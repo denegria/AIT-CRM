@@ -26,11 +26,14 @@ export default function Sidebar() {
       </div>
       <nav className={s.navSection}>
         <div className={s.navLabel}>Menu</div>
-        {nav.map(({ href, label, Icon }) => (
-          <Link key={href} href={href} className={`${s.navItem} ${pathname === href ? s.active : ''}`}>
-            <Icon /><span>{label}</span>
-          </Link>
-        ))}
+        {nav.map(({ href, label, Icon }) => {
+          if (role === 'employee' && href === '/settings') return null;
+          return (
+            <Link key={href} href={href} className={`${s.navItem} ${pathname === href ? s.active : ''}`}>
+              <Icon /><span>{label}</span>
+            </Link>
+          );
+        })}
       </nav>
       <div className={s.bottom}>
         <div className={s.roleToggle}>

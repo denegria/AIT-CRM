@@ -1,10 +1,19 @@
 'use client';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 
 export default function SettingsPage() {
-  const { resetData, loaded } = useCRM();
+  const { resetData, loaded, role } = useCRM();
+  const router = useRouter();
 
-  if (!loaded) return <div className="empty-state">Loading...</div>;
+  useEffect(() => {
+    if (loaded && role === 'employee') {
+      router.push('/');
+    }
+  }, [loaded, role, router]);
+
+  if (!loaded || role === 'employee') return <div className="empty-state">Loading...</div>;
 
   return (
     <div className="fade-in">
