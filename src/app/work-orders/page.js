@@ -38,6 +38,20 @@ export default function WorkOrdersPage() {
     { key: 'estimatedCost', label: 'Est. Cost', type: 'currency', sortable: true },
   ];
 
+  const [selectedIds, setSelectedIds] = useState([]);
+
+  const exportSelected = () => {
+    const selected = workOrders.filter(w => selectedIds.includes(w.id));
+    if (selected.length === 0) return;
+    const rows = [['WO #','Title','Client','Priority','Status','Due Date','Est. Cost']];
+    selected.forEach(w => rows.push([w.number, w.title, w.client, w.priority, w.status, w.dueDate, w.estimatedCost]));
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'work_orders_export.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
   return (
@@ -56,6 +70,16 @@ export default function WorkOrdersPage() {
           data={workOrders.map(w => ({ ...w, assignedLabel: empName(w.assignedTo) }))}
           searchPlaceholder="Search work orders..."
           onEdit={(id, u) => updateWorkOrder(id, u)}
+          selectable
+          selectedIds={selectedIds}
+          onSelect={setSelectedIds}
+          toolbarExtra={
+            selectedIds.length > 0 && (
+              <button className="btn fade-in" onClick={exportSelected} data-tooltip="Sample feature — exports selected rows to CSV">
+                Export Selected ({selectedIds.length})
+              </button>
+            )
+          }
           actions={[
             { label: 'Edit', onClick: openEdit },
             { label: 'PDF', onClick: (r) => generateWorkOrderPDF(r) },

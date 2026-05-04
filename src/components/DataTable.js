@@ -11,7 +11,7 @@ function badgeClass(val) {
   return map[v] || 'badge-new';
 }
 
-export default function DataTable({ columns, data, actions, onEdit, searchPlaceholder, toolbarExtra }) {
+export default function DataTable({ columns, data, actions, onEdit, searchPlaceholder, toolbarExtra, selectable, selectedIds = [], onSelect }) {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
@@ -62,6 +62,14 @@ export default function DataTable({ columns, data, actions, onEdit, searchPlaceh
       ) : (
         <table className={s.table}>
           <thead><tr>
+            {selectable && (
+              <th style={{ width: 40, textAlign: 'center' }}>
+                <input type="checkbox"
+                  checked={filtered.length > 0 && selectedIds.length === filtered.length}
+                  onChange={(e) => onSelect(e.target.checked ? filtered.map(r => r.id) : [])}
+                />
+              </th>
+            )}
             {columns.map(c => (
               <th key={c.key} onClick={() => c.sortable !== false && toggleSort(c.key)}>
                 <div style={{display:'flex', alignItems:'center', gap:4}}>
@@ -75,6 +83,17 @@ export default function DataTable({ columns, data, actions, onEdit, searchPlaceh
           <tbody>
             {filtered.map(row => (
               <tr key={row.id}>
+                {selectable && (
+                  <td style={{ textAlign: 'center' }}>
+                    <input type="checkbox"
+                      checked={selectedIds.includes(row.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) onSelect([...selectedIds, row.id]);
+                        else onSelect(selectedIds.filter(id => id !== row.id));
+                      }}
+                    />
+                  </td>
+                )}
                 {columns.map(c => (
                   <td key={c.key}>
                     {editCell?.rowId===row.id && editCell?.key===c.key ? (

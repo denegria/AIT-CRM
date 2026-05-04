@@ -14,6 +14,20 @@ export default function FinancialsPage() {
   const [drawer, setDrawer] = useState(null);
   const [form, setForm] = useState(emptyForm);
 
+  const [selectedIds, setSelectedIds] = useState([]);
+
+  const exportSelected = () => {
+    const selected = financials.filter(f => selectedIds.includes(f.id));
+    if (selected.length === 0) return;
+    const rows = [['Type','Doc #','Client','Amount','Date','Due Date','Status']];
+    selected.forEach(f => rows.push([f.type, f.number, f.client, f.amount, f.date, f.dueDate || '', f.status]));
+    const csv = rows.map(r => r.join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'financials_export.csv'; a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const filtered = useMemo(() => financials.filter(f => f.type === tab), [financials, tab]);
 
   const openNew = () => {
@@ -65,7 +79,7 @@ export default function FinancialsPage() {
 
       <div className="tabs">
         {types.map(t => (
-          <button key={t} className={`tab ${tab===t?'tab-active':''}`} onClick={()=>setTab(t)}>
+          <button key={t} className={`tab ${tab===t?'tab-active':''}`} onClick={()=>{setTab(t); setSelectedIds([]);}}>
             {t}s <span style={{marginLeft:4,opacity:0.5}}>({financials.filter(f=>f.type===t).length})</span>
           </button>
         ))}
@@ -76,6 +90,16 @@ export default function FinancialsPage() {
           columns={columns}
           data={filtered}
           searchPlaceholder={`Search ${tab.toLowerCase()}s...`}
+          selectable
+          selectedIds={selectedIds}
+          onSelect={setSelectedIds}
+          toolbarExtra={
+            selectedIds.length > 0 && (
+              <button className="btn fade-in" onClick={exportSelected} data-tooltip="Sample feature — exports selected rows to CSV">
+                Export Selected ({selectedIds.length})
+              </button>
+            )
+          }
           actions={[
             { label: 'Edit', onClick: openEdit },
             { label: 'PDF', onClick: genPDF },

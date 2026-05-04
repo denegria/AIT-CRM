@@ -33,9 +33,11 @@ export function BarChart({ data, width = 400, height = 200 }) {
       const barH = (d.value / maxVal) * chartH;
       const x = pad.left + i * gap + (gap - barW) / 2;
       const y = pad.top + chartH - barH;
+      const baseColor = d.color || '#4a7aff';
+      const isAlpha = baseColor.length > 7;
       const gradient = ctx.createLinearGradient(x, y, x, y + barH);
-      gradient.addColorStop(0, d.color || '#4a7aff');
-      gradient.addColorStop(1, (d.color || '#4a7aff') + '60');
+      gradient.addColorStop(0, baseColor);
+      gradient.addColorStop(1, isAlpha ? baseColor.slice(0, 7) + '10' : baseColor + '10');
       ctx.fillStyle = gradient;
       ctx.beginPath();
       ctx.roundRect(x, y, barW, barH, [4, 4, 0, 0]);
