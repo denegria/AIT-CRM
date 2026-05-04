@@ -2,6 +2,8 @@
 import { useState, useMemo } from 'react';
 import s from './DataTable.module.css';
 
+import { Search, ArrowUp, ArrowDown, FileQuestion } from 'lucide-react';
+
 function badgeClass(val) {
   if (!val) return '';
   const v = val.toLowerCase().replace(/\s+/g, '');
@@ -47,20 +49,25 @@ export default function DataTable({ columns, data, actions, onEdit, searchPlaceh
     <div className={s.wrap}>
       <div className={s.toolbar}>
         <div className={s.searchWrap}>
-          <svg className={s.searchIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+          <Search className={s.searchIcon} size={16} />
           <input className={s.search} placeholder={searchPlaceholder||'Search...'} value={search} onChange={e=>setSearch(e.target.value)} />
         </div>
         {toolbarExtra}
       </div>
       {filtered.length === 0 ? (
-        <div className={s.empty}>No records found</div>
+        <div className={s.empty}>
+          <FileQuestion size={32} style={{opacity:0.5, marginBottom: 8}} />
+          <div>No records found</div>
+        </div>
       ) : (
         <table className={s.table}>
           <thead><tr>
             {columns.map(c => (
               <th key={c.key} onClick={() => c.sortable !== false && toggleSort(c.key)}>
-                {c.label}
-                {sortKey === c.key && <span className={s.sortIcon}>{sortDir==='asc'?'↑':'↓'}</span>}
+                <div style={{display:'flex', alignItems:'center', gap:4}}>
+                  {c.label}
+                  {sortKey === c.key && (sortDir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
+                </div>
               </th>
             ))}
             {actions && <th>Actions</th>}

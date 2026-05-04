@@ -87,3 +87,32 @@
   font-size: var(--text-xs);
   color: var(--text-muted);
 }
+
+@media (max-width: 768px) {
+  .sidebar {
+    top: auto;
+    bottom: 0;
+    width: 100%;
+    height: 64px;
+    flex-direction: row;
+    border-right: none;
+    border-top: 1px solid var(--border-subtle);
+  }
+  .logo, .navLabel, .bottom { display: none; }
+  .navSection {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    padding: 0;
+  }
+  .navItem {
+    flex-direction: column;
+    gap: 4px;
+    font-size: 10px;
+    padding: 8px;
+    flex: 1;
+    justify-content: center;
+  }
+  .navItem span { display: none; }
+  .navItem svg { width: 22px; height: 22px; }
+}
