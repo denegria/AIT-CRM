@@ -22,7 +22,7 @@ export default function Sidebar() {
     <aside className={s.sidebar}>
       <div className={s.logo}>
         <span className={s.logoIcon}>◆</span>
-        <span>AIT CRM</span>
+        <span>AIT Signs</span>
       </div>
       <nav className={s.navSection}>
         <div className={s.navLabel}>Menu</div>

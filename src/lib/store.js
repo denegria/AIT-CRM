@@ -15,7 +15,7 @@ function saveStorage(d) {
 }
 
 export function CRMProvider({ children }) {
-  const [role, setRole] = useState('admin');
+  const [role, setRole] = useState('employee');
   const [contacts, setContacts] = useState([]);
   const [workOrders, setWorkOrders] = useState([]);
   const [financials, setFinancials] = useState([]);

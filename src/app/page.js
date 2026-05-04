@@ -16,8 +16,15 @@ export default function Dashboard() {
     const totalInvoiced = invoices.reduce((s, f) => s + f.amount, 0);
     const activeWOs = workOrders.filter(w => w.status !== 'Completed').length;
     const newLeads = contacts.filter(c => c.status === 'New Lead').length;
-    return { totalRevenue, pipeline, totalInvoiced, activeWOs, newLeads };
-  }, [financials, workOrders, contacts]);
+    
+    // Employee Specific
+    const myTasksCount = tasks.filter(t => t.assignedTo === 'emp-1' && !t.completed).length;
+    const needsFollowUp = contacts.filter(c => c.status !== 'Won' && c.status !== 'Lost').length;
+    const pendingInvoices = invoices.filter(f => f.status === 'Pending').length;
+    const assignedWOs = workOrders.filter(w => w.assignedTo === 'emp-1' && w.status !== 'Completed').length;
+
+    return { totalRevenue, pipeline, totalInvoiced, activeWOs, newLeads, myTasksCount, needsFollowUp, pendingInvoices, assignedWOs };
+  }, [financials, workOrders, contacts, tasks]);
 
   const statusData = useMemo(() => {
     const counts = {};
@@ -64,12 +71,21 @@ export default function Dashboard() {
         <span className={`badge ${role==='admin'?'badge-won':'badge-contacted'}`} style={{fontSize:'var(--text-sm)',padding:'4px 12px'}}>{role==='admin'?'Admin View':'Employee View'}</span>
       </div>
 
-      <div className="grid-4" style={{marginBottom:20}}>
-        <KPICard label="Total Revenue" value={`$${kpis.totalRevenue.toLocaleString()}`} change="12% vs last month" trend="up" />
-        <KPICard label="Pipeline Value" value={`$${kpis.pipeline.toLocaleString()}`} change={`${financials.filter(f=>f.type==='Estimate'&&f.status==='Pending').length} estimates`} trend="up" />
-        <KPICard label="Active Work Orders" value={kpis.activeWOs} change={`${workOrders.filter(w=>w.status==='In Progress').length} in progress`} trend="up" />
-        <KPICard label="New Leads" value={kpis.newLeads} change="This week" trend="up" />
-      </div>
+      {role === 'admin' ? (
+        <div className="grid-4" style={{marginBottom:20}}>
+          <KPICard label="Total Revenue" value={`$${kpis.totalRevenue.toLocaleString()}`} change="12% vs last month" trend="up" />
+          <KPICard label="Pipeline Value" value={`$${kpis.pipeline.toLocaleString()}`} change={`${financials.filter(f=>f.type==='Estimate'&&f.status==='Pending').length} estimates`} trend="up" />
+          <KPICard label="Active Work Orders" value={kpis.activeWOs} change={`${workOrders.filter(w=>w.status==='In Progress').length} in progress`} trend="up" />
+          <KPICard label="New Leads" value={kpis.newLeads} change="This week" trend="up" />
+        </div>
+      ) : (
+        <div className="grid-4" style={{marginBottom:20}}>
+          <KPICard label="My Active Tasks" value={kpis.myTasksCount} change="Due soon" trend="up" />
+          <KPICard label="Needs Follow Up" value={kpis.needsFollowUp} change="Active leads" trend="up" />
+          <KPICard label="Invoices Pending" value={kpis.pendingInvoices} change="Action required" trend="down" />
+          <KPICard label="Assigned Work Orders" value={kpis.assignedWOs} change="In progress" trend="up" />
+        </div>
+      )}
 
       <div className="grid-2" style={{marginBottom:20}}>
         <div className="card">
