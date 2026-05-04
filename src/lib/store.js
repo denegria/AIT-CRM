@@ -1,0 +1,90 @@
+'use client';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import * as defaults from './data';
+
+const CRMContext = createContext(null);
+const STORAGE_KEY = 'ait-crm-data';
+
+function loadStorage() {
+  if (typeof window === 'undefined') return null;
+  try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
+}
+function saveStorage(d) {
+  if (typeof window === 'undefined') return;
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {}
+}
+
+export function CRMProvider({ children }) {
+  const [role, setRole] = useState('admin');
+  const [contacts, setContacts] = useState([]);
+  const [workOrders, setWorkOrders] = useState([]);
+  const [financials, setFinancials] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [calendarEvents, setCalendarEvents] = useState([]);
+  const [salesLedger, setSalesLedger] = useState([]);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    const s = loadStorage();
+    setContacts(s?.contacts || defaults.contacts);
+    setWorkOrders(s?.workOrders || defaults.workOrders);
+    setFinancials(s?.financials || defaults.financials);
+    setTasks(s?.tasks || defaults.tasks);
+    setCalendarEvents(s?.calendarEvents || defaults.calendarEvents);
+    setSalesLedger(s?.salesLedger || defaults.salesLedger);
+    setLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!loaded) return;
+    saveStorage({ contacts, workOrders, financials, tasks, calendarEvents, salesLedger });
+  }, [contacts, workOrders, financials, tasks, calendarEvents, salesLedger, loaded]);
+
+  const gid = (p) => `${p}-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+
+  const updateContact = useCallback((id, u) => setContacts(p => p.map(c => c.id===id ? {...c,...u} : c)), []);
+  const addContact = useCallback((d) => setContacts(p => [{id:gid('c'),...d},...p]), []);
+  const deleteContact = useCallback((id) => setContacts(p => p.filter(c => c.id!==id)), []);
+
+  const updateWorkOrder = useCallback((id, u) => setWorkOrders(p => p.map(w => w.id===id ? {...w,...u} : w)), []);
+  const addWorkOrder = useCallback((d) => setWorkOrders(p => [{id:gid('wo'),...d},...p]), []);
+  const deleteWorkOrder = useCallback((id) => setWorkOrders(p => p.filter(w => w.id!==id)), []);
+
+  const updateFinancial = useCallback((id, u) => setFinancials(p => p.map(f => f.id===id ? {...f,...u} : f)), []);
+  const addFinancial = useCallback((d) => setFinancials(p => [{id:gid('f'),...d},...p]), []);
+  const deleteFinancial = useCallback((id) => setFinancials(p => p.filter(f => f.id!==id)), []);
+
+  const updateTask = useCallback((id, u) => setTasks(p => p.map(t => t.id===id ? {...t,...u} : t)), []);
+  const addTask = useCallback((d) => setTasks(p => [{id:gid('t'),...d},...p]), []);
+  const deleteTask = useCallback((id) => setTasks(p => p.filter(t => t.id!==id)), []);
+
+  const addCalendarEvent = useCallback((d) => setCalendarEvents(p => [...p, {id:gid('ev'),...d}]), []);
+  const deleteCalendarEvent = useCallback((id) => setCalendarEvents(p => p.filter(e => e.id!==id)), []);
+  const addSalesEntry = useCallback((d) => setSalesLedger(p => [{id:gid('sl'),...d},...p]), []);
+
+  const resetData = useCallback(() => {
+    localStorage.removeItem(STORAGE_KEY);
+    setContacts(defaults.contacts); setWorkOrders(defaults.workOrders);
+    setFinancials(defaults.financials); setTasks(defaults.tasks);
+    setCalendarEvents(defaults.calendarEvents); setSalesLedger(defaults.salesLedger);
+  }, []);
+
+  const value = {
+    role, setRole, loaded,
+    contacts, addContact, updateContact, deleteContact,
+    workOrders, addWorkOrder, updateWorkOrder, deleteWorkOrder,
+    financials, addFinancial, updateFinancial, deleteFinancial,
+    tasks, addTask, updateTask, deleteTask,
+    calendarEvents, addCalendarEvent, deleteCalendarEvent,
+    salesLedger, addSalesEntry,
+    employees: defaults.EMPLOYEES, statuses: defaults.STATUSES, sources: defaults.SOURCES,
+    resetData,
+  };
+  return <CRMContext.Provider value={value}>{children}</CRMContext.Provider>;
+}
+
+export function useCRM() {
+  const c = useContext(CRMContext);
+  if (!c) throw new Error('useCRM must be used within CRMProvider');
+  return c;
+}

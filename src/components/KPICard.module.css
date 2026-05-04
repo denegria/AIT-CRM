@@ -1,0 +1,16 @@
+.card {
+  background:var(--bg-secondary); border:1px solid var(--border-subtle);
+  border-radius:var(--radius-lg); padding:16px 20px;
+  display:flex; flex-direction:column; gap:4px;
+}
+.label {
+  font-size:var(--text-xs); font-weight:500; color:var(--text-muted);
+  text-transform:uppercase; letter-spacing:0.04em;
+}
+.value { font-size:var(--text-2xl); font-weight:700; letter-spacing:-0.02em; }
+.change {
+  font-size:var(--text-xs); font-weight:500;
+  display:flex; align-items:center; gap:4px;
+}
+.up { color:var(--success); }
+.down { color:var(--danger); }
