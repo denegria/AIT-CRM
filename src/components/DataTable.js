@@ -11,7 +11,7 @@ function badgeClass(val) {
   return map[v] || 'badge-new';
 }
 
-export default function DataTable({ columns, data, actions, onEdit, searchPlaceholder, toolbarExtra, selectable, selectedIds = [], onSelect }) {
+export default function DataTable({ columns, data, actions, onEdit, searchPlaceholder, toolbarExtra, selectable, selectedIds = [], onSelect, filters = [] }) {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
@@ -52,6 +52,16 @@ export default function DataTable({ columns, data, actions, onEdit, searchPlaceh
           <Search className={s.searchIcon} size={16} />
           <input className={s.search} placeholder={searchPlaceholder||'Search...'} value={search} onChange={e=>setSearch(e.target.value)} />
         </div>
+        {filters.length > 0 && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            {filters.map((f, i) => (
+              <select key={i} className="select" style={{ width: 'auto', padding: '6px 28px 6px 12px', height: 34 }} value={f.value} onChange={e => f.onChange(e.target.value)}>
+                <option value="">{f.label}</option>
+                {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+              </select>
+            ))}
+          </div>
+        )}
         {toolbarExtra}
       </div>
       {filtered.length === 0 ? (

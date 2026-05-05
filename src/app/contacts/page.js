@@ -4,12 +4,17 @@ import { useCRM } from '@/lib/store';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 
-const empty = { name:'', email:'', phone:'', status:'New Lead', source:'Facebook Ads', assignedTo:'emp-1', notes:'' };
+import { useToast } from '@/components/Toast';
+
+const empty = { name:'', email:'', phone:'', status:'New Lead', source:'Facebook Ads', assignedTo:'emp-1', notes: [] };
 
 export default function ContactsPage() {
   const { contacts, addContact, updateContact, deleteContact, employees, loaded } = useCRM();
+  const { addToast } = useToast();
   const [drawer, setDrawer] = useState(null); // null | 'new' | contact object
   const [form, setForm] = useState(empty);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [newNote, setNewNote] = useState('');
 
   const openNew = () => { setForm(empty); setDrawer('new'); };
   const openEdit = (row) => { setForm({ ...row }); setDrawer(row); };
@@ -17,9 +22,26 @@ export default function ContactsPage() {
 
   const save = () => {
     if (!form.name.trim()) return;
-    if (drawer === 'new') addContact(form);
-    else updateContact(drawer.id, form);
+    if (drawer === 'new') {
+      addContact(form);
+      addToast('Contact added successfully', 'success');
+    } else {
+      updateContact(drawer.id, form);
+      addToast('Contact updated', 'success');
+    }
     close();
+  };
+
+  const handleDelete = (id) => {
+    deleteContact(id);
+    addToast('Contact deleted', 'error');
+  };
+
+  const addNote = () => {
+    if (!newNote.trim()) return;
+    const note = { text: newNote, date: new Date().toISOString() };
+    setForm(f => ({ ...f, notes: [...(Array.isArray(f.notes) ? f.notes : []), note] }));
+    setNewNote('');
   };
 
   const empName = (id) => employees.find(e => e.id === id)?.name || id;
@@ -33,7 +55,9 @@ export default function ContactsPage() {
     { key: 'lastContact', label: 'Last Contact', sortable: true },
   ];
 
-  const dataWithEmp = contacts.map(c => ({ ...c, assignedLabel: empName(c.assignedTo) }));
+  const filteredData = contacts
+    .filter(c => !statusFilter || c.status === statusFilter)
+    .map(c => ({ ...c, assignedLabel: empName(c.assignedTo) }));
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
@@ -50,12 +74,16 @@ export default function ContactsPage() {
       <div className="card" style={{padding:16}}>
         <DataTable
           columns={columns}
-          data={dataWithEmp}
+          data={filteredData}
           searchPlaceholder="Search contacts..."
-          onEdit={(id, u) => updateContact(id, u)}
+          onEdit={(id, u) => {
+            updateContact(id, u);
+            addToast('Updated inline', 'success', 2000);
+          }}
+          filters={[{ label: 'All Statuses', options: ['New Lead', 'Contacted', 'Qualified', 'Proposal Sent', 'Won', 'Lost'], value: statusFilter, onChange: setStatusFilter }]}
           actions={[
             { label: 'Edit', onClick: openEdit },
-            { label: 'Delete', onClick: (r) => deleteContact(r.id), danger: true },
+            { label: 'Delete', onClick: (r) => handleDelete(r.id), danger: true },
           ]}
         />
       </div>
@@ -96,9 +124,26 @@ export default function ContactsPage() {
             {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
           </select>
         </div>
-        <div className="form-group">
-          <label className="form-label">Notes</label>
-          <textarea className="input" rows={3} value={form.notes} onChange={e => setForm(f => ({...f, notes: e.target.value}))} style={{resize:'vertical'}} />
+        <div className="form-group" style={{marginTop: 16}}>
+          <label className="form-label">Activity Timeline & Notes</label>
+          <div style={{background: 'var(--bg-tertiary)', padding: 12, borderRadius: 'var(--radius-md)', maxHeight: 150, overflowY: 'auto', marginBottom: 8}}>
+            {Array.isArray(form.notes) && form.notes.length > 0 ? (
+              form.notes.map((n, i) => (
+                <div key={i} style={{marginBottom: 8, fontSize: 'var(--text-sm)', borderBottom: i < form.notes.length-1 ? '1px solid var(--border-subtle)' : 'none', paddingBottom: 4}}>
+                  <div style={{fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 2}}>
+                    {new Date(n.date).toLocaleString()}
+                  </div>
+                  <div>{n.text}</div>
+                </div>
+              ))
+            ) : (
+              <div style={{fontSize: 'var(--text-sm)', color: 'var(--text-muted)'}}>No notes yet.</div>
+            )}
+          </div>
+          <div style={{display: 'flex', gap: 8}}>
+            <input className="input" placeholder="Add a new note..." value={newNote} onChange={e => setNewNote(e.target.value)} onKeyDown={e => e.key === 'Enter' && addNote()} />
+            <button className="btn" onClick={addNote}>Add</button>
+          </div>
         </div>
       </Modal>
     </div>

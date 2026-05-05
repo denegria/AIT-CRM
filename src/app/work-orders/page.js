@@ -4,13 +4,16 @@ import { useCRM } from '@/lib/store';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import { generateWorkOrderPDF } from '@/lib/pdf';
+import { useToast } from '@/components/Toast';
 
 const empty = { number:'', title:'', client:'', contactId:'', priority:'Medium', status:'Pending', assignedTo:'emp-1', dueDate:'', description:'', estimatedCost:0 };
 
 export default function WorkOrdersPage() {
   const { workOrders, addWorkOrder, updateWorkOrder, deleteWorkOrder, contacts, employees, loaded } = useCRM();
+  const { addToast } = useToast();
   const [drawer, setDrawer] = useState(null);
   const [form, setForm] = useState(empty);
+  const [statusFilter, setStatusFilter] = useState('');
 
   const openNew = () => {
     const num = `WO-${String(workOrders.length + 1).padStart(3, '0')}`;
@@ -21,9 +24,19 @@ export default function WorkOrdersPage() {
   const close = () => setDrawer(null);
   const save = () => {
     if (!form.title.trim()) return;
-    if (drawer === 'new') addWorkOrder(form);
-    else updateWorkOrder(drawer.id, form);
+    if (drawer === 'new') {
+      addWorkOrder(form);
+      addToast('Work order created successfully', 'success');
+    } else {
+      updateWorkOrder(drawer.id, form);
+      addToast('Work order updated', 'success');
+    }
     close();
+  };
+
+  const handleDelete = (id) => {
+    deleteWorkOrder(id);
+    addToast('Work order deleted', 'error');
   };
 
   const empName = (id) => employees.find(e => e.id === id)?.name || id;
@@ -50,7 +63,12 @@ export default function WorkOrdersPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'work_orders_export.csv'; a.click();
     URL.revokeObjectURL(url);
+    addToast(`${selected.length} work orders exported`, 'info');
   };
+
+  const filteredData = workOrders
+    .filter(w => !statusFilter || w.status === statusFilter)
+    .map(w => ({ ...w, assignedLabel: empName(w.assignedTo) }));
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
@@ -67,9 +85,13 @@ export default function WorkOrdersPage() {
       <div className="card" style={{padding:16}}>
         <DataTable
           columns={columns}
-          data={workOrders.map(w => ({ ...w, assignedLabel: empName(w.assignedTo) }))}
+          data={filteredData}
           searchPlaceholder="Search work orders..."
-          onEdit={(id, u) => updateWorkOrder(id, u)}
+          onEdit={(id, u) => {
+            updateWorkOrder(id, u);
+            addToast('Updated inline', 'success', 2000);
+          }}
+          filters={[{ label: 'All Statuses', options: ['Pending', 'In Progress', 'Completed', 'On Hold'], value: statusFilter, onChange: setStatusFilter }]}
           selectable
           selectedIds={selectedIds}
           onSelect={setSelectedIds}
@@ -82,8 +104,8 @@ export default function WorkOrdersPage() {
           }
           actions={[
             { label: 'Edit', onClick: openEdit },
-            { label: 'PDF', onClick: (r) => generateWorkOrderPDF(r) },
-            { label: 'Delete', onClick: (r) => deleteWorkOrder(r.id), danger: true },
+            { label: 'PDF', onClick: (r) => { generateWorkOrderPDF(r); addToast('PDF generated', 'info'); } },
+            { label: 'Delete', onClick: (r) => handleDelete(r.id), danger: true },
           ]}
         />
       </div>
