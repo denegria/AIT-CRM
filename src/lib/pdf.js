@@ -66,46 +66,61 @@ export function generateInvoicePDF(record) {
 }
 
 export function generateEstimatePDF(record) {
-  const doc = new jsPDF();
-  let y = header(doc, 'ESTIMATE', record.number);
-  y = clientBlock(doc, y, record);
-  y = itemsTable(doc, y, record.items);
-  totalBlock(doc, y + 4, record.amount);
-  doc.setFontSize(8); doc.setTextColor(150,150,150);
-  doc.text('This estimate is valid for 30 days from the date of issue.', 105, 275, { align: 'center' });
-  footer(doc);
-  doc.save(`${record.number}.pdf`);
+  try {
+    const doc = new jsPDF();
+    let y = header(doc, 'ESTIMATE', record.number);
+    y = clientBlock(doc, y, record);
+    y = itemsTable(doc, y, record.items);
+    totalBlock(doc, y + 4, record.amount);
+    doc.setFontSize(8); doc.setTextColor(150,150,150);
+    doc.text('This estimate is valid for 30 days from the date of issue.', 105, 275, { align: 'center' });
+    footer(doc);
+    doc.save(`${record.number}.pdf`);
+  } catch (err) {
+    console.error('PDF Generation Error:', err);
+    alert('Failed to generate PDF. Please check console for details.');
+  }
 }
 
 export function generateReceiptPDF(record) {
-  const doc = new jsPDF();
-  let y = header(doc, 'RECEIPT', record.number);
-  y = clientBlock(doc, y, record);
-  y = itemsTable(doc, y, record.items);
-  totalBlock(doc, y + 4, record.amount);
-  doc.setFontSize(10); doc.setTextColor(34,197,94); doc.setFont('helvetica','bold');
-  doc.text('PAID', 105, y + 24, { align: 'center' });
-  footer(doc);
-  doc.save(`${record.number}.pdf`);
+  try {
+    const doc = new jsPDF();
+    let y = header(doc, 'RECEIPT', record.number);
+    y = clientBlock(doc, y, record);
+    y = itemsTable(doc, y, record.items);
+    totalBlock(doc, y + 4, record.amount);
+    doc.setFontSize(10); doc.setTextColor(34,197,94); doc.setFont('helvetica','bold');
+    doc.text('PAID', 105, y + 24, { align: 'center' });
+    footer(doc);
+    doc.save(`${record.number}.pdf`);
+  } catch (err) {
+    console.error('PDF Generation Error:', err);
+    alert('Failed to generate PDF. Please check console for details.');
+  }
 }
 
 export function generateWorkOrderPDF(wo) {
-  const doc = new jsPDF();
-  let y = header(doc, 'WORK ORDER', wo.number);
-  doc.setFontSize(8); doc.setTextColor(130,130,130); doc.text('CLIENT', 20, y);
-  doc.setFontSize(11); doc.setTextColor(30,30,30); doc.setFont('helvetica','bold');
-  doc.text(wo.client||'', 20, y+7); doc.setFont('helvetica','normal');
-  doc.setFontSize(9); doc.setTextColor(100,100,100);
-  doc.text(`Priority: ${wo.priority||''}`, 140, y); doc.text(`Status: ${wo.status||''}`, 140, y+6);
-  doc.text(`Due: ${wo.dueDate||''}`, 140, y+12);
-  y += 24;
-  doc.setFontSize(8); doc.setTextColor(130,130,130); doc.text('DESCRIPTION', 20, y);
-  y += 7; doc.setFontSize(10); doc.setTextColor(50,50,50);
-  const lines = doc.splitTextToSize(wo.description||'', 160);
-  doc.text(lines, 20, y); y += lines.length * 5 + 8;
-  doc.setFontSize(8); doc.setTextColor(130,130,130); doc.text('ESTIMATED COST', 20, y);
-  y += 7; doc.setFontSize(12); doc.setTextColor(30,30,30); doc.setFont('helvetica','bold');
-  doc.text(`$${(wo.estimatedCost||0).toLocaleString()}`, 20, y);
-  footer(doc);
-  doc.save(`${wo.number}.pdf`);
+  try {
+    const doc = new jsPDF();
+    let y = header(doc, 'WORK ORDER', wo.number);
+    doc.setFontSize(8); doc.setTextColor(130,130,130); doc.text('CLIENT', 20, y);
+    doc.setFontSize(11); doc.setTextColor(30,30,30); doc.setFont('helvetica','bold');
+    doc.text(wo.client||'', 20, y+7); doc.setFont('helvetica','normal');
+    doc.setFontSize(9); doc.setTextColor(100,100,100);
+    doc.text(`Priority: ${wo.priority||''}`, 140, y); doc.text(`Status: ${wo.status||''}`, 140, y+6);
+    doc.text(`Due: ${wo.dueDate||''}`, 140, y+12);
+    y += 24;
+    doc.setFontSize(8); doc.setTextColor(130,130,130); doc.text('DESCRIPTION', 20, y);
+    y += 7; doc.setFontSize(10); doc.setTextColor(50,50,50);
+    const lines = doc.splitTextToSize(wo.description||'', 160);
+    doc.text(lines, 20, y); y += lines.length * 5 + 8;
+    doc.setFontSize(8); doc.setTextColor(130,130,130); doc.text('ESTIMATED COST', 20, y);
+    y += 7; doc.setFontSize(12); doc.setTextColor(30,30,30); doc.setFont('helvetica','bold');
+    doc.text(`$${(wo.estimatedCost||0).toLocaleString()}`, 20, y);
+    footer(doc);
+    doc.save(`${wo.number}.pdf`);
+  } catch (err) {
+    console.error('PDF Generation Error:', err);
+    alert('Failed to generate PDF. Please check console for details.');
+  }
 }

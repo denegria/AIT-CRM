@@ -4,24 +4,24 @@ import { ToastProvider } from '@/components/Toast';
 import Sidebar from '@/components/Sidebar';
 
 export const metadata = {
-  title: 'AIT CRM',
-  description: 'Lead management, work orders, financials, and reporting — AIT Services CRM.',
+  title: 'AIT Signs',
+  description: 'AIT Signs Operational CRM — Lead management, work orders, and financials.',
 };
 
 export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning>
-        <CRMProvider>
-          <ToastProvider>
+        <ToastProvider>
+          <CRMProvider>
             <div className="app-layout">
               <Sidebar />
               <main className="main-content">
                 {children}
               </main>
             </div>
-          </ToastProvider>
-        </CRMProvider>
+          </CRMProvider>
+        </ToastProvider>
       </body>
     </html>
   );

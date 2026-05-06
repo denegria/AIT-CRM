@@ -12,8 +12,8 @@ export default function Modal({ open, onClose, title, children, footer }) {
   if (!open) return null;
   return (
     <>
-      <div className={`${s.overlay} modal-overlay-fade`} onClick={onClose} />
-      <div className={`${s.drawer} modal-content-slide`}>
+      <div className={s.overlay} onClick={onClose} />
+      <div className={s.drawer}>
         <div className={s.header}>
           <div className={s.title}>{title}</div>
           <button className={s.closeBtn} onClick={onClose}>✕</button>

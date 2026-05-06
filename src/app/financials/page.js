@@ -1,21 +1,20 @@
 'use client';
 import { useState, useMemo } from 'react';
 import { useCRM } from '@/lib/store';
+import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import { generateInvoicePDF, generateEstimatePDF, generateReceiptPDF } from '@/lib/pdf';
-import { useToast } from '@/components/Toast';
 
 const types = ['Invoice', 'Estimate', 'Receipt'];
 const emptyForm = { number:'', type:'Invoice', client:'', contactId:'', amount:0, date:'', dueDate:'', status:'Pending', items:[{desc:'',qty:1,rate:0}] };
 
 export default function FinancialsPage() {
   const { financials, addFinancial, updateFinancial, deleteFinancial, contacts, loaded } = useCRM();
-  const { addToast } = useToast();
+  const { toast } = useToast();
   const [tab, setTab] = useState('Invoice');
   const [drawer, setDrawer] = useState(null);
   const [form, setForm] = useState(emptyForm);
-  const [statusFilter, setStatusFilter] = useState('');
 
   const [selectedIds, setSelectedIds] = useState([]);
 
@@ -29,14 +28,10 @@ export default function FinancialsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'financials_export.csv'; a.click();
     URL.revokeObjectURL(url);
-    addToast(`${selected.length} records exported`, 'info');
+    toast(`Exported ${selected.length} records`);
   };
 
-  const filtered = useMemo(() => {
-    return financials
-      .filter(f => f.type === tab)
-      .filter(f => !statusFilter || f.status === statusFilter);
-  }, [financials, tab, statusFilter]);
+  const filtered = useMemo(() => financials.filter(f => f.type === tab), [financials, tab]);
 
   const openNew = () => {
     const prefix = tab === 'Invoice' ? 'INV' : tab === 'Estimate' ? 'EST' : 'REC';
@@ -52,23 +47,19 @@ export default function FinancialsPage() {
     const data = { ...form, amount: total };
     if (drawer === 'new') {
       addFinancial(data);
-      addToast(`${form.type} created successfully`, 'success');
+      toast(`${tab} created`);
     } else {
       updateFinancial(drawer.id, data);
-      addToast(`${form.type} updated`, 'success');
+      toast(`${tab} updated`);
     }
     close();
-  };
-
-  const handleDelete = (id) => {
-    deleteFinancial(id);
-    addToast('Record deleted', 'error');
   };
 
   const genPDF = (row) => {
     if (row.type === 'Invoice') generateInvoicePDF(row);
     else if (row.type === 'Estimate') generateEstimatePDF(row);
     else generateReceiptPDF(row);
+    toast('PDF Generated');
   };
 
   const addItem = () => setForm(f => ({...f, items:[...f.items, {desc:'',qty:1,rate:0}]}));
@@ -98,7 +89,7 @@ export default function FinancialsPage() {
 
       <div className="tabs">
         {types.map(t => (
-          <button key={t} className={`tab ${tab===t?'tab-active':''}`} onClick={()=>{setTab(t); setSelectedIds([]); setStatusFilter('');}}>
+          <button key={t} className={`tab ${tab===t?'tab-active':''}`} onClick={()=>{setTab(t); setSelectedIds([]);}}>
             {t}s <span style={{marginLeft:4,opacity:0.5}}>({financials.filter(f=>f.type===t).length})</span>
           </button>
         ))}
@@ -109,7 +100,6 @@ export default function FinancialsPage() {
           columns={columns}
           data={filtered}
           searchPlaceholder={`Search ${tab.toLowerCase()}s...`}
-          filters={[{ label: 'All Statuses', options: ['Draft', 'Pending', 'Paid', 'Overdue'], value: statusFilter, onChange: setStatusFilter }]}
           selectable
           selectedIds={selectedIds}
           onSelect={setSelectedIds}
@@ -123,7 +113,7 @@ export default function FinancialsPage() {
           actions={[
             { label: 'Edit', onClick: openEdit },
             { label: 'PDF', onClick: genPDF },
-            { label: 'Delete', onClick: (r) => handleDelete(r.id), danger: true },
+            { label: 'Delete', onClick: (r) => { deleteFinancial(r.id); toast('Record deleted', 'error'); }, danger: true },
           ]}
         />
       </div>

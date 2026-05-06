@@ -28,7 +28,9 @@ export default function ReportsPage() {
   useEffect(() => {
     const currentMonth = new Date().getMonth();
     const data = SHORT.map((m, i) => {
-      const base = Math.floor(Math.random() * 6000 + 3000);
+      // Deterministic "random" value based on month index
+      const seed = (i + 1) * 1234.56;
+      const base = Math.floor((seed % 6000) + 3000);
       const val = i === currentMonth ? report.totalRevenue : base;
       return { label: m, value: val, color: i === selectedMonth ? '#4a7aff' : '#4a7aff60' };
     });

@@ -15,7 +15,13 @@ function saveStorage(d) {
 }
 
 export function CRMProvider({ children }) {
-  const [role, setRole] = useState('employee');
+  const [role, setRole] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ait-crm-role');
+      return saved || 'employee';
+    }
+    return 'employee';
+  });
   const [contacts, setContacts] = useState([]);
   const [workOrders, setWorkOrders] = useState([]);
   const [financials, setFinancials] = useState([]);
@@ -36,11 +42,17 @@ export function CRMProvider({ children }) {
   }, []);
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ait-crm-role', role);
+    }
+  }, [role]);
+
+  useEffect(() => {
     if (!loaded) return;
     saveStorage({ contacts, workOrders, financials, tasks, calendarEvents, salesLedger });
   }, [contacts, workOrders, financials, tasks, calendarEvents, salesLedger, loaded]);
 
-  const gid = (p) => `${p}-${Date.now()}-${Math.random().toString(36).slice(2,6)}`;
+  const gid = (p) => `${p}-${crypto.randomUUID().slice(0, 8)}`;
 
   const updateContact = useCallback((id, u) => setContacts(p => p.map(c => c.id===id ? {...c,...u} : c)), []);
   const addContact = useCallback((d) => setContacts(p => [{id:gid('c'),...d},...p]), []);

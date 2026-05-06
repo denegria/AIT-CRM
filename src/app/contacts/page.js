@@ -1,20 +1,22 @@
 'use client';
 import { useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
-import DataTable from '@/components/DataTable';
-import Modal from '@/components/Modal';
-
 import { useToast } from '@/components/Toast';
+import DataTable from '@/components/DataTable';
+import KanbanBoard from '@/components/KanbanBoard';
+import Modal from '@/components/Modal';
+import { List, LayoutDashboard as KanbanIcon } from 'lucide-react';
 
 const empty = { name:'', email:'', phone:'', status:'New Lead', source:'Facebook Ads', assignedTo:'emp-1', notes: [] };
 
 export default function ContactsPage() {
   const { contacts, addContact, updateContact, deleteContact, employees, loaded } = useCRM();
-  const { addToast } = useToast();
+  const { toast } = useToast();
+  const router = useRouter();
   const [drawer, setDrawer] = useState(null); // null | 'new' | contact object
   const [form, setForm] = useState(empty);
-  const [statusFilter, setStatusFilter] = useState('');
-  const [newNote, setNewNote] = useState('');
+  const [viewMode, setViewMode] = useState('table'); // 'table' | 'kanban'
 
   const openNew = () => { setForm(empty); setDrawer('new'); };
   const openEdit = (row) => { setForm({ ...row }); setDrawer(row); };
@@ -24,40 +26,26 @@ export default function ContactsPage() {
     if (!form.name.trim()) return;
     if (drawer === 'new') {
       addContact(form);
-      addToast('Contact added successfully', 'success');
+      toast('Contact created successfully');
     } else {
       updateContact(drawer.id, form);
-      addToast('Contact updated', 'success');
+      toast('Contact updated successfully');
     }
     close();
-  };
-
-  const handleDelete = (id) => {
-    deleteContact(id);
-    addToast('Contact deleted', 'error');
-  };
-
-  const addNote = () => {
-    if (!newNote.trim()) return;
-    const note = { text: newNote, date: new Date().toISOString() };
-    setForm(f => ({ ...f, notes: [...(Array.isArray(f.notes) ? f.notes : []), note] }));
-    setNewNote('');
   };
 
   const empName = (id) => employees.find(e => e.id === id)?.name || id;
 
   const columns = [
-    { key: 'name', label: 'Name', sortable: true },
-    { key: 'email', label: 'Email', sortable: true },
-    { key: 'phone', label: 'Phone' },
+    { key: 'name', label: 'Name', sortable: true, editable: true },
+    { key: 'email', label: 'Email', sortable: true, editable: true },
+    { key: 'phone', label: 'Phone', editable: true },
     { key: 'status', label: 'Status', type: 'badge', sortable: true },
     { key: 'source', label: 'Source', sortable: true },
     { key: 'lastContact', label: 'Last Contact', sortable: true },
   ];
 
-  const filteredData = contacts
-    .filter(c => !statusFilter || c.status === statusFilter)
-    .map(c => ({ ...c, assignedLabel: empName(c.assignedTo) }));
+  const dataWithEmp = contacts.map(c => ({ ...c, assignedLabel: empName(c.assignedTo) }));
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
@@ -68,25 +56,62 @@ export default function ContactsPage() {
           <h1 className="page-title">Contacts & Leads</h1>
           <p className="page-subtitle">{contacts.length} total contacts</p>
         </div>
-        <button className="btn btn-primary" onClick={openNew}>+ Add Contact</button>
+        <div className="flex-gap">
+          <div className="view-toggle">
+            <button className={`btn-icon ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setViewMode('table')} title="Table View">
+              <List size={18} />
+            </button>
+            <button className={`btn-icon ${viewMode === 'kanban' ? 'active' : ''}`} onClick={() => setViewMode('kanban')} title="Pipeline View">
+              <KanbanIcon size={18} />
+            </button>
+          </div>
+          <button className="btn btn-primary" onClick={openNew}>+ Add Contact</button>
+        </div>
       </div>
 
-      <div className="card" style={{padding:16}}>
-        <DataTable
-          columns={columns}
-          data={filteredData}
-          searchPlaceholder="Search contacts..."
-          onEdit={(id, u) => {
-            updateContact(id, u);
-            addToast('Updated inline', 'success', 2000);
-          }}
-          filters={[{ label: 'All Statuses', options: ['New Lead', 'Contacted', 'Qualified', 'Proposal Sent', 'Won', 'Lost'], value: statusFilter, onChange: setStatusFilter }]}
-          actions={[
-            { label: 'Edit', onClick: openEdit },
-            { label: 'Delete', onClick: (r) => handleDelete(r.id), danger: true },
-          ]}
+      <style jsx>{`
+        .view-toggle {
+          display: flex;
+          background: var(--bg-tertiary);
+          padding: 4px;
+          border-radius: var(--radius-md);
+          border: 1px solid var(--border-subtle);
+          margin-right: 8px;
+        }
+        .view-toggle .btn-icon {
+          padding: 4px 8px;
+          border-radius: var(--radius-sm);
+          color: var(--text-muted);
+        }
+        .view-toggle .btn-icon.active {
+          background: var(--bg-secondary);
+          color: var(--accent);
+          box-shadow: var(--shadow-sm);
+        }
+      `}</style>
+
+      {viewMode === 'table' ? (
+        <div className="card" style={{padding:16}}>
+          <DataTable
+            columns={columns}
+            data={dataWithEmp}
+            searchPlaceholder="Search contacts..."
+            onEdit={(id, u) => { updateContact(id, u); toast('Field updated'); }}
+            actions={[
+              { label: 'View', onClick: (r) => router.push(`/contacts/${r.id}`) },
+              { label: 'Edit', onClick: openEdit },
+              { label: 'Delete', onClick: (r) => { deleteContact(r.id); toast('Contact deleted', 'error'); }, danger: true },
+            ]}
+          />
+        </div>
+      ) : (
+        <KanbanBoard 
+          data={dataWithEmp}
+          columns={['New Lead', 'Contacted', 'Qualified', 'Proposal Sent', 'Won', 'Lost']}
+          onMove={(id, status) => { updateContact(id, { status }); toast('Stage updated'); }}
+          onEdit={(item) => router.push(`/contacts/${item.id}`)}
         />
-      </div>
+      )}
 
       <Modal open={!!drawer} onClose={close} title={drawer === 'new' ? 'New Contact' : 'Edit Contact'}
         footer={<><button className="btn" onClick={close}>Cancel</button><button className="btn btn-primary" onClick={save}>Save</button></>}>
@@ -124,25 +149,26 @@ export default function ContactsPage() {
             {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
           </select>
         </div>
-        <div className="form-group" style={{marginTop: 16}}>
-          <label className="form-label">Activity Timeline & Notes</label>
-          <div style={{background: 'var(--bg-tertiary)', padding: 12, borderRadius: 'var(--radius-md)', maxHeight: 150, overflowY: 'auto', marginBottom: 8}}>
-            {Array.isArray(form.notes) && form.notes.length > 0 ? (
-              form.notes.map((n, i) => (
-                <div key={i} style={{marginBottom: 8, fontSize: 'var(--text-sm)', borderBottom: i < form.notes.length-1 ? '1px solid var(--border-subtle)' : 'none', paddingBottom: 4}}>
-                  <div style={{fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 2}}>
-                    {new Date(n.date).toLocaleString()}
-                  </div>
-                  <div>{n.text}</div>
-                </div>
-              ))
-            ) : (
-              <div style={{fontSize: 'var(--text-sm)', color: 'var(--text-muted)'}}>No notes yet.</div>
-            )}
-          </div>
-          <div style={{display: 'flex', gap: 8}}>
-            <input className="input" placeholder="Add a new note..." value={newNote} onChange={e => setNewNote(e.target.value)} onKeyDown={e => e.key === 'Enter' && addNote()} />
-            <button className="btn" onClick={addNote}>Add</button>
+        <div className="form-group">
+          <label className="form-label">Notes</label>
+          <textarea className="input" rows={3} 
+            value={Array.isArray(form.notes) ? (form.notes[form.notes.length - 1]?.text || '') : form.notes} 
+            onChange={e => {
+              const text = e.target.value;
+              setForm(f => {
+                const newNotes = Array.isArray(f.notes) ? [...f.notes] : [{ text: f.notes, date: new Date().toISOString().slice(0,10) }];
+                if (newNotes.length > 0) {
+                  newNotes[newNotes.length - 1] = { ...newNotes[newNotes.length - 1], text, date: new Date().toISOString().slice(0,10) };
+                } else {
+                  newNotes.push({ text, date: new Date().toISOString().slice(0,10) });
+                }
+                return { ...f, notes: newNotes };
+              });
+            }} 
+            style={{resize:'vertical'}} 
+          />
+          <div style={{fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 4}}>
+            Editing the latest note. Full timeline available in Contact Details.
           </div>
         </div>
       </Modal>

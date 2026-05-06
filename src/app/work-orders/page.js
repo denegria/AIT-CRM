@@ -1,19 +1,18 @@
 'use client';
 import { useState } from 'react';
 import { useCRM } from '@/lib/store';
+import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import { generateWorkOrderPDF } from '@/lib/pdf';
-import { useToast } from '@/components/Toast';
 
 const empty = { number:'', title:'', client:'', contactId:'', priority:'Medium', status:'Pending', assignedTo:'emp-1', dueDate:'', description:'', estimatedCost:0 };
 
 export default function WorkOrdersPage() {
   const { workOrders, addWorkOrder, updateWorkOrder, deleteWorkOrder, contacts, employees, loaded } = useCRM();
-  const { addToast } = useToast();
+  const { toast } = useToast();
   const [drawer, setDrawer] = useState(null);
   const [form, setForm] = useState(empty);
-  const [statusFilter, setStatusFilter] = useState('');
 
   const openNew = () => {
     const num = `WO-${String(workOrders.length + 1).padStart(3, '0')}`;
@@ -26,29 +25,24 @@ export default function WorkOrdersPage() {
     if (!form.title.trim()) return;
     if (drawer === 'new') {
       addWorkOrder(form);
-      addToast('Work order created successfully', 'success');
+      toast('Work order created');
     } else {
       updateWorkOrder(drawer.id, form);
-      addToast('Work order updated', 'success');
+      toast('Work order updated');
     }
     close();
-  };
-
-  const handleDelete = (id) => {
-    deleteWorkOrder(id);
-    addToast('Work order deleted', 'error');
   };
 
   const empName = (id) => employees.find(e => e.id === id)?.name || id;
 
   const columns = [
     { key: 'number', label: 'WO #', sortable: true },
-    { key: 'title', label: 'Title', sortable: true },
+    { key: 'title', label: 'Title', sortable: true, editable: true },
     { key: 'client', label: 'Client', sortable: true },
     { key: 'priority', label: 'Priority', type: 'badge', sortable: true },
     { key: 'status', label: 'Status', type: 'badge', sortable: true },
     { key: 'dueDate', label: 'Due Date', sortable: true },
-    { key: 'estimatedCost', label: 'Est. Cost', type: 'currency', sortable: true },
+    { key: 'estimatedCost', label: 'Est. Cost', type: 'currency', sortable: true, editable: true },
   ];
 
   const [selectedIds, setSelectedIds] = useState([]);
@@ -63,12 +57,8 @@ export default function WorkOrdersPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a'); a.href = url; a.download = 'work_orders_export.csv'; a.click();
     URL.revokeObjectURL(url);
-    addToast(`${selected.length} work orders exported`, 'info');
+    toast(`Exported ${selected.length} work orders`);
   };
-
-  const filteredData = workOrders
-    .filter(w => !statusFilter || w.status === statusFilter)
-    .map(w => ({ ...w, assignedLabel: empName(w.assignedTo) }));
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
@@ -85,13 +75,9 @@ export default function WorkOrdersPage() {
       <div className="card" style={{padding:16}}>
         <DataTable
           columns={columns}
-          data={filteredData}
+          data={workOrders.map(w => ({ ...w, assignedLabel: empName(w.assignedTo) }))}
           searchPlaceholder="Search work orders..."
-          onEdit={(id, u) => {
-            updateWorkOrder(id, u);
-            addToast('Updated inline', 'success', 2000);
-          }}
-          filters={[{ label: 'All Statuses', options: ['Pending', 'In Progress', 'Completed', 'On Hold'], value: statusFilter, onChange: setStatusFilter }]}
+          onEdit={(id, u) => { updateWorkOrder(id, u); toast('Field updated'); }}
           selectable
           selectedIds={selectedIds}
           onSelect={setSelectedIds}
@@ -104,8 +90,8 @@ export default function WorkOrdersPage() {
           }
           actions={[
             { label: 'Edit', onClick: openEdit },
-            { label: 'PDF', onClick: (r) => { generateWorkOrderPDF(r); addToast('PDF generated', 'info'); } },
-            { label: 'Delete', onClick: (r) => handleDelete(r.id), danger: true },
+            { label: 'PDF', onClick: (r) => { generateWorkOrderPDF(r); toast('PDF Generated'); } },
+            { label: 'Delete', onClick: (r) => { deleteWorkOrder(r.id); toast('Work order deleted', 'error'); }, danger: true },
           ]}
         />
       </div>

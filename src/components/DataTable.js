@@ -11,7 +11,7 @@ function badgeClass(val) {
   return map[v] || 'badge-new';
 }
 
-export default function DataTable({ columns, data, actions, onEdit, searchPlaceholder, toolbarExtra, selectable, selectedIds = [], onSelect, filters = [] }) {
+export default function DataTable({ columns, data, actions, onEdit, searchPlaceholder, toolbarExtra, selectable, selectedIds = [], onSelect }) {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
@@ -52,16 +52,6 @@ export default function DataTable({ columns, data, actions, onEdit, searchPlaceh
           <Search className={s.searchIcon} size={16} />
           <input className={s.search} placeholder={searchPlaceholder||'Search...'} value={search} onChange={e=>setSearch(e.target.value)} />
         </div>
-        {filters.length > 0 && (
-          <div style={{ display: 'flex', gap: 8 }}>
-            {filters.map((f, i) => (
-              <select key={i} className="select" style={{ width: 'auto', padding: '6px 28px 6px 12px', height: 34 }} value={f.value} onChange={e => f.onChange(e.target.value)}>
-                <option value="">{f.label}</option>
-                {f.options.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
-            ))}
-          </div>
-        )}
         {toolbarExtra}
       </div>
       {filtered.length === 0 ? (
@@ -125,7 +115,15 @@ export default function DataTable({ columns, data, actions, onEdit, searchPlaceh
                 {actions && (
                   <td><div className={s.actions}>
                     {actions.map((a,i) => (
-                      <button key={i} className={`${s.actBtn} ${a.danger?s.actBtnDanger:''}`} onClick={()=>a.onClick(row)}>{a.label}</button>
+                      <button key={i} className={`${s.actBtn} ${a.danger?s.actBtnDanger:''}`} onClick={()=>{
+                        if (a.danger) {
+                          if (window.confirm(`Are you sure you want to ${a.label.toLowerCase()}?`)) {
+                            a.onClick(row);
+                          }
+                        } else {
+                          a.onClick(row);
+                        }
+                      }}>{a.label}</button>
                     ))}
                   </div></td>
                 )}
