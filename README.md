@@ -1,8 +1,8 @@
-# AIT CRM
+# AIT Signs CRM
 
-A high-density, professional CRM built for rapid data editing, lead management, and operational document generation.
+A high-performance, professional CRM built for sign shops and operational workflows. Designed for rapid data management, visual lead pipelines, and professional document generation.
 
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
 # Install dependencies
@@ -18,73 +18,62 @@ npm start
 
 Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## Features
+## ✨ Key Features
 
-### Dashboard
-- **KPI Cards**: Total Revenue, Pipeline Value, Active Work Orders, New Leads
-- **Task List**: Aggregated to-dos with priorities, due dates, and inline task creation
-- **Calendar Widget**: Monthly view with color-coded event indicators
-- **Revenue Trend**: Bar chart showing monthly revenue
-- **Invoice Status**: Donut chart breakdown (Paid / Pending / Overdue)
-- **Employee Progress**: Admin-only tracker for staff task completion
+### 🏢 Dashboard
+- **Live KPIs**: Revenue, Pipeline, Active Orders, and Lead counts.
+- **Unified Task List**: Inline task creation with priority and assignment.
+- **Calendar Widget**: Track appointments and deadlines.
+- **Deterministic Reporting**: Revenue trends and invoice status charts (visualized via custom Canvas implementation).
+- **Employee Tracker**: Monitor staff performance and lead assignment.
 
-### Contacts & Leads
-- High-density sortable/filterable data table
-- Inline editing (double-click any editable cell)
-- Lead status tracking: New Lead → Contacted → Qualified → Proposal Sent → Won/Lost
-- Lead source tracking: Facebook Ads, Website, Referral, Cold Call, Google Ads
-- Drawer-style forms for add/edit
+### 👥 Contacts & Leads
+- **Dual Views**: Toggle between a **High-Density Table** and a **Visual Kanban Pipeline**.
+- **Kanban Board**: Drag-and-drop leads through stages (New Lead → Won/Lost).
+- **Contact Details**: Rich profile pages with:
+    - **Activity Timeline**: Chronological record of notes and updates.
+    - **Linked Records**: Instant access to all Work Orders and Financials for that contact.
+- **Inline Editing**: Double-click any cell in the table view to update data instantly.
 
-### Work Orders
-- Priority-based work order management (High/Medium/Low)
-- Status tracking: Pending → In Progress → Completed / On Hold
-- One-click PDF generation for professional work order documents
-- Client and employee assignment
+### 🛠️ Work Orders
+- **Priority Management**: Color-coded High/Medium/Low priority tracking.
+- **Status Lifecycle**: Manage jobs from Pending to Completed.
+- **PDF Generation**: Professional, client-ready work order documents generated in one click.
+- **Status Filtering**: Quickly drill down into active vs. completed jobs.
 
-### Financials
-- **Tabbed Interface**: Invoices | Estimates | Receipts
-- Line item editing with auto-calculated totals
-- Status badges: Draft, Pending, Paid, Overdue
-- One-click PDF generation for all document types
-- Professional PDF templates with company header and line items
+### 💰 Financials & Billing
+- **Full Suite**: Manage Invoices, Estimates, and Receipts.
+- **Auto-Calculations**: Dynamic line items with real-time tax and total updates.
+- **Document Generation**: High-quality PDFs with company branding and professional layout.
 
-### Reports
-- Monthly financial snapshot with KPI cards
-- Revenue by month bar chart
-- Invoice status breakdown (pie chart)
-- Lead source analysis
-- Quick stats: Conversion rate, avg invoice value, etc.
-- **CSV export** for financial data
+### 🔍 Search & Navigation
+- **Command Palette (Cmd+K)**: Instant global search across all records from anywhere in the app.
+- **Dark Mode**: Fully themed dark mode with persistence.
+- **Toast Notifications**: Real-time feedback for all CRUD operations.
+- **Confirm Dialogs**: Custom, themed safety prompts for destructive actions.
 
-### Settings
-- Webhook configuration panel (Facebook Ads, Google Ads endpoints)
-- Automation rules overview
-- API access configuration
-- Role-based access control management
-- Data reset functionality
-
-## Role-Based Views
-
-Toggle between **Admin** and **Employee** views using the sidebar toggle:
-
-- **Admin**: Full access to all data, reports, employee tracking, financial oversight
-- **Employee**: Personal tasks, assigned leads, document generation
-
-## Tech Stack
+## 🏗️ Tech Stack
 
 - **Framework**: Next.js 16 (App Router)
-- **State Management**: React Context with localStorage persistence
-- **PDF Generation**: jsPDF (client-side)
-- **Charts**: Custom Canvas-based (zero dependencies)
-- **Styling**: CSS Modules + CSS Custom Properties
-- **Font**: Inter (Google Fonts)
+- **Icons**: Lucide React
+- **PDFs**: jsPDF (Client-side)
+- **State**: React Context API
+- **Persistence**: `localStorage` (Mock data layer)
+- **Styling**: Vanilla CSS + CSS Modules + CSS Custom Properties
 
-## Deploying to Vercel
+## 🛡️ Role-Based Access
 
-1. Push this repo to GitHub
-2. Import the repo in [Vercel Dashboard](https://vercel.com/new)
-3. Deploy — no configuration needed
+Toggle roles in the Sidebar to test different permissions:
+- **Admin**: Full oversight, reports, and settings access.
+- **Employee**: Focused on assigned tasks, leads, and work order execution.
 
-## Data
+## 📦 Deployment
 
-The app ships with 15 contacts, 8 work orders, 13 financial records, 8 tasks, and 10 calendar events as demo data. All data persists in localStorage across sessions. Use **Settings → Reset Data** to restore defaults.
+1. Connect this repo to [Vercel](https://vercel.com).
+2. The app is zero-config and will deploy immediately.
+
+## 🗺️ Roadmap
+- [ ] **Directus + PostgreSQL Integration**: Move from localStorage to a real database.
+- [ ] **CSV Importer**: Bulk import leads from Google Sheets.
+- [ ] **File Storage**: Upload sign designs and site survey photos.
+- [ ] **Twilio Integration**: Automated SMS follow-ups for new leads.
