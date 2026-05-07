@@ -1,5 +1,6 @@
 'use client';
 import { useState, useMemo } from 'react';
+import ConfirmDialog from './ConfirmDialog';
 import s from './DataTable.module.css';
 
 import { Search, ArrowUp, ArrowDown, FileQuestion } from 'lucide-react';
@@ -17,6 +18,7 @@ export default function DataTable({ columns, data, actions, onEdit, searchPlaceh
   const [sortDir, setSortDir] = useState('asc');
   const [editCell, setEditCell] = useState(null); // {rowId, key}
   const [editVal, setEditVal] = useState('');
+  const [confirm, setConfirm] = useState(null); // { title, message, onConfirm }
 
   const filtered = useMemo(() => {
     let rows = data;
@@ -117,9 +119,11 @@ export default function DataTable({ columns, data, actions, onEdit, searchPlaceh
                     {actions.map((a,i) => (
                       <button key={i} className={`${s.actBtn} ${a.danger?s.actBtnDanger:''}`} onClick={()=>{
                         if (a.danger) {
-                          if (window.confirm(`Are you sure you want to ${a.label.toLowerCase()}?`)) {
-                            a.onClick(row);
-                          }
+                          setConfirm({
+                            title: `${a.label} Record`,
+                            message: `Are you sure you want to ${a.label.toLowerCase()} this record? This action cannot be undone.`,
+                            onConfirm: () => a.onClick(row)
+                          });
                         } else {
                           a.onClick(row);
                         }
@@ -132,6 +136,13 @@ export default function DataTable({ columns, data, actions, onEdit, searchPlaceh
           </tbody>
         </table>
       )}
+      <ConfirmDialog 
+        open={!!confirm} 
+        onClose={() => setConfirm(null)} 
+        onConfirm={confirm?.onConfirm || (() => {})}
+        title={confirm?.title}
+        message={confirm?.message}
+      />
     </div>
   );
 }

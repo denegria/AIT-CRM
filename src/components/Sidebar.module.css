@@ -52,8 +52,33 @@
 }
 .navItem svg { width: 18px; height: 18px; flex-shrink: 0; }
 .bottom {
-  padding: 16px;
+  padding: 12px;
   border-top: 1px solid var(--border-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.themeToggle {
+  display: flex;
+}
+.themeBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+.themeBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 .roleToggle {
   display: flex;

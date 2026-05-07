@@ -38,9 +38,15 @@ export default function Dashboard() {
 
   const revenueByMonth = useMemo(() => {
     const months = ['Jan','Feb','Mar','Apr','May','Jun'];
-    return months.map((m, i) => ({
-      label: m, value: Math.floor(Math.random() * 8000 + 4000) + (i === new Date().getMonth() ? kpis.totalRevenue : 0), color: '#4a7aff'
-    }));
+    return months.map((m, i) => {
+      // Deterministic "mock" growth: base 4k + (i * 1.5k) + minor variation based on month index
+      const seedVal = 4000 + (i * 1200) + ((i * 313) % 800);
+      return {
+        label: m, 
+        value: seedVal + (i === new Date().getMonth() ? kpis.totalRevenue : 0), 
+        color: '#4a7aff'
+      };
+    });
   }, [kpis.totalRevenue]);
 
   const myTasks = useMemo(() => {

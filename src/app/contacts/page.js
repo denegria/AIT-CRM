@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';

@@ -1,6 +1,7 @@
 import './globals.css';
 import { CRMProvider } from '@/lib/store';
 import { ToastProvider } from '@/components/Toast';
+import CommandPalette from '@/components/CommandPalette';
 import Sidebar from '@/components/Sidebar';
 
 export const metadata = {
@@ -14,6 +15,7 @@ export default function RootLayout({ children }) {
       <body suppressHydrationWarning>
         <ToastProvider>
           <CRMProvider>
+            <CommandPalette />
             <div className="app-layout">
               <Sidebar />
               <main className="main-content">

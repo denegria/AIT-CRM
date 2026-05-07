@@ -22,6 +22,13 @@ export function CRMProvider({ children }) {
     }
     return 'employee';
   });
+  const [theme, setTheme] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ait-crm-theme');
+      return saved || 'light';
+    }
+    return 'light';
+  });
   const [contacts, setContacts] = useState([]);
   const [workOrders, setWorkOrders] = useState([]);
   const [financials, setFinancials] = useState([]);
@@ -46,6 +53,13 @@ export function CRMProvider({ children }) {
       localStorage.setItem('ait-crm-role', role);
     }
   }, [role]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ait-crm-theme', theme);
+      document.documentElement.setAttribute('data-theme', theme);
+    }
+  }, [theme]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -82,7 +96,7 @@ export function CRMProvider({ children }) {
   }, []);
 
   const value = {
-    role, setRole, loaded,
+    role, setRole, theme, setTheme, loaded,
     contacts, addContact, updateContact, deleteContact,
     workOrders, addWorkOrder, updateWorkOrder, deleteWorkOrder,
     financials, addFinancial, updateFinancial, deleteFinancial,

@@ -1,26 +1,43 @@
 'use client';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
+import Modal from '@/components/Modal';
+import s from './ContactDetail.module.css';
 import { 
   ArrowLeft, Mail, Phone, MapPin, Calendar, 
-  Clock, Plus, FileText, ClipboardList, Send, 
-  CheckCircle, MessageSquare, Edit3
+  Plus, FileText, ClipboardList, 
+  MessageSquare, Edit3
 } from 'lucide-react';
 
 export default function ContactDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
-  const { contacts, workOrders, financials, updateContact, loaded, employees } = useCRM();
+  const { contacts, workOrders, financials, updateContact, loaded, employees, sources } = useCRM();
   const [activeTab, setActiveTab] = useState('timeline');
   const [noteInput, setNoteInput] = useState('');
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   const contact = useMemo(() => contacts.find(c => c.id === params.id), [contacts, params.id]);
   const contactWorkOrders = useMemo(() => workOrders.filter(wo => wo.contactId === params.id), [workOrders, params.id]);
   const contactFinancials = useMemo(() => financials.filter(f => f.contactId === params.id), [financials, params.id]);
   const assignedEmployee = useMemo(() => employees.find(e => e.id === contact?.assignedTo), [employees, contact]);
+
+  // For Edit Modal
+  const [editForm, setEditForm] = useState(null);
+
+  const openEditModal = () => {
+    setEditForm({ ...contact });
+    setIsEditModalOpen(true);
+  };
+
+  const handleEditSave = () => {
+    updateContact(contact.id, editForm);
+    toast('Profile updated');
+    setIsEditModalOpen(false);
+  };
 
   if (loaded && !contact) {
     return <div className="empty-state">Contact not found</div>;
@@ -36,109 +53,107 @@ export default function ContactDetailPage() {
     const updatedNotes = Array.isArray(contact.notes) ? [...contact.notes, newNote] : [newNote];
     updateContact(contact.id, { notes: updatedNotes });
     setNoteInput('');
-    toast('Note added to timeline');
+    toast('Note added');
   };
 
   const timeline = useMemo(() => {
     if (!contact) return [];
     const notes = (contact.notes || []).map(n => ({ ...n, type: 'note', icon: <MessageSquare size={16} /> }));
-    // We could add status changes or related record creations to this list if we tracked them
     return [...notes].sort((a, b) => b.date.localeCompare(a.date));
   }, [contact]);
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
   return (
-    <div className="detail-page fade-in">
+    <div className={s.detailPage + " fade-in"}>
       <div className="page-header">
-        <button className="btn-back" onClick={() => router.back()}>
+        <button className={s.btnBack} onClick={() => router.back()}>
           <ArrowLeft size={18} /> Back to Contacts
         </button>
       </div>
 
-      <div className="detail-layout">
+      <div className={s.detailLayout}>
         {/* Left Sidebar: Profile */}
-        <div className="profile-card">
-          <div className="profile-header">
-            <div className="profile-avatar">{contact.name.charAt(0)}</div>
-            <h1 className="profile-name">{contact.name}</h1>
+        <div className={s.profileCard}>
+          <div className={s.profileHeader}>
+            <div className={s.profileAvatarLarge}>{contact.name.charAt(0)}</div>
+            <h1 className={s.profileName}>{contact.name}</h1>
             <span className={`badge badge-${contact.status.toLowerCase().replace(' ', '')}`}>{contact.status}</span>
           </div>
 
-          <div className="profile-info">
-            <div className="info-item"><Mail size={16} /> <span>{contact.email}</span></div>
-            <div className="info-item"><Phone size={16} /> <span>{contact.phone}</span></div>
-            <div className="info-item"><MapPin size={16} /> <span>Austin, TX</span></div>
-            <div className="info-item"><Calendar size={16} /> <span>Last contact: {contact.lastContact}</span></div>
+          <div className={s.profileInfo}>
+            <div className={s.infoItem}><Mail size={16} /> <span>{contact.email}</span></div>
+            <div className={s.infoItem}><Phone size={16} /> <span>{contact.phone}</span></div>
+            <div className={s.infoItem}><MapPin size={16} /> <span>Austin, TX</span></div>
+            <div className={s.infoItem}><Calendar size={16} /> <span>Last contact: {contact.lastContact}</span></div>
           </div>
 
-          <div className="profile-assignment">
-            <div className="assignment-label">Assigned To</div>
-            <div className="assignment-user">
-              <div className="user-avatar">{assignedEmployee?.name?.charAt(0)}</div>
+          <div className={s.profileAssignment}>
+            <div className={s.assignmentLabel}>Assigned To</div>
+            <div className={s.assignmentUser}>
+              <div className={s.userAvatarSmall}>{assignedEmployee?.name?.charAt(0)}</div>
               <span>{assignedEmployee?.name}</span>
             </div>
           </div>
           
-          <button className="btn btn-block" style={{marginTop: 20}}>
+          <button className="btn btn-block" style={{marginTop: 20}} onClick={openEditModal}>
             <Edit3 size={16} style={{marginRight: 8}} /> Edit Profile
           </button>
         </div>
 
         {/* Right Section: Content */}
-        <div className="content-section">
-          <div className="content-tabs">
-            <button className={`content-tab ${activeTab === 'timeline' ? 'active' : ''}`} onClick={() => setActiveTab('timeline')}>Timeline</button>
-            <button className={`content-tab ${activeTab === 'workorders' ? 'active' : ''}`} onClick={() => setActiveTab('workorders')}>Work Orders ({contactWorkOrders.length})</button>
-            <button className={`content-tab ${activeTab === 'financials' ? 'active' : ''}`} onClick={() => setActiveTab('financials')}>Financials ({contactFinancials.length})</button>
+        <div className={s.contentSection}>
+          <div className={s.contentTabs}>
+            <button className={`${s.contentTab} ${activeTab === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')}>Timeline</button>
+            <button className={`${s.contentTab} ${activeTab === 'workorders' ? s.active : ''}`} onClick={() => setActiveTab('workorders')}>Work Orders ({contactWorkOrders.length})</button>
+            <button className={`${s.contentTab} ${activeTab === 'financials' ? s.active : ''}`} onClick={() => setActiveTab('financials')}>Financials ({contactFinancials.length})</button>
           </div>
 
-          <div className="tab-content">
+          <div className={s.tabContent}>
             {activeTab === 'timeline' && (
-              <div className="timeline-view">
-                <div className="note-box">
+              <div className={s.timelineView}>
+                <div className={s.noteBox}>
                   <textarea 
-                    className="input" 
                     placeholder="Type a note or activity update..." 
                     value={noteInput}
                     onChange={e => setNoteInput(e.target.value)}
                   />
-                  <div className="note-box-footer">
+                  <div className={s.noteBoxFooter}>
                     <button className="btn btn-primary btn-sm" onClick={addNote}>
                       <Plus size={14} /> Add Note
                     </button>
                   </div>
                 </div>
 
-                <div className="timeline">
+                <div className={s.timeline}>
                   {timeline.map((item, i) => (
-                    <div key={i} className="timeline-item">
-                      <div className="timeline-icon">{item.icon}</div>
-                      <div className="timeline-body">
-                        <div className="timeline-meta">
-                          <span className="timeline-type">Note</span>
-                          <span className="timeline-date">{item.date}</span>
+                    <div key={i} className={s.timelineItem}>
+                      <div className={s.timelineIcon}>{item.icon}</div>
+                      <div className={s.timelineBody}>
+                        <div className={s.timelineMeta}>
+                          <span className={s.timelineType}>Note</span>
+                          <span className={s.timelineDate}>{item.date}</span>
                         </div>
-                        <div className="timeline-text">{item.text}</div>
+                        <div className={s.timelineText}>{item.text}</div>
                       </div>
                     </div>
                   ))}
                   {timeline.length === 0 && (
-                    <div className="timeline-empty">No activity recorded yet.</div>
+                    <div className={s.timelineEmpty}>No activity recorded yet.</div>
                   )}
                 </div>
               </div>
             )}
 
             {activeTab === 'workorders' && (
-              <div className="records-list">
+              <div className={s.recordsList}>
                 {contactWorkOrders.map(wo => (
-                  <div key={wo.id} className="record-card">
-                    <div className="record-main">
-                      <div className="record-icon"><ClipboardList size={20} /></div>
+                  <div key={wo.id} className={s.recordCard}>
+                    <div className={s.recordMain}>
+                      <div className={s.recordIcon}><ClipboardList size={20} /></div>
                       <div>
-                        <div className="record-title">{wo.title}</div>
-                        <div className="record-subtitle">{wo.number} • Due {wo.dueDate}</div>
+                        <div className={s.recordTitle}>{wo.title}</div>
+                        <div className={s.recordSubtitle}>{wo.number} • Due {wo.dueDate}</div>
                       </div>
                     </div>
                     <span className={`badge badge-${wo.status.toLowerCase().replace(' ', '')}`}>{wo.status}</span>
@@ -149,18 +164,18 @@ export default function ContactDetailPage() {
             )}
 
             {activeTab === 'financials' && (
-              <div className="records-list">
+              <div className={s.recordsList}>
                 {contactFinancials.map(f => (
-                  <div key={f.id} className="record-card">
-                    <div className="record-main">
-                      <div className="record-icon"><FileText size={20} /></div>
+                  <div key={f.id} className={s.recordCard}>
+                    <div className={s.recordMain}>
+                      <div className={s.recordIcon}><FileText size={20} /></div>
                       <div>
-                        <div className="record-title">{f.type} {f.number}</div>
-                        <div className="record-subtitle">{f.date}</div>
+                        <div className={s.recordTitle}>{f.type} {f.number}</div>
+                        <div className={s.recordSubtitle}>{f.date}</div>
                       </div>
                     </div>
-                    <div className="record-value">
-                      <div className="value-amount">${f.amount.toLocaleString()}</div>
+                    <div className={s.recordValue}>
+                      <div className={s.valueAmount}>${f.amount.toLocaleString()}</div>
                       <span className={`badge badge-${f.status.toLowerCase()}`}>{f.status}</span>
                     </div>
                   </div>
@@ -172,280 +187,50 @@ export default function ContactDetailPage() {
         </div>
       </div>
 
-      <style jsx>{`
-        .detail-page {
-          max-width: 1200px;
-          margin: 0 auto;
-        }
-        .btn-back {
-          background: none;
-          border: none;
-          color: var(--text-muted);
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          cursor: pointer;
-          font-size: var(--text-sm);
-          padding: 8px 0;
-        }
-        .btn-back:hover { color: var(--text-primary); }
-
-        .detail-layout {
-          display: grid;
-          grid-template-columns: 320px 1fr;
-          gap: 24px;
-          margin-top: 16px;
-        }
-
-        .profile-card {
-          background: var(--bg-secondary);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-xl);
-          padding: 24px;
-          height: fit-content;
-          position: sticky;
-          top: 24px;
-        }
-        .profile-header {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          text-align: center;
-          margin-bottom: 24px;
-        }
-        .profile-avatar {
-          width: 80px;
-          height: 80px;
-          background: var(--accent);
-          color: white;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          font-size: 32px;
-          font-weight: 700;
-          margin-bottom: 16px;
-          box-shadow: var(--shadow-md);
-        }
-        .profile-name {
-          font-size: 22px;
-          font-weight: 700;
-          margin-bottom: 8px;
-        }
-        
-        .profile-info {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-          margin-bottom: 24px;
-          padding: 16px 0;
-          border-top: 1px solid var(--border-subtle);
-          border-bottom: 1px solid var(--border-subtle);
-        }
-        .info-item {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-          font-size: var(--text-sm);
-          color: var(--text-secondary);
-        }
-
-        .profile-assignment {
-          background: var(--bg-tertiary);
-          padding: 12px;
-          border-radius: var(--radius-md);
-        }
-        .assignment-label {
-          font-size: 10px;
-          text-transform: uppercase;
-          color: var(--text-muted);
-          font-weight: 700;
-          margin-bottom: 8px;
-        }
-        .assignment-user {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          font-size: var(--text-sm);
-          font-weight: 500;
-        }
-
-        .content-section {
-          display: flex;
-          flex-direction: column;
-          gap: 16px;
-        }
-        .content-tabs {
-          display: flex;
-          gap: 8px;
-          border-bottom: 1px solid var(--border-subtle);
-          padding-bottom: 0;
-        }
-        .content-tab {
-          background: none;
-          border: none;
-          padding: 12px 16px;
-          font-size: var(--text-sm);
-          font-weight: 600;
-          color: var(--text-muted);
-          cursor: pointer;
-          position: relative;
-        }
-        .content-tab.active {
-          color: var(--accent);
-        }
-        .content-tab.active::after {
-          content: '';
-          position: absolute;
-          bottom: -1px;
-          left: 0;
-          right: 0;
-          height: 2px;
-          background: var(--accent);
-        }
-
-        .tab-content {
-          background: var(--bg-secondary);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-xl);
-          min-height: 500px;
-          padding: 24px;
-        }
-
-        .note-box {
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-lg);
-          overflow: hidden;
-          margin-bottom: 24px;
-          background: var(--bg-tertiary);
-        }
-        .note-box textarea {
-          border: none;
-          background: none;
-          padding: 16px;
-          width: 100%;
-          min-height: 100px;
-          resize: none;
-          font-size: var(--text-sm);
-        }
-        .note-box-footer {
-          padding: 8px 16px;
-          display: flex;
-          justify-content: flex-end;
-          border-top: 1px solid var(--border-subtle);
-          background: var(--bg-secondary);
-        }
-
-        .timeline {
-          display: flex;
-          flex-direction: column;
-          gap: 0;
-        }
-        .timeline-item {
-          display: flex;
-          gap: 16px;
-          padding-bottom: 24px;
-          position: relative;
-        }
-        .timeline-item::before {
-          content: '';
-          position: absolute;
-          left: 17px;
-          top: 36px;
-          bottom: 0;
-          width: 2px;
-          background: var(--border-subtle);
-        }
-        .timeline-item:last-child::before { display: none; }
-        
-        .timeline-icon {
-          width: 36px;
-          height: 36px;
-          background: var(--bg-tertiary);
-          border: 1px solid var(--border-subtle);
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: var(--text-muted);
-          flex-shrink: 0;
-          z-index: 1;
-        }
-        .timeline-body {
-          flex: 1;
-          background: var(--bg-tertiary);
-          padding: 16px;
-          border-radius: var(--radius-lg);
-          border: 1px solid var(--border-subtle);
-        }
-        .timeline-meta {
-          display: flex;
-          justify-content: space-between;
-          margin-bottom: 8px;
-        }
-        .timeline-type {
-          font-size: 10px;
-          font-weight: 700;
-          text-transform: uppercase;
-          color: var(--text-muted);
-        }
-        .timeline-date {
-          font-size: var(--text-xs);
-          color: var(--text-muted);
-        }
-        .timeline-text {
-          font-size: var(--text-sm);
-          color: var(--text-primary);
-          line-height: 1.5;
-        }
-
-        .records-list {
-          display: flex;
-          flex-direction: column;
-          gap: 12px;
-        }
-        .record-card {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          padding: 16px;
-          background: var(--bg-tertiary);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-lg);
-        }
-        .record-main {
-          display: flex;
-          align-items: center;
-          gap: 16px;
-        }
-        .record-icon {
-          width: 40px;
-          height: 40px;
-          background: var(--bg-secondary);
-          border-radius: var(--radius-md);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: var(--accent);
-        }
-        .record-title {
-          font-weight: 600;
-          font-size: var(--text-sm);
-        }
-        .record-subtitle {
-          font-size: var(--text-xs);
-          color: var(--text-muted);
-          margin-top: 2px;
-        }
-        .record-value {
-          text-align: right;
-        }
-        .value-amount {
-          font-weight: 700;
-          font-size: var(--text-md);
-          margin-bottom: 4px;
-        }
-      `}</style>
+      {/* Edit Profile Modal */}
+      {isEditModalOpen && editForm && (
+        <Modal 
+          open={isEditModalOpen} 
+          onClose={() => setIsEditModalOpen(false)} 
+          title="Edit Profile"
+          footer={<><button className="btn" onClick={() => setIsEditModalOpen(false)}>Cancel</button><button className="btn btn-primary" onClick={handleEditSave}>Save Changes</button></>}
+        >
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">Full Name</label>
+              <input className="input" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Email</label>
+              <input className="input" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} />
+            </div>
+          </div>
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">Phone</label>
+              <input className="input" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Source</label>
+              <select className="input select" value={editForm.source} onChange={e => setEditForm({...editForm, source: e.target.value})}>
+                {sources.map(src => <option key={src} value={src}>{src}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Status</label>
+            <select className="input select" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}>
+              {['New Lead', 'Contacted', 'Qualified', 'Proposal Sent', 'Won', 'Lost'].map(st => <option key={st} value={st}>{st}</option>)}
+            </select>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Assigned To</label>
+            <select className="input select" value={editForm.assignedTo} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
+              {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+            </select>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

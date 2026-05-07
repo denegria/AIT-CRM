@@ -13,6 +13,7 @@ export default function WorkOrdersPage() {
   const { toast } = useToast();
   const [drawer, setDrawer] = useState(null);
   const [form, setForm] = useState(empty);
+  const [statusFilter, setStatusFilter] = useState('All');
 
   const openNew = () => {
     const num = `WO-${String(workOrders.length + 1).padStart(3, '0')}`;
@@ -45,6 +46,8 @@ export default function WorkOrdersPage() {
     { key: 'estimatedCost', label: 'Est. Cost', type: 'currency', sortable: true, editable: true },
   ];
 
+  const filtered = workOrders.filter(w => statusFilter === 'All' || w.status === statusFilter);
+
   const [selectedIds, setSelectedIds] = useState([]);
 
   const exportSelected = () => {
@@ -75,18 +78,24 @@ export default function WorkOrdersPage() {
       <div className="card" style={{padding:16}}>
         <DataTable
           columns={columns}
-          data={workOrders.map(w => ({ ...w, assignedLabel: empName(w.assignedTo) }))}
+          data={filtered.map(w => ({ ...w, assignedLabel: empName(w.assignedTo) }))}
           searchPlaceholder="Search work orders..."
           onEdit={(id, u) => { updateWorkOrder(id, u); toast('Field updated'); }}
           selectable
           selectedIds={selectedIds}
           onSelect={setSelectedIds}
           toolbarExtra={
-            selectedIds.length > 0 && (
-              <button className="btn fade-in" onClick={exportSelected} data-tooltip="Sample feature — exports selected rows to CSV">
-                Export Selected ({selectedIds.length})
-              </button>
-            )
+            <div className="flex-gap">
+              <select className="input select" style={{width:130, padding:'4px 8px'}} value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
+                <option value="All">All Statuses</option>
+                {['Pending','In Progress','Completed','On Hold'].map(s=><option key={s} value={s}>{s}</option>)}
+              </select>
+              {selectedIds.length > 0 && (
+                <button className="btn fade-in" onClick={exportSelected} data-tooltip="Sample feature — exports selected rows to CSV">
+                  Export Selected ({selectedIds.length})
+                </button>
+              )}
+            </div>
           }
           actions={[
             { label: 'Edit', onClick: openEdit },
