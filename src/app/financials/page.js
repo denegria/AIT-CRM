@@ -104,7 +104,7 @@ export default function FinancialsPage() {
           selectedIds={selectedIds}
           onSelect={setSelectedIds}
           toolbarExtra={
-            selectedIds.length > 0 && (
+            role === 'admin' && selectedIds.length > 0 && (
               <button className="btn fade-in" onClick={exportSelected} data-tooltip="Sample feature — exports selected rows to CSV">
                 Export Selected ({selectedIds.length})
               </button>

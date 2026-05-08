@@ -90,7 +90,7 @@ export default function WorkOrdersPage() {
                 <option value="All">All Statuses</option>
                 {['Pending','In Progress','Completed','On Hold'].map(s=><option key={s} value={s}>{s}</option>)}
               </select>
-              {selectedIds.length > 0 && (
+              {role === 'admin' && selectedIds.length > 0 && (
                 <button className="btn fade-in" onClick={exportSelected} data-tooltip="Sample feature — exports selected rows to CSV">
                   Export Selected ({selectedIds.length})
                 </button>

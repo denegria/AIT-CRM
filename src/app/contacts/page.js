@@ -17,6 +17,7 @@ export default function ContactsPage() {
   const [drawer, setDrawer] = useState(null); // null | 'new' | contact object
   const [form, setForm] = useState(empty);
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'kanban'
+  const [statusFilter, setStatusFilter] = useState('All');
 
   const openNew = () => { setForm(empty); setDrawer('new'); };
   const openEdit = (row) => { setForm({ ...row }); setDrawer(row); };
@@ -45,7 +46,8 @@ export default function ContactsPage() {
     { key: 'lastContact', label: 'Last Contact', sortable: true },
   ];
 
-  const dataWithEmp = contacts.map(c => ({ ...c, assignedLabel: empName(c.assignedTo) }));
+  const filteredContacts = contacts.filter(c => statusFilter === 'All' || c.status === statusFilter);
+  const dataWithEmp = filteredContacts.map(c => ({ ...c, assignedLabel: empName(c.assignedTo) }));
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
@@ -65,6 +67,10 @@ export default function ContactsPage() {
               <KanbanIcon size={18} />
             </button>
           </div>
+          <select className="input select" style={{width:130, padding:'4px 8px'}} value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
+            <option value="All">All Statuses</option>
+            {['New Lead','Contacted','Qualified','Proposal Sent','Won','Lost'].map(s=><option key={s} value={s}>{s}</option>)}
+          </select>
           <button className="btn btn-primary" onClick={openNew}>+ Add Contact</button>
         </div>
       </div>

@@ -79,7 +79,8 @@ export default function ReportsPage() {
           <select className="input select" style={{width:'auto'}} value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}>
             {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
           </select>
-          <button className="btn" onClick={exportCSV} data-tooltip="Sample feature — exports monthly report to CSV">Export CSV</button>
+          {role === 'admin' && <button className="btn" onClick={exportCSV} data-tooltip="Sample feature — exports monthly report to CSV">Export CSV</button>}
+          <button className="btn btn-primary" onClick={() => window.print()}>Print Report</button>
         </div>
       </div>
 

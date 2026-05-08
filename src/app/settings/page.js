@@ -8,12 +8,12 @@ export default function SettingsPage() {
   const router = useRouter();
 
   useEffect(() => {
-    if (loaded && role === 'employee') {
+    if (loaded && role !== 'admin') {
       router.push('/');
     }
   }, [loaded, role, router]);
 
-  if (!loaded || role === 'employee') return <div className="empty-state">Loading...</div>;
+  if (!loaded || role !== 'admin') return <div className="empty-state">Loading...</div>;
 
   return (
     <div className="fade-in">

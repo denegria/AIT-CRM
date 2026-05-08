@@ -18,9 +18,9 @@ export function CRMProvider({ children }) {
   const [role, setRole] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ait-crm-role');
-      return saved || 'employee';
+      return saved || 'admin';
     }
-    return 'employee';
+    return 'admin';
   });
   const [theme, setTheme] = useState(() => {
     if (typeof window !== 'undefined') {

@@ -18,6 +18,7 @@ Welcome to the AIT Signs CRM! This guide will help you navigate the system and m
 - 🔍 **Global Search**: Press `Cmd + K` (or `Ctrl + K`) to quickly find any contact or invoice from anywhere in the app.
 - 🌓 **Dark Mode**: Use the toggle at the bottom of the sidebar to switch between Light and Dark mode.
 - 🔔 **Notifications**: Watch the bottom right for "Toasts" that confirm your actions (Saved, Deleted, etc.).
+- 🛡️ **Export Restrictions**: Data exports (CSV) are restricted to **Administrators** only.
 
 ---
 
@@ -27,6 +28,8 @@ Welcome to the AIT Signs CRM! This guide will help you navigate the system and m
 On the Contacts page, use the icons in the top right to switch views:
 1.  **List View (Table)**: Best for bulk viewing and sorting data. **Double-click** any name or email to edit it directly in the table.
 2.  **Pipeline View (Kanban)**: Best for managing leads. Click and drag a card to move a lead through the stages (New Lead → Won).
+
+**Filtering**: Use the status dropdown at the top to filter contacts by stage (e.g., show only "Qualified" leads). This works in both Table and Kanban views.
 
 ### **Contact Details**
 Click **"View"** on any contact to open their profile. Here you can:
@@ -61,8 +64,8 @@ Professional documents are just one click away:
 ## 🛡️ Admin vs. Employee Roles
 
 You can toggle your role at the bottom of the sidebar to see how the app changes:
-- **Administrators**: See global revenue, track all employee progress, and have full access to Reports and Settings.
-- **Employees**: Focused on their assigned tasks and leads. Settings and high-level financial reports are hidden to keep things simple.
+- **Administrators**: See global revenue, track all employee progress, and have full access to Reports, Settings, and Data Exports.
+- **Account Managers / Sales Managers / Designers**: Focused on their specific operational tasks. Settings, high-level financial reports, and data exports are restricted.
 
 ---
 

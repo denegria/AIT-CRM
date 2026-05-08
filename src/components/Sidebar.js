@@ -35,7 +35,7 @@ export default function Sidebar() {
       <nav className={s.navSection}>
         <div className={s.navLabel}>Menu</div>
         {nav.map(({ href, label, Icon }) => {
-          if (role === 'employee' && href === '/settings') return null;
+          if (role !== 'admin' && href === '/settings') return null;
           return (
             <Link key={href} href={href} className={`${s.navItem} ${pathname === href ? s.active : ''}`}>
               <Icon /><span>{label}</span>
@@ -50,11 +50,23 @@ export default function Sidebar() {
             <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
           </button>
         </div>
-        <div className={s.roleToggle}>
-          <button className={`${s.roleBtn} ${role==='admin'?s.activeRole:''}`} onClick={()=>handleRoleChange('admin')}>Admin</button>
-          <button className={`${s.roleBtn} ${role==='employee'?s.activeRole:''}`} onClick={()=>handleRoleChange('employee')}>Employee</button>
+        <div className={s.roleSwitcher}>
+          <label className={s.roleLabel}>System Role</label>
+          <select 
+            className="input select" 
+            style={{padding: '4px 8px', fontSize: 'var(--text-xs)'}} 
+            value={role} 
+            onChange={(e) => handleRoleChange(e.target.value)}
+          >
+            <option value="admin">Administrator</option>
+            <option value="designer">Designer</option>
+            <option value="account_manager">Account Manager</option>
+            <option value="sales_manager">Sales Manager</option>
+          </select>
         </div>
-        <div className={s.roleBadge}>Viewing as {role === 'admin' ? 'Administrator' : 'Employee'}</div>
+        <div className={s.roleBadge}>
+          {role === 'admin' ? 'Full Access' : 'Restricted Access'}
+        </div>
       </div>
     </aside>
   );
