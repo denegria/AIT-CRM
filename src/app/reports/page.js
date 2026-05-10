@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import { useCRM } from '@/lib/store';
 import KPICard from '@/components/KPICard';
 import { BarChart, PieChart, ChartLegend } from '@/components/Charts';
@@ -8,7 +8,7 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 const SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 export default function ReportsPage() {
-  const { financials, contacts, workOrders, loaded } = useCRM();
+  const { financials, contacts, workOrders, loaded, role } = useCRM();
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
 
   const report = useMemo(() => {
@@ -23,18 +23,14 @@ export default function ReportsPage() {
     return { totalRevenue, totalInvoiced, pipelineValue, overdueAmount, pendingEstimates: pendingEstimates.length, overdueCount: overdueInvoices.length };
   }, [financials]);
 
-  const [monthlyRevenue, setMonthlyRevenue] = useState([]);
-
-  useEffect(() => {
+  const monthlyRevenue = useMemo(() => {
     const currentMonth = new Date().getMonth();
-    const data = SHORT.map((m, i) => {
-      // Deterministic "random" value based on month index
+    return SHORT.map((m, i) => {
       const seed = (i + 1) * 1234.56;
       const base = Math.floor((seed % 6000) + 3000);
       const val = i === currentMonth ? report.totalRevenue : base;
       return { label: m, value: val, color: i === selectedMonth ? '#4a7aff' : '#4a7aff60' };
     });
-    setMonthlyRevenue(data);
   }, [report.totalRevenue, selectedMonth]);
 
   const statusBreakdown = useMemo(() => {

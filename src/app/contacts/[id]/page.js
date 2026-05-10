@@ -24,6 +24,11 @@ export default function ContactDetailPage() {
   const contactWorkOrders = useMemo(() => workOrders.filter(wo => wo.contactId === params.id), [workOrders, params.id]);
   const contactFinancials = useMemo(() => financials.filter(f => f.contactId === params.id), [financials, params.id]);
   const assignedEmployee = useMemo(() => employees.find(e => e.id === contact?.assignedTo), [employees, contact]);
+  const timeline = useMemo(() => {
+    if (!contact) return [];
+    const notes = (contact.notes || []).map(n => ({ ...n, type: 'note', icon: <MessageSquare size={16} /> }));
+    return [...notes].sort((a, b) => b.date.localeCompare(a.date));
+  }, [contact]);
 
   // For Edit Modal
   const [editForm, setEditForm] = useState(null);
@@ -55,12 +60,6 @@ export default function ContactDetailPage() {
     setNoteInput('');
     toast('Note added');
   };
-
-  const timeline = useMemo(() => {
-    if (!contact) return [];
-    const notes = (contact.notes || []).map(n => ({ ...n, type: 'note', icon: <MessageSquare size={16} /> }));
-    return [...notes].sort((a, b) => b.date.localeCompare(a.date));
-  }, [contact]);
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 

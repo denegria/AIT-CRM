@@ -14,6 +14,18 @@ function saveStorage(d) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {}
 }
 
+function getInitialData() {
+  const s = loadStorage();
+  return {
+    contacts: s?.contacts || defaults.contacts,
+    workOrders: s?.workOrders || defaults.workOrders,
+    financials: s?.financials || defaults.financials,
+    tasks: s?.tasks || defaults.tasks,
+    calendarEvents: s?.calendarEvents || defaults.calendarEvents,
+    salesLedger: s?.salesLedger || defaults.salesLedger,
+  };
+}
+
 export function CRMProvider({ children }) {
   const [role, setRole] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -29,24 +41,14 @@ export function CRMProvider({ children }) {
     }
     return 'light';
   });
-  const [contacts, setContacts] = useState([]);
-  const [workOrders, setWorkOrders] = useState([]);
-  const [financials, setFinancials] = useState([]);
-  const [tasks, setTasks] = useState([]);
-  const [calendarEvents, setCalendarEvents] = useState([]);
-  const [salesLedger, setSalesLedger] = useState([]);
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    const s = loadStorage();
-    setContacts(s?.contacts || defaults.contacts);
-    setWorkOrders(s?.workOrders || defaults.workOrders);
-    setFinancials(s?.financials || defaults.financials);
-    setTasks(s?.tasks || defaults.tasks);
-    setCalendarEvents(s?.calendarEvents || defaults.calendarEvents);
-    setSalesLedger(s?.salesLedger || defaults.salesLedger);
-    setLoaded(true);
-  }, []);
+  const [initialData] = useState(getInitialData);
+  const [contacts, setContacts] = useState(initialData.contacts);
+  const [workOrders, setWorkOrders] = useState(initialData.workOrders);
+  const [financials, setFinancials] = useState(initialData.financials);
+  const [tasks, setTasks] = useState(initialData.tasks);
+  const [calendarEvents, setCalendarEvents] = useState(initialData.calendarEvents);
+  const [salesLedger, setSalesLedger] = useState(initialData.salesLedger);
+  const loaded = true;
 
   useEffect(() => {
     if (typeof window !== 'undefined') {

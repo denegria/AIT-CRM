@@ -1,5 +1,5 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, User, ClipboardList, FileText, X } from 'lucide-react';
 import { useCRM } from '@/lib/store';
@@ -7,7 +7,6 @@ import { useCRM } from '@/lib/store';
 export default function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState([]);
   const router = useRouter();
   const { contacts, workOrders, financials, loaded } = useCRM();
   const inputRef = useRef(null);
@@ -28,11 +27,8 @@ export default function CommandPalette() {
     if (open && inputRef.current) inputRef.current.focus();
   }, [open]);
 
-  useEffect(() => {
-    if (!query.trim()) {
-      setResults([]);
-      return;
-    }
+  const results = useMemo(() => {
+    if (!query.trim()) return [];
     const q = query.toLowerCase();
     
     const matchedContacts = contacts.filter(c => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q))
@@ -44,7 +40,7 @@ export default function CommandPalette() {
     const matchedFin = financials.filter(f => f.number.toLowerCase().includes(q) || f.client.toLowerCase().includes(q))
       .map(f => ({ id: f.id, title: `${f.type} ${f.number}`, subtitle: f.client, type: 'financial', icon: <FileText size={16} />, path: '/financials' }));
 
-    setResults([...matchedContacts, ...matchedWO, ...matchedFin].slice(0, 10));
+    return [...matchedContacts, ...matchedWO, ...matchedFin].slice(0, 10);
   }, [query, contacts, workOrders, financials]);
 
   const navigate = (path) => {
@@ -83,7 +79,7 @@ export default function CommandPalette() {
               </div>
             ))
           ) : query ? (
-            <div className="cp-empty">No results for "{query}"</div>
+            <div className="cp-empty">No results for &quot;{query}&quot;</div>
           ) : (
             <div className="cp-hint">Type to search across everything...</div>
           )}

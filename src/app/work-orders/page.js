@@ -9,7 +9,7 @@ import { generateWorkOrderPDF } from '@/lib/pdf';
 const empty = { number:'', title:'', client:'', contactId:'', priority:'Medium', status:'Pending', assignedTo:'emp-1', dueDate:'', description:'', estimatedCost:0 };
 
 export default function WorkOrdersPage() {
-  const { workOrders, addWorkOrder, updateWorkOrder, deleteWorkOrder, contacts, employees, loaded } = useCRM();
+  const { workOrders, addWorkOrder, updateWorkOrder, deleteWorkOrder, contacts, employees, loaded, role } = useCRM();
   const { toast } = useToast();
   const [drawer, setDrawer] = useState(null);
   const [form, setForm] = useState(empty);

@@ -10,7 +10,7 @@ const types = ['Invoice', 'Estimate', 'Receipt'];
 const emptyForm = { number:'', type:'Invoice', client:'', contactId:'', amount:0, date:'', dueDate:'', status:'Pending', items:[{desc:'',qty:1,rate:0}] };
 
 export default function FinancialsPage() {
-  const { financials, addFinancial, updateFinancial, deleteFinancial, contacts, loaded } = useCRM();
+  const { financials, addFinancial, updateFinancial, deleteFinancial, contacts, loaded, role } = useCRM();
   const { toast } = useToast();
   const [tab, setTab] = useState('Invoice');
   const [drawer, setDrawer] = useState(null);
