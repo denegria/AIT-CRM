@@ -114,6 +114,13 @@ If used, Directus should be treated as an accelerator/admin surface over our dat
 
 The production app should replace the current mock role toggle with real RBAC.
 
+V1 should keep the same user types already present in the CRM prototype:
+
+- Administrator: `admin`
+- Designer: `designer`
+- Account Manager: `account_manager`
+- Sales Manager: `sales_manager`
+
 Core tables:
 
 - `users`
@@ -122,13 +129,10 @@ Core tables:
 - `user_roles`
 - `teams` or `departments`, if needed
 
-Likely roles:
+Future roles can be added later if the business needs them:
 
-- Owner/Admin
 - General Manager
-- Sales Manager
 - Sales Rep
-- Designer
 - Production/Installer
 - Accounting
 - Read-only/Auditor
@@ -159,10 +163,10 @@ Access checks should consider:
 Example rules:
 
 - Admin sees all business units.
-- Business unit manager sees only their assigned business units.
-- Sales rep sees assigned leads, usually scoped to their business unit.
-- Accounting can see invoices across all business units.
-- Owner sees consolidated reporting across the full organization.
+- Sales Manager sees sales activity, assigned teams/leads, and business-unit scoped performance.
+- Account Manager sees assigned contacts, customer activity, and account follow-up work.
+- Designer sees design/job-related work assigned to them, with restricted financial/settings access.
+- Future accounting/production roles can be split out when those workflows become first-class.
 
 ## Business Unit Model
 
@@ -409,7 +413,6 @@ Full Directus parity:
 - Which ORM should be used: Drizzle or Prisma?
 - Which workflow engine should be used: Trigger.dev, Temporal, or BullMQ?
 - What do the current Google Sheets reveal about actual fields, ownership, dedupe, and business-unit separation?
-- Which roles are required for the first production client?
 - Should business-unit membership be per-user only, or also team-based?
 - Which data should be shared organization-wide across all business units?
 - What should be synced from QuickBooks in V1: customers, estimates, invoices, payments, items/services, or only invoice/payment snapshots?
