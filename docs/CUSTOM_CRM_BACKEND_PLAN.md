@@ -33,6 +33,7 @@ Directus can still be useful as a temporary or optional admin/data tool, but it 
 - [x] Drizzle config and initial SQL migration generated
 - [x] Linear project created and seeded with completed/proposed slices
 - [x] Apply latest import staging migration and load AIT Signs staging batch into Neon
+- [x] CRM import review UI added for row-by-row approval inside the app
 - [ ] Real auth and RBAC
 - [ ] Facebook Lead Ads ingestion
 
@@ -62,7 +63,7 @@ Next Linear slices:
    - connect contacts, leads, estimates, work orders, and activity events to the Drizzle schema
    - seed the four AIT business units
    - prepare server-side read paths for the current UI
-   - status: first server bootstrap path is active; dashboard now surfaces import staging counts while production CRM tables remain empty; review and approved-record promotion scripts are available but not run
+   - status: first server bootstrap path is active; dashboard now surfaces import staging counts while production CRM tables remain empty; review and approved-record promotion scripts are available, and the CRM now has an internal import review screen for row-by-row approval
 
 3. `MIS-14` LocalStorage replacement plan
    - map current mock entities to Postgres reads

@@ -1,5 +1,6 @@
 'use client';
 import { useMemo } from 'react';
+import Link from 'next/link';
 import { useCRM } from '@/lib/store';
 import KPICard from '@/components/KPICard';
 import TaskList from '@/components/TaskList';
@@ -90,6 +91,9 @@ export default function Dashboard() {
               <span className="badge badge-contacted">{importStaging.counts.normalizedRecords.toLocaleString()} normalized</span>
               <span className="badge badge-qualified">{importStaging.counts.reviewItems.toLocaleString()} review</span>
               <span className="badge badge-pending">{importStaging.latestBatch.status}</span>
+              <Link className="btn btn-sm btn-primary" href="/import-review">
+                Open review queue
+              </Link>
             </div>
           </div>
         </div>

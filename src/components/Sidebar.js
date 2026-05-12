@@ -5,11 +5,12 @@ import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import s from './Sidebar.module.css';
 
-import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, Database } from 'lucide-react';
 
 const nav = [
   { href: '/', label: 'Dashboard', Icon: LayoutDashboard },
   { href: '/contacts', label: 'Contacts', Icon: Users },
+  { href: '/import-review', label: 'Import Review', Icon: Database },
   { href: '/work-orders', label: 'Work Orders', Icon: ClipboardList },
   { href: '/financials', label: 'Financials', Icon: DollarSign },
   { href: '/reports', label: 'Reports', Icon: BarChart3 },
@@ -35,7 +36,7 @@ export default function Sidebar() {
       <nav className={s.navSection}>
         <div className={s.navLabel}>Menu</div>
         {nav.map(({ href, label, Icon }) => {
-          if (role !== 'admin' && href === '/settings') return null;
+          if (role !== 'admin' && (href === '/settings' || href === '/import-review')) return null;
           return (
             <Link key={href} href={href} className={`${s.navItem} ${pathname === href ? s.active : ''}`}>
               <Icon /><span>{label}</span>
