@@ -32,7 +32,7 @@ Directus can still be useful as a temporary or optional admin/data tool, but it 
 - [x] First Postgres-backed CRM entities scaffolded
 - [x] Drizzle config and initial SQL migration generated
 - [x] Linear project created and seeded with completed/proposed slices
-- [ ] Apply latest import staging migration and load AIT Signs staging batch into Neon
+- [x] Apply latest import staging migration and load AIT Signs staging batch into Neon
 - [ ] Real auth and RBAC
 - [ ] Facebook Lead Ads ingestion
 
@@ -56,7 +56,7 @@ Next Linear slices:
    - classify record candidates, notes, headers, and financial lines
    - store raw source rows immutably
    - promote approved rows into normalized staging records
-   - status: implementation is ready and dry-run validated; live Neon load is pending a current `DATABASE_URL`
+   - status: live Neon staging load complete; production CRM tables intentionally remain empty until review/promote logic lands
 
 2. `MIS-13` First CRM entity wiring
    - connect contacts, leads, estimates, work orders, and activity events to the Drizzle schema
