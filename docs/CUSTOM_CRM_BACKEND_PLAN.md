@@ -14,6 +14,19 @@ The backend should be custom enough to own the business rules that matter:
 
 Directus can still be useful as a temporary or optional admin/data tool, but it should not own the core permission model, business-unit model, or automation logic.
 
+## Execution Status
+
+- [x] Final operating model defined: Linear -> Symphony -> Codex -> GitHub -> Giuseppe review
+- [x] AIT Signs workbook profile generated from the XLSX
+- [x] AIT Signs migration notes drafted from the profile
+- [x] AIT Signs schema draft written from the profile
+- [x] AIT Signs row-level staging preview drafted
+- [x] Plan doc updated with finalized strategy and phases
+- [x] Schema and import staging tables drafted in SQL
+- [ ] First Postgres-backed CRM entities
+- [ ] Real auth and RBAC
+- [ ] Facebook Lead Ads ingestion
+
 ## Final Operating Model
 
 This is the finalized delivery stack for the project:
@@ -83,7 +96,7 @@ Recommended stack:
 
 - Next.js app for the CRM product UI
 - Postgres as the source of truth
-- Drizzle or Prisma for schema and migrations
+- Drizzle for schema and migrations
 - Custom API/server layer for product behavior
 - Custom internal admin pages inside the CRM app
 - Durable workflow layer for automations
@@ -147,6 +160,12 @@ V1 recommended default:
 - Vercel + Neon + Cloudflare R2
 
 This keeps the architecture simple, production-capable, and easy for Codex agents to reason about.
+
+Recommended ORM decision:
+
+- Use `Drizzle` as the default migration/schema layer.
+- Keep the SQL draft aligned with Drizzle table definitions.
+- Avoid introducing Prisma unless a later slice proves we need its client ergonomics more than Drizzle's explicitness.
 
 ## Authentication Recommendation
 
@@ -728,7 +747,6 @@ The execution rule is:
 
 ## Open Questions
 
-- Which ORM should be used: Drizzle or Prisma?
 - Which workflow engine should be used: Trigger.dev, Temporal, or BullMQ?
 - Can we get XLSX or direct Google Sheets access to preserve formatting/formulas/hidden context, or should we proceed from CSV only?
 - Which Spanish status labels and notes should become normalized CRM statuses versus plain timeline notes?
