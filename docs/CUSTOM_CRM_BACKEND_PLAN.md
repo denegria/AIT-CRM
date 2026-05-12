@@ -23,7 +23,8 @@ Directus can still be useful as a temporary or optional admin/data tool, but it 
 - [x] AIT Signs row-level staging preview drafted
 - [x] Plan doc updated with finalized strategy and phases
 - [x] Schema and import staging tables drafted in SQL
-- [ ] First Postgres-backed CRM entities
+- [x] First Postgres-backed CRM entities scaffolded
+- [x] Drizzle config and initial SQL migration generated
 - [ ] Real auth and RBAC
 - [ ] Facebook Lead Ads ingestion
 
