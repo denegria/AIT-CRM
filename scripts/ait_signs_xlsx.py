@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import re
+from datetime import datetime, timezone
 from collections import defaultdict
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -12,6 +15,10 @@ NS = {
     "r": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
     "rel": "http://schemas.openxmlformats.org/package/2006/relationships",
 }
+
+PHONE_RE = re.compile(r"(?<!\d)(?:\+?\d[\d\s().-]{5,}\d)(?!\d)")
+MONEY_RE = re.compile(r"(?<!\w)\$?\s*\d[\d,]*(?:\.\d+)?(?!\w)")
+EXCEL_SERIAL_RE = re.compile(r"^4[0-9]{4}(?:\.0)?$")
 
 
 def col_to_number(col: str) -> int:
@@ -117,6 +124,315 @@ def non_empty_count(values: list[str]) -> int:
     return sum(1 for v in values if str(v).strip())
 
 
+def normalize_text(value: object) -> str:
+    return " ".join(str(value).strip().split())
+
+
+def row_text(values: list[str]) -> str:
+    return " | ".join(normalize_text(v) for v in values if normalize_text(v))
+
+
+def sheet_family(sheet_name: str) -> str:
+    lower = sheet_name.lower()
+    if "interes" in lower:
+        return "lead_intake"
+    if "estim" in lower:
+        return "estimates"
+    if "termin" in lower or "pagad" in lower:
+        return "completed_paid"
+    if "work order" in lower:
+        return "work_orders"
+    return "mixed"
+
+
+def source_type_for_sheet(sheet_name: str) -> str:
+    family = sheet_family(sheet_name)
+    if family == "lead_intake":
+        return "lead"
+    if family == "estimates":
+        return "estimate"
+    if family == "work_orders":
+        return "work_order"
+    if family == "completed_paid":
+        return "archive"
+    return "mixed"
+
+
+def status_hint_for_sheet(sheet_name: str) -> str:
+    family = sheet_family(sheet_name)
+    if family == "lead_intake":
+        return "new"
+    if family == "estimates":
+        return "estimate_review"
+    if family == "work_orders":
+        return "in_production"
+    if family == "completed_paid":
+        return "delivered_paid"
+    return "needs_review"
+
+
+def extract_first_phone(values: list[str]) -> str | None:
+    candidates: list[tuple[int, str]] = []
+    for value in values:
+        text = normalize_text(value)
+        if not text:
+            continue
+        for match in PHONE_RE.finditer(text):
+            phone = normalize_text(match.group(0))
+            digits = re.sub(r"\D", "", phone)
+            if 7 <= len(digits) <= 15:
+                candidates.append((len(digits), digits))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda item: item[0])[1]
+
+
+def extract_first_money(values: list[str]) -> str | None:
+    for value in values:
+        text = normalize_text(value)
+        if not text:
+            continue
+        match = MONEY_RE.search(text)
+        if match:
+            token = match.group(0).replace("$", "").strip()
+            token = token.replace(",", "")
+            if token:
+                return token
+    return None
+
+
+def money_like_count(values: list[str]) -> int:
+    count = 0
+    for value in values:
+        text = normalize_text(value)
+        if not text:
+            continue
+        if "$" in text:
+            count += 1
+            continue
+        compact = text.replace(",", "")
+        if EXCEL_SERIAL_RE.match(compact):
+            continue
+        try:
+            amount = float(compact)
+        except ValueError:
+            continue
+        if amount >= 100:
+            count += 1
+    return count
+
+
+def extract_contact_hint(values: list[str]) -> str | None:
+    stopwords = {
+        "ai",
+        "ait",
+        "fb",
+        "phone",
+        "phone:",
+        "customer",
+        "contacto",
+        "address",
+        "email",
+        "status",
+        "observaciones",
+        "designer",
+        "chief",
+        "activo",
+        "monto",
+        "tax",
+        "total",
+        "balance",
+    }
+    for value in values:
+        text = normalize_text(value)
+        if not text:
+            continue
+        upper = text.upper()
+        if any(ch.isdigit() for ch in text):
+            continue
+        if len(text) < 3:
+            continue
+        if upper.lower() in stopwords:
+            continue
+        if any(marker in upper for marker in ("LLAMAR", "NO CONTEST", "SE CONTACT", "PAG", "ENTREG", "ESTA EN", "VOLVER")):
+            continue
+        if " " in text or text.isalpha():
+            return text
+    return None
+
+
+def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
+    workbook_file = Path(workbook_path)
+    source_name = workbook_file.stem
+    file_bytes = workbook_file.read_bytes()
+    file_hash = hashlib.sha256(file_bytes).hexdigest()
+    generated_at = datetime.now(timezone.utc).isoformat()
+
+    sheet_summaries = []
+    counts = {
+        "sourceRows": 0,
+        "normalizedRecords": 0,
+        "reviewItems": 0,
+    }
+    for sheet in report["sheets"]:
+        sheet_summaries.append(
+            {
+                "name": sheet["name"],
+                "family": sheet_family(sheet["name"]),
+                "sourceType": source_type_for_sheet(sheet["name"]),
+                "rowCount": sheet["rowCount"],
+                "nonEmptyRowCount": sheet["nonEmptyRowCount"],
+                "headerRow": sheet["headerRow"],
+                "maxCols": sheet["maxCols"],
+            }
+        )
+
+    source_rows = []
+    normalized_records = []
+    review_items = []
+
+    header_rows_by_sheet = {
+        sheet["name"]: sheet["headerRow"]
+        for sheet in report["sheets"]
+        if sheet.get("headerRow") is not None
+    }
+
+    for row in report["rowInventory"]:
+        header_row = header_rows_by_sheet.get(row["sheet"])
+        is_before_data = header_row is not None and row["rowNumber"] <= header_row
+        source_row = {
+            "sheet": row["sheet"],
+            "sourceSheet": row["sheet"],
+            "sourceRowNumber": row["rowNumber"],
+            "rowKind": row["kind"],
+            "parseStatus": "pending",
+            "rawValuesJson": row["values"],
+            "rawText": row["summary"],
+        }
+        if row["kind"] == "blank":
+            source_row["parseStatus"] = "ignored"
+        elif is_before_data:
+            source_row["parseStatus"] = "ignored" if row["kind"] in {"header", "section_header"} else "needs_review"
+        elif row["kind"] in {"record_candidate", "financial_line", "note"}:
+            source_row["parseStatus"] = "parsed"
+        elif row["kind"] in {"header", "section_header"}:
+            source_row["parseStatus"] = "ignored"
+        else:
+            source_row["parseStatus"] = "needs_review"
+        if row["kind"] == "record_candidate" and row["confidence"] < 0.75:
+            source_row["parseStatus"] = "needs_review"
+
+        source_rows.append(source_row)
+
+        if source_row["parseStatus"] == "parsed":
+            sheet_name = row["sheet"]
+            family = sheet_family(sheet_name)
+            phone = extract_first_phone(row["values"])
+            contact_hint = extract_contact_hint(row["values"])
+            money_hint = extract_first_money(row["values"])
+            proposed_base = {
+                "businessUnit": "AIT Signs",
+                "sourceSheet": sheet_name,
+                "sourceRowNumber": row["rowNumber"],
+                "rowKind": row["kind"],
+                "sourceType": source_type_for_sheet(sheet_name),
+                "statusHint": status_hint_for_sheet(sheet_name),
+                "importConfidence": row["confidence"],
+                "contactHint": contact_hint,
+                "phoneHint": phone,
+                "moneyHint": money_hint,
+                "originalText": row["summary"],
+                "rawValuesJson": row["values"],
+            }
+            record_type = "note"
+            proposed_field = "proposedNoteJson"
+            if row["kind"] == "financial_line":
+                record_type = "payment_snapshot"
+                proposed_field = "proposedPaymentJson"
+            elif row["kind"] == "note":
+                record_type = "note"
+                proposed_field = "proposedNoteJson"
+            elif family == "lead_intake":
+                record_type = "lead"
+                proposed_field = "proposedLeadJson"
+            elif family == "estimates":
+                record_type = "estimate"
+                proposed_field = "proposedEstimateJson"
+            elif family in {"work_orders", "completed_paid"}:
+                record_type = "work_order"
+                proposed_field = "proposedWorkOrderJson"
+
+            normalized_record = {
+                "sourceSheet": sheet_name,
+                "sourceRowNumber": row["rowNumber"],
+                "recordType": record_type,
+                "confidenceScore": row["confidence"],
+                "status": "pending",
+                proposed_field: proposed_base,
+            }
+            if record_type == "lead":
+                normalized_record["proposedLeadJson"] = proposed_base | {
+                    "leadStage": status_hint_for_sheet(sheet_name),
+                }
+            elif record_type == "estimate":
+                normalized_record["proposedEstimateJson"] = proposed_base | {
+                    "estimateStage": status_hint_for_sheet(sheet_name),
+                }
+            elif record_type == "work_order":
+                normalized_record["proposedWorkOrderJson"] = proposed_base | {
+                    "workOrderStage": status_hint_for_sheet(sheet_name),
+                }
+            elif record_type == "payment_snapshot":
+                normalized_record["proposedPaymentJson"] = proposed_base | {
+                    "paymentStage": status_hint_for_sheet(sheet_name),
+                }
+            else:
+                normalized_record["proposedNoteJson"] = proposed_base | {
+                    "noteStage": status_hint_for_sheet(sheet_name),
+                }
+            normalized_records.append(normalized_record)
+
+        if (
+            (is_before_data and row["kind"] not in {"blank", "header", "section_header"})
+            or row["kind"] in {"header", "section_header", "misc_text"}
+        ) or (
+            row["kind"] == "record_candidate" and row["confidence"] < 0.75
+        ):
+            review_items.append(
+                {
+                    "sourceSheet": row["sheet"],
+                    "sourceRowNumber": row["rowNumber"],
+                    "reviewType": row["kind"],
+                    "reason": row["summary"],
+                    "reviewStatus": "pending",
+                    "proposedResolutionJson": {
+                        "workbookPath": str(workbook_file),
+                        "sourceType": source_type_for_sheet(row["sheet"]),
+                        "rowKind": row["kind"],
+                        "confidence": row["confidence"],
+                    },
+                }
+            )
+
+    counts["sourceRows"] = len(source_rows)
+    counts["normalizedRecords"] = len(normalized_records)
+    counts["reviewItems"] = len(review_items)
+
+    return {
+        "generatedAt": generated_at,
+        "workbookPath": str(workbook_file),
+        "workbookFileHash": file_hash,
+        "sourceName": source_name,
+        "sourceType": "xlsx",
+        "businessUnit": "AIT Signs",
+        "sheets": sheet_summaries,
+        "counts": counts,
+        "sourceRows": source_rows,
+        "normalizedRecords": normalized_records,
+        "reviewItems": review_items,
+    }
+
+
 def find_header_row(rows: list[dict]) -> dict | None:
     keywords = [
         "customer",
@@ -201,6 +517,18 @@ def classify_row(sheet_name: str, row_number: int, values: list[str]) -> dict:
             "values": values,
         }
 
+    if len(non_empty) == 1:
+        compact = non_empty[0].replace(",", "")
+        if compact.replace(".", "", 1).isdigit():
+            return {
+                "sheet": sheet_name,
+                "rowNumber": row_number,
+                "kind": "blank",
+                "confidence": 1.0,
+                "summary": joined,
+                "values": values,
+            }
+
     section_markers = [
         "prospectos o interesados",
         "15 work order",
@@ -240,14 +568,14 @@ def classify_row(sheet_name: str, row_number: int, values: list[str]) -> dict:
             "values": values,
         }
 
-    has_phone = any(ch.isdigit() for ch in joined) and any(len(token) >= 7 for token in joined.split())
+    has_phone = extract_first_phone(values) is not None
     has_name = any(token.isalpha() for token in non_empty)
-    has_money = any(token.replace(".", "", 1).isdigit() for token in non_empty)
+    has_money = money_like_count(values) >= 2 or "$" in joined
     has_note = any(marker in lower for marker in ["llamar", "contesto", "contact", "pago", "entregado", "seguimiento", "no contest", "volver"])
 
     if has_phone and (has_name or has_note):
         kind = "record_candidate"
-        confidence = 0.72
+        confidence = 0.82
     elif has_note:
         kind = "note"
         confidence = 0.66

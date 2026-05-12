@@ -12,6 +12,12 @@
 
 # testing
 /coverage
+__pycache__/
+
+# local generated AIT import artifacts with client source data
+/docs/ait-signs-import-staging.json
+/docs/ait-signs-import-staging.md
+/src/lib/ait-signs-seed.js
 
 # next.js
 /.next/

@@ -14,19 +14,21 @@ function saveStorage(d) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(d)); } catch {}
 }
 
-function getInitialData() {
+function getInitialData(seedData = defaults) {
   const s = loadStorage();
+  const fallback = seedData || defaults;
   return {
-    contacts: s?.contacts || defaults.contacts,
-    workOrders: s?.workOrders || defaults.workOrders,
-    financials: s?.financials || defaults.financials,
-    tasks: s?.tasks || defaults.tasks,
-    calendarEvents: s?.calendarEvents || defaults.calendarEvents,
-    salesLedger: s?.salesLedger || defaults.salesLedger,
+    businessUnits: s?.businessUnits || fallback.businessUnits || [],
+    contacts: s?.contacts || fallback.contacts,
+    workOrders: s?.workOrders || fallback.workOrders,
+    financials: s?.financials || fallback.financials,
+    tasks: s?.tasks || fallback.tasks,
+    calendarEvents: s?.calendarEvents || fallback.calendarEvents,
+    salesLedger: s?.salesLedger || fallback.salesLedger,
   };
 }
 
-export function CRMProvider({ children }) {
+export function CRMProvider({ children, initialData }) {
   const [role, setRole] = useState(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ait-crm-role');
@@ -41,13 +43,14 @@ export function CRMProvider({ children }) {
     }
     return 'light';
   });
-  const [initialData] = useState(getInitialData);
-  const [contacts, setContacts] = useState(initialData.contacts);
-  const [workOrders, setWorkOrders] = useState(initialData.workOrders);
-  const [financials, setFinancials] = useState(initialData.financials);
-  const [tasks, setTasks] = useState(initialData.tasks);
-  const [calendarEvents, setCalendarEvents] = useState(initialData.calendarEvents);
-  const [salesLedger, setSalesLedger] = useState(initialData.salesLedger);
+  const [bootstrapData] = useState(() => getInitialData(initialData));
+  const [businessUnits, setBusinessUnits] = useState(bootstrapData.businessUnits);
+  const [contacts, setContacts] = useState(bootstrapData.contacts);
+  const [workOrders, setWorkOrders] = useState(bootstrapData.workOrders);
+  const [financials, setFinancials] = useState(bootstrapData.financials);
+  const [tasks, setTasks] = useState(bootstrapData.tasks);
+  const [calendarEvents, setCalendarEvents] = useState(bootstrapData.calendarEvents);
+  const [salesLedger, setSalesLedger] = useState(bootstrapData.salesLedger);
   const loaded = true;
 
   useEffect(() => {
@@ -65,8 +68,8 @@ export function CRMProvider({ children }) {
 
   useEffect(() => {
     if (!loaded) return;
-    saveStorage({ contacts, workOrders, financials, tasks, calendarEvents, salesLedger });
-  }, [contacts, workOrders, financials, tasks, calendarEvents, salesLedger, loaded]);
+    saveStorage({ businessUnits, contacts, workOrders, financials, tasks, calendarEvents, salesLedger });
+  }, [businessUnits, contacts, workOrders, financials, tasks, calendarEvents, salesLedger, loaded]);
 
   const gid = (p) => `${p}-${crypto.randomUUID().slice(0, 8)}`;
 
@@ -92,6 +95,7 @@ export function CRMProvider({ children }) {
 
   const resetData = useCallback(() => {
     localStorage.removeItem(STORAGE_KEY);
+    setBusinessUnits(defaults.businessUnits || []);
     setContacts(defaults.contacts); setWorkOrders(defaults.workOrders);
     setFinancials(defaults.financials); setTasks(defaults.tasks);
     setCalendarEvents(defaults.calendarEvents); setSalesLedger(defaults.salesLedger);
@@ -99,6 +103,7 @@ export function CRMProvider({ children }) {
 
   const value = {
     role, setRole, theme, setTheme, loaded,
+    businessUnits, setBusinessUnits,
     contacts, addContact, updateContact, deleteContact,
     workOrders, addWorkOrder, updateWorkOrder, deleteWorkOrder,
     financials, addFinancial, updateFinancial, deleteFinancial,

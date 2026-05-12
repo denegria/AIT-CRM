@@ -1,0 +1,1 @@
+ALTER TABLE "import_normalized_records" ADD COLUMN "proposed_note_json" jsonb;

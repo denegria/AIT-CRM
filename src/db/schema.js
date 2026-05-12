@@ -251,6 +251,7 @@ export const importNormalizedRecords = pgTable('import_normalized_records', {
   proposedEstimateJson: jsonb('proposed_estimate_json'),
   proposedWorkOrderJson: jsonb('proposed_work_order_json'),
   proposedPaymentJson: jsonb('proposed_payment_json'),
+  proposedNoteJson: jsonb('proposed_note_json'),
   confidenceScore: numeric('confidence_score', { precision: 5, scale: 2 }),
   status: text('status').notNull().default('pending'),
   createdAt,

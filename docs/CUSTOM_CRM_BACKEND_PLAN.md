@@ -21,11 +21,18 @@ Directus can still be useful as a temporary or optional admin/data tool, but it 
 - [x] AIT Signs migration notes drafted from the profile
 - [x] AIT Signs schema draft written from the profile
 - [x] AIT Signs row-level staging preview drafted
+- [x] AIT Signs import staging batch generator added
+- [x] AIT Signs import staging DB loader added with dry-run validation
+- [x] AIT Signs server bootstrap path wired through the root layout/store
+- [x] Empty live Postgres bootstrap guardrail added
+- [x] Raw generated import artifacts kept out of git; committed UI fallback stays sanitized
 - [x] Plan doc updated with finalized strategy and phases
+- [x] Live Postgres bring-up and verification gate
 - [x] Schema and import staging tables drafted in SQL
 - [x] First Postgres-backed CRM entities scaffolded
 - [x] Drizzle config and initial SQL migration generated
 - [x] Linear project created and seeded with completed/proposed slices
+- [ ] Apply latest import staging migration and load AIT Signs staging batch into Neon
 - [ ] Real auth and RBAC
 - [ ] Facebook Lead Ads ingestion
 
@@ -49,6 +56,7 @@ Next Linear slices:
    - classify record candidates, notes, headers, and financial lines
    - store raw source rows immutably
    - promote approved rows into normalized staging records
+   - status: implementation is ready and dry-run validated; live Neon load is pending a current `DATABASE_URL`
 
 2. `MIS-13` First CRM entity wiring
    - connect contacts, leads, estimates, work orders, and activity events to the Drizzle schema
@@ -600,6 +608,17 @@ Full Directus parity:
 - Add database schema for organizations, business units, contacts, leads, estimates, work orders/jobs, financial snapshots, tasks, files, notes, activity, audit logs, and import staging tables.
 - Seed the first organization and four business units.
 
+### Step 2.5: Live Database Bring-Up And Verification
+
+- Apply the Drizzle schema to a live Postgres instance.
+- Verify round-trip reads and writes for organizations, business units, contacts, leads, estimates, work orders, and import staging tables.
+- Confirm the server bootstrap path uses live Postgres whenever it is available.
+- Keep any generated seed data strictly as a fallback for local/dev bootstrapping, not as a substitute for imported production records.
+- If the live database exists but is still empty, show an honest empty/import state instead of silently substituting demo rows.
+- Capture the exact database connection and migration commands that work in this repo.
+- Verification status: Neon connection tested successfully and `drizzle-kit migrate` applied the schema to the live database.
+- Current database state: tables exist, but the first bootstrap import still needs to land before the UI should depend on real operational data.
+
 ### Step 3: Import Staging And Review
 
 - Import raw rows into staging tables without mutating production CRM records.
@@ -673,20 +692,21 @@ Suggested slice order:
 1. CSV/XLSX profiler for provided AIT Signs exports.
 2. Field inventory, lifecycle map, and Spanish status mapping draft.
 3. Schema/migrations foundation, including import staging tables.
-4. Seed data for organization and business units.
-5. Contacts/leads/estimates/work-orders server data model.
-6. Import staging and review workflow.
-7. Contacts API/data migration from localStorage.
-8. Leads/jobs/financial snapshots API/data migration.
-9. UI data-provider replacement.
-10. Business-unit UI and filters.
-11. File storage.
-12. Auth integration.
-13. RBAC and business-unit access helpers.
-14. Facebook webhook ingestion.
-15. Permission/integration test suite.
-16. Deployment/runbook.
-17. QuickBooks V5 investigation/adapter.
+4. Live Postgres bring-up and verification.
+5. Seed data for organization and business units.
+6. Contacts/leads/estimates/work-orders server data model.
+7. Import staging and review workflow.
+8. Contacts API/data migration from localStorage.
+9. Leads/jobs/financial snapshots API/data migration.
+10. UI data-provider replacement.
+11. Business-unit UI and filters.
+12. File storage.
+13. Auth integration.
+14. RBAC and business-unit access helpers.
+15. Facebook webhook ingestion.
+16. Permission/integration test suite.
+17. Deployment/runbook.
+18. QuickBooks V5 investigation/adapter.
 
 Recommended agent discipline:
 

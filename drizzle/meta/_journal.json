@@ -8,6 +8,13 @@
       "when": 1778593622244,
       "tag": "0000_ait_signs_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1778620635410,
+      "tag": "0001_add_import_note_proposals",
+      "breakpoints": true
     }
   ]
 }
