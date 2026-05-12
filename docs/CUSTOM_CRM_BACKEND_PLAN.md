@@ -83,6 +83,60 @@ Recommended financial posture:
 - Later, CRM may generate invoices into QuickBooks via API if that improves workflow.
 - Do not build a full accounting system inside AIT CRM unless accounting itself becomes a product priority.
 
+## Hosting Recommendation
+
+Recommended V1 hosting:
+
+- Vercel: Next.js app, route handlers, server actions, webhooks, preview deployments
+- Neon Postgres: managed Postgres database
+- Cloudflare R2 or S3-compatible storage: files and attachments
+- Trigger.dev later: durable background workflows for V2/V3 automation
+
+Why this is the default recommendation:
+
+- The app is already Next.js, so Vercel is the lowest-friction deploy target.
+- Vercel route handlers are enough for V1 API endpoints and Facebook Lead Ads webhooks.
+- Neon is a clean managed Postgres fit for serverless Next.js, with connection pooling, branching, autoscaling, and Vercel integration.
+- File storage should not live in the database. Use object storage and store metadata in Postgres.
+- V1 does not need a separate long-running backend service unless QuickBooks/Facebook sync jobs become more complex than expected.
+
+Recommended deployment shape:
+
+- `main`/production branch deploys to production.
+- Preview deployments are used for PR validation.
+- Production database lives in Neon.
+- Preview database strategy can start with a shared staging DB, then move to Neon branching when workflow maturity justifies it.
+- All secrets live in Vercel/Neon/provider dashboards, never in the repo.
+
+When to choose a different host:
+
+- Choose Render/Fly/Railway if the backend becomes a long-running service with workers, queues, or websocket-heavy behavior.
+- Choose Supabase if we want its Auth/Storage/Realtime package more than we want a lean custom backend.
+- Choose AWS/GCP only if client/security/compliance requirements justify the added operational load.
+
+V1 recommended default:
+
+- Vercel + Neon + Cloudflare R2
+
+This keeps the architecture simple, production-capable, and easy for Codex agents to reason about.
+
+## Authentication Recommendation
+
+V1 needs real authentication and app-owned authorization.
+
+Recommended default:
+
+- Auth.js/NextAuth or Better Auth for authentication
+- Custom RBAC in Postgres for authorization
+
+Reasoning:
+
+- Auth should prove who the user is.
+- Our app should decide what the user can access.
+- Business-unit scoping and role permissions are business rules, so they should live in our database and server-side checks.
+
+Clerk is still a valid alternative if speed and polished user management matter more than keeping auth fully app-owned. If Clerk is used, treat Clerk as identity only and keep roles/business-unit permissions in Postgres.
+
 ## Directus Position
 
 Directus is not a CRM. It is a generic data/admin/API platform.
@@ -346,6 +400,127 @@ Full Directus parity:
 - 6-12+ months
 - not recommended
 
+## V1 Execution Plan
+
+### Step 0: Lock Inputs
+
+- Review the client's Google Sheets.
+- Identify exact fields, sheets, dedupe patterns, and business-unit separation.
+- Confirm where QuickBooks stores the four businesses: classes, locations, custom fields, separate companies, or naming conventions.
+- Confirm hosting accounts and access: Vercel, Neon, Cloudflare/AWS, Meta/Facebook, QuickBooks.
+
+### Step 1: Backend Foundation
+
+- Add Postgres and migration tooling.
+- Choose ORM: Drizzle is the recommended default for this app because it is explicit, TypeScript-friendly, and maps well to a custom schema.
+- Add database schema for organizations, business units, users, roles, permissions, memberships, contacts, leads, jobs, financial snapshots, tasks, files, notes, activity, and audit logs.
+- Seed the first organization and four business units.
+- Seed V1 roles: admin, designer, account_manager, sales_manager.
+
+### Step 2: Auth And Authorization
+
+- Add authentication.
+- Replace frontend role toggle with real signed-in users.
+- Add server-side permission helpers.
+- Enforce organization/business-unit scoping in every data access path.
+- Add tests for permission boundaries.
+
+### Step 3: Replace LocalStorage
+
+- Replace `src/lib/store.js` localStorage persistence with server-backed data access.
+- Keep the existing UI where practical.
+- Move mutations through server actions/API endpoints.
+- Preserve current UX while changing the data source.
+
+### Step 4: Business Unit UX
+
+- Add business-unit filter/switcher where needed.
+- Add business-unit assignment to contacts/leads/jobs/financial records/files.
+- Add consolidated vs business-unit scoped reporting.
+- Keep UI label configurable so this client can see "Divisions".
+
+### Step 5: Files
+
+- Add object storage bucket.
+- Add file metadata table.
+- Scope files by organization and business unit when attached to scoped records.
+- Add upload/download/delete permissions.
+
+### Step 6: Imports
+
+- Build CSV/Google Sheets import path after reviewing current sheets.
+- Import contacts/leads/jobs/financial snapshots with mapping and dedupe.
+- Record import activity/audit events.
+
+### Step 7: Facebook Lead Ads V1
+
+- Add Meta webhook endpoint.
+- Verify webhook signatures.
+- Map lead forms/campaigns to business units.
+- Normalize and dedupe lead/contact data.
+- Create lead/contact/activity records.
+- Add observability for failures and retries.
+
+### Step 8: QuickBooks Visibility
+
+- Do not replace QuickBooks.
+- Add a V1 sync plan for invoice/payment snapshots after confirming QuickBooks structure.
+- Store external IDs and last sync timestamps.
+- Keep CRM financial dashboards operational, not tax/accounting authoritative.
+
+### Step 9: Deployment And Validation
+
+- Deploy preview/staging.
+- Run lint/build/tests.
+- Validate auth, RBAC, business-unit isolation, imports, and Facebook webhook flow.
+- Create production runbook.
+
+## Codex Implementation Plan
+
+Use Codex in small, reviewable slices. Do not ask one agent to rewrite the app end-to-end.
+
+Recommended workflow:
+
+- Keep this plan doc as the source of truth.
+- Create one implementation ticket per slice.
+- Each Codex run gets a narrow file/module ownership scope.
+- Every run must report changed files, validation commands, and unresolved assumptions.
+- Prefer local commits per slice.
+- Do not push until a human-approved integration checkpoint.
+
+Suggested slice order:
+
+1. Schema/migrations foundation.
+2. Seed data for organization, business units, and roles.
+3. Auth integration.
+4. RBAC and business-unit access helpers.
+5. Contacts API/data migration from localStorage.
+6. Leads/jobs/financial snapshots API/data migration.
+7. UI data-provider replacement.
+8. Business-unit UI and filters.
+9. File storage.
+10. CSV/Sheets import.
+11. Facebook webhook ingestion.
+12. QuickBooks sync investigation/adapter.
+13. Permission/integration test suite.
+14. Deployment/runbook.
+
+Recommended agent discipline:
+
+- One branch/worktree per slice.
+- No broad rewrites unless the slice explicitly requires it.
+- Keep current UI intact unless a backend change forces a UX update.
+- Add tests around permission and business-unit scoping before adding more features.
+- Use the canonical git author identity already configured for this repo.
+
+First Codex task should not be implementation. It should be a repo-backed technical design slice:
+
+- inspect current app state
+- choose Drizzle vs Prisma with reasons
+- propose concrete schema files and migration layout
+- identify exact files that need to change for Step 1
+- produce a small implementation plan for the first code slice
+
 ## Recommended Phases
 
 ### Phase 1: Foundation
@@ -417,3 +592,14 @@ Full Directus parity:
 - Which data should be shared organization-wide across all business units?
 - What should be synced from QuickBooks in V1: customers, estimates, invoices, payments, items/services, or only invoice/payment snapshots?
 - Does QuickBooks currently have separate classes/locations/custom fields for the four AIT businesses?
+
+## Final Pre-Implementation Questions
+
+These are the remaining questions before code implementation should start:
+
+1. Can we inspect the current Google Sheets?
+2. Which auth direction should V1 use: Auth.js/Better Auth by default, or Clerk for speed?
+3. Do we have or want Vercel + Neon + Cloudflare R2 accounts for this project?
+4. Does QuickBooks separate the four AIT businesses using classes, locations, custom fields, separate companies, or naming only?
+5. Should business-unit membership be assigned directly per user in V1, or should we add teams immediately?
+6. Should V1 include QuickBooks read-only snapshot sync, or defer QuickBooks integration until after core CRM + Facebook ingestion?
