@@ -25,10 +25,17 @@ The first client has four businesses under one roof, in priority order:
 
 Implementation should prioritize AIT Signs first, but the schema must support all four from the beginning so data access, reporting, ingestion, and future automation do not need to be retrofitted later.
 
-Current production data source to inspect before final schema lock:
+Current production data source:
 
-- Google Sheets are currently used to store business data.
-- Those sheets should be reviewed before finalizing contact sharing, business-unit scoping, field names, import mappings, and workflow assumptions.
+- AIT Signs currently runs on Google Sheets / spreadsheet exports.
+- Four CSV exports have been provided for AIT Signs:
+  - `Interesados` / prospects
+  - `Estimados` / estimates
+  - `15 Signs Work Order` / active work orders
+  - `Work Order Terminados y Pagado` / completed and paid archive
+- The source data is Spanish-first and operationally messy: preamble rows, merged-header artifacts, status legends, blank rows, duplicate people/phones, follow-up notes, payment columns, balances, and lifecycle movement between sheets.
+- This data should be treated as a migration product stream, not a simple CSV upload.
+- XLSX or direct Google Sheets access is preferred over CSV when available, because formatting, sheet names, formulas, hidden columns, and merged headers may carry meaning that CSV flattens away.
 
 ## Terminology Decision
 
@@ -64,7 +71,7 @@ Recommended stack:
 - Custom internal admin pages inside the CRM app
 - Durable workflow layer for automations
 - SMS/email/voice providers for delivery only
-- QuickBooks integration for accounting source-of-truth behavior unless explicitly replaced later
+- QuickBooks integration later, after the CRM foundation is proven
 
 Workflow layer options:
 
@@ -74,6 +81,8 @@ Workflow layer options:
 - n8n: useful for internal ops/prototyping, not recommended as core product brain
 
 V1 should not attempt to replace QuickBooks as the accounting ledger. AIT CRM can own CRM-native commercial workflow, such as estimates, customer/job context, proposal tracking, and invoice visibility, but QuickBooks should remain the accounting source of truth for invoices, payments, bank reconciliation, tax-facing books, and accountant workflows until there is a clear replacement decision.
+
+QuickBooks is V5 scope, not V1. The CRM should be designed so QuickBooks can be connected later, but the first build should not spend implementation time on QuickBooks sync unless a production blocker appears.
 
 Recommended financial posture:
 
@@ -98,7 +107,7 @@ Why this is the default recommendation:
 - Vercel route handlers are enough for V1 API endpoints and Facebook Lead Ads webhooks.
 - Neon is a clean managed Postgres fit for serverless Next.js, with connection pooling, branching, autoscaling, and Vercel integration.
 - File storage should not live in the database. Use object storage and store metadata in Postgres.
-- V1 does not need a separate long-running backend service unless QuickBooks/Facebook sync jobs become more complex than expected.
+- V1 does not need a separate long-running backend service unless import processing or Facebook/web ingestion become more complex than expected.
 
 Recommended deployment shape:
 
@@ -122,7 +131,12 @@ This keeps the architecture simple, production-capable, and easy for Codex agent
 
 ## Authentication Recommendation
 
-V1 needs real authentication and app-owned authorization.
+Authentication is required before real production access, but it does not need to be the first implementation slice while the product is still being shaped around imported data.
+
+Recommended sequencing:
+
+- Phase 1: data model, import staging, cleanup workflow, and core CRM screens can be built in a controlled/internal environment.
+- Phase 1.5: add real authentication, signed-in users, and app-owned authorization before broader user rollout.
 
 Recommended default:
 
@@ -135,7 +149,9 @@ Reasoning:
 - Our app should decide what the user can access.
 - Business-unit scoping and role permissions are business rules, so they should live in our database and server-side checks.
 
-Clerk is still a valid alternative if speed and polished user management matter more than keeping auth fully app-owned. If Clerk is used, treat Clerk as identity only and keep roles/business-unit permissions in Postgres.
+Do not use Clerk by default for this project. It adds a vendor layer, cost, and operational complexity that are not justified unless speed/polished user management becomes more important than owning the auth path.
+
+If Clerk is used later, treat Clerk as identity only and keep roles/business-unit permissions in Postgres.
 
 ## Directus Position
 
@@ -323,6 +339,52 @@ Initial production schema should cover:
 - users/roles/permissions
 - organizations/business units
 
+## AIT Signs Data Migration
+
+The first real implementation risk is not UI or auth. It is understanding and cleaning the existing AIT Signs data well enough to avoid importing bad history into a new system.
+
+Current source sheets represent a lifecycle:
+
+1. `Interesados`: prospects/leads, mostly Facebook and manual follow-up.
+2. `Estimados`: estimates that may or may not be approved.
+3. `15 Signs Work Order`: active production work.
+4. `Work Order Terminados y Pagado`: completed and paid work/archive.
+
+Migration should use a staged import model:
+
+- `import_batches`: one record per uploaded/exported source file.
+- `import_source_rows`: raw parsed rows with original row number, sheet/source name, and untouched values.
+- `import_normalized_records`: proposed contacts, leads, estimates, work orders, payments, notes, and follow-ups extracted from source rows.
+- `import_review_items`: human review queue for duplicates, uncertain mappings, Spanish notes/statuses, malformed rows, and conflicting financial values.
+- final production tables receive only approved/validated records.
+
+Important mapping rules:
+
+- Normalize phones first; use phone as the strongest dedupe signal, but do not auto-merge every matching phone without review.
+- Preserve the original Spanish text in notes/activity even when adding normalized English/internal statuses.
+- Treat spreadsheet status legends as business vocabulary that needs mapping, not noise.
+- Convert repeated follow-up columns into timeline/activity records.
+- Convert payment, balance, tax, total, and advance columns into financial snapshots tied to estimates/work orders, not authoritative accounting ledger rows.
+- Track source sheet and source row on every imported record for traceability.
+
+The import UX should make cleanup collaborative:
+
+- upload or connect sheet
+- preview parsed rows
+- map columns
+- review proposed records
+- flag duplicate contacts/companies
+- approve batches in chunks
+- show import errors in Spanish-friendly language where useful
+- allow rollback/re-run for a batch before production use
+
+Recommended immediate work:
+
+- Build a small parser/profiler for the four provided CSVs.
+- Produce a field inventory and lifecycle map.
+- Create a proposed normalized schema from the actual data, not from guesses.
+- Review unclear Spanish statuses/notes with Alvaro before locking mappings.
+
 ## Ingestion And Automation
 
 Lead ingestion should be custom.
@@ -337,11 +399,11 @@ Sources:
 
 V1 ingestion priority:
 
-1. Facebook Lead Ads
-2. Website forms
-3. Manual entry
-4. CSV/Google Sheets import
-5. Phone/AI receptionist later
+1. CSV/Google Sheets staged import for existing AIT Signs data.
+2. Manual entry and editing for cleaned records.
+3. Facebook Lead Ads.
+4. Website forms.
+5. Phone/AI receptionist later.
 
 Ingestion responsibilities:
 
@@ -371,9 +433,11 @@ Automation is not V1.
 
 Current phased intent:
 
-- V1: source-of-truth backend, RBAC, business units, core CRM data, and Facebook-first ingestion.
-- V2: automated follow-up basics.
+- V1: source-of-truth backend, business units, core CRM data, staged import/cleanup, and manual operations.
+- V1.5: authentication, signed-in users, RBAC enforcement, and production access hardening.
+- V2: Facebook/web ingestion and automated follow-up basics.
 - V3: broader outreach/orchestration and more advanced communication workflows.
+- Version 5 / V5: QuickBooks integration.
 
 ## Build Estimate
 
@@ -404,75 +468,79 @@ Full Directus parity:
 
 ### Step 0: Lock Inputs
 
-- Review the client's Google Sheets.
-- Identify exact fields, sheets, dedupe patterns, and business-unit separation.
-- Confirm where QuickBooks stores the four businesses: classes, locations, custom fields, separate companies, or naming conventions.
-- Confirm hosting accounts and access: Vercel, Neon, Cloudflare/AWS, Meta/Facebook, QuickBooks.
+- Review the four provided AIT Signs CSV exports.
+- Prefer XLSX or direct Google Sheets access if available.
+- Identify exact fields, sheet lifecycle, dedupe patterns, Spanish status vocabulary, and business-unit separation.
+- Confirm hosting accounts and access: Vercel, Neon, Cloudflare/AWS or R2, and Meta/Facebook.
+- Defer QuickBooks account/access questions to V5 unless a near-term blocker appears.
 
-### Step 1: Backend Foundation
+### Step 1: Data Profiling And Migration Design
+
+- Build a read-only CSV/XLSX profiler.
+- Detect header rows, empty rows, malformed rows, totals/formula artifacts, duplicate phones, and likely lifecycle transitions.
+- Produce field inventory for prospects, estimates, active work orders, completed/paid work orders, payments, balances, notes, and follow-ups.
+- Draft the normalized schema and import mapping from real source data.
+- Review uncertain Spanish statuses and notes with Alvaro before import rules become automated.
+
+### Step 2: Backend Foundation
 
 - Add Postgres and migration tooling.
 - Choose ORM: Drizzle is the recommended default for this app because it is explicit, TypeScript-friendly, and maps well to a custom schema.
-- Add database schema for organizations, business units, users, roles, permissions, memberships, contacts, leads, jobs, financial snapshots, tasks, files, notes, activity, and audit logs.
+- Add database schema for organizations, business units, contacts, leads, estimates, work orders/jobs, financial snapshots, tasks, files, notes, activity, audit logs, and import staging tables.
 - Seed the first organization and four business units.
-- Seed V1 roles: admin, designer, account_manager, sales_manager.
 
-### Step 2: Auth And Authorization
+### Step 3: Import Staging And Review
 
-- Add authentication.
-- Replace frontend role toggle with real signed-in users.
-- Add server-side permission helpers.
-- Enforce organization/business-unit scoping in every data access path.
-- Add tests for permission boundaries.
+- Import raw rows into staging tables without mutating production CRM records.
+- Normalize proposed contacts, leads, estimates, work orders, payments, notes, and follow-up activities.
+- Add review states: pending, needs_review, approved, rejected, imported.
+- Preserve source file, source sheet, source row, and raw Spanish text.
+- Add rollback/re-run behavior per import batch.
 
-### Step 3: Replace LocalStorage
+### Step 4: Replace LocalStorage For Core CRM
 
 - Replace `src/lib/store.js` localStorage persistence with server-backed data access.
 - Keep the existing UI where practical.
 - Move mutations through server actions/API endpoints.
 - Preserve current UX while changing the data source.
 
-### Step 4: Business Unit UX
+### Step 5: Business Unit UX
 
 - Add business-unit filter/switcher where needed.
 - Add business-unit assignment to contacts/leads/jobs/financial records/files.
 - Add consolidated vs business-unit scoped reporting.
 - Keep UI label configurable so this client can see "Divisions".
 
-### Step 5: Files
+### Step 6: Files
 
 - Add object storage bucket.
 - Add file metadata table.
 - Scope files by organization and business unit when attached to scoped records.
 - Add upload/download/delete permissions.
 
-### Step 6: Imports
+### Step 7: Auth And Authorization
 
-- Build CSV/Google Sheets import path after reviewing current sheets.
-- Import contacts/leads/jobs/financial snapshots with mapping and dedupe.
-- Record import activity/audit events.
+- Add authentication after the core data model/import flow is coherent.
+- Replace frontend role toggle with real signed-in users.
+- Seed roles: admin, designer, account_manager, sales_manager.
+- Add server-side permission helpers.
+- Enforce organization/business-unit scoping in every data access path.
+- Add tests for permission boundaries.
 
-### Step 7: Facebook Lead Ads V1
+### Step 8: Facebook Lead Ads
 
-- Add Meta webhook endpoint.
+- Add Meta webhook endpoint after the manual/imported CRM path works.
 - Verify webhook signatures.
 - Map lead forms/campaigns to business units.
 - Normalize and dedupe lead/contact data.
 - Create lead/contact/activity records.
 - Add observability for failures and retries.
 
-### Step 8: QuickBooks Visibility
-
-- Do not replace QuickBooks.
-- Add a V1 sync plan for invoice/payment snapshots after confirming QuickBooks structure.
-- Store external IDs and last sync timestamps.
-- Keep CRM financial dashboards operational, not tax/accounting authoritative.
-
 ### Step 9: Deployment And Validation
 
 - Deploy preview/staging.
 - Run lint/build/tests.
-- Validate auth, RBAC, business-unit isolation, imports, and Facebook webhook flow.
+- Validate import staging/review, core CRM operations, business-unit isolation, auth/RBAC, and Facebook webhook flow.
 - Create production runbook.
 
 ## Codex Implementation Plan
@@ -490,20 +558,23 @@ Recommended workflow:
 
 Suggested slice order:
 
-1. Schema/migrations foundation.
-2. Seed data for organization, business units, and roles.
-3. Auth integration.
-4. RBAC and business-unit access helpers.
-5. Contacts API/data migration from localStorage.
-6. Leads/jobs/financial snapshots API/data migration.
-7. UI data-provider replacement.
-8. Business-unit UI and filters.
-9. File storage.
-10. CSV/Sheets import.
-11. Facebook webhook ingestion.
-12. QuickBooks sync investigation/adapter.
-13. Permission/integration test suite.
-14. Deployment/runbook.
+1. CSV/XLSX profiler for provided AIT Signs exports.
+2. Field inventory, lifecycle map, and Spanish status mapping draft.
+3. Schema/migrations foundation, including import staging tables.
+4. Seed data for organization and business units.
+5. Contacts/leads/estimates/work-orders server data model.
+6. Import staging and review workflow.
+7. Contacts API/data migration from localStorage.
+8. Leads/jobs/financial snapshots API/data migration.
+9. UI data-provider replacement.
+10. Business-unit UI and filters.
+11. File storage.
+12. Auth integration.
+13. RBAC and business-unit access helpers.
+14. Facebook webhook ingestion.
+15. Permission/integration test suite.
+16. Deployment/runbook.
+17. QuickBooks V5 investigation/adapter.
 
 Recommended agent discipline:
 
@@ -513,25 +584,39 @@ Recommended agent discipline:
 - Add tests around permission and business-unit scoping before adding more features.
 - Use the canonical git author identity already configured for this repo.
 
-First Codex task should not be implementation. It should be a repo-backed technical design slice:
+First Codex task should not be app implementation. It should be a repo-backed data profiling/design slice:
 
 - inspect current app state
+- inspect the provided CSV exports
+- produce a source field inventory and lifecycle map
+- identify parse/mapping uncertainties that require Alvaro review
 - choose Drizzle vs Prisma with reasons
-- propose concrete schema files and migration layout
-- identify exact files that need to change for Step 1
+- propose concrete schema files, import staging tables, and migration layout
+- identify exact files that need to change for the first implementation slice
 - produce a small implementation plan for the first code slice
 
 ## Recommended Phases
 
-### Phase 1: Foundation
+### Phase 1: Data Foundation And Core CRM
 
+- Profile the existing AIT Signs CSV/XLSX/Google Sheet data.
+- Build staged import tables and review workflow.
+- Map Spanish statuses, notes, payment fields, and follow-up fields into normalized CRM concepts.
 - Pick ORM/migration tool.
 - Create Postgres schema.
-- Add real users/roles/permissions.
 - Add organizations and business units.
 - Add activity and audit tables.
 - Replace localStorage persistence for core records.
-- Keep business-unit scoping and RBAC in Phase 1; do not migrate to Postgres first and retrofit access rules later.
+- Keep business-unit scoping in Phase 1; do not migrate to Postgres first and retrofit business-unit ownership later.
+
+### Phase 1.5: Auth And Access Control
+
+- Add real authentication.
+- Add real users/roles/permissions.
+- Seed roles: admin, designer, account_manager, sales_manager.
+- Replace the mock role toggle.
+- Add server-side authorization helpers.
+- Enforce business-unit and assignment boundaries before production/broader user access.
 
 ### Phase 2: Product Admin
 
@@ -553,7 +638,7 @@ First Codex task should not be implementation. It should be a repo-backed techni
 
 - Add Facebook Lead Ads ingestion.
 - Add website form ingestion.
-- Add CSV/Google Sheets import flow.
+- Harden ongoing CSV/Google Sheets import flow.
 - Add dedupe and attribution.
 - Add source-to-business-unit mapping.
 
@@ -564,6 +649,13 @@ First Codex task should not be implementation. It should be a repo-backed techni
 - Add follow-up sequences.
 - Add reply/opt-out/bounce handling.
 - Add task escalation and reminders.
+
+### Version 5 / V5: QuickBooks / Accounting Integration
+
+- Confirm QuickBooks structure only when accounting integration becomes active scope.
+- Add read-only invoice/payment snapshot sync first.
+- Store external IDs and last sync timestamps.
+- Keep QuickBooks as accounting source of truth unless a separate replacement decision is made.
 
 ### Phase 6: Hardening
 
@@ -587,19 +679,19 @@ First Codex task should not be implementation. It should be a repo-backed techni
 
 - Which ORM should be used: Drizzle or Prisma?
 - Which workflow engine should be used: Trigger.dev, Temporal, or BullMQ?
-- What do the current Google Sheets reveal about actual fields, ownership, dedupe, and business-unit separation?
+- Can we get XLSX or direct Google Sheets access to preserve formatting/formulas/hidden context, or should we proceed from CSV only?
+- Which Spanish status labels and notes should become normalized CRM statuses versus plain timeline notes?
+- What are the exact approval/movement rules from prospect to estimate to work order to completed/paid?
 - Should business-unit membership be per-user only, or also team-based?
 - Which data should be shared organization-wide across all business units?
-- What should be synced from QuickBooks in V1: customers, estimates, invoices, payments, items/services, or only invoice/payment snapshots?
-- Does QuickBooks currently have separate classes/locations/custom fields for the four AIT businesses?
+- Which production data issues can be auto-cleaned, and which must always go through human review?
 
 ## Final Pre-Implementation Questions
 
 These are the remaining questions before code implementation should start:
 
-1. Can we inspect the current Google Sheets?
-2. Which auth direction should V1 use: Auth.js/Better Auth by default, or Clerk for speed?
+1. Can we get the original XLSX/Google Sheet access, or are the four CSV exports the source we should build from first?
+2. Who can help validate Spanish statuses/notes when mappings are ambiguous?
 3. Do we have or want Vercel + Neon + Cloudflare R2 accounts for this project?
-4. Does QuickBooks separate the four AIT businesses using classes, locations, custom fields, separate companies, or naming only?
-5. Should business-unit membership be assigned directly per user in V1, or should we add teams immediately?
-6. Should V1 include QuickBooks read-only snapshot sync, or defer QuickBooks integration until after core CRM + Facebook ingestion?
+4. Should business-unit membership be assigned directly per user in V1.5, or should we add teams immediately?
+5. Should we start with Auth.js/NextAuth or Better Auth for Phase 1.5?
