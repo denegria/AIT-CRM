@@ -17,14 +17,17 @@ function saveStorage(d) {
 function getInitialData(seedData = defaults) {
   const s = loadStorage();
   const fallback = seedData || defaults;
+  const useLocalStorage = fallback.dataSource !== 'postgres';
   return {
-    businessUnits: s?.businessUnits || fallback.businessUnits || [],
-    contacts: s?.contacts || fallback.contacts,
-    workOrders: s?.workOrders || fallback.workOrders,
-    financials: s?.financials || fallback.financials,
-    tasks: s?.tasks || fallback.tasks,
-    calendarEvents: s?.calendarEvents || fallback.calendarEvents,
-    salesLedger: s?.salesLedger || fallback.salesLedger,
+    dataSource: fallback.dataSource || 'local',
+    importStaging: fallback.importStaging || null,
+    businessUnits: (useLocalStorage && s?.businessUnits) || fallback.businessUnits || [],
+    contacts: (useLocalStorage && s?.contacts) || fallback.contacts,
+    workOrders: (useLocalStorage && s?.workOrders) || fallback.workOrders,
+    financials: (useLocalStorage && s?.financials) || fallback.financials,
+    tasks: (useLocalStorage && s?.tasks) || fallback.tasks,
+    calendarEvents: (useLocalStorage && s?.calendarEvents) || fallback.calendarEvents,
+    salesLedger: (useLocalStorage && s?.salesLedger) || fallback.salesLedger,
   };
 }
 
@@ -44,6 +47,7 @@ export function CRMProvider({ children, initialData }) {
     return 'light';
   });
   const [bootstrapData] = useState(() => getInitialData(initialData));
+  const [importStaging] = useState(bootstrapData.importStaging);
   const [businessUnits, setBusinessUnits] = useState(bootstrapData.businessUnits);
   const [contacts, setContacts] = useState(bootstrapData.contacts);
   const [workOrders, setWorkOrders] = useState(bootstrapData.workOrders);
@@ -103,6 +107,8 @@ export function CRMProvider({ children, initialData }) {
 
   const value = {
     role, setRole, theme, setTheme, loaded,
+    dataSource: bootstrapData.dataSource,
+    importStaging,
     businessUnits, setBusinessUnits,
     contacts, addContact, updateContact, deleteContact,
     workOrders, addWorkOrder, updateWorkOrder, deleteWorkOrder,

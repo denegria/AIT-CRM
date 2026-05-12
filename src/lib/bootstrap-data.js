@@ -1,5 +1,5 @@
 import { cache } from 'react';
-import { asc, desc } from 'drizzle-orm';
+import { asc, desc, sql } from 'drizzle-orm';
 import * as seedData from './data';
 import { getDb } from '../db/index.js';
 import {
@@ -11,6 +11,10 @@ import {
   activityEvents as activityEventsTable,
   leads as leadsTable,
   businessUnits as businessUnitsTable,
+  importBatches as importBatchesTable,
+  importSourceRows as importSourceRowsTable,
+  importNormalizedRecords as importNormalizedRecordsTable,
+  importReviewItems as importReviewItemsTable,
 } from '../db/schema.js';
 
 function toIsoDate(value) {
@@ -139,9 +143,42 @@ function mapBusinessUnits(rows) {
   }));
 }
 
-function emptyDbData(businessUnitRows = []) {
+async function countRows(db, table) {
+  const rows = await db.select({ count: sql`count(*)::int` }).from(table);
+  return Number(rows[0]?.count || 0);
+}
+
+async function getImportStagingSummary(db) {
+  const [latestBatchRows, sourceRows, normalizedRecords, reviewItems] = await Promise.all([
+    db.select().from(importBatchesTable).orderBy(desc(importBatchesTable.createdAt)).limit(1),
+    countRows(db, importSourceRowsTable),
+    countRows(db, importNormalizedRecordsTable),
+    countRows(db, importReviewItemsTable),
+  ]);
+  const latestBatch = latestBatchRows[0];
+
+  return {
+    latestBatch: latestBatch ? {
+      id: latestBatch.id,
+      sourceName: latestBatch.sourceName,
+      sourceType: latestBatch.sourceType,
+      fileName: latestBatch.fileName,
+      fileHash: latestBatch.fileHash,
+      status: latestBatch.status,
+      createdAt: latestBatch.createdAt?.toISOString?.() || latestBatch.createdAt || '',
+    } : null,
+    counts: {
+      sourceRows,
+      normalizedRecords,
+      reviewItems,
+    },
+  };
+}
+
+function emptyDbData(businessUnitRows = [], importStaging = null) {
   return {
     ...seedData,
+    dataSource: 'postgres',
     businessUnits: mapBusinessUnits(businessUnitRows),
     contacts: [],
     workOrders: [],
@@ -149,6 +186,7 @@ function emptyDbData(businessUnitRows = []) {
     tasks: [],
     calendarEvents: [],
     salesLedger: [],
+    importStaging,
   };
 }
 
@@ -159,7 +197,17 @@ export const getBootstrapData = cache(async function getBootstrapData() {
 
   try {
     const db = getDb();
-    const [businessUnitRows, contactRows, leadRows, workOrderRows, estimateRows, paymentRows, noteRows, eventRows] = await Promise.all([
+    const [
+      businessUnitRows,
+      contactRows,
+      leadRows,
+      workOrderRows,
+      estimateRows,
+      paymentRows,
+      noteRows,
+      eventRows,
+      importStaging,
+    ] = await Promise.all([
       db.select().from(businessUnitsTable).orderBy(asc(businessUnitsTable.name)),
       db.select().from(contactsTable).orderBy(desc(contactsTable.createdAt)),
       db.select().from(leadsTable).orderBy(desc(leadsTable.createdAt)),
@@ -168,10 +216,11 @@ export const getBootstrapData = cache(async function getBootstrapData() {
       db.select().from(paymentSnapshotsTable).orderBy(desc(paymentSnapshotsTable.createdAt)),
       db.select().from(notesTable).orderBy(desc(notesTable.createdAt)),
       db.select().from(activityEventsTable).orderBy(desc(activityEventsTable.createdAt)),
+      getImportStagingSummary(db),
     ]);
 
     if (!contactRows.length) {
-      return emptyDbData(businessUnitRows);
+      return emptyDbData(businessUnitRows, importStaging);
     }
 
     const contacts = mapContacts(contactRows, leadRows, noteRows, eventRows);
@@ -180,10 +229,12 @@ export const getBootstrapData = cache(async function getBootstrapData() {
     const financials = mapFinancials(estimateRows, paymentRows, contactLookup);
     return {
       ...seedData,
+      dataSource: 'postgres',
       businessUnits: mapBusinessUnits(businessUnitRows),
       contacts,
       workOrders,
       financials,
+      importStaging,
     };
   } catch (error) {
     console.warn('Falling back to empty CRM data because Postgres bootstrap failed:', error.message);

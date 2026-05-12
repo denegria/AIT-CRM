@@ -7,7 +7,7 @@ import Calendar from '@/components/Calendar';
 import { BarChart, PieChart, ChartLegend } from '@/components/Charts';
 
 export default function Dashboard() {
-  const { role, contacts, workOrders, financials, tasks, calendarEvents, employees, updateTask, addTask, loaded } = useCRM();
+  const { role, contacts, workOrders, financials, tasks, calendarEvents, employees, updateTask, addTask, loaded, dataSource, importStaging } = useCRM();
 
   const kpis = useMemo(() => {
     const invoices = financials.filter(f => f.type === 'Invoice');
@@ -76,6 +76,24 @@ export default function Dashboard() {
         </div>
         <span className={`badge ${role==='admin'?'badge-won':'badge-contacted'}`} style={{fontSize:'var(--text-sm)',padding:'4px 12px'}}>{role==='admin'?'Admin View':'Employee View'}</span>
       </div>
+
+      {dataSource === 'postgres' && importStaging?.latestBatch && (
+        <div className="card" style={{marginBottom:20, padding:16}}>
+          <div className="flex-between" style={{alignItems:'flex-start', gap:16}}>
+            <div>
+              <div className="card-title" style={{marginBottom:4}}>AIT Signs import staging</div>
+              <p className="page-subtitle" style={{margin:0}}>
+                {importStaging.counts.sourceRows.toLocaleString()} source rows staged from {importStaging.latestBatch.fileName}
+              </p>
+            </div>
+            <div className="flex-gap" style={{flexWrap:'wrap', justifyContent:'flex-end'}}>
+              <span className="badge badge-contacted">{importStaging.counts.normalizedRecords.toLocaleString()} normalized</span>
+              <span className="badge badge-qualified">{importStaging.counts.reviewItems.toLocaleString()} review</span>
+              <span className="badge badge-pending">{importStaging.latestBatch.status}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {role === 'admin' ? (
         <div className="grid-4" style={{marginBottom:20}}>

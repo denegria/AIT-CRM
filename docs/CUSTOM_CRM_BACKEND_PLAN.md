@@ -62,6 +62,7 @@ Next Linear slices:
    - connect contacts, leads, estimates, work orders, and activity events to the Drizzle schema
    - seed the four AIT business units
    - prepare server-side read paths for the current UI
+   - status: first server bootstrap path is active; dashboard now surfaces import staging counts while production CRM tables remain empty
 
 3. `MIS-14` LocalStorage replacement plan
    - map current mock entities to Postgres reads
