@@ -14,6 +14,23 @@ The backend should be custom enough to own the business rules that matter:
 
 Directus can still be useful as a temporary or optional admin/data tool, but it should not own the core permission model, business-unit model, or automation logic.
 
+## Final Operating Model
+
+This is the finalized delivery stack for the project:
+
+- `Linear` is the source of truth for tickets, priorities, acceptance criteria, and phase tracking.
+- `GitHub` is the source of truth for code, branches, pull requests, and CI.
+- `Giuseppe` / OpenClaw is the director layer that scopes work, sets priorities, reviews output, and decides what is ready.
+- `Symphony` is the router/control loop that watches Linear, creates isolated workspaces, and dispatches execution.
+- `Codex` is the coding harness that edits code, writes scripts, runs tests, and produces implementation evidence.
+- `Google Drive` is a useful optional source for spreadsheets, docs, and source data if the client keeps operational files there.
+
+Working rule:
+
+- Linear ticket -> Symphony routes -> Codex implements -> GitHub records the branch/PR -> Giuseppe reviews -> merge only after validation.
+
+This keeps the work fast without turning the process into a free-for-all.
+
 ## Confirmed First Client Context
 
 The first client has four businesses under one roof, in priority order:
@@ -72,6 +89,8 @@ Recommended stack:
 - Durable workflow layer for automations
 - SMS/email/voice providers for delivery only
 - QuickBooks integration later, after the CRM foundation is proven
+- Linear for work tracking and Codex slice coordination
+- GitHub for implementation branches, PRs, and review history
 
 Workflow layer options:
 
@@ -549,12 +568,13 @@ Use Codex in small, reviewable slices. Do not ask one agent to rewrite the app e
 
 Recommended workflow:
 
-- Keep this plan doc as the source of truth.
-- Create one implementation ticket per slice.
-- Each Codex run gets a narrow file/module ownership scope.
+- Keep this plan doc as the source of truth for product direction, but mirror execution in Linear.
+- Create one Linear issue per slice with explicit acceptance criteria and validation commands.
+- Each Codex run gets a narrow file/module ownership scope and a matching GitHub branch/PR when code changes.
 - Every run must report changed files, validation commands, and unresolved assumptions.
 - Prefer local commits per slice.
 - Do not push until a human-approved integration checkpoint.
+- If Symphony is routing the work, it should create the workspace, hand off the ticket context, and collect the evidence.
 
 Suggested slice order:
 
@@ -594,6 +614,16 @@ First Codex task should not be app implementation. It should be a repo-backed da
 - propose concrete schema files, import staging tables, and migration layout
 - identify exact files that need to change for the first implementation slice
 - produce a small implementation plan for the first code slice
+
+## Operating Phases
+
+### Phase 0: Workflow Foundation
+
+- Enable Linear and GitHub integrations.
+- Create the first working issue list in Linear for the AIT CRM build.
+- Decide the branch naming and PR convention for Codex-authored slices.
+- Confirm the repo owner identity and the review/merge path.
+- Treat this plan doc as the narrative spec and Linear as the execution queue.
 
 ## Recommended Phases
 
@@ -672,8 +702,29 @@ First Codex task should not be app implementation. It should be a repo-backed da
 - Keep business-unit scoping first-class from day one.
 - Do not treat permissions as frontend-only.
 - Do not make Directus or n8n the core business brain.
+- Do not make Linear or GitHub the product brain either; they are delivery infrastructure.
 - Every external communication event must be logged back to the CRM.
 - Every automated write should be idempotent.
+
+## Strategy Summary
+
+The strategic order is:
+
+1. Build the real AIT Signs data foundation first.
+2. Keep the scope to core CRM, business units, and staging/import cleanup.
+3. Add auth after the data model is coherent and useful.
+4. Add Facebook/web ingestion after the manual/import path is stable.
+5. Add automation only after the CRM can reliably hold and route the data.
+6. Keep QuickBooks out of V1/V2 unless a hard blocker appears.
+
+The execution rule is:
+
+- spec in this doc
+- tasks in Linear
+- code in GitHub
+- implementation by Codex
+- routing through Symphony when available
+- review by Giuseppe
 
 ## Open Questions
 

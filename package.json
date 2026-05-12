@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "profile:ait-signs": "python3 scripts/profile-ait-signs.py"
   },
   "dependencies": {
     "jspdf": "^4.2.1",
