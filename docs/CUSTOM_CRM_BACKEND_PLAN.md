@@ -25,8 +25,50 @@ Directus can still be useful as a temporary or optional admin/data tool, but it 
 - [x] Schema and import staging tables drafted in SQL
 - [x] First Postgres-backed CRM entities scaffolded
 - [x] Drizzle config and initial SQL migration generated
+- [x] Linear project created and seeded with completed/proposed slices
 - [ ] Real auth and RBAC
 - [ ] Facebook Lead Ads ingestion
+
+## Upcoming Queue
+
+Linear project:
+
+- `AIT CRM`: https://linear.app/mission-control-v2/project/ait-crm-509472b2a78b
+
+Completed Linear slices:
+
+- `MIS-8` Final operating model and plan doc
+- `MIS-9` AIT Signs workbook profile and migration notes
+- `MIS-10` AIT Signs staging schema and row preview
+- `MIS-11` Postgres/Drizzle backend scaffold
+
+Next Linear slices:
+
+1. `MIS-12` Import staging pipeline
+   - ingest raw workbook rows
+   - classify record candidates, notes, headers, and financial lines
+   - store raw source rows immutably
+   - promote approved rows into normalized staging records
+
+2. `MIS-13` First CRM entity wiring
+   - connect contacts, leads, estimates, work orders, and activity events to the Drizzle schema
+   - seed the four AIT business units
+   - prepare server-side read paths for the current UI
+
+3. `MIS-14` LocalStorage replacement plan
+   - map current mock entities to Postgres reads
+   - keep the UI stable while switching data sources
+   - define the minimal API/server actions needed for the first CRUD slice
+
+4. `MIS-15` Auth and RBAC foundation
+   - add real authentication
+   - add organization and business-unit scoped permissions
+   - replace the mock role toggle with server-owned access control
+
+5. `MIS-16` Facebook Lead Ads ingestion
+   - add webhook handling
+   - normalize inbound leads into the CRM
+   - preserve source and attribution metadata
 
 ## Final Operating Model
 
