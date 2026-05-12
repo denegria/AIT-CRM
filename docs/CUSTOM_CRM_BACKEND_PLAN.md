@@ -70,6 +70,36 @@ Next Linear slices:
    - normalize inbound leads into the CRM
    - preserve source and attribution metadata
 
+6. `MIS-17` Business unit UX and scoped reporting
+   - business-unit switcher/filter
+   - scoped vs consolidated reporting
+   - configurable client terminology
+
+7. `MIS-18` Files and attachment storage
+   - object storage integration
+   - record-linked file metadata
+   - scoped upload/download permissions
+
+8. `MIS-19` Product admin screens and role management
+   - admin screens for ops staff
+   - role management and business-unit management
+   - import/export tooling
+
+9. `MIS-20` Core CRM operations shell
+   - contacts/leads/estimates/work orders on Postgres-backed reads/writes
+   - assignment logic and activity timeline
+   - custom fields inside known entities
+
+10. `MIS-21` Website form and CSV import ingestion
+    - website lead ingestion
+    - CSV/Google Sheets import staging and review
+    - dedupe, attribution, and source-to-business-unit mapping
+
+11. `MIS-22` Validation, observability, and runbook
+    - permission boundary tests
+    - import/recovery observability
+    - backup/restore and deployment runbook
+
 ## Final Operating Model
 
 This is the finalized delivery stack for the project:
