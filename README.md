@@ -4,6 +4,22 @@ A high-density, professional CRM built for rapid data editing, lead management, 
 
 For the strategic goals and non-negotiable constraints, read [goals and constraints.md](./goals%20and%20constraints.md).
 
+## 🧭 Quick Start
+
+1. Open the dashboard to see revenue, pipeline, tasks, and recent operational work.
+2. Use Contacts & Leads to search, filter, and edit customer data quickly.
+3. Move into Work Orders or Financials when you need PDFs, line items, or status tracking.
+4. Use Import Review for staged AIT Signs rows before they are promoted into production tables.
+5. Switch between Admin and Employee views from the sidebar to match the task at hand.
+
+## 🧑‍💻 How To Use The App
+
+- Keep the interface dense and fast-moving; it is designed for rapid edits.
+- Double-click editable cells in tables to make inline updates.
+- Use the drawer-style forms for add and edit flows when you need a fuller view.
+- Review staged import rows carefully before approving them.
+- Leave ambiguous rows in `needs_review` or reject them instead of forcing a bad match.
+
 ## Features
 
 ### 📊 Dashboard
