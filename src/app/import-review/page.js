@@ -58,7 +58,7 @@ function formatDate(value) {
 }
 
 export default function ImportReviewPage() {
-  const { loaded, dataSource, role } = useCRM();
+  const { loaded, dataSource, access } = useCRM();
   const { toast } = useToast();
   const [filters, setFilters] = useState({ status: 'pending', type: 'all', q: '', limit: 120 });
   const [reloadKey, setReloadKey] = useState(0);
@@ -130,7 +130,7 @@ export default function ImportReviewPage() {
   const rowIds = rows.map((row) => row.id);
   const allVisibleSelected = rowIds.length > 0 && rowIds.every((id) => selectedIds.includes(id));
   const selectedCount = selectedIds.filter((id) => rowIds.includes(id)).length;
-  const canReview = role === 'admin';
+  const canReview = access.canWriteImportReview;
 
   async function unlockAdminSession(event) {
     event.preventDefault();
@@ -222,7 +222,7 @@ export default function ImportReviewPage() {
             </span>
             <h1 className="page-title">Unlock import review</h1>
             <p className="page-subtitle">
-              Import review contains staged customer data and requires a temporary admin token until real auth/RBAC lands.
+              Import review contains staged customer data and requires either import-review permission or the temporary admin token.
             </p>
           </div>
           <Link className="btn btn-primary" href="/">
@@ -232,7 +232,7 @@ export default function ImportReviewPage() {
         <form className="card" onSubmit={unlockAdminSession} style={{ maxWidth: 520 }}>
           <div className="card-title">Admin token</div>
           <p className="page-subtitle">
-            Enter the value configured in the server environment as AIT_CRM_ADMIN_TOKEN.
+            If your account does not have import-review access yet, enter the temporary AIT_CRM_ADMIN_TOKEN value.
           </p>
           <input
             className="input"

@@ -36,7 +36,9 @@ Directus can still be useful as a temporary or optional admin/data tool, but it 
 - [x] CRM import review UI added for row-by-row approval inside the app
 - [x] Temporary admin guard added for import review API and UI access
 - [x] Raw row-level staging preview JSON removed from git tracking
-- [ ] Real auth and RBAC
+- [x] Contacts CRUD API added as the first Postgres-backed write slice
+- [x] First-party auth/session foundation added without Clerk
+- [x] Server-owned role/permission state replaces the mock role toggle in database-backed sessions
 - [ ] Facebook Lead Ads ingestion
 
 ## Upcoming Queue
@@ -51,63 +53,44 @@ Completed Linear slices:
 - `MIS-9` AIT Signs workbook profile and migration notes
 - `MIS-10` AIT Signs staging schema and row preview
 - `MIS-11` Postgres/Drizzle backend scaffold
+- `MIS-12` Import staging pipeline
+- `MIS-13` First CRM entity wiring
+- `MIS-14` LocalStorage replacement plan
+- `MIS-15` Auth and RBAC foundation
 
 Next Linear slices:
 
-1. `MIS-12` Import staging pipeline
-   - ingest raw workbook rows
-   - classify record candidates, notes, headers, and financial lines
-   - store raw source rows immutably
-   - promote approved rows into normalized staging records
-   - status: live Neon staging load complete; production CRM tables intentionally remain empty until review/promote logic lands
-
-2. `MIS-13` First CRM entity wiring
-   - connect contacts, leads, estimates, work orders, and activity events to the Drizzle schema
-   - seed the four AIT business units
-   - prepare server-side read paths for the current UI
-   - status: first server bootstrap path is active; dashboard now surfaces import staging counts while production CRM tables remain empty; review and approved-record promotion scripts are available, and the CRM now has an internal import review screen protected by a temporary admin token guard
-
-3. `MIS-14` LocalStorage replacement plan
-   - map current mock entities to Postgres reads
-   - keep the UI stable while switching data sources
-   - define the minimal API/server actions needed for the first CRUD slice
-
-4. `MIS-15` Auth and RBAC foundation
-   - add real authentication
-   - add organization and business-unit scoped permissions
-   - replace the mock role toggle with server-owned access control
-
-5. `MIS-16` Facebook Lead Ads ingestion
+1. `MIS-16` Facebook Lead Ads ingestion
    - add webhook handling
    - normalize inbound leads into the CRM
    - preserve source and attribution metadata
 
-6. `MIS-17` Business unit UX and scoped reporting
+2. `MIS-17` Business unit UX and scoped reporting
    - business-unit switcher/filter
    - scoped vs consolidated reporting
    - configurable client terminology
 
-7. `MIS-18` Files and attachment storage
+3. `MIS-18` Files and attachment storage
    - object storage integration
    - record-linked file metadata
    - scoped upload/download permissions
 
-8. `MIS-19` Product admin screens and role management
+4. `MIS-19` Product admin screens and role management
    - admin screens for ops staff
    - role management and business-unit management
    - import/export tooling
 
-9. `MIS-20` Core CRM operations shell
+5. `MIS-20` Core CRM operations shell
    - contacts/leads/estimates/work orders on Postgres-backed reads/writes
    - assignment logic and activity timeline
    - custom fields inside known entities
 
-10. `MIS-21` Website form and CSV import ingestion
+6. `MIS-21` Website form and CSV import ingestion
     - website lead ingestion
     - CSV/Google Sheets import staging and review
     - dedupe, attribution, and source-to-business-unit mapping
 
-11. `MIS-22` Validation, observability, and runbook
+7. `MIS-22` Validation, observability, and runbook
     - permission boundary tests
     - import/recovery observability
     - backup/restore and deployment runbook
@@ -634,10 +617,10 @@ Full Directus parity:
 
 ### Step 4: Replace LocalStorage For Core CRM
 
-- Replace `src/lib/store.js` localStorage persistence with server-backed data access.
-- Keep the existing UI where practical.
-- Move mutations through server actions/API endpoints.
-- Preserve current UX while changing the data source.
+- `src/lib/store.js` now treats Postgres-backed sessions as server data and does not persist CRM records back into `localStorage`.
+- `src/lib/bootstrap-data.js` maps Postgres contacts, leads, work orders, estimates, payments, notes, activity events, business units, and import staging summary into the existing UI shape.
+- `/api/contacts` is the first CRUD endpoint for server-backed writes; it creates/updates/deletes contacts and keeps a minimal lead record aligned for status/source.
+- Local no-database mode still uses sanitized demo data and browser storage so the prototype remains easy to run.
 
 ### Step 5: Business Unit UX
 
@@ -655,12 +638,14 @@ Full Directus parity:
 
 ### Step 7: Auth And Authorization
 
-- Add authentication after the core data model/import flow is coherent.
-- Replace frontend role toggle with real signed-in users.
-- Seed roles: admin, designer, account_manager, sales_manager.
-- Add server-side permission helpers.
-- Enforce organization/business-unit scoping in every data access path.
-- Add tests for permission boundaries.
+- First-party password/session auth is now scaffolded without Clerk.
+- `user_password_credentials`, `user_sessions`, and `role_permissions` extend the existing users/roles/permissions model.
+- `scripts/bootstrap-auth-user.mjs` seeds permissions, the four V1 roles, and the first admin user from env vars.
+- The frontend role toggle is removed for database-backed sessions; role/access now comes from the signed-in server session.
+- `src/lib/auth.js` centralizes session loading, password verification, cookie handling, permission checks, and business-unit access flags.
+- `src/lib/bootstrap-data.js` enforces organization scope and initial business-unit scope for server bootstrap reads.
+- `/api/import-review` accepts real import-review permissions first, with the temporary admin token kept for scripts/internal fallback.
+- Next hardening: add route-level tests and extend server write APIs beyond contacts.
 
 ### Step 8: Facebook Lead Ads
 

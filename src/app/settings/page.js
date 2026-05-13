@@ -4,16 +4,16 @@ import { useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 
 export default function SettingsPage() {
-  const { resetData, loaded, role } = useCRM();
+  const { resetData, loaded, access, dataSource } = useCRM();
   const router = useRouter();
 
   useEffect(() => {
-    if (loaded && role !== 'admin') {
+    if (loaded && !access.canReadSettings) {
       router.push('/');
     }
-  }, [loaded, role, router]);
+  }, [access.canReadSettings, loaded, router]);
 
-  if (!loaded || role !== 'admin') return <div className="empty-state">Loading...</div>;
+  if (!loaded || !access.canReadSettings) return <div className="empty-state">Loading...</div>;
 
   return (
     <div className="fade-in">
@@ -109,16 +109,18 @@ export default function SettingsPage() {
         </div>
       </div>
 
-      <div className="card" style={{borderColor:'var(--danger)',borderColor:'rgba(239,68,68,0.2)'}}>
-        <div className="card-title" style={{color:'var(--danger)'}}>Danger Zone</div>
-        <div className="flex-between">
-          <div>
-            <div style={{fontSize:'var(--text-sm)',fontWeight:500}}>Reset All Data</div>
-            <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>Restore mock data to original state. This cannot be undone.</div>
+      {dataSource !== 'postgres' && (
+        <div className="card" style={{borderColor:'var(--danger)',borderColor:'rgba(239,68,68,0.2)'}}>
+          <div className="card-title" style={{color:'var(--danger)'}}>Danger Zone</div>
+          <div className="flex-between">
+            <div>
+              <div style={{fontSize:'var(--text-sm)',fontWeight:500}}>Reset All Data</div>
+              <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>Restore mock data to original state. This cannot be undone.</div>
+            </div>
+            <button className="btn btn-danger" onClick={resetData}>Reset Data</button>
           </div>
-          <button className="btn btn-danger" onClick={resetData}>Reset Data</button>
         </div>
-      </div>
+      )}
     </div>
   );
 }

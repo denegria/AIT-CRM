@@ -92,11 +92,42 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
+.userName {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.userEmail {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .roleBadge {
   margin-top: 8px;
   text-align: center;
   font-size: var(--text-xs);
   color: var(--text-muted);
+}
+.logoutBtn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  cursor: pointer;
+}
+.logoutBtn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
 @media (max-width: 768px) {

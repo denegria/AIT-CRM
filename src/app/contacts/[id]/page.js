@@ -15,7 +15,7 @@ export default function ContactDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
-  const { contacts, workOrders, financials, updateContact, loaded, employees, sources } = useCRM();
+  const { contacts, workOrders, financials, updateContact, loaded, employees, sources, access } = useCRM();
   const [activeTab, setActiveTab] = useState('timeline');
   const [noteInput, setNoteInput] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -34,6 +34,7 @@ export default function ContactDetailPage() {
   const [editForm, setEditForm] = useState(null);
 
   const openEditModal = () => {
+    if (!access.canWriteCrm) return;
     setEditForm({ ...contact });
     setIsEditModalOpen(true);
   };
@@ -50,6 +51,7 @@ export default function ContactDetailPage() {
 
   const addNote = () => {
     if (!noteInput.trim()) return;
+    if (!access.canWriteCrm) return;
     const newNote = {
       text: noteInput,
       date: new Date().toISOString().slice(0, 10),
@@ -95,9 +97,11 @@ export default function ContactDetailPage() {
             </div>
           </div>
           
-          <button className="btn btn-block" style={{marginTop: 20}} onClick={openEditModal}>
-            <Edit3 size={16} style={{marginRight: 8}} /> Edit Profile
-          </button>
+          {access.canWriteCrm && (
+            <button className="btn btn-block" style={{marginTop: 20}} onClick={openEditModal}>
+              <Edit3 size={16} style={{marginRight: 8}} /> Edit Profile
+            </button>
+          )}
         </div>
 
         {/* Right Section: Content */}
@@ -116,9 +120,10 @@ export default function ContactDetailPage() {
                     placeholder="Type a note or activity update..." 
                     value={noteInput}
                     onChange={e => setNoteInput(e.target.value)}
+                    disabled={!access.canWriteCrm}
                   />
                   <div className={s.noteBoxFooter}>
-                    <button className="btn btn-primary btn-sm" onClick={addNote}>
+                    <button className="btn btn-primary btn-sm" onClick={addNote} disabled={!access.canWriteCrm}>
                       <Plus size={14} /> Add Note
                     </button>
                   </div>

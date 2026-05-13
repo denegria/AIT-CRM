@@ -45,6 +45,30 @@ export const users = pgTable('users', {
   updatedAt,
 });
 
+export const userPasswordCredentials = pgTable('user_password_credentials', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  email: text('email').notNull().unique(),
+  passwordHash: text('password_hash').notNull(),
+  passwordSalt: text('password_salt').notNull(),
+  passwordIterations: integer('password_iterations').notNull().default(310000),
+  lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  userIdx: uniqueIndex('user_password_credentials_user_idx').on(table.userId),
+}));
+
+export const userSessions = pgTable('user_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull().unique(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  createdAt,
+  updatedAt,
+});
+
 export const roles = pgTable('roles', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
@@ -64,6 +88,16 @@ export const permissions = pgTable('permissions', {
   createdAt,
   updatedAt,
 });
+
+export const rolePermissions = pgTable('role_permissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  roleId: uuid('role_id').notNull().references(() => roles.id, { onDelete: 'cascade' }),
+  permissionId: uuid('permission_id').notNull().references(() => permissions.id, { onDelete: 'cascade' }),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  rolePermissionIdx: uniqueIndex('role_permissions_role_permission_idx').on(table.roleId, table.permissionId),
+}));
 
 export const userRoles = pgTable('user_roles', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -275,8 +309,11 @@ export const allTables = {
   organizations,
   businessUnits,
   users,
+  userPasswordCredentials,
+  userSessions,
   roles,
   permissions,
+  rolePermissions,
   userRoles,
   businessUnitMemberships,
   contacts,

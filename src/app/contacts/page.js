@@ -11,7 +11,7 @@ import { List, LayoutDashboard as KanbanIcon } from 'lucide-react';
 const empty = { name:'', email:'', phone:'', status:'New Lead', source:'Facebook Ads', assignedTo:'emp-1', notes: [] };
 
 export default function ContactsPage() {
-  const { contacts, addContact, updateContact, deleteContact, employees, loaded } = useCRM();
+  const { contacts, addContact, updateContact, deleteContact, employees, loaded, access } = useCRM();
   const { toast } = useToast();
   const router = useRouter();
   const [drawer, setDrawer] = useState(null); // null | 'new' | contact object
@@ -19,8 +19,9 @@ export default function ContactsPage() {
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'kanban'
   const [statusFilter, setStatusFilter] = useState('All');
 
-  const openNew = () => { setForm(empty); setDrawer('new'); };
-  const openEdit = (row) => { setForm({ ...row }); setDrawer(row); };
+  const canWrite = access.canWriteCrm;
+  const openNew = () => { if (!canWrite) return; setForm(empty); setDrawer('new'); };
+  const openEdit = (row) => { if (!canWrite) return; setForm({ ...row }); setDrawer(row); };
   const close = () => setDrawer(null);
 
   const save = () => {
@@ -71,7 +72,7 @@ export default function ContactsPage() {
             <option value="All">All Statuses</option>
             {['New Lead','Contacted','Qualified','Proposal Sent','Won','Lost'].map(s=><option key={s} value={s}>{s}</option>)}
           </select>
-          <button className="btn btn-primary" onClick={openNew}>+ Add Contact</button>
+          {canWrite && <button className="btn btn-primary" onClick={openNew}>+ Add Contact</button>}
         </div>
       </div>
 
@@ -102,11 +103,13 @@ export default function ContactsPage() {
             columns={columns}
             data={dataWithEmp}
             searchPlaceholder="Search contacts..."
-            onEdit={(id, u) => { updateContact(id, u); toast('Field updated'); }}
+            onEdit={canWrite ? (id, u) => { updateContact(id, u); toast('Field updated'); } : undefined}
             actions={[
               { label: 'View', onClick: (r) => router.push(`/contacts/${r.id}`) },
-              { label: 'Edit', onClick: openEdit },
-              { label: 'Delete', onClick: (r) => { deleteContact(r.id); toast('Contact deleted', 'error'); }, danger: true },
+              ...(canWrite ? [
+                { label: 'Edit', onClick: openEdit },
+                { label: 'Delete', onClick: (r) => { deleteContact(r.id); toast('Contact deleted', 'error'); }, danger: true },
+              ] : []),
             ]}
           />
         </div>
@@ -114,7 +117,7 @@ export default function ContactsPage() {
         <KanbanBoard 
           data={dataWithEmp}
           columns={['New Lead', 'Contacted', 'Qualified', 'Proposal Sent', 'Won', 'Lost']}
-          onMove={(id, status) => { updateContact(id, { status }); toast('Stage updated'); }}
+          onMove={canWrite ? (id, status) => { updateContact(id, { status }); toast('Stage updated'); } : undefined}
           onEdit={(item) => router.push(`/contacts/${item.id}`)}
         />
       )}

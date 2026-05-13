@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Client } from 'pg';
 import { ADMIN_TOKEN_ENV, hasConfiguredAdminToken, isImportReviewAdmin } from '@/lib/admin-guard';
+import { getRequestSession, hasPermission, isAuthEnabled, PERMISSIONS } from '@/lib/auth';
 
 const DEFAULT_LIMIT = 120;
 const VALID_PATCH_STATUSES = new Set(['approved', 'rejected', 'pending', 'needs_review']);
@@ -34,22 +35,25 @@ async function withClient(handler) {
   }
 }
 
-function requireImportReviewAdmin(request) {
-  if (!hasConfiguredAdminToken()) {
+async function requireImportReviewAdmin(request, permission) {
+  if (isAuthEnabled()) {
+    const session = await getRequestSession(request);
+    if (hasPermission(session, permission)) return null;
+  }
+
+  if (hasConfiguredAdminToken() && isImportReviewAdmin(request)) return null;
+
+  if (!hasConfiguredAdminToken() && !isAuthEnabled()) {
     return NextResponse.json(
-      { error: `${ADMIN_TOKEN_ENV} is required before import review can be accessed.` },
+      { error: `${ADMIN_TOKEN_ENV} or real auth/RBAC is required before import review can be accessed.` },
       { status: 503 },
     );
   }
 
-  if (!isImportReviewAdmin(request)) {
-    return NextResponse.json(
-      { error: 'Admin unlock required to access import review data.' },
-      { status: 401 },
-    );
-  }
-
-  return null;
+  return NextResponse.json(
+    { error: 'Admin unlock or import-review permission required.' },
+    { status: 401 },
+  );
 }
 
 async function resolveBatchId(client, batchId) {
@@ -198,7 +202,7 @@ async function loadRows(client, batchId, { status, type, q, limit }) {
 }
 
 export async function GET(request) {
-  const authError = requireImportReviewAdmin(request);
+  const authError = await requireImportReviewAdmin(request, PERMISSIONS.IMPORT_REVIEW_READ);
   if (authError) return authError;
 
   try {
@@ -248,7 +252,7 @@ export async function GET(request) {
 }
 
 export async function PATCH(request) {
-  const authError = requireImportReviewAdmin(request);
+  const authError = await requireImportReviewAdmin(request, PERMISSIONS.IMPORT_REVIEW_WRITE);
   if (authError) return authError;
 
   try {

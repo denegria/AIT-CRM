@@ -13,6 +13,7 @@
     "db:load-ait-signs-staging": "node scripts/load-ait-signs-staging.mjs",
     "db:review-ait-signs-staging": "node scripts/review-ait-signs-staging.mjs",
     "db:promote-ait-signs-staging": "node scripts/promote-ait-signs-staging.mjs",
+    "db:bootstrap-auth-user": "node scripts/bootstrap-auth-user.mjs",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",

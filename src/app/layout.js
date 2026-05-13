@@ -4,6 +4,7 @@ import { ToastProvider } from '@/components/Toast';
 import CommandPalette from '@/components/CommandPalette';
 import Sidebar from '@/components/Sidebar';
 import { getBootstrapData } from '@/lib/bootstrap-data';
+import { getCurrentSession } from '@/lib/auth';
 
 export const metadata = {
   title: 'AIT Signs',
@@ -11,7 +12,8 @@ export const metadata = {
 };
 
 export default async function RootLayout({ children }) {
-  const bootstrapData = await getBootstrapData();
+  const session = await getCurrentSession();
+  const bootstrapData = await getBootstrapData(session);
   return (
     <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning>

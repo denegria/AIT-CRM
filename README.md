@@ -116,7 +116,8 @@ The near-term product should prioritize trustworthy data, import review, busines
 - Database: Postgres
 - ORM/migrations: Drizzle
 - Current fallback state: sanitized demo records are used only when no database is configured; live empty databases should stay empty until import staging is loaded
-- Live database status: the initial Drizzle schema has been applied to Neon, but the production bootstrap/import data still needs to be loaded
+- Live database status: the initial schema and import staging migrations have been applied to Neon; staged AIT Signs source rows are loaded, but production CRM records still require human review/promote
+- Auth status: database-backed sessions require `AIT_CRM_SESSION_SECRET` plus a bootstrapped user; local no-database mode still uses sanitized demo data
 
 ## Development
 
@@ -135,14 +136,25 @@ npm run build
 npm run profile:ait-signs
 npm run import:ait-signs-staging
 npm run seed:ait-signs
+npm run db:load-ait-signs-staging
+npm run db:review-ait-signs-staging
+npm run db:promote-ait-signs-staging
+npm run db:bootstrap-auth-user
 npm run db:generate
 npm run db:migrate
 ```
 
 Database commands require `DATABASE_URL` in the environment.
 
-Import review also requires `AIT_CRM_ADMIN_TOKEN`. The app sets an HTTP-only
-admin session cookie after the token is entered, and `/api/import-review`
-rejects requests without that cookie or a matching `x-ait-admin-token` /
-`Authorization: Bearer` token. This is a temporary guard until Phase 1.5
-auth/RBAC replaces it.
+For database-backed app sessions, set `AIT_CRM_SESSION_SECRET`, run migrations,
+then bootstrap the first admin with:
+
+```bash
+AIT_CRM_BOOTSTRAP_ADMIN_EMAIL=admin@example.com \
+AIT_CRM_BOOTSTRAP_ADMIN_PASSWORD='change-me' \
+npm run db:bootstrap-auth-user
+```
+
+Import review now accepts either a signed-in user with import-review permission
+or the temporary `AIT_CRM_ADMIN_TOKEN` path. The temporary token path remains for
+internal scripts and emergency unlocks until full user/admin management exists.

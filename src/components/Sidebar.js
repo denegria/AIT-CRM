@@ -5,7 +5,7 @@ import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import s from './Sidebar.module.css';
 
-import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, Database } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, Database, LogOut } from 'lucide-react';
 
 const nav = [
   { href: '/', label: 'Dashboard', Icon: LayoutDashboard },
@@ -19,12 +19,12 @@ const nav = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { role, setRole, theme, setTheme } = useCRM();
+  const { role, theme, setTheme, currentUser, access, dataSource } = useCRM();
   const { toast } = useToast();
 
-  const handleRoleChange = (newRole) => {
-    setRole(newRole);
-    toast(`Switched to ${newRole} view`);
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
+    window.location.reload();
   };
 
   return (
@@ -36,7 +36,10 @@ export default function Sidebar() {
       <nav className={s.navSection}>
         <div className={s.navLabel}>Menu</div>
         {nav.map(({ href, label, Icon }) => {
-          if (role !== 'admin' && (href === '/settings' || href === '/import-review')) return null;
+          if (href === '/settings' && !access.canReadSettings) return null;
+          if (href === '/import-review' && !access.canReadImportReview) return null;
+          if (href === '/reports' && !access.canReadReports && role !== 'admin') return null;
+          if (href === '/financials' && !access.canReadFinancials && role !== 'admin') return null;
           return (
             <Link key={href} href={href} className={`${s.navItem} ${pathname === href ? s.active : ''}`}>
               <Icon /><span>{label}</span>
@@ -52,22 +55,19 @@ export default function Sidebar() {
           </button>
         </div>
         <div className={s.roleSwitcher}>
-          <label className={s.roleLabel}>System Role</label>
-          <select 
-            className="input select" 
-            style={{padding: '4px 8px', fontSize: 'var(--text-xs)'}} 
-            value={role} 
-            onChange={(e) => handleRoleChange(e.target.value)}
-          >
-            <option value="admin">Administrator</option>
-            <option value="designer">Designer</option>
-            <option value="account_manager">Account Manager</option>
-            <option value="sales_manager">Sales Manager</option>
-          </select>
+          <label className={s.roleLabel}>Signed In</label>
+          <div className={s.userName}>{currentUser?.name || 'Local Admin'}</div>
+          <div className={s.userEmail}>{currentUser?.email || 'local fallback'}</div>
         </div>
         <div className={s.roleBadge}>
           {role === 'admin' ? 'Full Access' : 'Restricted Access'}
         </div>
+        {dataSource === 'postgres' && (
+          <button className={s.logoutBtn} onClick={handleLogout}>
+            <LogOut size={14} />
+            <span>Sign out</span>
+          </button>
+        )}
       </div>
     </aside>
   );

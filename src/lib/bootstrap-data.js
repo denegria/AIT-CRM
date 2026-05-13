@@ -1,7 +1,8 @@
 import { cache } from 'react';
-import { asc, desc, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import * as seedData from './data';
 import { getDb } from '../db/index.js';
+import { hasPermission, isAuthEnabled, PERMISSIONS, SESSION_SECRET_ENV } from './auth';
 import {
   contacts as contactsTable,
   workOrders as workOrdersTable,
@@ -143,6 +144,79 @@ function mapBusinessUnits(rows) {
   }));
 }
 
+function authData({ authRequired = false, authError = '', currentUser = null } = {}) {
+  return {
+    ...seedData,
+    dataSource: process.env.DATABASE_URL ? 'postgres' : 'local',
+    authRequired,
+    authError,
+    currentUser,
+    access: {
+      canReadCrm: Boolean(currentUser),
+      canWriteCrm: false,
+      canReadImportReview: false,
+      canWriteImportReview: false,
+      canReadSettings: false,
+      canReadReports: false,
+      canReadFinancials: false,
+      canWriteFinancials: false,
+      canWriteWorkOrders: false,
+    },
+    importStaging: null,
+    contacts: [],
+    workOrders: [],
+    financials: [],
+    tasks: [],
+    calendarEvents: [],
+    salesLedger: [],
+  };
+}
+
+function sessionAccess(session) {
+  return {
+    canReadCrm: hasPermission(session, PERMISSIONS.CRM_READ),
+    canWriteCrm: hasPermission(session, PERMISSIONS.CRM_WRITE),
+    canReadImportReview: hasPermission(session, PERMISSIONS.IMPORT_REVIEW_READ),
+    canWriteImportReview: hasPermission(session, PERMISSIONS.IMPORT_REVIEW_WRITE),
+    canReadSettings: hasPermission(session, PERMISSIONS.SETTINGS_READ),
+    canReadReports: hasPermission(session, PERMISSIONS.REPORTS_READ),
+    canReadFinancials: hasPermission(session, PERMISSIONS.FINANCIALS_READ),
+    canWriteFinancials: hasPermission(session, PERMISSIONS.FINANCIALS_WRITE),
+    canWriteWorkOrders: hasPermission(session, PERMISSIONS.WORK_ORDERS_WRITE),
+  };
+}
+
+function businessUnitScope(column, session) {
+  if (session.user.canAccessAllBusinessUnits) return undefined;
+  if (!session.user.businessUnitIds.length) return sql`false`;
+  return inArray(column, session.user.businessUnitIds);
+}
+
+function scopedContactWhere(session) {
+  const orgScope = eq(contactsTable.organizationId, session.user.organizationId);
+  if (session.user.canAccessAllBusinessUnits) return orgScope;
+  if (!session.user.businessUnitIds.length) {
+    return and(orgScope, isNull(contactsTable.primaryBusinessUnitId));
+  }
+  return and(
+    orgScope,
+    or(
+      isNull(contactsTable.primaryBusinessUnitId),
+      inArray(contactsTable.primaryBusinessUnitId, session.user.businessUnitIds),
+    ),
+  );
+}
+
+function scopedOrgWhere(table, session) {
+  return eq(table.organizationId, session.user.organizationId);
+}
+
+function scopedBusinessUnitWhere(table, session) {
+  const orgScope = scopedOrgWhere(table, session);
+  const buScope = businessUnitScope(table.businessUnitId, session);
+  return buScope ? and(orgScope, buScope) : orgScope;
+}
+
 async function countRows(db, table) {
   const rows = await db.select({ count: sql`count(*)::int` }).from(table);
   return Number(rows[0]?.count || 0);
@@ -179,6 +253,10 @@ function emptyDbData(businessUnitRows = [], importStaging = null) {
   return {
     ...seedData,
     dataSource: 'postgres',
+    authRequired: false,
+    authError: '',
+    currentUser: null,
+    access: authData().access,
     businessUnits: mapBusinessUnits(businessUnitRows),
     contacts: [],
     workOrders: [],
@@ -190,9 +268,44 @@ function emptyDbData(businessUnitRows = [], importStaging = null) {
   };
 }
 
-export const getBootstrapData = cache(async function getBootstrapData() {
+export const getBootstrapData = cache(async function getBootstrapData(session = null) {
   if (!process.env.DATABASE_URL) {
-    return seedData;
+    return {
+      ...seedData,
+      authRequired: false,
+      currentUser: {
+        id: 'local-admin',
+        name: 'Local Admin',
+        email: '',
+        primaryRoleKey: 'admin',
+        roleKeys: ['admin'],
+        permissions: Object.values(PERMISSIONS),
+        businessUnitIds: [],
+        canAccessAllBusinessUnits: true,
+      },
+      access: {
+        canReadCrm: true,
+        canWriteCrm: true,
+        canReadImportReview: true,
+        canWriteImportReview: true,
+        canReadSettings: true,
+        canReadReports: true,
+        canReadFinancials: true,
+        canWriteFinancials: true,
+        canWriteWorkOrders: true,
+      },
+    };
+  }
+
+  if (!isAuthEnabled()) {
+    return authData({
+      authRequired: true,
+      authError: `${SESSION_SECRET_ENV} is required before database-backed CRM data can be shown.`,
+    });
+  }
+
+  if (!session) {
+    return authData({ authRequired: true });
   }
 
   try {
@@ -208,19 +321,23 @@ export const getBootstrapData = cache(async function getBootstrapData() {
       eventRows,
       importStaging,
     ] = await Promise.all([
-      db.select().from(businessUnitsTable).orderBy(asc(businessUnitsTable.name)),
-      db.select().from(contactsTable).orderBy(desc(contactsTable.createdAt)),
-      db.select().from(leadsTable).orderBy(desc(leadsTable.createdAt)),
-      db.select().from(workOrdersTable).orderBy(desc(workOrdersTable.createdAt)),
-      db.select().from(estimatesTable).orderBy(desc(estimatesTable.createdAt)),
-      db.select().from(paymentSnapshotsTable).orderBy(desc(paymentSnapshotsTable.createdAt)),
-      db.select().from(notesTable).orderBy(desc(notesTable.createdAt)),
-      db.select().from(activityEventsTable).orderBy(desc(activityEventsTable.createdAt)),
+      db.select().from(businessUnitsTable).where(scopedOrgWhere(businessUnitsTable, session)).orderBy(asc(businessUnitsTable.name)),
+      db.select().from(contactsTable).where(scopedContactWhere(session)).orderBy(desc(contactsTable.createdAt)),
+      db.select().from(leadsTable).where(scopedBusinessUnitWhere(leadsTable, session)).orderBy(desc(leadsTable.createdAt)),
+      db.select().from(workOrdersTable).where(scopedBusinessUnitWhere(workOrdersTable, session)).orderBy(desc(workOrdersTable.createdAt)),
+      db.select().from(estimatesTable).where(scopedBusinessUnitWhere(estimatesTable, session)).orderBy(desc(estimatesTable.createdAt)),
+      db.select().from(paymentSnapshotsTable).where(scopedBusinessUnitWhere(paymentSnapshotsTable, session)).orderBy(desc(paymentSnapshotsTable.createdAt)),
+      db.select().from(notesTable).where(scopedOrgWhere(notesTable, session)).orderBy(desc(notesTable.createdAt)),
+      db.select().from(activityEventsTable).where(scopedOrgWhere(activityEventsTable, session)).orderBy(desc(activityEventsTable.createdAt)),
       getImportStagingSummary(db),
     ]);
 
     if (!contactRows.length) {
-      return emptyDbData(businessUnitRows, importStaging);
+      return {
+        ...emptyDbData(businessUnitRows, importStaging),
+        currentUser: session.user,
+        access: sessionAccess(session),
+      };
     }
 
     const contacts = mapContacts(contactRows, leadRows, noteRows, eventRows);
@@ -230,6 +347,10 @@ export const getBootstrapData = cache(async function getBootstrapData() {
     return {
       ...seedData,
       dataSource: 'postgres',
+      authRequired: false,
+      authError: '',
+      currentUser: session.user,
+      access: sessionAccess(session),
       businessUnits: mapBusinessUnits(businessUnitRows),
       contacts,
       workOrders,
@@ -238,6 +359,10 @@ export const getBootstrapData = cache(async function getBootstrapData() {
     };
   } catch (error) {
     console.warn('Falling back to empty CRM data because Postgres bootstrap failed:', error.message);
-    return emptyDbData();
+    return {
+      ...emptyDbData(),
+      currentUser: session.user,
+      access: sessionAccess(session),
+    };
   }
 });
