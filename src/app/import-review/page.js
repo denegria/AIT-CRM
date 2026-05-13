@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Check, Database, Eye, Filter, RefreshCw, Search, X } from 'lucide-react';
+import { Check, Database, Eye, Filter, Lock, RefreshCw, Search, X } from 'lucide-react';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 
@@ -65,6 +65,8 @@ export default function ImportReviewPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [authRequired, setAuthRequired] = useState(false);
+  const [adminToken, setAdminToken] = useState('');
   const [batch, setBatch] = useState(null);
   const [summary, setSummary] = useState(null);
   const [rows, setRows] = useState([]);
@@ -88,9 +90,11 @@ export default function ImportReviewPage() {
         const payload = await response.json();
 
         if (!response.ok) {
+          if (response.status === 401) setAuthRequired(true);
           throw new Error(payload.error || 'Unable to load import review queue.');
         }
 
+        setAuthRequired(false);
         setBatch(payload.batch);
         setSummary(payload.summary);
         setRows(payload.rows || []);
@@ -127,6 +131,32 @@ export default function ImportReviewPage() {
   const allVisibleSelected = rowIds.length > 0 && rowIds.every((id) => selectedIds.includes(id));
   const selectedCount = selectedIds.filter((id) => rowIds.includes(id)).length;
   const canReview = role === 'admin';
+
+  async function unlockAdminSession(event) {
+    event.preventDefault();
+    setSaving(true);
+    try {
+      const response = await fetch('/api/admin-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: adminToken }),
+      });
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error || 'Unable to unlock admin session.');
+      }
+
+      setAdminToken('');
+      setAuthRequired(false);
+      setError('');
+      setReloadKey((key) => key + 1);
+      toast('Import review unlocked for this browser session.', 'success');
+    } catch (err) {
+      toast(err.message || 'Unable to unlock admin session.', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
 
   async function updateRows(recordIds, status) {
     if (!recordIds.length) return;
@@ -177,6 +207,47 @@ export default function ImportReviewPage() {
             The CRM is still using local seed data in this session. Import review becomes available after the live database is configured.
           </p>
         </div>
+      </div>
+    );
+  }
+
+  if (authRequired) {
+    return (
+      <div className="fade-in">
+        <div className="page-header">
+          <div>
+            <span className="badge badge-medium" style={{ padding: '4px 10px', marginBottom: 8 }}>
+              <Lock size={14} />
+              Admin Guard
+            </span>
+            <h1 className="page-title">Unlock import review</h1>
+            <p className="page-subtitle">
+              Import review contains staged customer data and requires a temporary admin token until real auth/RBAC lands.
+            </p>
+          </div>
+          <Link className="btn btn-primary" href="/">
+            Back to dashboard
+          </Link>
+        </div>
+        <form className="card" onSubmit={unlockAdminSession} style={{ maxWidth: 520 }}>
+          <div className="card-title">Admin token</div>
+          <p className="page-subtitle">
+            Enter the value configured in the server environment as AIT_CRM_ADMIN_TOKEN.
+          </p>
+          <input
+            className="input"
+            type="password"
+            value={adminToken}
+            onChange={(event) => setAdminToken(event.target.value)}
+            autoComplete="current-password"
+            placeholder="Temporary admin token"
+            style={{ marginBottom: 12 }}
+          />
+          <button className="btn btn-primary" disabled={!adminToken.trim() || saving} type="submit">
+            <Lock size={16} />
+            Unlock review queue
+          </button>
+        </form>
       </div>
     );
   }

@@ -140,3 +140,9 @@ npm run db:migrate
 ```
 
 Database commands require `DATABASE_URL` in the environment.
+
+Import review also requires `AIT_CRM_ADMIN_TOKEN`. The app sets an HTTP-only
+admin session cookie after the token is entered, and `/api/import-review`
+rejects requests without that cookie or a matching `x-ait-admin-token` /
+`Authorization: Bearer` token. This is a temporary guard until Phase 1.5
+auth/RBAC replaces it.

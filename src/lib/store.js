@@ -15,19 +15,17 @@ function saveStorage(d) {
 }
 
 function getInitialData(seedData = defaults) {
-  const s = loadStorage();
   const fallback = seedData || defaults;
-  const useLocalStorage = fallback.dataSource !== 'postgres';
   return {
     dataSource: fallback.dataSource || 'local',
     importStaging: fallback.importStaging || null,
-    businessUnits: (useLocalStorage && s?.businessUnits) || fallback.businessUnits || [],
-    contacts: (useLocalStorage && s?.contacts) || fallback.contacts,
-    workOrders: (useLocalStorage && s?.workOrders) || fallback.workOrders,
-    financials: (useLocalStorage && s?.financials) || fallback.financials,
-    tasks: (useLocalStorage && s?.tasks) || fallback.tasks,
-    calendarEvents: (useLocalStorage && s?.calendarEvents) || fallback.calendarEvents,
-    salesLedger: (useLocalStorage && s?.salesLedger) || fallback.salesLedger,
+    businessUnits: fallback.businessUnits || [],
+    contacts: fallback.contacts,
+    workOrders: fallback.workOrders,
+    financials: fallback.financials,
+    tasks: fallback.tasks,
+    calendarEvents: fallback.calendarEvents,
+    salesLedger: fallback.salesLedger,
   };
 }
 
@@ -55,7 +53,32 @@ export function CRMProvider({ children, initialData }) {
   const [tasks, setTasks] = useState(bootstrapData.tasks);
   const [calendarEvents, setCalendarEvents] = useState(bootstrapData.calendarEvents);
   const [salesLedger, setSalesLedger] = useState(bootstrapData.salesLedger);
+  const [storageReady, setStorageReady] = useState(bootstrapData.dataSource === 'postgres');
   const loaded = true;
+
+  useEffect(() => {
+    if (bootstrapData.dataSource === 'postgres') return;
+    const stored = loadStorage();
+
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (stored) {
+        setBusinessUnits(stored.businessUnits || defaults.businessUnits || []);
+        setContacts(stored.contacts || defaults.contacts);
+        setWorkOrders(stored.workOrders || defaults.workOrders);
+        setFinancials(stored.financials || defaults.financials);
+        setTasks(stored.tasks || defaults.tasks);
+        setCalendarEvents(stored.calendarEvents || defaults.calendarEvents);
+        setSalesLedger(stored.salesLedger || defaults.salesLedger);
+      }
+      setStorageReady(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bootstrapData.dataSource]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -72,8 +95,9 @@ export function CRMProvider({ children, initialData }) {
 
   useEffect(() => {
     if (!loaded) return;
+    if (bootstrapData.dataSource === 'postgres' || !storageReady) return;
     saveStorage({ businessUnits, contacts, workOrders, financials, tasks, calendarEvents, salesLedger });
-  }, [businessUnits, contacts, workOrders, financials, tasks, calendarEvents, salesLedger, loaded]);
+  }, [bootstrapData.dataSource, businessUnits, contacts, workOrders, financials, tasks, calendarEvents, salesLedger, loaded, storageReady]);
 
   const gid = (p) => `${p}-${crypto.randomUUID().slice(0, 8)}`;
 

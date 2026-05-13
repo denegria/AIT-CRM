@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Client } from 'pg';
+import { ADMIN_TOKEN_ENV, hasConfiguredAdminToken, isImportReviewAdmin } from '@/lib/admin-guard';
 
 const DEFAULT_LIMIT = 120;
 const VALID_PATCH_STATUSES = new Set(['approved', 'rejected', 'pending', 'needs_review']);
@@ -31,6 +32,24 @@ async function withClient(handler) {
   } finally {
     await client.end();
   }
+}
+
+function requireImportReviewAdmin(request) {
+  if (!hasConfiguredAdminToken()) {
+    return NextResponse.json(
+      { error: `${ADMIN_TOKEN_ENV} is required before import review can be accessed.` },
+      { status: 503 },
+    );
+  }
+
+  if (!isImportReviewAdmin(request)) {
+    return NextResponse.json(
+      { error: 'Admin unlock required to access import review data.' },
+      { status: 401 },
+    );
+  }
+
+  return null;
 }
 
 async function resolveBatchId(client, batchId) {
@@ -179,6 +198,9 @@ async function loadRows(client, batchId, { status, type, q, limit }) {
 }
 
 export async function GET(request) {
+  const authError = requireImportReviewAdmin(request);
+  if (authError) return authError;
+
   try {
     return await withClient(async (client) => {
       const url = new URL(request.url);
@@ -226,6 +248,9 @@ export async function GET(request) {
 }
 
 export async function PATCH(request) {
+  const authError = requireImportReviewAdmin(request);
+  if (authError) return authError;
+
   try {
     return await withClient(async (client) => {
       const body = await request.json();

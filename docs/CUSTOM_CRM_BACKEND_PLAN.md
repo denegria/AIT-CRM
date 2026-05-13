@@ -34,6 +34,8 @@ Directus can still be useful as a temporary or optional admin/data tool, but it 
 - [x] Linear project created and seeded with completed/proposed slices
 - [x] Apply latest import staging migration and load AIT Signs staging batch into Neon
 - [x] CRM import review UI added for row-by-row approval inside the app
+- [x] Temporary admin guard added for import review API and UI access
+- [x] Raw row-level staging preview JSON removed from git tracking
 - [ ] Real auth and RBAC
 - [ ] Facebook Lead Ads ingestion
 
@@ -63,7 +65,7 @@ Next Linear slices:
    - connect contacts, leads, estimates, work orders, and activity events to the Drizzle schema
    - seed the four AIT business units
    - prepare server-side read paths for the current UI
-   - status: first server bootstrap path is active; dashboard now surfaces import staging counts while production CRM tables remain empty; review and approved-record promotion scripts are available, and the CRM now has an internal import review screen for row-by-row approval
+   - status: first server bootstrap path is active; dashboard now surfaces import staging counts while production CRM tables remain empty; review and approved-record promotion scripts are available, and the CRM now has an internal import review screen protected by a temporary admin token guard
 
 3. `MIS-14` LocalStorage replacement plan
    - map current mock entities to Postgres reads
@@ -258,6 +260,7 @@ Recommended sequencing:
 
 - Phase 1: data model, import staging, cleanup workflow, and core CRM screens can be built in a controlled/internal environment.
 - Phase 1.5: add real authentication, signed-in users, and app-owned authorization before broader user rollout.
+- Until Phase 1.5 lands, sensitive internal import review endpoints must stay behind `AIT_CRM_ADMIN_TOKEN` and should not be treated as user authentication.
 
 Recommended default:
 
