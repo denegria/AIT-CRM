@@ -5,7 +5,7 @@ import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import s from './Sidebar.module.css';
 
-import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, Database, LogOut } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, Database, LogOut, Building2 } from 'lucide-react';
 
 const nav = [
   { href: '/', label: 'Dashboard', Icon: LayoutDashboard },
@@ -19,7 +19,19 @@ const nav = [
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { role, theme, setTheme, currentUser, access, dataSource } = useCRM();
+  const {
+    role,
+    theme,
+    setTheme,
+    currentUser,
+    access,
+    dataSource,
+    accessibleBusinessUnits,
+    currentBusinessUnitId,
+    setCurrentBusinessUnitId,
+    canUseConsolidatedScope,
+    scopeLabel,
+  } = useCRM();
   const { toast } = useToast();
 
   const handleLogout = async () => {
@@ -46,6 +58,25 @@ export default function Sidebar() {
             </Link>
           );
         })}
+        {accessibleBusinessUnits?.length > 0 && (
+          <div className={s.scopePanel}>
+            <div className={s.scopeTitle}>
+              <Building2 size={14} />
+              <span>{scopeLabel}</span>
+            </div>
+            <select
+              className={s.scopeSelect}
+              value={currentBusinessUnitId}
+              onChange={(event) => setCurrentBusinessUnitId(event.target.value)}
+              aria-label={`${scopeLabel} scope`}
+            >
+              {canUseConsolidatedScope && <option value="all">All {scopeLabel}</option>}
+              {accessibleBusinessUnits.map((unit) => (
+                <option key={unit.id} value={unit.id}>{unit.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
       </nav>
       <div className={s.bottom}>
         <div className={s.themeToggle}>

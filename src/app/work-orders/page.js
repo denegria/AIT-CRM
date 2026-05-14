@@ -9,7 +9,20 @@ import { generateWorkOrderPDF } from '@/lib/pdf';
 const empty = { number:'', title:'', client:'', contactId:'', priority:'Medium', status:'Pending', assignedTo:'emp-1', dueDate:'', description:'', estimatedCost:0 };
 
 export default function WorkOrdersPage() {
-  const { workOrders, addWorkOrder, updateWorkOrder, deleteWorkOrder, contacts, employees, loaded, role } = useCRM();
+  const {
+    workOrders,
+    addWorkOrder,
+    updateWorkOrder,
+    deleteWorkOrder,
+    contacts,
+    employees,
+    loaded,
+    role,
+    accessibleBusinessUnits,
+    currentBusinessUnitId,
+    currentBusinessUnit,
+    scopeLabel,
+  } = useCRM();
   const { toast } = useToast();
   const [drawer, setDrawer] = useState(null);
   const [form, setForm] = useState(empty);
@@ -17,7 +30,8 @@ export default function WorkOrdersPage() {
 
   const openNew = () => {
     const num = `WO-${String(workOrders.length + 1).padStart(3, '0')}`;
-    setForm({ ...empty, number: num, dueDate: new Date().toISOString().slice(0,10) });
+    const businessUnitId = currentBusinessUnitId !== 'all' ? currentBusinessUnitId : accessibleBusinessUnits[0]?.id || '';
+    setForm({ ...empty, number: num, businessUnitId, dueDate: new Date().toISOString().slice(0,10) });
     setDrawer('new');
   };
   const openEdit = (row) => { setForm({ ...row }); setDrawer(row); };
@@ -35,11 +49,13 @@ export default function WorkOrdersPage() {
   };
 
   const empName = (id) => employees.find(e => e.id === id)?.name || id;
+  const unitName = (id) => accessibleBusinessUnits.find((unit) => unit.id === id)?.name || 'Unassigned';
 
   const columns = [
     { key: 'number', label: 'WO #', sortable: true },
     { key: 'title', label: 'Title', sortable: true, editable: true },
     { key: 'client', label: 'Client', sortable: true },
+    { key: 'divisionLabel', label: scopeLabel, sortable: true },
     { key: 'priority', label: 'Priority', type: 'badge', sortable: true },
     { key: 'status', label: 'Status', type: 'badge', sortable: true },
     { key: 'dueDate', label: 'Due Date', sortable: true },
@@ -70,7 +86,7 @@ export default function WorkOrdersPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Work Orders</h1>
-          <p className="page-subtitle">{workOrders.filter(w=>w.status!=='Completed').length} active orders</p>
+          <p className="page-subtitle">{workOrders.filter(w=>w.status!=='Completed').length} active orders in {currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}</p>
         </div>
         <button className="btn btn-primary" onClick={openNew}>+ New Work Order</button>
       </div>
@@ -78,7 +94,7 @@ export default function WorkOrdersPage() {
       <div className="card" style={{padding:16}}>
         <DataTable
           columns={columns}
-          data={filtered.map(w => ({ ...w, assignedLabel: empName(w.assignedTo) }))}
+          data={filtered.map(w => ({ ...w, assignedLabel: empName(w.assignedTo), divisionLabel: unitName(w.businessUnitId) }))}
           searchPlaceholder="Search work orders..."
           onEdit={(id, u) => { updateWorkOrder(id, u); toast('Field updated'); }}
           selectable
@@ -125,13 +141,20 @@ export default function WorkOrdersPage() {
           <label className="form-label">Client</label>
           <select className="input select" value={form.contactId} onChange={e => {
             const c = contacts.find(ct => ct.id === e.target.value);
-            setForm(f=>({...f, contactId: e.target.value, client: c?.name || ''}));
+            setForm(f=>({...f, contactId: e.target.value, client: c?.name || '', businessUnitId: c?.businessUnitId || c?.primaryBusinessUnitId || f.businessUnitId || ''}));
           }}>
             <option value="">Select client</option>
             {contacts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
         <div className="grid-3">
+          <div className="form-group">
+            <label className="form-label">{scopeLabel}</label>
+            <select className="input select" value={form.businessUnitId || ''} onChange={e => setForm(f=>({...f,businessUnitId:e.target.value}))}>
+              <option value="">Unassigned</option>
+              {accessibleBusinessUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+            </select>
+          </div>
           <div className="form-group">
             <label className="form-label">Priority</label>
             <select className="input select" value={form.priority} onChange={e => setForm(f=>({...f,priority:e.target.value}))}>

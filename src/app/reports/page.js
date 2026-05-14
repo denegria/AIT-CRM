@@ -8,7 +8,7 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 const SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 export default function ReportsPage() {
-  const { financials, contacts, workOrders, loaded, role } = useCRM();
+  const { financials, contacts, workOrders, businessUnits, loaded, role, currentBusinessUnit, scopeLabel } = useCRM();
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
 
   const report = useMemo(() => {
@@ -52,6 +52,17 @@ export default function ReportsPage() {
     return Object.entries(counts).map(([label, value]) => ({ label, value, color: colors[label] || '#71717a' }));
   }, [contacts]);
 
+  const divisionBreakdown = useMemo(() => {
+    const unitCounts = new Map((businessUnits || []).map((unit) => [unit.id, { label: unit.name, value: 0, color: unit.color || '#71717a' }]));
+    contacts.forEach((contact) => {
+      const id = contact.businessUnitId || contact.primaryBusinessUnitId;
+      if (!id) return;
+      const current = unitCounts.get(id);
+      if (current) current.value += 1;
+    });
+    return [...unitCounts.values()].filter((entry) => entry.value > 0);
+  }, [businessUnits, contacts]);
+
   const exportCSV = () => {
     const rows = [['Type','Number','Client','Amount','Status','Date']];
     financials.forEach(f => rows.push([f.type, f.number, f.client, f.amount, f.status, f.date]));
@@ -69,7 +80,7 @@ export default function ReportsPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Reports</h1>
-          <p className="page-subtitle">Monthly financial snapshot & analytics</p>
+          <p className="page-subtitle">Monthly financial snapshot & analytics for {currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}</p>
         </div>
         <div className="flex-gap">
           <select className="input select" style={{width:'auto'}} value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}>
@@ -109,6 +120,20 @@ export default function ReportsPage() {
             <ChartLegend data={sourceBreakdown} />
           </div>
         </div>
+        <div className="card">
+          <div className="card-title" style={{marginBottom:16}}>{scopeLabel} Mix</div>
+          {divisionBreakdown.length ? (
+            <div style={{display:'flex',alignItems:'center',gap:32,justifyContent:'center'}}>
+              <PieChart data={divisionBreakdown} size={160} />
+              <ChartLegend data={divisionBreakdown} />
+            </div>
+          ) : (
+            <div className="empty-state">No {scopeLabel.toLowerCase()} data in the selected scope.</div>
+          )}
+        </div>
+      </div>
+
+      <div className="grid-2" style={{marginTop:20}}>
         <div className="card">
           <div className="card-title">Quick Stats</div>
           <div style={{display:'flex',flexDirection:'column',gap:12}}>

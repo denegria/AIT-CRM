@@ -1,9 +1,26 @@
 'use client';
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import * as defaults from './data';
 
 const CRMContext = createContext(null);
 const STORAGE_KEY = 'ait-crm-data';
+const SCOPE_STORAGE_KEY = 'ait-crm-business-unit-scope';
+const ALL_BUSINESS_UNITS = 'all';
+
+function getBusinessUnitId(record) {
+  return record?.businessUnitId || record?.primaryBusinessUnitId || '';
+}
+
+function withBusinessUnitDefaults(record, businessUnitId, includePrimary = false) {
+  if (!businessUnitId || businessUnitId === ALL_BUSINESS_UNITS) return record;
+  const hasBusinessUnitId = Object.prototype.hasOwnProperty.call(record, 'businessUnitId');
+  const hasPrimaryBusinessUnitId = Object.prototype.hasOwnProperty.call(record, 'primaryBusinessUnitId');
+  return {
+    ...record,
+    businessUnitId: hasBusinessUnitId ? record.businessUnitId : businessUnitId,
+    ...(includePrimary ? { primaryBusinessUnitId: hasPrimaryBusinessUnitId ? record.primaryBusinessUnitId : businessUnitId } : {}),
+  };
+}
 
 function loadStorage() {
   if (typeof window === 'undefined') return null;
@@ -112,8 +129,75 @@ export function CRMProvider({ children, initialData }) {
   const [tasks, setTasks] = useState(bootstrapData.tasks);
   const [calendarEvents, setCalendarEvents] = useState(bootstrapData.calendarEvents);
   const [salesLedger, setSalesLedger] = useState(bootstrapData.salesLedger);
+  const [currentBusinessUnitId, setCurrentBusinessUnitIdState] = useState(() => {
+    if (typeof window === 'undefined') return ALL_BUSINESS_UNITS;
+    return localStorage.getItem(SCOPE_STORAGE_KEY) || ALL_BUSINESS_UNITS;
+  });
   const [storageReady, setStorageReady] = useState(isPostgres);
   const loaded = true;
+
+  const accessibleBusinessUnits = useMemo(() => {
+    const activeUnits = (businessUnits || []).filter((unit) => unit.isActive !== false);
+    if (!currentUser || currentUser.canAccessAllBusinessUnits) return activeUnits;
+    const allowed = new Set(currentUser.businessUnitIds || []);
+    return activeUnits.filter((unit) => allowed.has(unit.id));
+  }, [businessUnits, currentUser]);
+
+  const canUseConsolidatedScope = Boolean(!currentUser || currentUser.canAccessAllBusinessUnits);
+  const effectiveBusinessUnitId = useMemo(() => {
+    if (currentBusinessUnitId === ALL_BUSINESS_UNITS && canUseConsolidatedScope) return ALL_BUSINESS_UNITS;
+    const allowedIds = new Set(accessibleBusinessUnits.map((unit) => unit.id));
+    if (allowedIds.has(currentBusinessUnitId)) return currentBusinessUnitId;
+    return canUseConsolidatedScope ? ALL_BUSINESS_UNITS : accessibleBusinessUnits[0]?.id || ALL_BUSINESS_UNITS;
+  }, [accessibleBusinessUnits, canUseConsolidatedScope, currentBusinessUnitId]);
+  const currentBusinessUnit = useMemo(
+    () => accessibleBusinessUnits.find((unit) => unit.id === effectiveBusinessUnitId) || null,
+    [accessibleBusinessUnits, effectiveBusinessUnitId],
+  );
+  const scopeLabel = currentBusinessUnit?.label || businessUnits?.[0]?.label || 'Divisions';
+
+  const setCurrentBusinessUnitId = useCallback((nextId) => {
+    const selectedId = nextId || ALL_BUSINESS_UNITS;
+    const allowedIds = new Set(accessibleBusinessUnits.map((unit) => unit.id));
+    if (selectedId !== ALL_BUSINESS_UNITS && !allowedIds.has(selectedId)) return;
+    if (selectedId === ALL_BUSINESS_UNITS && !canUseConsolidatedScope) return;
+    setCurrentBusinessUnitIdState(selectedId);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(SCOPE_STORAGE_KEY, selectedId);
+    }
+  }, [accessibleBusinessUnits, canUseConsolidatedScope]);
+
+  const inCurrentBusinessUnitScope = useCallback((record) => {
+    if (effectiveBusinessUnitId === ALL_BUSINESS_UNITS) return true;
+    const businessUnitId = getBusinessUnitId(record);
+    return !businessUnitId || businessUnitId === effectiveBusinessUnitId;
+  }, [effectiveBusinessUnitId]);
+
+  const businessUnitByContactId = useMemo(() => {
+    const lookup = new Map();
+    for (const contact of contacts) {
+      lookup.set(contact.id, getBusinessUnitId(contact));
+    }
+    return lookup;
+  }, [contacts]);
+  const inCurrentBusinessUnitOrContactScope = useCallback((record) => {
+    if (effectiveBusinessUnitId === ALL_BUSINESS_UNITS) return true;
+    const businessUnitId = getBusinessUnitId(record);
+    const contactBusinessUnitId = businessUnitByContactId.get(record?.contactId);
+    return (
+      !businessUnitId ||
+      businessUnitId === effectiveBusinessUnitId ||
+      !contactBusinessUnitId ||
+      contactBusinessUnitId === effectiveBusinessUnitId
+    );
+  }, [businessUnitByContactId, effectiveBusinessUnitId]);
+
+  const scopedContacts = useMemo(() => contacts.filter(inCurrentBusinessUnitScope), [contacts, inCurrentBusinessUnitScope]);
+  const scopedWorkOrders = useMemo(() => workOrders.filter(inCurrentBusinessUnitScope), [workOrders, inCurrentBusinessUnitScope]);
+  const scopedFinancials = useMemo(() => financials.filter(inCurrentBusinessUnitScope), [financials, inCurrentBusinessUnitScope]);
+  const scopedTasks = useMemo(() => tasks.filter(inCurrentBusinessUnitScope), [tasks, inCurrentBusinessUnitScope]);
+  const scopedCalendarEvents = useMemo(() => calendarEvents.filter(inCurrentBusinessUnitOrContactScope), [calendarEvents, inCurrentBusinessUnitOrContactScope]);
+  const scopedSalesLedger = useMemo(() => salesLedger.filter(inCurrentBusinessUnitOrContactScope), [salesLedger, inCurrentBusinessUnitOrContactScope]);
 
   useEffect(() => {
     if (isPostgres) return;
@@ -181,10 +265,11 @@ export function CRMProvider({ children, initialData }) {
   }, [access.canWriteCrm, callContactsApi, isPostgres]);
   const addContact = useCallback((d) => {
     const tempId = gid('c');
-    const draft = { id: tempId, ...d };
+    const payload = withBusinessUnitDefaults(d, effectiveBusinessUnitId, true);
+    const draft = { id: tempId, ...payload };
     setContacts(p => [draft,...p]);
     if (isPostgres && access.canWriteCrm) {
-      callContactsApi('POST', d)
+      callContactsApi('POST', payload)
         .then((contact) => {
           if (contact) setContacts(p => p.map(c => c.id === tempId ? contact : c));
         })
@@ -193,7 +278,7 @@ export function CRMProvider({ children, initialData }) {
           setContacts(p => p.filter(c => c.id !== tempId));
         });
     }
-  }, [access.canWriteCrm, callContactsApi, isPostgres]);
+  }, [access.canWriteCrm, callContactsApi, effectiveBusinessUnitId, isPostgres]);
   const deleteContact = useCallback((id) => {
     const existing = contacts.find(c => c.id === id);
     setContacts(p => p.filter(c => c.id!==id));
@@ -206,15 +291,15 @@ export function CRMProvider({ children, initialData }) {
   }, [access.canWriteCrm, callContactsApi, contacts, isPostgres]);
 
   const updateWorkOrder = useCallback((id, u) => setWorkOrders(p => p.map(w => w.id===id ? {...w,...u} : w)), []);
-  const addWorkOrder = useCallback((d) => setWorkOrders(p => [{id:gid('wo'),...d},...p]), []);
+  const addWorkOrder = useCallback((d) => setWorkOrders(p => [{id:gid('wo'),...withBusinessUnitDefaults(d, effectiveBusinessUnitId)},...p]), [effectiveBusinessUnitId]);
   const deleteWorkOrder = useCallback((id) => setWorkOrders(p => p.filter(w => w.id!==id)), []);
 
   const updateFinancial = useCallback((id, u) => setFinancials(p => p.map(f => f.id===id ? {...f,...u} : f)), []);
-  const addFinancial = useCallback((d) => setFinancials(p => [{id:gid('f'),...d},...p]), []);
+  const addFinancial = useCallback((d) => setFinancials(p => [{id:gid('f'),...withBusinessUnitDefaults(d, effectiveBusinessUnitId)},...p]), [effectiveBusinessUnitId]);
   const deleteFinancial = useCallback((id) => setFinancials(p => p.filter(f => f.id!==id)), []);
 
   const updateTask = useCallback((id, u) => setTasks(p => p.map(t => t.id===id ? {...t,...u} : t)), []);
-  const addTask = useCallback((d) => setTasks(p => [{id:gid('t'),...d},...p]), []);
+  const addTask = useCallback((d) => setTasks(p => [{id:gid('t'),...withBusinessUnitDefaults(d, effectiveBusinessUnitId)},...p]), [effectiveBusinessUnitId]);
   const deleteTask = useCallback((id) => setTasks(p => p.filter(t => t.id!==id)), []);
 
   const addCalendarEvent = useCallback((d) => setCalendarEvents(p => [...p, {id:gid('ev'),...d}]), []);
@@ -242,12 +327,16 @@ export function CRMProvider({ children, initialData }) {
     access,
     importStaging,
     businessUnits, setBusinessUnits,
-    contacts, addContact, updateContact, deleteContact,
-    workOrders, addWorkOrder, updateWorkOrder, deleteWorkOrder,
-    financials, addFinancial, updateFinancial, deleteFinancial,
-    tasks, addTask, updateTask, deleteTask,
-    calendarEvents, addCalendarEvent, deleteCalendarEvent,
-    salesLedger, addSalesEntry,
+    accessibleBusinessUnits,
+    currentBusinessUnitId: effectiveBusinessUnitId, currentBusinessUnit, setCurrentBusinessUnitId,
+    canUseConsolidatedScope,
+    scopeLabel,
+    contacts: scopedContacts, allContacts: contacts, addContact, updateContact, deleteContact,
+    workOrders: scopedWorkOrders, allWorkOrders: workOrders, addWorkOrder, updateWorkOrder, deleteWorkOrder,
+    financials: scopedFinancials, allFinancials: financials, addFinancial, updateFinancial, deleteFinancial,
+    tasks: scopedTasks, allTasks: tasks, addTask, updateTask, deleteTask,
+    calendarEvents: scopedCalendarEvents, allCalendarEvents: calendarEvents, addCalendarEvent, deleteCalendarEvent,
+    salesLedger: scopedSalesLedger, allSalesLedger: salesLedger, addSalesEntry,
     employees: defaults.EMPLOYEES, statuses: defaults.STATUSES, sources: defaults.SOURCES,
     resetData,
   };

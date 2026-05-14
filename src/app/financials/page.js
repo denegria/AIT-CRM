@@ -10,7 +10,19 @@ const types = ['Invoice', 'Estimate', 'Receipt'];
 const emptyForm = { number:'', type:'Invoice', client:'', contactId:'', amount:0, date:'', dueDate:'', status:'Pending', items:[{desc:'',qty:1,rate:0}] };
 
 export default function FinancialsPage() {
-  const { financials, addFinancial, updateFinancial, deleteFinancial, contacts, loaded, role } = useCRM();
+  const {
+    financials,
+    addFinancial,
+    updateFinancial,
+    deleteFinancial,
+    contacts,
+    loaded,
+    role,
+    accessibleBusinessUnits,
+    currentBusinessUnitId,
+    currentBusinessUnit,
+    scopeLabel,
+  } = useCRM();
   const { toast } = useToast();
   const [tab, setTab] = useState('Invoice');
   const [drawer, setDrawer] = useState(null);
@@ -36,7 +48,8 @@ export default function FinancialsPage() {
   const openNew = () => {
     const prefix = tab === 'Invoice' ? 'INV' : tab === 'Estimate' ? 'EST' : 'REC';
     const count = financials.filter(f => f.type === tab).length + 1;
-    setForm({ ...emptyForm, type: tab, number: `${prefix}-${String(count).padStart(3,'0')}`, date: new Date().toISOString().slice(0,10) });
+    const businessUnitId = currentBusinessUnitId !== 'all' ? currentBusinessUnitId : accessibleBusinessUnits[0]?.id || '';
+    setForm({ ...emptyForm, type: tab, number: `${prefix}-${String(count).padStart(3,'0')}`, businessUnitId, date: new Date().toISOString().slice(0,10) });
     setDrawer('new');
   };
   const openEdit = (row) => { setForm({ ...row }); setDrawer(row); };
@@ -69,6 +82,7 @@ export default function FinancialsPage() {
   const columns = [
     { key: 'number', label: 'Doc #', sortable: true },
     { key: 'client', label: 'Client', sortable: true },
+    { key: 'divisionLabel', label: scopeLabel, sortable: true },
     { key: 'amount', label: 'Amount', type: 'currency', sortable: true },
     { key: 'date', label: 'Date', sortable: true },
     { key: 'status', label: 'Status', type: 'badge', sortable: true },
@@ -82,7 +96,7 @@ export default function FinancialsPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Financials</h1>
-          <p className="page-subtitle">Manage estimates, invoices, and receipts</p>
+          <p className="page-subtitle">Manage estimates, invoices, and receipts for {currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}</p>
         </div>
         <button className="btn btn-primary" onClick={openNew}>+ New {tab}</button>
       </div>
@@ -98,7 +112,10 @@ export default function FinancialsPage() {
       <div className="card" style={{padding:16}}>
         <DataTable
           columns={columns}
-          data={filtered}
+          data={filtered.map((record) => ({
+            ...record,
+            divisionLabel: accessibleBusinessUnits.find((unit) => unit.id === record.businessUnitId)?.name || 'Unassigned',
+          }))}
           searchPlaceholder={`Search ${tab.toLowerCase()}s...`}
           selectable
           selectedIds={selectedIds}
@@ -136,10 +153,17 @@ export default function FinancialsPage() {
           <label className="form-label">Client</label>
           <select className="input select" value={form.contactId} onChange={e=>{
             const c = contacts.find(ct=>ct.id===e.target.value);
-            setForm(f=>({...f,contactId:e.target.value,client:c?.name||''}));
+            setForm(f=>({...f,contactId:e.target.value,client:c?.name||'',businessUnitId:c?.businessUnitId||c?.primaryBusinessUnitId||f.businessUnitId||''}));
           }}>
             <option value="">Select client</option>
             {contacts.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label">{scopeLabel}</label>
+          <select className="input select" value={form.businessUnitId || ''} onChange={e=>setForm(f=>({...f,businessUnitId:e.target.value}))}>
+            <option value="">Unassigned</option>
+            {accessibleBusinessUnits.map(unit=><option key={unit.id} value={unit.id}>{unit.name}</option>)}
           </select>
         </div>
         <div className="grid-2">

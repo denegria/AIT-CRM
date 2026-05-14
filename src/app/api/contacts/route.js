@@ -14,6 +14,8 @@ function toContactPayload(row, lead = null) {
     name: row.name,
     email: row.email || '',
     phone: row.phone || '',
+    businessUnitId: row.primaryBusinessUnitId || '',
+    primaryBusinessUnitId: row.primaryBusinessUnitId || '',
     status: lead?.status || 'New Lead',
     source: lead?.sourceName || row.sourceLabel || '',
     assignedTo: lead?.assignedUserId || '',
@@ -50,6 +52,11 @@ async function resolveBusinessUnitId(db, session, requestedId) {
   return row?.id || null;
 }
 
+async function resolveOptionalBusinessUnitId(db, session, requestedId) {
+  if (!requestedId) return null;
+  return resolveBusinessUnitId(db, session, requestedId);
+}
+
 async function latestLeadForContact(db, contactId) {
   const [lead] = await db
     .select()
@@ -71,7 +78,7 @@ export async function POST(request) {
   }
 
   const db = getDb();
-  const businessUnitId = await resolveBusinessUnitId(db, session, body.businessUnitId);
+  const businessUnitId = await resolveBusinessUnitId(db, session, body.businessUnitId || body.primaryBusinessUnitId);
   const [contact] = await db.insert(contacts).values({
     organizationId: session.user.organizationId,
     primaryBusinessUnitId: businessUnitId,
@@ -126,6 +133,9 @@ export async function PATCH(request) {
   if ('email' in body) patch.email = body.email || null;
   if ('phone' in body) patch.phone = body.phone || null;
   if ('source' in body) patch.sourceLabel = body.source || null;
+  if ('businessUnitId' in body || 'primaryBusinessUnitId' in body) {
+    patch.primaryBusinessUnitId = await resolveOptionalBusinessUnitId(db, session, body.businessUnitId || body.primaryBusinessUnitId);
+  }
 
   const [contact] = await db
     .update(contacts)
@@ -134,7 +144,7 @@ export async function PATCH(request) {
     .returning();
 
   let lead = await latestLeadForContact(db, id);
-  if (lead && ('status' in body || 'source' in body || 'assignedTo' in body)) {
+  if (lead && ('status' in body || 'source' in body || 'assignedTo' in body || 'businessUnitId' in body || 'primaryBusinessUnitId' in body)) {
     const leadPatch = { updatedAt: new Date() };
     if ('status' in body) {
       leadPatch.status = body.status || lead.status;
@@ -142,6 +152,9 @@ export async function PATCH(request) {
     }
     if ('source' in body) leadPatch.sourceName = body.source || null;
     if ('assignedTo' in body) leadPatch.assignedUserId = isUuid(body.assignedTo) ? body.assignedTo : null;
+    if (patch.primaryBusinessUnitId && ('businessUnitId' in body || 'primaryBusinessUnitId' in body)) {
+      leadPatch.businessUnitId = patch.primaryBusinessUnitId || lead.businessUnitId;
+    }
     [lead] = await db.update(leads).set(leadPatch).where(eq(leads.id, lead.id)).returning();
   }
 

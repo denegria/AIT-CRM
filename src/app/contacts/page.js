@@ -11,7 +11,19 @@ import { List, LayoutDashboard as KanbanIcon } from 'lucide-react';
 const empty = { name:'', email:'', phone:'', status:'New Lead', source:'Facebook Ads', assignedTo:'emp-1', notes: [] };
 
 export default function ContactsPage() {
-  const { contacts, addContact, updateContact, deleteContact, employees, loaded, access } = useCRM();
+  const {
+    contacts,
+    addContact,
+    updateContact,
+    deleteContact,
+    employees,
+    loaded,
+    access,
+    accessibleBusinessUnits,
+    currentBusinessUnitId,
+    currentBusinessUnit,
+    scopeLabel,
+  } = useCRM();
   const { toast } = useToast();
   const router = useRouter();
   const [drawer, setDrawer] = useState(null); // null | 'new' | contact object
@@ -20,7 +32,12 @@ export default function ContactsPage() {
   const [statusFilter, setStatusFilter] = useState('All');
 
   const canWrite = access.canWriteCrm;
-  const openNew = () => { if (!canWrite) return; setForm(empty); setDrawer('new'); };
+  const defaultBusinessUnitId = currentBusinessUnitId !== 'all' ? currentBusinessUnitId : accessibleBusinessUnits[0]?.id || '';
+  const openNew = () => {
+    if (!canWrite) return;
+    setForm({ ...empty, businessUnitId: defaultBusinessUnitId, primaryBusinessUnitId: defaultBusinessUnitId });
+    setDrawer('new');
+  };
   const openEdit = (row) => { if (!canWrite) return; setForm({ ...row }); setDrawer(row); };
   const close = () => setDrawer(null);
 
@@ -37,18 +54,20 @@ export default function ContactsPage() {
   };
 
   const empName = (id) => employees.find(e => e.id === id)?.name || id;
+  const unitName = (id) => accessibleBusinessUnits.find((unit) => unit.id === id)?.name || 'Unassigned';
 
   const columns = [
     { key: 'name', label: 'Name', sortable: true, editable: true },
     { key: 'email', label: 'Email', sortable: true, editable: true },
     { key: 'phone', label: 'Phone', editable: true },
     { key: 'status', label: 'Status', type: 'badge', sortable: true },
+    { key: 'divisionLabel', label: scopeLabel, sortable: true },
     { key: 'source', label: 'Source', sortable: true },
     { key: 'lastContact', label: 'Last Contact', sortable: true },
   ];
 
   const filteredContacts = contacts.filter(c => statusFilter === 'All' || c.status === statusFilter);
-  const dataWithEmp = filteredContacts.map(c => ({ ...c, assignedLabel: empName(c.assignedTo) }));
+  const dataWithEmp = filteredContacts.map(c => ({ ...c, assignedLabel: empName(c.assignedTo), divisionLabel: unitName(c.businessUnitId || c.primaryBusinessUnitId) }));
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
@@ -57,7 +76,7 @@ export default function ContactsPage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Contacts & Leads</h1>
-          <p className="page-subtitle">{contacts.length} total contacts</p>
+          <p className="page-subtitle">{contacts.length} contacts in {currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}</p>
         </div>
         <div className="flex-gap">
           <div className="view-toggle">
@@ -156,6 +175,17 @@ export default function ContactsPage() {
           <label className="form-label">Assigned To</label>
           <select className="input select" value={form.assignedTo} onChange={e => setForm(f => ({...f, assignedTo: e.target.value}))}>
             {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label className="form-label">{scopeLabel}</label>
+          <select
+            className="input select"
+            value={form.businessUnitId || form.primaryBusinessUnitId || ''}
+            onChange={e => setForm(f => ({...f, businessUnitId: e.target.value, primaryBusinessUnitId: e.target.value}))}
+          >
+            <option value="">Unassigned</option>
+            {accessibleBusinessUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
           </select>
         </div>
         <div className="form-group">

@@ -8,7 +8,22 @@ import Calendar from '@/components/Calendar';
 import { BarChart, PieChart, ChartLegend } from '@/components/Charts';
 
 export default function Dashboard() {
-  const { role, contacts, workOrders, financials, tasks, calendarEvents, employees, updateTask, addTask, loaded, dataSource, importStaging } = useCRM();
+  const {
+    role,
+    contacts,
+    workOrders,
+    financials,
+    tasks,
+    calendarEvents,
+    employees,
+    updateTask,
+    addTask,
+    loaded,
+    dataSource,
+    importStaging,
+    currentBusinessUnit,
+    scopeLabel,
+  } = useCRM();
 
   const kpis = useMemo(() => {
     const invoices = financials.filter(f => f.type === 'Invoice');
@@ -73,7 +88,10 @@ export default function Dashboard() {
       <div className="page-header">
         <div>
           <h1 className="page-title">{greeting}</h1>
-          <p className="page-subtitle">{today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</p>
+          <p className="page-subtitle">
+            {today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+            {' '}· {currentBusinessUnit?.name || `All ${scopeLabel}`}
+          </p>
         </div>
         <span className={`badge ${role==='admin'?'badge-won':'badge-contacted'}`} style={{fontSize:'var(--text-sm)',padding:'4px 12px'}}>{role==='admin'?'Admin View':'Employee View'}</span>
       </div>

@@ -57,6 +57,7 @@ Completed Linear slices:
 - `MIS-13` First CRM entity wiring
 - `MIS-14` LocalStorage replacement plan
 - `MIS-15` Auth and RBAC foundation
+- `MIS-17` Business unit UX and scoped reporting
 
 Next Linear slices:
 
@@ -65,32 +66,27 @@ Next Linear slices:
    - normalize inbound leads into the CRM
    - preserve source and attribution metadata
 
-2. `MIS-17` Business unit UX and scoped reporting
-   - business-unit switcher/filter
-   - scoped vs consolidated reporting
-   - configurable client terminology
-
-3. `MIS-18` Files and attachment storage
+2. `MIS-18` Files and attachment storage
    - object storage integration
    - record-linked file metadata
    - scoped upload/download permissions
 
-4. `MIS-19` Product admin screens and role management
+3. `MIS-19` Product admin screens and role management
    - admin screens for ops staff
    - role management and business-unit management
    - import/export tooling
 
-5. `MIS-20` Core CRM operations shell
+4. `MIS-20` Core CRM operations shell
    - contacts/leads/estimates/work orders on Postgres-backed reads/writes
    - assignment logic and activity timeline
    - custom fields inside known entities
 
-6. `MIS-21` Website form and CSV import ingestion
+5. `MIS-21` Website form and CSV import ingestion
     - website lead ingestion
     - CSV/Google Sheets import staging and review
     - dedupe, attribution, and source-to-business-unit mapping
 
-7. `MIS-22` Validation, observability, and runbook
+6. `MIS-22` Validation, observability, and runbook
     - permission boundary tests
     - import/recovery observability
     - backup/restore and deployment runbook
@@ -624,10 +620,11 @@ Full Directus parity:
 
 ### Step 5: Business Unit UX
 
-- Add business-unit filter/switcher where needed.
-- Add business-unit assignment to contacts/leads/jobs/financial records/files.
-- Add consolidated vs business-unit scoped reporting.
-- Keep UI label configurable so this client can see "Divisions".
+- Sidebar now includes a persistent configurable business-unit scope selector using this client's "Divisions" terminology.
+- CRM provider exposes scoped contacts, work orders, financials, tasks, calendar events, and sales ledger data to the current UI.
+- Contacts, work orders, and financial records preserve and display business-unit assignment.
+- Dashboard, contacts, work orders, financials, and reports now show scoped vs consolidated context.
+- Remaining follow-up: server-backed write APIs beyond contacts still need business-unit persistence when those APIs are added.
 
 ### Step 6: Files
 

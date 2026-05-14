@@ -51,6 +51,35 @@
   color: var(--accent);
 }
 .navItem svg { width: 18px; height: 18px; flex-shrink: 0; }
+.scopePanel {
+  margin: 16px 0 0;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-primary);
+}
+.scopeTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+.scopeSelect {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: 7px 8px;
+}
 .bottom {
   padding: 12px;
   border-top: 1px solid var(--border-subtle);
@@ -140,7 +169,7 @@
     border-right: none;
     border-top: 1px solid var(--border-subtle);
   }
-  .logo, .navLabel, .bottom { display: none; }
+  .logo, .navLabel, .scopePanel, .bottom { display: none; }
   .navSection {
     display: flex;
     justify-content: space-around;
