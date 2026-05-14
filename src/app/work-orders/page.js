@@ -16,37 +16,48 @@ export default function WorkOrdersPage() {
     deleteWorkOrder,
     contacts,
     employees,
+    access,
     loaded,
     role,
     accessibleBusinessUnits,
     currentBusinessUnitId,
     currentBusinessUnit,
-    canUseConsolidatedScope,
     scopeLabel,
   } = useCRM();
   const { toast } = useToast();
   const [drawer, setDrawer] = useState(null);
   const [form, setForm] = useState(empty);
   const [statusFilter, setStatusFilter] = useState('All');
+  const canWriteWorkOrders = Boolean(access?.canWriteWorkOrders);
 
   const openNew = () => {
+    if (!canWriteWorkOrders) return;
     const num = `WO-${String(workOrders.length + 1).padStart(3, '0')}`;
     const businessUnitId = currentBusinessUnitId !== 'all' && currentBusinessUnitId !== 'unassigned' ? currentBusinessUnitId : accessibleBusinessUnits[0]?.id || '';
     setForm({ ...empty, number: num, businessUnitId, dueDate: new Date().toISOString().slice(0,10) });
     setDrawer('new');
   };
-  const openEdit = (row) => { setForm({ ...row }); setDrawer(row); };
+  const openEdit = (row) => {
+    if (!canWriteWorkOrders) return;
+    setForm({ ...row });
+    setDrawer(row);
+  };
   const close = () => setDrawer(null);
-  const save = () => {
+  const save = async () => {
+    if (!canWriteWorkOrders) return;
     if (!form.title.trim()) return;
-    if (drawer === 'new') {
-      addWorkOrder(form);
-      toast('Work order created');
-    } else {
-      updateWorkOrder(drawer.id, form);
-      toast('Work order updated');
+    try {
+      if (drawer === 'new') {
+        await addWorkOrder(form);
+        toast('Work order created');
+      } else {
+        await updateWorkOrder(drawer.id, form);
+        toast('Work order updated');
+      }
+      close();
+    } catch (error) {
+      toast(error?.message || 'Work order save failed.', 'error');
     }
-    close();
   };
 
   const empName = (id) => employees.find(e => e.id === id)?.name || id;
@@ -89,7 +100,7 @@ export default function WorkOrdersPage() {
           <h1 className="page-title">Work Orders</h1>
           <p className="page-subtitle">{workOrders.filter(w=>w.status!=='Completed').length} active orders in {currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}</p>
         </div>
-        <button className="btn btn-primary" onClick={openNew}>+ New Work Order</button>
+        <button className="btn btn-primary" onClick={openNew} disabled={!canWriteWorkOrders}>+ New Work Order</button>
       </div>
 
       <div className="card" style={{padding:16}}>
@@ -97,7 +108,11 @@ export default function WorkOrdersPage() {
           columns={columns}
           data={filtered.map(w => ({ ...w, assignedLabel: empName(w.assignedTo), divisionLabel: unitName(w.businessUnitId) }))}
           searchPlaceholder="Search work orders..."
-          onEdit={(id, u) => { updateWorkOrder(id, u); toast('Field updated'); }}
+          onEdit={canWriteWorkOrders ? ((id, u) => {
+            updateWorkOrder(id, u)
+              .then(() => toast('Field updated'))
+              .catch((error) => toast(error?.message || 'Update failed.', 'error'));
+          }) : undefined}
           selectable
           selectedIds={selectedIds}
           onSelect={setSelectedIds}
@@ -115,9 +130,20 @@ export default function WorkOrdersPage() {
             </div>
           }
           actions={[
-            { label: 'Edit', onClick: openEdit },
+            ...(canWriteWorkOrders ? [{ label: 'Edit', onClick: openEdit }] : []),
             { label: 'PDF', onClick: (r) => { generateWorkOrderPDF(r); toast('PDF Generated'); } },
-            { label: 'Delete', onClick: (r) => { deleteWorkOrder(r.id); toast('Work order deleted', 'error'); }, danger: true },
+            ...(canWriteWorkOrders ? [{
+              label: 'Delete',
+              onClick: async (r) => {
+                try {
+                  await deleteWorkOrder(r.id);
+                  toast('Work order deleted', 'error');
+                } catch (error) {
+                  toast(error?.message || 'Delete failed.', 'error');
+                }
+              },
+              danger: true,
+            }] : []),
           ]}
         />
       </div>
@@ -152,7 +178,6 @@ export default function WorkOrdersPage() {
           <div className="form-group">
             <label className="form-label">{scopeLabel}</label>
             <select className="input select" value={form.businessUnitId || ''} onChange={e => setForm(f=>({...f,businessUnitId:e.target.value}))}>
-              {canUseConsolidatedScope && <option value="">Unassigned</option>}
               {accessibleBusinessUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
             </select>
           </div>

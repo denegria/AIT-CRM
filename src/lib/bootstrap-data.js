@@ -94,7 +94,7 @@ function mapWorkOrders(rows, contactLookup) {
   return rows.map((row, index) => ({
     id: row.id,
     number: row.workOrderNumber || `WO-${String(index + 1).padStart(3, '0')}`,
-    title: row.status || `Work Order ${index + 1}`,
+    title: row.title || row.status || `Work Order ${index + 1}`,
     client: contactLookup.get(row.contactId)?.name || '',
     contactId: row.contactId || '',
     businessUnitId: row.businessUnitId || '',
@@ -102,8 +102,8 @@ function mapWorkOrders(rows, contactLookup) {
     status: row.status || 'Pending',
     assignedTo: row.assignedUserId || seedData.EMPLOYEES[index % seedData.EMPLOYEES.length].id,
     dueDate: toIsoDate(row.deliveryDate),
-    description: '',
-    estimatedCost: 0,
+    description: row.description || '',
+    estimatedCost: Number(row.estimatedCost || 0),
   }));
 }
 

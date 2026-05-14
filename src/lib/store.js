@@ -270,6 +270,18 @@ export function CRMProvider({ children, initialData }) {
     return payload.contact || null;
   }, [isPostgres]);
 
+  const callWorkOrdersApi = useCallback(async (method, body) => {
+    if (!isPostgres) return null;
+    const response = await fetch('/api/work-orders', {
+      method,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || 'Work order save failed.');
+    return payload.workOrder || null;
+  }, [isPostgres]);
+
   const updateContact = useCallback((id, u) => {
     setContacts(p => p.map(c => c.id===id ? {...c,...u} : c));
     if (isPostgres && access.canWriteCrm) {
@@ -303,9 +315,55 @@ export function CRMProvider({ children, initialData }) {
     }
   }, [access.canWriteCrm, callContactsApi, contacts, isPostgres]);
 
-  const updateWorkOrder = useCallback((id, u) => setWorkOrders(p => p.map(w => w.id===id ? {...w,...u} : w)), []);
-  const addWorkOrder = useCallback((d) => setWorkOrders(p => [{id:gid('wo'),...withBusinessUnitDefaults(d, effectiveBusinessUnitId)},...p]), [effectiveBusinessUnitId]);
-  const deleteWorkOrder = useCallback((id) => setWorkOrders(p => p.filter(w => w.id!==id)), []);
+  const updateWorkOrder = useCallback((id, u) => {
+    const existing = workOrders.find((workOrder) => workOrder.id === id);
+    setWorkOrders((prev) => prev.map((workOrder) => (workOrder.id === id ? { ...workOrder, ...u } : workOrder)));
+    if (isPostgres && access.canWriteWorkOrders) {
+      return callWorkOrdersApi('PATCH', { id, ...u })
+        .then((workOrder) => {
+          if (workOrder) setWorkOrders((prev) => prev.map((row) => (row.id === id ? workOrder : row)));
+          return workOrder;
+        })
+        .catch((error) => {
+          console.error(error);
+          if (existing) setWorkOrders((prev) => prev.map((row) => (row.id === id ? existing : row)));
+          throw error;
+        });
+    }
+    return Promise.resolve(null);
+  }, [access.canWriteWorkOrders, callWorkOrdersApi, isPostgres, workOrders]);
+  const addWorkOrder = useCallback((d) => {
+    const tempId = gid('wo');
+    const payload = withBusinessUnitDefaults(d, effectiveBusinessUnitId);
+    const draft = { id: tempId, ...payload };
+    setWorkOrders((prev) => [draft, ...prev]);
+    if (isPostgres && access.canWriteWorkOrders) {
+      return callWorkOrdersApi('POST', payload)
+        .then((workOrder) => {
+          if (workOrder) setWorkOrders((prev) => prev.map((row) => (row.id === tempId ? workOrder : row)));
+          return workOrder;
+        })
+        .catch((error) => {
+          console.error(error);
+          setWorkOrders((prev) => prev.filter((row) => row.id !== tempId));
+          throw error;
+        });
+    }
+    return Promise.resolve(draft);
+  }, [access.canWriteWorkOrders, callWorkOrdersApi, effectiveBusinessUnitId, isPostgres]);
+  const deleteWorkOrder = useCallback((id) => {
+    const existing = workOrders.find((workOrder) => workOrder.id === id);
+    setWorkOrders((prev) => prev.filter((workOrder) => workOrder.id !== id));
+    if (isPostgres && access.canWriteWorkOrders) {
+      return callWorkOrdersApi('DELETE', { id })
+        .catch((error) => {
+          console.error(error);
+          if (existing) setWorkOrders((prev) => [existing, ...prev]);
+          throw error;
+        });
+    }
+    return Promise.resolve(null);
+  }, [access.canWriteWorkOrders, callWorkOrdersApi, isPostgres, workOrders]);
 
   const updateFinancial = useCallback((id, u) => setFinancials(p => p.map(f => f.id===id ? {...f,...u} : f)), []);
   const addFinancial = useCallback((d) => setFinancials(p => [{id:gid('f'),...withBusinessUnitDefaults(d, effectiveBusinessUnitId)},...p]), [effectiveBusinessUnitId]);
