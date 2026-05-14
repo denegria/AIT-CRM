@@ -108,7 +108,7 @@ export default function SettingsPage() {
           <div className="form-group">
             <label className="form-label">Facebook Ads Webhook URL</label>
             <div style={{display:'flex',gap:8}}>
-              <input className="input" value="https://api.aitcrm.com/webhooks/fb-leads" readOnly style={{opacity:0.7,flex:1}} />
+              <input className="input" value="https://api.aitcrm.com/api/webhooks/facebook-leads" readOnly style={{opacity:0.7,flex:1}} />
               <button className="btn btn-sm">Copy</button>
             </div>
           </div>

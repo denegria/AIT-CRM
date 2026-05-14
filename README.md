@@ -122,6 +122,17 @@ AIT_CRM_BOOTSTRAP_ADMIN_PASSWORD='change-me' \
 npm run db:bootstrap-auth-user
 ```
 
+For Facebook lead webhook verification and signed payload validation:
+
+```bash
+FACEBOOK_WEBHOOK_VERIFY_TOKEN=replace-me
+FACEBOOK_APP_SECRET=replace-me
+```
+
+Webhook endpoint:
+
+`/api/webhooks/facebook-leads`
+
 ## 🔄 Import Workflow
 
 The staged AIT Signs import is reviewed row by row before promotion.
