@@ -91,6 +91,7 @@ export default function FinancialsPage() {
   if (tab !== 'Receipt') columns.splice(4, 0, { key: 'dueDate', label: 'Due Date', sortable: true });
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
+  if (role !== 'admin') return <div className="empty-state">Financials are admin-only in v1.</div>;
 
   return (
     <div className="fade-in">
@@ -100,6 +101,13 @@ export default function FinancialsPage() {
           <p className="page-subtitle">Manage estimates, invoices, and receipts for {currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}</p>
         </div>
         <button className="btn btn-primary" onClick={openNew}>+ New {tab}</button>
+      </div>
+
+      <div className="card" style={{marginBottom:16}}>
+        <div className="card-title">Sample Data Notice</div>
+        <p className="page-subtitle" style={{margin:0}}>
+          Financials and reporting are not v1 goals. Data on this page is sample/demo only until the post-v1 accounting phase.
+        </p>
       </div>
 
       <div className="tabs">

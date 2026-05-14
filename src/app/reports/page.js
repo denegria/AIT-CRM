@@ -74,6 +74,7 @@ export default function ReportsPage() {
   };
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
+  if (role !== 'admin') return <div className="empty-state">Reports are admin-only in v1.</div>;
 
   return (
     <div className="fade-in">
@@ -89,6 +90,13 @@ export default function ReportsPage() {
           {role === 'admin' && <button className="btn" onClick={exportCSV} data-tooltip="Sample feature — exports monthly report to CSV">Export CSV</button>}
           <button className="btn btn-primary" onClick={() => window.print()}>Print Report</button>
         </div>
+      </div>
+
+      <div className="card" style={{marginBottom:20}}>
+        <div className="card-title">Sample Data Notice</div>
+        <p className="page-subtitle" style={{margin:0}}>
+          Financials and reports are intentionally unfinished for v1. Metrics here are sample/demo until the post-v1 accounting phase.
+        </p>
       </div>
 
       <div className="grid-4" style={{marginBottom:20}}>

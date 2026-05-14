@@ -50,8 +50,7 @@ export default function Sidebar() {
         {nav.map(({ href, label, Icon }) => {
           if (href === '/settings' && !access.canReadSettings) return null;
           if (href === '/import-review' && !access.canReadImportReview) return null;
-          if (href === '/reports' && !access.canReadReports && role !== 'admin') return null;
-          if (href === '/financials' && !access.canReadFinancials && role !== 'admin') return null;
+          if ((href === '/reports' || href === '/financials') && role !== 'admin') return null;
           return (
             <Link key={href} href={href} className={`${s.navItem} ${pathname === href ? s.active : ''}`}>
               <Icon /><span>{label}</span>
