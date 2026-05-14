@@ -89,7 +89,7 @@ export default function SettingsPage() {
 
         <div className="card">
           <div className="card-title">Role Management</div>
-          <p style={{fontSize:'var(--text-sm)',color:'var(--text-secondary)',marginBottom:12}}>Configure role-based access control.</p>
+          <p style={{fontSize:'var(--text-sm)',color:'var(--text-secondary)',marginBottom:12}}>Employee access is role + division scoped.</p>
           <div style={{display:'flex',flexDirection:'column',gap:10}}>
             <div style={{padding:'10px 12px',background:'var(--bg-tertiary)',borderRadius:'var(--radius-md)'}}>
               <div className="flex-between">
@@ -100,10 +100,29 @@ export default function SettingsPage() {
             </div>
             <div style={{padding:'10px 12px',background:'var(--bg-tertiary)',borderRadius:'var(--radius-md)'}}>
               <div className="flex-between">
-                <span style={{fontSize:'var(--text-sm)',fontWeight:500}}>Employee</span>
+                <span style={{fontSize:'var(--text-sm)',fontWeight:500}}>Account Manager</span>
                 <span className="badge badge-contacted">Limited</span>
               </div>
-              <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)',marginTop:4}}>Personal tasks, assigned leads, document generation</div>
+              <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)',marginTop:4}}>CRM write access with division scope; no settings/admin controls</div>
+            </div>
+            <div style={{padding:'10px 12px',background:'var(--bg-tertiary)',borderRadius:'var(--radius-md)'}}>
+              <div className="flex-between">
+                <span style={{fontSize:'var(--text-sm)',fontWeight:500}}>Designer / Sales Manager</span>
+                <span className="badge badge-contacted">Limited</span>
+              </div>
+              <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)',marginTop:4}}>Role-specific access and division-scoped visibility</div>
+            </div>
+            <div style={{padding:'10px 12px',background:'rgba(74,122,255,0.08)',borderRadius:'var(--radius-md)',border:'1px solid rgba(74,122,255,0.2)'}}>
+              <div style={{fontSize:'var(--text-xs)',color:'var(--text-secondary)',marginBottom:6}}>
+                Employee accounts are currently provisioned via script:
+              </div>
+              <code style={{display:'block',fontSize:'var(--text-xs)',lineHeight:1.5,whiteSpace:'pre-wrap'}}>
+                AIT_CRM_BOOTSTRAP_EMAIL=employee@aitcrm.com{'\n'}
+                AIT_CRM_BOOTSTRAP_PASSWORD=...{'\n'}
+                AIT_CRM_BOOTSTRAP_ROLE=account_manager{'\n'}
+                AIT_CRM_BOOTSTRAP_BUSINESS_UNIT_IDS=&lt;division-uuid&gt;{'\n'}
+                npm run db:bootstrap-auth-user
+              </code>
             </div>
           </div>
         </div>
