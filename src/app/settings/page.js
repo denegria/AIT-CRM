@@ -1,17 +1,94 @@
 'use client';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
+import { useToast } from '@/components/Toast';
+
+const roleOptions = [
+  { key: 'admin', label: 'Administrator' },
+  { key: 'account_manager', label: 'Account Manager' },
+  { key: 'sales_manager', label: 'Sales Manager' },
+  { key: 'designer', label: 'Designer' },
+];
 
 export default function SettingsPage() {
-  const { resetData, loaded, access, dataSource } = useCRM();
+  const { resetData, loaded, access, dataSource, accessibleBusinessUnits } = useCRM();
   const router = useRouter();
+  const { toast } = useToast();
+  const [users, setUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersError, setUsersError] = useState('');
+  const [savingUser, setSavingUser] = useState(false);
+  const [userForm, setUserForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    roleKey: 'account_manager',
+    businessUnitId: '',
+  });
 
   useEffect(() => {
     if (loaded && !access.canReadSettings) {
       router.push('/');
     }
   }, [access.canReadSettings, loaded, router]);
+
+  useEffect(() => {
+    if (!loaded || !access.canWriteSettings || dataSource !== 'postgres') return;
+    let cancelled = false;
+
+    async function loadUsers() {
+      setUsersLoading(true);
+      setUsersError('');
+      try {
+        const response = await fetch('/api/users');
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Failed to load users.');
+        if (!cancelled) setUsers(Array.isArray(payload.users) ? payload.users : []);
+      } catch (error) {
+        if (!cancelled) setUsersError(error.message || 'Failed to load users.');
+      } finally {
+        if (!cancelled) setUsersLoading(false);
+      }
+    }
+
+    loadUsers();
+    return () => {
+      cancelled = true;
+    };
+  }, [access.canWriteSettings, dataSource, loaded]);
+
+  async function handleCreateOrUpdateUser(event) {
+    event.preventDefault();
+    if (!access.canWriteSettings || dataSource !== 'postgres') return;
+
+    setSavingUser(true);
+    setUsersError('');
+    try {
+      const payload = {
+        name: userForm.name.trim(),
+        email: userForm.email.trim(),
+        password: userForm.password,
+        roleKey: userForm.roleKey,
+        businessUnitIds: userForm.roleKey === 'admin' ? [] : [userForm.businessUnitId].filter(Boolean),
+      };
+      const response = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Failed to save user.');
+
+      setUsers(Array.isArray(result.users) ? result.users : []);
+      setUserForm((prev) => ({ ...prev, name: '', email: '', password: '' }));
+      toast('User saved');
+    } catch (error) {
+      setUsersError(error.message || 'Failed to save user.');
+    } finally {
+      setSavingUser(false);
+    }
+  }
 
   if (!loaded || !access.canReadSettings) return <div className="empty-state">Loading...</div>;
 
@@ -124,6 +201,78 @@ export default function SettingsPage() {
                 npm run db:bootstrap-auth-user
               </code>
             </div>
+            {dataSource === 'postgres' && access.canWriteSettings && (
+              <form onSubmit={handleCreateOrUpdateUser} style={{display:'flex',flexDirection:'column',gap:10,padding:'10px 12px',background:'var(--bg-tertiary)',borderRadius:'var(--radius-md)'}}>
+                <div style={{fontSize:'var(--text-xs)',color:'var(--text-secondary)'}}>Create or update employee account</div>
+                <input
+                  className="input"
+                  placeholder="Full name"
+                  value={userForm.name}
+                  onChange={(event) => setUserForm((prev) => ({ ...prev, name: event.target.value }))}
+                  required
+                />
+                <input
+                  className="input"
+                  type="email"
+                  placeholder="Email"
+                  value={userForm.email}
+                  onChange={(event) => setUserForm((prev) => ({ ...prev, email: event.target.value }))}
+                  required
+                />
+                <input
+                  className="input"
+                  type="password"
+                  placeholder="Password (leave empty to keep current)"
+                  value={userForm.password}
+                  onChange={(event) => setUserForm((prev) => ({ ...prev, password: event.target.value }))}
+                />
+                <select
+                  className="input select"
+                  value={userForm.roleKey}
+                  onChange={(event) => setUserForm((prev) => ({ ...prev, roleKey: event.target.value }))}
+                >
+                  {roleOptions.map((option) => (
+                    <option key={option.key} value={option.key}>{option.label}</option>
+                  ))}
+                </select>
+                {userForm.roleKey !== 'admin' && (
+                  <select
+                    className="input select"
+                    value={userForm.businessUnitId}
+                    onChange={(event) => setUserForm((prev) => ({ ...prev, businessUnitId: event.target.value }))}
+                    required
+                  >
+                    <option value="">Select division</option>
+                    {accessibleBusinessUnits.map((unit) => (
+                      <option key={unit.id} value={unit.id}>{unit.name}</option>
+                    ))}
+                  </select>
+                )}
+                <button className="btn btn-primary" type="submit" disabled={savingUser}>
+                  {savingUser ? 'Saving...' : 'Save User'}
+                </button>
+              </form>
+            )}
+            {dataSource === 'postgres' && access.canWriteSettings && (
+              <div style={{padding:'10px 12px',background:'var(--bg-tertiary)',borderRadius:'var(--radius-md)'}}>
+                <div style={{fontSize:'var(--text-xs)',color:'var(--text-secondary)',marginBottom:8}}>Provisioned users</div>
+                {usersLoading && <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>Loading users...</div>}
+                {!usersLoading && users.length === 0 && <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>No users found yet.</div>}
+                {!usersLoading && users.map((user) => (
+                  <div key={user.id} className="flex-between" style={{padding:'6px 0',borderBottom:'1px solid var(--border)'}}>
+                    <div>
+                      <div style={{fontSize:'var(--text-sm)',fontWeight:500}}>{user.name}</div>
+                      <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>{user.email}</div>
+                    </div>
+                    <div style={{textAlign:'right'}}>
+                      <div style={{fontSize:'var(--text-xs)',color:'var(--text-secondary)'}}>{user.primaryRoleKey}</div>
+                      <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>{user.businessUnitIds?.length || 0} division(s)</div>
+                    </div>
+                  </div>
+                ))}
+                {usersError && <div style={{fontSize:'var(--text-xs)',color:'var(--danger)',marginTop:8}}>{usersError}</div>}
+              </div>
+            )}
           </div>
         </div>
       </div>
