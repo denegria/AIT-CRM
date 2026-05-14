@@ -37,6 +37,14 @@ function requiredEnv(name) {
   return value;
 }
 
+function firstDefinedEnv(...names) {
+  for (const name of names) {
+    const value = process.env[name];
+    if (value) return value;
+  }
+  return '';
+}
+
 function hashPassword(password) {
   const salt = randomBytes(16).toString('hex');
   const hash = pbkdf2Sync(password, salt, PASSWORD_ITERATIONS, 64, 'sha512').toString('base64');
@@ -57,11 +65,44 @@ async function ensureOrganization(client) {
   return inserted.rows[0].id;
 }
 
+async function ensureBusinessUnitIds(client, organizationId, roleKey, configuredIds) {
+  const cleanIds = configuredIds.filter(Boolean);
+  if (cleanIds.length) return cleanIds;
+
+  if (roleKey === 'admin') return [];
+
+  const units = await client.query(
+    'select id from business_units where organization_id = $1 and is_active = true order by name asc limit 1',
+    [organizationId],
+  );
+
+  if (!units.rows.length) {
+    throw new Error('At least one business unit is required before creating non-admin users.');
+  }
+
+  return [units.rows[0].id];
+}
+
 async function main() {
   const connectionString = requiredEnv('DATABASE_URL');
-  const email = requiredEnv('AIT_CRM_BOOTSTRAP_ADMIN_EMAIL').trim().toLowerCase();
-  const password = requiredEnv('AIT_CRM_BOOTSTRAP_ADMIN_PASSWORD');
-  const name = process.env.AIT_CRM_BOOTSTRAP_ADMIN_NAME || 'AIT CRM Admin';
+  const email = firstDefinedEnv('AIT_CRM_BOOTSTRAP_EMAIL', 'AIT_CRM_BOOTSTRAP_ADMIN_EMAIL');
+  const password = firstDefinedEnv('AIT_CRM_BOOTSTRAP_PASSWORD', 'AIT_CRM_BOOTSTRAP_ADMIN_PASSWORD');
+  if (!email) throw new Error('AIT_CRM_BOOTSTRAP_EMAIL (or AIT_CRM_BOOTSTRAP_ADMIN_EMAIL) is required.');
+  if (!password) throw new Error('AIT_CRM_BOOTSTRAP_PASSWORD (or AIT_CRM_BOOTSTRAP_ADMIN_PASSWORD) is required.');
+  const normalizedEmail = email.trim().toLowerCase();
+  const roleKey = firstDefinedEnv('AIT_CRM_BOOTSTRAP_ROLE', 'AIT_CRM_BOOTSTRAP_ADMIN_ROLE') || 'admin';
+  const name = firstDefinedEnv('AIT_CRM_BOOTSTRAP_NAME', 'AIT_CRM_BOOTSTRAP_ADMIN_NAME') || 'AIT CRM User';
+  const configuredBusinessUnitIds = firstDefinedEnv(
+    'AIT_CRM_BOOTSTRAP_BUSINESS_UNIT_IDS',
+    'AIT_CRM_BOOTSTRAP_ADMIN_BUSINESS_UNIT_IDS',
+  )
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (!PERMISSIONS[roleKey]) {
+    throw new Error(`Unsupported role "${roleKey}". Expected one of: ${Object.keys(PERMISSIONS).join(', ')}.`);
+  }
 
   const client = new Client({ connectionString });
   await client.connect();
@@ -118,7 +159,7 @@ async function main() {
           set name = excluded.name, organization_id = excluded.organization_id, is_active = true, updated_at = now()
         returning id
       `,
-      [organizationId, name, email],
+      [organizationId, name, normalizedEmail],
     );
     const userId = user.rows[0].id;
 
@@ -134,8 +175,13 @@ async function main() {
               password_iterations = excluded.password_iterations,
               updated_at = now()
       `,
-      [userId, email, hash, salt, PASSWORD_ITERATIONS],
+      [userId, normalizedEmail, hash, salt, PASSWORD_ITERATIONS],
     );
+
+    const roleId = roleIds.get(roleKey);
+    if (!roleId) {
+      throw new Error(`Role "${roleKey}" is not available in the current organization.`);
+    }
 
     await client.query(
       `
@@ -143,11 +189,27 @@ async function main() {
         values ($1, $2)
         on conflict (user_id, role_id) do nothing
       `,
-      [userId, roleIds.get('admin')],
+      [userId, roleId],
     );
 
+    const businessUnitIds = await ensureBusinessUnitIds(client, organizationId, roleKey, configuredBusinessUnitIds);
+    for (let index = 0; index < businessUnitIds.length; index += 1) {
+      const businessUnitId = businessUnitIds[index];
+      await client.query(
+        `
+          insert into business_unit_memberships (business_unit_id, user_id, role_id, is_primary)
+          values ($1, $2, $3, $4)
+          on conflict (business_unit_id, user_id) do update
+            set role_id = excluded.role_id,
+                is_primary = excluded.is_primary,
+                updated_at = now()
+        `,
+        [businessUnitId, userId, roleId, index === 0],
+      );
+    }
+
     await client.query('commit');
-    console.log(`Bootstrapped admin user ${email}`);
+    console.log(`Bootstrapped ${roleKey} user ${normalizedEmail}`);
   } catch (error) {
     await client.query('rollback');
     throw error;
