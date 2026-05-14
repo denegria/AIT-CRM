@@ -71,6 +71,7 @@ export default function Sidebar() {
               aria-label={`${scopeLabel} scope`}
             >
               {canUseConsolidatedScope && <option value="all">All {scopeLabel}</option>}
+              <option value="unassigned">Unassigned</option>
               {accessibleBusinessUnits.map((unit) => (
                 <option key={unit.id} value={unit.id}>{unit.name}</option>
               ))}

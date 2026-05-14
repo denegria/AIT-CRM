@@ -22,6 +22,7 @@ export default function ContactsPage() {
     accessibleBusinessUnits,
     currentBusinessUnitId,
     currentBusinessUnit,
+    canUseConsolidatedScope,
     scopeLabel,
   } = useCRM();
   const { toast } = useToast();
@@ -32,7 +33,7 @@ export default function ContactsPage() {
   const [statusFilter, setStatusFilter] = useState('All');
 
   const canWrite = access.canWriteCrm;
-  const defaultBusinessUnitId = currentBusinessUnitId !== 'all' ? currentBusinessUnitId : accessibleBusinessUnits[0]?.id || '';
+  const defaultBusinessUnitId = currentBusinessUnitId !== 'all' && currentBusinessUnitId !== 'unassigned' ? currentBusinessUnitId : accessibleBusinessUnits[0]?.id || '';
   const openNew = () => {
     if (!canWrite) return;
     setForm({ ...empty, businessUnitId: defaultBusinessUnitId, primaryBusinessUnitId: defaultBusinessUnitId });
@@ -184,7 +185,7 @@ export default function ContactsPage() {
             value={form.businessUnitId || form.primaryBusinessUnitId || ''}
             onChange={e => setForm(f => ({...f, businessUnitId: e.target.value, primaryBusinessUnitId: e.target.value}))}
           >
-            <option value="">Unassigned</option>
+            {canUseConsolidatedScope && <option value="">Unassigned</option>}
             {accessibleBusinessUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
           </select>
         </div>

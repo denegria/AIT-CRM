@@ -24,6 +24,25 @@ function toContactPayload(row, lead = null) {
   };
 }
 
+function requestedBusinessUnitId(body) {
+  return body.businessUnitId || body.primaryBusinessUnitId || '';
+}
+
+function hasBusinessUnitRequest(body) {
+  return 'businessUnitId' in body || 'primaryBusinessUnitId' in body;
+}
+
+function businessUnitError(message, status = 400) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+function businessUnitErrorResponse(error) {
+  if (!error?.status) throw error;
+  return NextResponse.json({ error: error.message }, { status: error.status });
+}
+
 function canAccessContact(session, contact) {
   return Boolean(
     session.user.canAccessAllBusinessUnits ||
@@ -33,10 +52,24 @@ function canAccessContact(session, contact) {
 }
 
 async function resolveBusinessUnitId(db, session, requestedId) {
-  if (requestedId && isUuid(requestedId)) {
-    if (session.user.canAccessAllBusinessUnits || session.user.businessUnitIds.includes(requestedId)) {
-      return requestedId;
+  if (requestedId) {
+    if (!isUuid(requestedId)) {
+      throw businessUnitError('A valid business unit id is required.');
     }
+
+    const [row] = await db
+      .select({ id: businessUnits.id })
+      .from(businessUnits)
+      .where(and(eq(businessUnits.id, requestedId), eq(businessUnits.organizationId, session.user.organizationId)))
+      .limit(1);
+
+    if (!row) {
+      throw businessUnitError('Business unit not found.');
+    }
+    if (session.user.canAccessAllBusinessUnits || session.user.businessUnitIds.includes(requestedId)) {
+      return row.id;
+    }
+    throw businessUnitError('Insufficient business-unit access.', 403);
   }
 
   if (!session.user.canAccessAllBusinessUnits && session.user.businessUnitIds.length) {
@@ -54,6 +87,12 @@ async function resolveBusinessUnitId(db, session, requestedId) {
 
 async function resolveOptionalBusinessUnitId(db, session, requestedId) {
   if (!requestedId) return null;
+  return resolveBusinessUnitId(db, session, requestedId);
+}
+
+async function resolveContactBusinessUnitForCreate(db, session, body) {
+  const requestedId = requestedBusinessUnitId(body);
+  if (!requestedId && hasBusinessUnitRequest(body) && session.user.canAccessAllBusinessUnits) return null;
   return resolveBusinessUnitId(db, session, requestedId);
 }
 
@@ -78,7 +117,12 @@ export async function POST(request) {
   }
 
   const db = getDb();
-  const businessUnitId = await resolveBusinessUnitId(db, session, body.businessUnitId || body.primaryBusinessUnitId);
+  let businessUnitId;
+  try {
+    businessUnitId = await resolveContactBusinessUnitForCreate(db, session, body);
+  } catch (error) {
+    return businessUnitErrorResponse(error);
+  }
   const [contact] = await db.insert(contacts).values({
     organizationId: session.user.organizationId,
     primaryBusinessUnitId: businessUnitId,
@@ -134,7 +178,15 @@ export async function PATCH(request) {
   if ('phone' in body) patch.phone = body.phone || null;
   if ('source' in body) patch.sourceLabel = body.source || null;
   if ('businessUnitId' in body || 'primaryBusinessUnitId' in body) {
-    patch.primaryBusinessUnitId = await resolveOptionalBusinessUnitId(db, session, body.businessUnitId || body.primaryBusinessUnitId);
+    const requestedId = requestedBusinessUnitId(body);
+    if (!requestedId && !session.user.canAccessAllBusinessUnits && existing.primaryBusinessUnitId) {
+      return NextResponse.json({ error: 'Only all-division users can unassign a contact.' }, { status: 403 });
+    }
+    try {
+      patch.primaryBusinessUnitId = await resolveOptionalBusinessUnitId(db, session, requestedId);
+    } catch (error) {
+      return businessUnitErrorResponse(error);
+    }
   }
 
   const [contact] = await db

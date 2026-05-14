@@ -21,6 +21,7 @@ export default function WorkOrdersPage() {
     accessibleBusinessUnits,
     currentBusinessUnitId,
     currentBusinessUnit,
+    canUseConsolidatedScope,
     scopeLabel,
   } = useCRM();
   const { toast } = useToast();
@@ -30,7 +31,7 @@ export default function WorkOrdersPage() {
 
   const openNew = () => {
     const num = `WO-${String(workOrders.length + 1).padStart(3, '0')}`;
-    const businessUnitId = currentBusinessUnitId !== 'all' ? currentBusinessUnitId : accessibleBusinessUnits[0]?.id || '';
+    const businessUnitId = currentBusinessUnitId !== 'all' && currentBusinessUnitId !== 'unassigned' ? currentBusinessUnitId : accessibleBusinessUnits[0]?.id || '';
     setForm({ ...empty, number: num, businessUnitId, dueDate: new Date().toISOString().slice(0,10) });
     setDrawer('new');
   };
@@ -151,7 +152,7 @@ export default function WorkOrdersPage() {
           <div className="form-group">
             <label className="form-label">{scopeLabel}</label>
             <select className="input select" value={form.businessUnitId || ''} onChange={e => setForm(f=>({...f,businessUnitId:e.target.value}))}>
-              <option value="">Unassigned</option>
+              {canUseConsolidatedScope && <option value="">Unassigned</option>}
               {accessibleBusinessUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
             </select>
           </div>

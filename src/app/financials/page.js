@@ -21,6 +21,7 @@ export default function FinancialsPage() {
     accessibleBusinessUnits,
     currentBusinessUnitId,
     currentBusinessUnit,
+    canUseConsolidatedScope,
     scopeLabel,
   } = useCRM();
   const { toast } = useToast();
@@ -48,7 +49,7 @@ export default function FinancialsPage() {
   const openNew = () => {
     const prefix = tab === 'Invoice' ? 'INV' : tab === 'Estimate' ? 'EST' : 'REC';
     const count = financials.filter(f => f.type === tab).length + 1;
-    const businessUnitId = currentBusinessUnitId !== 'all' ? currentBusinessUnitId : accessibleBusinessUnits[0]?.id || '';
+    const businessUnitId = currentBusinessUnitId !== 'all' && currentBusinessUnitId !== 'unassigned' ? currentBusinessUnitId : accessibleBusinessUnits[0]?.id || '';
     setForm({ ...emptyForm, type: tab, number: `${prefix}-${String(count).padStart(3,'0')}`, businessUnitId, date: new Date().toISOString().slice(0,10) });
     setDrawer('new');
   };
@@ -162,7 +163,7 @@ export default function FinancialsPage() {
         <div className="form-group">
           <label className="form-label">{scopeLabel}</label>
           <select className="input select" value={form.businessUnitId || ''} onChange={e=>setForm(f=>({...f,businessUnitId:e.target.value}))}>
-            <option value="">Unassigned</option>
+            {canUseConsolidatedScope && <option value="">Unassigned</option>}
             {accessibleBusinessUnits.map(unit=><option key={unit.id} value={unit.id}>{unit.name}</option>)}
           </select>
         </div>
