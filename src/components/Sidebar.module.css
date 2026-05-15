@@ -184,6 +184,14 @@
     flex: 1;
     justify-content: center;
   }
-  .navItem span { display: none; }
-  .navItem svg { width: 22px; height: 22px; }
+  .navItem span {
+    display: block;
+    font-size: 10px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    width: 100%;
+  }
+  .navItem svg { width: 20px; height: 20px; margin: 0 auto; }
 }
