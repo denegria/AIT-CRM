@@ -154,7 +154,7 @@ export function CRMProvider({ children, initialData }) {
   }, [accessibleBusinessUnits, canUseConsolidatedScope, currentBusinessUnitId]);
   const currentBusinessUnit = useMemo(() => {
     if (effectiveBusinessUnitId === UNASSIGNED_BUSINESS_UNIT) {
-      return { id: UNASSIGNED_BUSINESS_UNIT, name: 'Unassigned', label: businessUnits?.[0]?.label || 'Divisions' };
+      return { id: UNASSIGNED_BUSINESS_UNIT, name: 'No Division', label: businessUnits?.[0]?.label || 'Divisions' };
     }
     return accessibleBusinessUnits.find((unit) => unit.id === effectiveBusinessUnitId) || null;
   }, [accessibleBusinessUnits, businessUnits, effectiveBusinessUnitId]);
