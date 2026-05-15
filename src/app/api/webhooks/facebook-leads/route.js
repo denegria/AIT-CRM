@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { Client } from 'pg';
 
 const FB_VERIFY_TOKEN_ENV = 'FACEBOOK_WEBHOOK_VERIFY_TOKEN';
+const META_VERIFY_TOKEN_ENV = 'META_WEBHOOK_VERIFY_TOKEN';
 const FB_APP_SECRET_ENV = 'FACEBOOK_APP_SECRET';
 const DEFAULT_SOURCE_SHEET = 'facebook_webhook';
 
@@ -10,8 +11,16 @@ function jsonError(message, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
+function getVerifyToken() {
+  return process.env[FB_VERIFY_TOKEN_ENV] || process.env[META_VERIFY_TOKEN_ENV] || '';
+}
+
 function verifyTokenConfigured() {
-  return Boolean(process.env[FB_VERIFY_TOKEN_ENV]);
+  return Boolean(getVerifyToken());
+}
+
+function verifyTokenErrorMessage() {
+  return `${FB_VERIFY_TOKEN_ENV} or ${META_VERIFY_TOKEN_ENV} is required before Facebook lead webhook verification can run.`;
 }
 
 function signatureIsValid(bodyText, signatureHeader) {
@@ -190,7 +199,7 @@ async function persistEvent(client, batchId, rowNumber, event) {
 
 export async function GET(request) {
   if (!verifyTokenConfigured()) {
-    return jsonError(`${FB_VERIFY_TOKEN_ENV} is required before Facebook webhook verification can run.`, 503);
+    return jsonError(verifyTokenErrorMessage(), 503);
   }
 
   const url = new URL(request.url);
@@ -198,7 +207,7 @@ export async function GET(request) {
   const verifyToken = url.searchParams.get('hub.verify_token');
   const challenge = url.searchParams.get('hub.challenge');
 
-  if (mode === 'subscribe' && verifyToken === process.env[FB_VERIFY_TOKEN_ENV]) {
+  if (mode === 'subscribe' && verifyToken === getVerifyToken()) {
     return new NextResponse(challenge || '', { status: 200 });
   }
 
@@ -207,7 +216,7 @@ export async function GET(request) {
 
 export async function POST(request) {
   if (!verifyTokenConfigured()) {
-    return jsonError(`${FB_VERIFY_TOKEN_ENV} is required before Facebook lead webhooks can be accepted.`, 503);
+    return jsonError(verifyTokenErrorMessage(), 503);
   }
 
   const signature = request.headers.get('x-hub-signature-256');

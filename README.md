@@ -125,9 +125,11 @@ npm run db:bootstrap-auth-user
 For Facebook lead webhook verification and signed payload validation:
 
 ```bash
-FACEBOOK_WEBHOOK_VERIFY_TOKEN=replace-me
+META_WEBHOOK_VERIFY_TOKEN=replace-me
 FACEBOOK_APP_SECRET=replace-me
 ```
+
+`FACEBOOK_WEBHOOK_VERIFY_TOKEN` is also supported for compatibility.
 
 Webhook endpoint:
 
