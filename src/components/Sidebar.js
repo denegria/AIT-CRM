@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
@@ -45,7 +46,7 @@ export default function Sidebar() {
   return (
     <aside className={s.sidebar}>
       <div className={s.logo}>
-        <img src="/logo.png" alt="AIT USA" className={s.logoImage} />
+        <Image src="/logo.png" alt="AIT USA" width={28} height={28} className={s.logoImage} />
         <span>AIT USA</span>
       </div>
       <nav className={s.navSection}>
@@ -80,26 +81,6 @@ export default function Sidebar() {
             </Link>
           );
         })}
-        {accessibleBusinessUnits?.length > 0 && (
-          <div className={s.scopePanel}>
-            <div className={s.scopeTitle}>
-              <Building2 size={14} />
-              <span>{scopeLabel}</span>
-            </div>
-            <select
-              className={s.scopeSelect}
-              value={currentBusinessUnitId}
-              onChange={(event) => setCurrentBusinessUnitId(event.target.value)}
-              aria-label={`${scopeLabel} scope`}
-            >
-              {canUseConsolidatedScope && <option value="all">All {scopeLabel}</option>}
-              <option value="unassigned" title="Shows records that have not been assigned to any division">No Division</option>
-              {accessibleBusinessUnits.map((unit) => (
-                <option key={unit.id} value={unit.id}>{unit.name}</option>
-              ))}
-            </select>
-          </div>
-        )}
       </nav>
       <div className={s.bottom}>
         <div className={s.themeToggle}>

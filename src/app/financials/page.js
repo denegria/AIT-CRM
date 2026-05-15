@@ -165,7 +165,7 @@ export default function FinancialsPage() {
           columns={columns}
           data={filtered.map((record) => ({
             ...record,
-            divisionLabel: accessibleBusinessUnits.find((unit) => unit.id === record.businessUnitId)?.name || 'Unassigned',
+            divisionLabel: accessibleBusinessUnits.find((unit) => unit.id === record.businessUnitId)?.name || 'No Division',
           }))}
           searchPlaceholder={`Search ${tab.toLowerCase()}s...`}
           selectable
@@ -213,7 +213,7 @@ export default function FinancialsPage() {
         <div className="form-group">
           <label className="form-label">{scopeLabel}</label>
           <select className="input select" value={form.businessUnitId || ''} onChange={e=>setForm(f=>({...f,businessUnitId:e.target.value}))}>
-            {canUseConsolidatedScope && <option value="">Unassigned</option>}
+            {canUseConsolidatedScope && <option value="">No Division</option>}
             {accessibleBusinessUnits.map(unit=><option key={unit.id} value={unit.id}>{unit.name}</option>)}
           </select>
         </div>

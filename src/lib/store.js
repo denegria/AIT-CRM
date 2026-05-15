@@ -189,7 +189,7 @@ export function CRMProvider({ children, initialData }) {
       const userId = currentUser?.id;
       if (userId) localStorage.setItem(SCOPE_USER_KEY, userId);
     }
-  }, [accessibleBusinessUnits, canUseConsolidatedScope]);
+  }, [accessibleBusinessUnits, canUseConsolidatedScope, currentUser?.id]);
 
   const inCurrentBusinessUnitScope = useCallback((record) => {
     if (effectiveBusinessUnitId === ALL_BUSINESS_UNITS) return true;
