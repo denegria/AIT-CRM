@@ -105,3 +105,53 @@ The source of truth is Postgres. Before a risky data operation:
 4. Keep import promotions reversible by preserving raw source rows, normalized records, and review decisions.
 
 For v1, do not use Google Sheets as the source of truth. It can be added later as a read-only backup/export layer if needed.
+
+### Neon Branch Restore Drill
+
+Use a Neon branch drill for v1 recovery validation. Do not restore the production/root branch during a drill.
+
+Why this method:
+
+- Neon instant restore on a root branch is an overwrite, not a merge.
+- Restoring the live/root branch can interrupt active connections.
+- A branch is an isolated copy-on-write clone, so validation does not affect production traffic or data.
+- The drill proves that Neon history/branch recovery works and that the app schema/data are readable after recovery.
+
+Prerequisites:
+
+- Neon CLI authenticated with access to the AIT CRM Neon project.
+- The Neon project id for the database behind production `DATABASE_URL`.
+- A timestamp inside the configured Neon history window.
+
+Recommended drill:
+
+```bash
+export NEON_PROJECT_ID="<project-id>"
+export DRILL_BRANCH="restore-drill-$(date -u +%Y%m%d%H%M%S)"
+export RESTORE_POINT="$(date -u -d '10 minutes ago' +%Y-%m-%dT%H:%M:%SZ)"
+
+npx neonctl branches create \
+  --project-id "$NEON_PROJECT_ID" \
+  --name "$DRILL_BRANCH" \
+  --parent "main@$RESTORE_POINT"
+
+npx neonctl connection-string "$DRILL_BRANCH" \
+  --project-id "$NEON_PROJECT_ID" \
+  --database-name neondb \
+  --ssl require
+```
+
+Use the returned branch connection string only for verification commands, never in Vercel production env:
+
+```bash
+DATABASE_URL="<branch-connection-string>" npm run verify:production
+DATABASE_URL="<branch-connection-string>" npm run verify:rbac
+```
+
+Record the branch name, restore timestamp, validation result, and deletion result in Linear. Then delete the drill branch:
+
+```bash
+npx neonctl branches delete "$DRILL_BRANCH" --project-id "$NEON_PROJECT_ID"
+```
+
+If production data is actually damaged, do not immediately restore production. First create a branch from the suspected good timestamp, inspect it, export or copy the missing rows when possible, and only use root-branch instant restore when a full branch overwrite is the least risky recovery path.
