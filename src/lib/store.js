@@ -5,6 +5,7 @@ import * as defaults from './data';
 const CRMContext = createContext(null);
 const STORAGE_KEY = 'ait-crm-data';
 const SCOPE_STORAGE_KEY = 'ait-crm-business-unit-scope';
+const SCOPE_USER_KEY = 'ait-crm-scope-user-id';
 const ALL_BUSINESS_UNITS = 'all';
 const UNASSIGNED_BUSINESS_UNIT = 'unassigned';
 
@@ -132,6 +133,16 @@ export function CRMProvider({ children, initialData }) {
   const [salesLedger, setSalesLedger] = useState(bootstrapData.salesLedger);
   const [currentBusinessUnitId, setCurrentBusinessUnitIdState] = useState(() => {
     if (typeof window === 'undefined') return ALL_BUSINESS_UNITS;
+    // Reset persisted scope if the current user differs from the stored scope owner
+    const storedUserId = localStorage.getItem(SCOPE_USER_KEY);
+    const currentUserId = bootstrapData.currentUser?.id || null;
+    if (isPostgres && currentUserId && storedUserId && storedUserId !== currentUserId) {
+      localStorage.removeItem(SCOPE_STORAGE_KEY);
+      localStorage.removeItem(SCOPE_USER_KEY);
+      // Default to user's primary business unit or 'all'
+      const userUnits = bootstrapData.currentUser?.businessUnitIds || [];
+      return userUnits[0] || ALL_BUSINESS_UNITS;
+    }
     return localStorage.getItem(SCOPE_STORAGE_KEY) || ALL_BUSINESS_UNITS;
   });
   const [storageReady, setStorageReady] = useState(isPostgres);
@@ -175,6 +186,8 @@ export function CRMProvider({ children, initialData }) {
     setCurrentBusinessUnitIdState(selectedId);
     if (typeof window !== 'undefined') {
       localStorage.setItem(SCOPE_STORAGE_KEY, selectedId);
+      const userId = currentUser?.id;
+      if (userId) localStorage.setItem(SCOPE_USER_KEY, userId);
     }
   }, [accessibleBusinessUnits, canUseConsolidatedScope]);
 
