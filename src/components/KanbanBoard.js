@@ -5,6 +5,7 @@ import s from './KanbanBoard.module.css';
 
 export default function KanbanBoard({ data, columns, onMove, onEdit }) {
   const [draggingId, setDraggingId] = useState(null);
+  const [dragOverCol, setDragOverCol] = useState(null);
 
   const onDragStart = (e, id) => {
     setDraggingId(id);
@@ -17,11 +18,24 @@ export default function KanbanBoard({ data, columns, onMove, onEdit }) {
     e.dataTransfer.dropEffect = 'move';
   };
 
+  const onDragEnter = (e, col) => {
+    e.preventDefault();
+    setDragOverCol(col);
+  };
+
+  const onDragLeave = (e) => {
+    // Only clear if leaving the column (not entering a child element)
+    if (!e.currentTarget.contains(e.relatedTarget)) {
+      setDragOverCol(null);
+    }
+  };
+
   const onDrop = (e, status) => {
     e.preventDefault();
     const id = e.dataTransfer.getData('id');
     if (onMove) onMove(id, status);
     setDraggingId(null);
+    setDragOverCol(null);
   };
 
   return (
@@ -31,8 +45,10 @@ export default function KanbanBoard({ data, columns, onMove, onEdit }) {
         return (
           <div 
             key={col} 
-            className={`${s.kanbanColumn} ${isTerminal ? s.terminal : ''}`}
+            className={`${s.kanbanColumn} ${isTerminal ? s.terminal : ''} ${draggingId && dragOverCol === col ? s.dragOver : ''}`}
             onDragOver={onDragOver}
+            onDragEnter={(e) => onDragEnter(e, col)}
+            onDragLeave={onDragLeave}
             onDrop={(e) => onDrop(e, col)}
           >
             <div className={s.kanbanHeader}>
