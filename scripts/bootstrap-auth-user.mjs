@@ -18,7 +18,7 @@ const PERMISSIONS = {
     'business_units:all',
   ],
   designer: ['crm:read', 'work_orders:write'],
-  account_manager: ['crm:read', 'crm:write', 'financials:read', 'import_review:read'],
+  account_manager: ['crm:read', 'crm:write', 'financials:read'],
   sales_manager: ['crm:read', 'crm:write', 'reports:read', 'financials:read'],
 };
 
@@ -138,6 +138,11 @@ async function main() {
         [organizationId, key, ROLE_NAMES[key], `${ROLE_NAMES[key]} CRM access.`],
       );
       roleIds.set(key, role.rows[0].id);
+
+      await client.query(
+        'delete from role_permissions rp using permissions p where rp.permission_id = p.id and rp.role_id = $1 and not (p.key = any($2::text[]))',
+        [role.rows[0].id, permissionKeys],
+      );
 
       for (const permissionKey of permissionKeys) {
         await client.query(

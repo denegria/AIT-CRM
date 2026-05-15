@@ -18,7 +18,8 @@
     "db:migrate": "drizzle-kit migrate --config drizzle.config.mjs",
     "db:push": "drizzle-kit push --config drizzle.config.mjs",
     "db:studio": "drizzle-kit studio --config drizzle.config.mjs",
-    "verify:production": "node scripts/verify-production-readiness.mjs"
+    "verify:production": "node scripts/verify-production-readiness.mjs",
+    "verify:rbac": "node scripts/verify-rbac-boundaries.mjs"
   },
   "dependencies": {
     "drizzle-kit": "^0.31.10",
