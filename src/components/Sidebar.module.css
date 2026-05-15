@@ -52,7 +52,7 @@
 }
 .navItem svg { width: 18px; height: 18px; flex-shrink: 0; }
 .scopePanel {
-  margin: 16px 0 0;
+  margin: 16px 0 8px 0;
   padding: 10px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);

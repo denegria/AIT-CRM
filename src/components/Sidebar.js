@@ -46,6 +46,26 @@ export default function Sidebar() {
         <span>AIT Signs</span>
       </div>
       <nav className={s.navSection}>
+        {accessibleBusinessUnits?.length > 0 && (
+          <div className={s.scopePanel}>
+            <div className={s.scopeTitle}>
+              <Building2 size={14} />
+              <span>{scopeLabel}</span>
+            </div>
+            <select
+              className={s.scopeSelect}
+              value={currentBusinessUnitId}
+              onChange={(event) => setCurrentBusinessUnitId(event.target.value)}
+              aria-label={`${scopeLabel} scope`}
+            >
+              {canUseConsolidatedScope && <option value="all">All {scopeLabel}</option>}
+              <option value="unassigned" title="Shows records that have not been assigned to any division">No Division</option>
+              {accessibleBusinessUnits.map((unit) => (
+                <option key={unit.id} value={unit.id}>{unit.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className={s.navLabel}>Menu</div>
         {nav.map(({ href, label, Icon }) => {
           if (href === '/settings' && !access.canReadSettings) return null;
