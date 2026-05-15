@@ -117,6 +117,20 @@ export default function Dashboard() {
         </div>
       )}
 
+      {dataSource === 'postgres' && !importStaging?.latestBatch && contacts.length === 0 && (
+        <div className="card" style={{marginBottom:20, padding:16, borderColor:'var(--accent)'}}>
+          <div className="card-title" style={{marginBottom:4}}>Getting started with AIT Signs CRM</div>
+          <p className="page-subtitle" style={{margin:0, marginBottom:16}}>
+            Your database is connected but currently empty. To get started, run the data pipeline scripts to ingest the legacy AIT Signs workbook:
+          </p>
+          <div style={{background:'var(--bg-tertiary)', padding:12, borderRadius:'var(--radius-md)', border:'1px solid var(--border-subtle)', fontFamily:'monospace', fontSize:'var(--text-xs)', display:'flex', flexDirection:'column', gap:8}}>
+            <div>1. Extract: <code style={{background:'var(--bg-primary)', padding:'2px 4px', borderRadius:4, color:'var(--text-primary)'}}>npm run db:extract</code></div>
+            <div>2. Load: <code style={{background:'var(--bg-primary)', padding:'2px 4px', borderRadius:4, color:'var(--text-primary)'}}>npm run db:load</code></div>
+            <div>3. Promote: <code style={{background:'var(--bg-primary)', padding:'2px 4px', borderRadius:4, color:'var(--text-primary)'}}>npm run db:promote</code></div>
+          </div>
+        </div>
+      )}
+
       {role === 'admin' ? (
         <div className="grid-4" style={{marginBottom:20}}>
           <KPICard label="Total Revenue" value={`$${kpis.totalRevenue.toLocaleString()}`} change="12% vs last month" trend="up" />
