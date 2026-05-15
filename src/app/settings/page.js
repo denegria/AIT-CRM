@@ -12,7 +12,7 @@ const roleOptions = [
 ];
 
 export default function SettingsPage() {
-  const { resetData, loaded, access, dataSource, accessibleBusinessUnits } = useCRM();
+  const { resetData, loaded, access, dataSource, businessUnits, setBusinessUnits } = useCRM();
   const router = useRouter();
   const { toast } = useToast();
   const [users, setUsers] = useState([]);
@@ -26,6 +26,18 @@ export default function SettingsPage() {
     roleKey: 'account_manager',
     businessUnitId: '',
   });
+  const [businessUnitRows, setBusinessUnitRows] = useState(businessUnits || []);
+  const [businessUnitsLoading, setBusinessUnitsLoading] = useState(false);
+  const [businessUnitsError, setBusinessUnitsError] = useState('');
+  const [savingBusinessUnit, setSavingBusinessUnit] = useState(false);
+  const [businessUnitForm, setBusinessUnitForm] = useState({
+    id: '',
+    name: '',
+    label: 'Divisions',
+    color: '#2563eb',
+    isActive: true,
+  });
+  const activeBusinessUnitOptions = businessUnitRows.filter((unit) => unit.isActive !== false);
 
   useEffect(() => {
     if (loaded && !access.canReadSettings) {
@@ -58,6 +70,35 @@ export default function SettingsPage() {
     };
   }, [access.canWriteSettings, dataSource, loaded]);
 
+  useEffect(() => {
+    if (!loaded || !access.canReadSettings || dataSource !== 'postgres') return;
+    let cancelled = false;
+
+    async function loadBusinessUnits() {
+      setBusinessUnitsLoading(true);
+      setBusinessUnitsError('');
+      try {
+        const response = await fetch('/api/business-units');
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Failed to load divisions.');
+        const rows = Array.isArray(payload.businessUnits) ? payload.businessUnits : [];
+        if (!cancelled) {
+          setBusinessUnitRows(rows);
+          setBusinessUnits(rows);
+        }
+      } catch (error) {
+        if (!cancelled) setBusinessUnitsError(error.message || 'Failed to load divisions.');
+      } finally {
+        if (!cancelled) setBusinessUnitsLoading(false);
+      }
+    }
+
+    loadBusinessUnits();
+    return () => {
+      cancelled = true;
+    };
+  }, [access.canReadSettings, dataSource, loaded, setBusinessUnits]);
+
   async function handleCreateOrUpdateUser(event) {
     event.preventDefault();
     if (!access.canWriteSettings || dataSource !== 'postgres') return;
@@ -88,6 +129,50 @@ export default function SettingsPage() {
     } finally {
       setSavingUser(false);
     }
+  }
+
+  async function handleSaveBusinessUnit(event) {
+    event.preventDefault();
+    if (!access.canWriteSettings || dataSource !== 'postgres') return;
+
+    setSavingBusinessUnit(true);
+    setBusinessUnitsError('');
+    try {
+      const payload = {
+        id: businessUnitForm.id,
+        name: businessUnitForm.name.trim(),
+        label: businessUnitForm.label.trim() || 'Divisions',
+        color: businessUnitForm.color.trim(),
+        isActive: Boolean(businessUnitForm.isActive),
+      };
+      const response = await fetch('/api/business-units', {
+        method: payload.id ? 'PATCH' : 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Failed to save division.');
+
+      const rows = Array.isArray(result.businessUnits) ? result.businessUnits : [];
+      setBusinessUnitRows(rows);
+      setBusinessUnits(rows);
+      setBusinessUnitForm({ id: '', name: '', label: 'Divisions', color: '#2563eb', isActive: true });
+      toast('Division saved');
+    } catch (error) {
+      setBusinessUnitsError(error.message || 'Failed to save division.');
+    } finally {
+      setSavingBusinessUnit(false);
+    }
+  }
+
+  function editBusinessUnit(unit) {
+    setBusinessUnitForm({
+      id: unit.id,
+      name: unit.name || '',
+      label: unit.label || 'Divisions',
+      color: unit.color || '#2563eb',
+      isActive: unit.isActive !== false,
+    });
   }
 
   if (!loaded || !access.canReadSettings) return <div className="empty-state">Loading...</div>;
@@ -162,6 +247,73 @@ export default function SettingsPage() {
             <input className="input" value="https://api.aitcrm.com/v1" readOnly style={{opacity:0.7}} />
           </div>
           <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)',marginTop:4}}>Rate limit: 1,000 requests/min • Endpoints: /contacts, /work-orders, /financials, /tasks</div>
+        </div>
+
+        <div className="card">
+          <div className="card-title">Division Management</div>
+          <p style={{fontSize:'var(--text-sm)',color:'var(--text-secondary)',marginBottom:12}}>Manage business units used by scopes, users, and inbound lead routing.</p>
+          {dataSource === 'postgres' && access.canWriteSettings ? (
+            <>
+              <form onSubmit={handleSaveBusinessUnit} style={{display:'grid',gridTemplateColumns:'minmax(160px,1fr) minmax(120px,0.7fr) 44px auto',gap:8,alignItems:'center',marginBottom:12}}>
+                <input
+                  className="input"
+                  placeholder="Division name"
+                  value={businessUnitForm.name}
+                  onChange={(event) => setBusinessUnitForm((prev) => ({ ...prev, name: event.target.value }))}
+                  required
+                />
+                <input
+                  className="input"
+                  placeholder="Label"
+                  value={businessUnitForm.label}
+                  onChange={(event) => setBusinessUnitForm((prev) => ({ ...prev, label: event.target.value }))}
+                />
+                <input
+                  className="input"
+                  type="color"
+                  aria-label="Division color"
+                  value={businessUnitForm.color}
+                  onChange={(event) => setBusinessUnitForm((prev) => ({ ...prev, color: event.target.value }))}
+                  style={{padding:4,minWidth:44}}
+                />
+                <button className="btn btn-primary" type="submit" disabled={savingBusinessUnit}>
+                  {savingBusinessUnit ? 'Saving...' : businessUnitForm.id ? 'Update' : 'Add'}
+                </button>
+                <label style={{display:'flex',alignItems:'center',gap:8,fontSize:'var(--text-sm)',color:'var(--text-secondary)',gridColumn:'1 / -1'}}>
+                  <input
+                    type="checkbox"
+                    checked={businessUnitForm.isActive}
+                    onChange={(event) => setBusinessUnitForm((prev) => ({ ...prev, isActive: event.target.checked }))}
+                  />
+                  Active division
+                </label>
+              </form>
+              <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                {businessUnitsLoading && <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>Loading divisions...</div>}
+                {!businessUnitsLoading && businessUnitRows.map((unit) => (
+                  <div key={unit.id} className="flex-between" style={{padding:'8px 10px',background:'var(--bg-tertiary)',borderRadius:'var(--radius-md)',gap:10}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8,minWidth:0}}>
+                      <span style={{width:10,height:10,borderRadius:999,background:unit.color || 'var(--accent)',flex:'0 0 auto'}} />
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:'var(--text-sm)',fontWeight:500,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{unit.name}</div>
+                        <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>{unit.label || 'Divisions'}</div>
+                      </div>
+                    </div>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <span className={'badge ' + (unit.isActive !== false ? 'badge-won' : 'badge-draft')}>{unit.isActive !== false ? 'Active' : 'Inactive'}</span>
+                      <button className="btn btn-sm" type="button" onClick={() => editBusinessUnit(unit)}>Edit</button>
+                    </div>
+                  </div>
+                ))}
+                {!businessUnitsLoading && businessUnitRows.length === 0 && (
+                  <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>No divisions found yet.</div>
+                )}
+                {businessUnitsError && <div style={{fontSize:'var(--text-xs)',color:'var(--danger)'}}>{businessUnitsError}</div>}
+              </div>
+            </>
+          ) : (
+            <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>Division management is available in database-backed admin sessions.</div>
+          )}
         </div>
 
         <div className="card">
@@ -243,7 +395,7 @@ export default function SettingsPage() {
                     required
                   >
                     <option value="">Select division</option>
-                    {accessibleBusinessUnits.map((unit) => (
+                    {activeBusinessUnitOptions.map((unit) => (
                       <option key={unit.id} value={unit.id}>{unit.name}</option>
                     ))}
                   </select>
