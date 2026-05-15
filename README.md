@@ -127,6 +127,7 @@ For Facebook lead webhook verification and signed payload validation:
 ```bash
 META_WEBHOOK_VERIFY_TOKEN=replace-me
 FACEBOOK_APP_SECRET=replace-me
+META_PAGE_ACCESS_TOKEN=replace-me
 ```
 
 `FACEBOOK_WEBHOOK_VERIFY_TOKEN` is also supported for compatibility.
@@ -134,6 +135,11 @@ FACEBOOK_APP_SECRET=replace-me
 Webhook endpoint:
 
 `/api/webhooks/facebook-leads`
+
+The webhook accepts both Facebook Lead Ads `leadgen` events and Page Messenger
+`messages` events. Lead Ads events fetch full lead fields from Graph API before
+creating CRM contacts/leads. Messenger events create or link CRM leads on first
+inbound Page conversation and log subsequent messages as activity.
 
 ## 🔄 Import Workflow
 

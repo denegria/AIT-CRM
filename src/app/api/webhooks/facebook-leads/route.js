@@ -8,6 +8,7 @@ const FB_APP_SECRET_ENV = 'FACEBOOK_APP_SECRET';
 const META_PAGE_ACCESS_TOKEN_ENV = 'META_PAGE_ACCESS_TOKEN';
 const GRAPH_API_VERSION = 'v24.0';
 const DEFAULT_SOURCE_SHEET = 'facebook_webhook';
+const MESSENGER_SOURCE_SHEET = 'facebook_messenger';
 
 function jsonError(message, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -71,19 +72,23 @@ async function resolveBusinessUnitId(client, organizationId) {
   return result.rows[0]?.id || null;
 }
 
-async function findOrCreateBatch(client, organizationId) {
+async function findOrCreateBatch(client, organizationId, options = {}) {
+  const sourceName = options.sourceName || 'Facebook Lead Ads';
+  const sourceType = options.sourceType || 'facebook_leads';
+  const filePrefix = options.filePrefix || 'facebook-webhook';
+  const sheetName = options.sheetName || DEFAULT_SOURCE_SHEET;
   const day = new Date().toISOString().slice(0, 10);
-  const fileName = `facebook-webhook-${day}`;
+  const fileName = `${filePrefix}-${day}`;
 
   const existing = await client.query(
     `
       select id
       from import_batches
-      where organization_id = $1 and source_type = 'facebook_leads' and file_name = $2
+      where organization_id = $1 and source_type = $2 and file_name = $3
       order by created_at desc
       limit 1
     `,
-    [organizationId, fileName],
+    [organizationId, sourceType, fileName],
   );
   if (existing.rows[0]?.id) return existing.rows[0].id;
 
@@ -91,10 +96,10 @@ async function findOrCreateBatch(client, organizationId) {
     `
       insert into import_batches
       (organization_id, source_name, source_type, file_name, sheet_name, status)
-      values ($1, 'Facebook Lead Ads', 'facebook_leads', $2, $3, 'staging')
+      values ($1, $2, $3, $4, $5, 'staging')
       returning id
     `,
-    [organizationId, fileName, DEFAULT_SOURCE_SHEET],
+    [organizationId, sourceName, sourceType, fileName, sheetName],
   );
   return inserted.rows[0]?.id || null;
 }
@@ -122,6 +127,32 @@ function flattenLeadgenChanges(payload) {
         adId: value.ad_id || '',
         createdTime: value.created_time || null,
         raw: { entry, change },
+      });
+    }
+  }
+  return events;
+}
+
+function flattenMessengerEvents(payload) {
+  if (payload?.object !== 'page') return [];
+  const events = [];
+  for (const entry of payload.entry || []) {
+    for (const messaging of entry.messaging || []) {
+      const message = messaging.message || null;
+      const postback = messaging.postback || null;
+      const senderId = messaging.sender?.id || '';
+      const pageId = messaging.recipient?.id || entry.id || '';
+      if (message?.is_echo) continue;
+      events.push({
+        entryId: entry.id || '',
+        senderId,
+        pageId,
+        messageId: message?.mid || '',
+        text: message?.text || '',
+        attachments: Array.isArray(message?.attachments) ? message.attachments : [],
+        postbackPayload: postback?.payload || '',
+        timestamp: messaging.timestamp || null,
+        raw: { entry, messaging },
       });
     }
   }
@@ -199,6 +230,29 @@ async function fetchLeadDetails(leadgenId) {
   return { ok: true, lead: body };
 }
 
+async function fetchMessengerProfile(senderId) {
+  const accessToken = process.env[META_PAGE_ACCESS_TOKEN_ENV];
+  if (!senderId || !accessToken) {
+    return { ok: false, reason: `${META_PAGE_ACCESS_TOKEN_ENV} missing` };
+  }
+
+  const url = new URL(`https://graph.facebook.com/${GRAPH_API_VERSION}/${encodeURIComponent(senderId)}`);
+  url.searchParams.set('fields', 'id,name,first_name,last_name,profile_pic');
+  url.searchParams.set('access_token', accessToken);
+
+  const response = await fetch(url, { cache: 'no-store' });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    return {
+      ok: false,
+      reason: body?.error?.message || `Graph API returned ${response.status}`,
+      graphStatus: response.status,
+    };
+  }
+
+  return { ok: true, profile: body };
+}
+
 async function findExistingContact(client, organizationId, details) {
   if (details.email) {
     const byEmail = await client.query(
@@ -229,6 +283,109 @@ async function findExistingContact(client, organizationId, details) {
   }
 
   return null;
+}
+
+async function findExistingMessengerLead(client, senderId, pageId) {
+  if (!senderId) return null;
+  const result = await client.query(
+    `
+      select proposed_lead_json
+      from import_normalized_records
+      where record_type = 'lead'
+        and coalesce(proposed_lead_json->>'messenger_sender_id', '') = $1
+        and coalesce(proposed_lead_json->>'page_id', '') = $2
+        and proposed_lead_json ? 'lead_id'
+      order by created_at asc
+      limit 1
+    `,
+    [senderId, pageId || ''],
+  );
+  const lead = result.rows[0]?.proposed_lead_json || null;
+  if (!lead?.lead_id) return null;
+  return {
+    contactId: lead.contact_id || null,
+    leadId: lead.lead_id || null,
+  };
+}
+
+function classifyMessengerEvent(event) {
+  if (!event.senderId) return { action: 'ignore', reason: 'Missing Messenger sender id.' };
+  if (event.senderId === event.pageId) return { action: 'ignore', reason: 'Ignoring Page self-message.' };
+
+  const text = String(event.text || '').trim();
+  const hasPostback = Boolean(event.postbackPayload);
+  const hasAttachments = event.attachments.length > 0;
+  if (!text && !hasPostback && !hasAttachments) {
+    return { action: 'ignore', reason: 'No message text, attachment, or postback payload.' };
+  }
+
+  const suspiciousPatterns = [
+    /\b(?:crypto|forex|casino|porn|xxx|loan offer|investment opportunity)\b/i,
+    /(?:t\.me|telegram\.me|bit\.ly|tinyurl\.com)\//i,
+  ];
+  if (text.length > 2000 || suspiciousPatterns.some((pattern) => pattern.test(text))) {
+    return { action: 'review', reason: 'Message matched basic spam filter.' };
+  }
+
+  return { action: 'promote', reason: null };
+}
+
+function messengerDisplayName(profile, senderId) {
+  const name = String(profile?.name || [profile?.first_name, profile?.last_name].filter(Boolean).join(' ')).trim();
+  if (name) return name;
+  return `Messenger User ${String(senderId || '').slice(-6) || 'Unknown'}`;
+}
+
+async function createMessengerContactAndLead(client, organizationId, businessUnitId, event, profile, sourceRowId) {
+  if (!businessUnitId) return { contactId: null, leadId: null, reason: 'No business unit found' };
+
+  const contact = await client.query(
+    `
+      insert into contacts
+      (organization_id, primary_business_unit_id, name, source_label)
+      values ($1, $2, $3, 'Facebook Messenger')
+      returning id
+    `,
+    [organizationId, businessUnitId, messengerDisplayName(profile, event.senderId)],
+  );
+  const contactId = contact.rows[0]?.id || null;
+
+  const lead = await client.query(
+    `
+      insert into leads
+      (organization_id, business_unit_id, contact_id, source_type, source_name, status, current_stage, original_notes)
+      values ($1, $2, $3, 'facebook_messenger', 'Facebook Messenger', 'New Lead', 'New Lead', $4)
+      returning id
+    `,
+    [
+      organizationId,
+      businessUnitId,
+      contactId,
+      `Messenger sender_id=${event.senderId || 'unknown'} page_id=${event.pageId || 'unknown'} source_row_id=${sourceRowId || 'unknown'}`,
+    ],
+  );
+
+  return { contactId, leadId: lead.rows[0]?.id || null, reason: null };
+}
+
+async function logMessengerActivity(client, organizationId, businessUnitId, event, crmIds, rowNumber) {
+  await client.query(
+    `
+      insert into activity_events
+      (organization_id, business_unit_id, contact_id, lead_id, event_type, message, source_sheet, source_row, occurred_at)
+      values ($1, $2, $3, $4, 'facebook_messenger_message', $5, $6, $7, $8)
+    `,
+    [
+      organizationId,
+      businessUnitId,
+      crmIds.contactId || null,
+      crmIds.leadId || null,
+      event.text || event.postbackPayload || '[Messenger attachment]',
+      MESSENGER_SOURCE_SHEET,
+      rowNumber,
+      event.timestamp ? new Date(Number(event.timestamp)) : new Date(),
+    ],
+  );
 }
 
 async function upsertContactAndLead(client, organizationId, businessUnitId, event, details, sourceRowId, rowNumber) {
@@ -413,6 +570,134 @@ async function persistEvent(client, organizationId, batchId, rowNumber, event) {
   return { inserted: true, promoted: Boolean(crmWrite.leadId), graphFetched: fetched.ok };
 }
 
+async function persistMessengerEvent(client, organizationId, batchId, rowNumber, event) {
+  const classification = classifyMessengerEvent(event);
+  if (classification.action === 'ignore') {
+    return { inserted: false, promoted: false, skippedReason: classification.reason };
+  }
+
+  const profileFetch = await fetchMessengerProfile(event.senderId);
+  const profile = profileFetch.ok ? profileFetch.profile : null;
+  const businessUnitId = await resolveBusinessUnitId(client, organizationId);
+  const existing = await findExistingMessengerLead(client, event.senderId, event.pageId);
+
+  const rawValues = {
+    source: 'facebook_messenger',
+    messenger_sender_id: event.senderId,
+    page_id: event.pageId,
+    message_id: event.messageId,
+    text: event.text || null,
+    attachments: event.attachments,
+    postback_payload: event.postbackPayload || null,
+    timestamp: event.timestamp,
+    profile_fetch: profileFetch.ok ? 'ok' : 'failed',
+    profile_fetch_reason: profileFetch.ok ? null : profileFetch.reason,
+    profile,
+    raw: event.raw,
+  };
+  const rawText = JSON.stringify(rawValues);
+
+  const sourceRow = await client.query(
+    `
+      insert into import_source_rows
+      (import_batch_id, source_sheet, source_row_number, raw_values_json, raw_text, parse_status)
+      values ($1, $2, $3, $4::jsonb, $5, 'parsed')
+      returning id
+    `,
+    [batchId, MESSENGER_SOURCE_SHEET, rowNumber, JSON.stringify(rawValues), rawText],
+  );
+  const sourceRowId = sourceRow.rows[0]?.id;
+  if (!sourceRowId) return { inserted: false, promoted: false, skippedReason: 'Failed to create source row.' };
+
+  let crmWrite = existing || { contactId: null, leadId: null, reason: null };
+  let action = 'linked_message';
+  if (!existing && classification.action === 'promote') {
+    crmWrite = await createMessengerContactAndLead(client, organizationId, businessUnitId, event, profile, sourceRowId);
+    action = crmWrite.leadId ? 'created_messenger_lead' : 'review_messenger_lead';
+  } else if (classification.action === 'review') {
+    action = 'review_messenger_message';
+  }
+
+  if (crmWrite.leadId) {
+    await logMessengerActivity(client, organizationId, businessUnitId, event, crmWrite, rowNumber);
+  }
+
+  const proposedContact = {
+    name: messengerDisplayName(profile, event.senderId),
+    source_label: 'Facebook Messenger',
+    business_unit_id: businessUnitId,
+    contact_id: crmWrite.contactId,
+    messenger_sender_id: event.senderId,
+    page_id: event.pageId,
+    profile,
+  };
+  const proposedLead = {
+    source_type: 'facebook_messenger',
+    source_name: 'Facebook Messenger',
+    messenger_sender_id: event.senderId,
+    page_id: event.pageId,
+    message_id: event.messageId,
+    status: 'New Lead',
+    current_stage: 'New Lead',
+    business_unit_id: businessUnitId,
+    contact_id: crmWrite.contactId,
+    lead_id: crmWrite.leadId,
+    first_message: event.text || event.postbackPayload || '[Messenger attachment]',
+    profile,
+    notes: crmWrite.leadId
+      ? 'Messenger message captured and linked to CRM lead.'
+      : `Messenger message captured but needs review: ${crmWrite.reason || classification.reason || profileFetch.reason || 'unknown reason'}`,
+  };
+
+  const normalized = await client.query(
+    `
+      insert into import_normalized_records
+      (import_batch_id, source_row_id, record_type, proposed_contact_json, proposed_lead_json, confidence_score, status)
+      values ($1, $2, 'lead', $3::jsonb, $4::jsonb, $5, $6)
+      returning id
+    `,
+    [
+      batchId,
+      sourceRowId,
+      JSON.stringify(proposedContact),
+      JSON.stringify(proposedLead),
+      crmWrite.leadId ? 0.8 : 0.3,
+      crmWrite.leadId ? 'promoted' : 'needs_review',
+    ],
+  );
+  const normalizedId = normalized.rows[0]?.id || null;
+
+  await client.query(
+    `
+      insert into import_review_items
+      (import_batch_id, source_row_id, review_type, reason, review_status, proposed_resolution_json)
+      values ($1, $2, 'facebook_messenger_review', $3, $4, $5::jsonb)
+    `,
+    [
+      batchId,
+      sourceRowId,
+      crmWrite.leadId
+        ? 'Messenger message captured and linked to CRM.'
+        : `Messenger message needs review: ${crmWrite.reason || classification.reason || profileFetch.reason || 'unknown reason'}.`,
+      crmWrite.leadId ? 'resolved' : 'pending',
+      JSON.stringify({
+        action,
+        normalizedRecordId: normalizedId,
+        contactId: crmWrite.contactId,
+        leadId: crmWrite.leadId,
+      }),
+    ],
+  );
+
+  return {
+    inserted: true,
+    promoted: Boolean(crmWrite.leadId && !existing),
+    linked: Boolean(crmWrite.leadId && existing),
+    profileFetched: profileFetch.ok,
+    review: !crmWrite.leadId,
+  };
+}
+
 export async function GET(request) {
   if (!verifyTokenConfigured()) {
     return jsonError(verifyTokenErrorMessage(), 503);
@@ -448,37 +733,77 @@ export async function POST(request) {
     return jsonError('Invalid JSON payload.', 400);
   }
 
-  const events = flattenLeadgenChanges(payload);
-  if (!events.length) {
+  const leadgenEvents = flattenLeadgenChanges(payload);
+  const messengerEvents = flattenMessengerEvents(payload);
+  if (!leadgenEvents.length && !messengerEvents.length) {
     return NextResponse.json({ ok: true, received: 0, inserted: 0, skipped: 0 });
   }
 
   const result = await withClient(async (client) => {
     const organizationId = await resolveOrganizationId(client);
-    if (!organizationId) return { inserted: 0, skipped: events.length, received: events.length, reason: 'No organization found' };
+    const received = leadgenEvents.length + messengerEvents.length;
+    if (!organizationId) return { inserted: 0, skipped: received, received, reason: 'No organization found' };
 
-    const batchId = await findOrCreateBatch(client, organizationId);
-    if (!batchId) return { inserted: 0, skipped: events.length, received: events.length, reason: 'Failed to resolve import batch' };
+    const leadBatchId = leadgenEvents.length ? await findOrCreateBatch(client, organizationId) : null;
+    const messengerBatchId = messengerEvents.length
+      ? await findOrCreateBatch(client, organizationId, {
+        sourceName: 'Facebook Messenger',
+        sourceType: 'facebook_messenger',
+        filePrefix: 'facebook-messenger',
+        sheetName: MESSENGER_SOURCE_SHEET,
+      })
+      : null;
+    if (leadgenEvents.length && !leadBatchId) return { inserted: 0, skipped: received, received, reason: 'Failed to resolve lead import batch' };
+    if (messengerEvents.length && !messengerBatchId) return { inserted: 0, skipped: received, received, reason: 'Failed to resolve messenger import batch' };
 
-    let rowNumber = await nextRowNumber(client, batchId);
+    let leadRowNumber = leadBatchId ? await nextRowNumber(client, leadBatchId) : 1;
+    let messengerRowNumber = messengerBatchId ? await nextRowNumber(client, messengerBatchId) : 1;
     let inserted = 0;
     let promoted = 0;
     let graphFetched = 0;
+    let profileFetched = 0;
+    let linked = 0;
+    let review = 0;
     let skipped = 0;
 
-    for (const event of events) {
-      const stored = await persistEvent(client, organizationId, batchId, rowNumber, event);
+    for (const event of leadgenEvents) {
+      const stored = await persistEvent(client, organizationId, leadBatchId, leadRowNumber, event);
       if (stored.inserted) {
         inserted += 1;
         if (stored.promoted) promoted += 1;
         if (stored.graphFetched) graphFetched += 1;
-        rowNumber += 1;
+        leadRowNumber += 1;
       } else {
         skipped += 1;
       }
     }
 
-    return { received: events.length, inserted, promoted, graphFetched, skipped, batchId };
+    for (const event of messengerEvents) {
+      const stored = await persistMessengerEvent(client, organizationId, messengerBatchId, messengerRowNumber, event);
+      if (stored.inserted) {
+        inserted += 1;
+        if (stored.promoted) promoted += 1;
+        if (stored.profileFetched) profileFetched += 1;
+        if (stored.linked) linked += 1;
+        if (stored.review) review += 1;
+        messengerRowNumber += 1;
+      } else {
+        skipped += 1;
+      }
+    }
+
+    return {
+      received,
+      inserted,
+      promoted,
+      linked,
+      review,
+      graphFetched,
+      profileFetched,
+      skipped,
+      leadBatchId,
+      messengerBatchId,
+    };
   });
 
   return NextResponse.json({ ok: true, ...result });
