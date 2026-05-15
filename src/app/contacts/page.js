@@ -123,7 +123,11 @@ export default function ContactsPage() {
             columns={columns}
             data={dataWithEmp}
             searchPlaceholder="Search contacts..."
-            onEdit={canWrite ? (id, u) => { updateContact(id, u); toast('Field updated'); } : undefined}
+            onEdit={canWrite ? (id, u) => {
+              updateContact(id, u)
+                .then(() => toast('Field updated'))
+                .catch((error) => toast(error?.message || 'Update failed.', 'error'));
+            } : undefined}
             actions={[
               { label: 'View', onClick: (r) => router.push(`/contacts/${r.id}`) },
               ...(canWrite ? [
