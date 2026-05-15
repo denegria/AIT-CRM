@@ -8,18 +8,15 @@
   padding: 0;
 }
 .logo {
-  display: flex; align-items: center; gap: 10px;
-  padding: 20px 20px 24px;
-  font-size: var(--text-lg); font-weight: 700;
+  display: flex; align-items: center; gap: 14px;
+  padding: 24px 20px 24px;
+  font-size: 1.25rem; font-weight: 700;
   letter-spacing: -0.02em;
   color: var(--text-primary);
 }
-.logoIcon {
-  width: 28px; height: 28px;
-  background: var(--accent);
-  border-radius: var(--radius-md);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 14px; color: #fff;
+.logoImage {
+  width: 40px; height: 40px;
+  object-fit: contain;
 }
 .navSection {
   padding: 0 12px;
