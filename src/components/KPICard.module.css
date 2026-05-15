@@ -2,6 +2,12 @@
   background:var(--bg-secondary); border:1px solid var(--border-subtle);
   border-radius:var(--radius-lg); padding:16px 20px;
   display:flex; flex-direction:column; gap:4px;
+  transition: all 0.2s ease;
+}
+.card:hover {
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 10px 30px -5px rgba(0,0,0,0.1);
+  border-color: var(--accent);
 }
 .label {
   font-size:var(--text-xs); font-weight:500; color:var(--text-muted);

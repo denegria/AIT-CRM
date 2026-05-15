@@ -119,17 +119,17 @@ export default function Dashboard() {
 
       {role === 'admin' ? (
         <div className="grid-4" style={{marginBottom:20}}>
-          <KPICard label="Total Revenue" value={`$${kpis.totalRevenue.toLocaleString()}`} change="12% vs last month" trend="up" />
-          <KPICard label="Pipeline Value" value={`$${kpis.pipeline.toLocaleString()}`} change={`${financials.filter(f=>f.type==='Estimate'&&f.status==='Pending').length} estimates`} trend="up" />
-          <KPICard label="Active Work Orders" value={kpis.activeWOs} change={`${workOrders.filter(w=>w.status==='In Progress').length} in progress`} trend="up" />
-          <KPICard label="New Leads" value={kpis.newLeads} change="This week" trend="up" />
+          <KPICard className="scale-up stagger-1" label="Total Revenue" value={`$${kpis.totalRevenue.toLocaleString()}`} change="12% vs last month" trend="up" />
+          <KPICard className="scale-up stagger-2" label="Pipeline Value" value={`$${kpis.pipeline.toLocaleString()}`} change={`${financials.filter(f=>f.type==='Estimate'&&f.status==='Pending').length} estimates`} trend="up" />
+          <KPICard className="scale-up stagger-3" label="Active Work Orders" value={kpis.activeWOs} change={`${workOrders.filter(w=>w.status==='In Progress').length} in progress`} trend="up" />
+          <KPICard className="scale-up stagger-4" label="New Leads" value={kpis.newLeads} change="This week" trend="up" />
         </div>
       ) : (
         <div className="grid-4" style={{marginBottom:20}}>
-          <KPICard label="My Active Tasks" value={kpis.myTasksCount} change="Due soon" trend="up" />
-          <KPICard label="Needs Follow Up" value={kpis.needsFollowUp} change="Active leads" trend="up" />
-          <KPICard label="Invoices Pending" value={kpis.pendingInvoices} change="Action required" trend="down" />
-          <KPICard label="Assigned Work Orders" value={kpis.assignedWOs} change="In progress" trend="up" />
+          <KPICard className="scale-up stagger-1" label="My Active Tasks" value={kpis.myTasksCount} change="Due soon" trend="up" />
+          <KPICard className="scale-up stagger-2" label="Needs Follow Up" value={kpis.needsFollowUp} change="Active leads" trend="up" />
+          <KPICard className="scale-up stagger-3" label="Invoices Pending" value={kpis.pendingInvoices} change="Action required" trend="down" />
+          <KPICard className="scale-up stagger-4" label="Assigned Work Orders" value={kpis.assignedWOs} change="In progress" trend="up" />
         </div>
       )}
 

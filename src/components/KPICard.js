@@ -3,9 +3,9 @@ import s from './KPICard.module.css';
 
 import { TrendingUp, TrendingDown } from 'lucide-react';
 
-export default function KPICard({ label, value, change, trend }) {
+export default function KPICard({ label, value, change, trend, style, className }) {
   return (
-    <div className={s.card}>
+    <div className={`${s.card} ${className || ''}`} style={style}>
       <span className={s.label}>{label}</span>
       <span className={s.value}>{value}</span>
       {change && (

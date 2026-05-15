@@ -26,8 +26,14 @@
   border-bottom:1px solid var(--border-subtle); white-space:nowrap;
   max-width:200px; overflow:hidden; text-overflow:ellipsis;
 }
-.table tr:hover td { background:var(--bg-hover); color:var(--text-primary); }
-.table tr { transition: background var(--transition-fast); }
+.table tr { transition: all var(--transition-fast); }
+.table tr:hover td { 
+  background: var(--bg-hover); 
+  color: var(--text-primary);
+}
+.table tr:hover td:first-child {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
 .actions { display:flex; gap:4px; }
 .actBtn {
   padding:3px 8px; font-size:var(--text-xs); font-family:var(--font-sans); font-weight:500;
