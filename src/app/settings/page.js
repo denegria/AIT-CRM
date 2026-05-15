@@ -264,9 +264,24 @@ export default function SettingsPage() {
                       <div style={{fontSize:'var(--text-sm)',fontWeight:500}}>{user.name}</div>
                       <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>{user.email}</div>
                     </div>
-                    <div style={{textAlign:'right'}}>
-                      <div style={{fontSize:'var(--text-xs)',color:'var(--text-secondary)'}}>{user.primaryRoleKey}</div>
-                      <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>{user.businessUnitIds?.length || 0} division(s)</div>
+                    <div style={{textAlign:'right', display:'flex', flexDirection:'column', alignItems:'flex-end', gap:4}}>
+                      <div style={{fontSize:'var(--text-xs)',color:'var(--text-secondary)'}}>
+                        {user.primaryRoleKey.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                      </div>
+                      <div style={{display:'flex', gap:4, flexWrap:'wrap', justifyContent:'flex-end', maxWidth: 220}}>
+                        {user.businessUnitIds && user.businessUnitIds.length > 0 ? (
+                          user.businessUnitIds.map(buId => {
+                            const bu = accessibleBusinessUnits.find(u => u.id === buId);
+                            return bu ? (
+                              <span key={bu.id} className="badge" style={{background:'var(--bg-hover)', color:'var(--text-secondary)', border:'1px solid var(--border-default)', fontSize:'9px', padding:'2px 6px'}}>
+                                {bu.name}
+                              </span>
+                            ) : null;
+                          })
+                        ) : (
+                          <span className="badge badge-draft" style={{fontSize:'9px', padding:'2px 6px'}}>No divisions</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}
