@@ -58,8 +58,16 @@ async function requireImportReviewAdmin(request, permission) {
 
 async function resolveBatchId(client, batchId) {
   if (batchId) return batchId;
-  const result = await client.query('select id from import_batches order by created_at desc limit 1');
-  const resolved = result.rows[0]?.id;
+  const result = await client.query(
+    'select ib.id ' +
+    'from import_batches ib ' +
+    'where exists (select 1 from import_normalized_records nr where nr.import_batch_id = ib.id and nr.status in (\'pending\', \'needs_review\')) ' +
+    'order by ib.created_at desc limit 1',
+  );
+  if (result.rows[0]?.id) return result.rows[0].id;
+
+  const fallback = await client.query('select id from import_batches order by created_at desc limit 1');
+  const resolved = fallback.rows[0]?.id;
   if (!resolved) {
     throw new Error('No import batch found.');
   }
