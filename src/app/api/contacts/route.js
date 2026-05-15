@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { and, desc, eq } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
-import { businessUnits, contacts, leads } from '@/db/schema.js';
+import { activityEvents, businessUnits, contacts, leads, notes } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
 }
 
-function toContactPayload(row, lead = null) {
+function toContactPayload(row, lead = null, noteRows = []) {
   return {
     id: row.id,
     name: row.name,
@@ -20,7 +20,11 @@ function toContactPayload(row, lead = null) {
     source: lead?.sourceName || row.sourceLabel || '',
     assignedTo: lead?.assignedUserId || '',
     lastContact: row.updatedAt?.toISOString?.().slice(0, 10) || row.createdAt?.toISOString?.().slice(0, 10) || '',
-    notes: [],
+    notes: noteRows.map((note) => ({
+      id: note.id,
+      text: note.body,
+      date: note.createdAt?.toISOString?.().slice(0, 10) || '',
+    })),
   };
 }
 
@@ -104,6 +108,30 @@ async function latestLeadForContact(db, contactId) {
     .orderBy(desc(leads.createdAt))
     .limit(1);
   return lead || null;
+}
+
+async function notesForContact(db, session, contactId) {
+  return db
+    .select()
+    .from(notes)
+    .where(and(eq(notes.contactId, contactId), eq(notes.organizationId, session.user.organizationId)))
+    .orderBy(desc(notes.createdAt));
+}
+
+function parseNoteDate(value) {
+  if (!value) return new Date();
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
+function normalizeNoteInputs(rawNotes) {
+  if (!Array.isArray(rawNotes)) return [];
+  return rawNotes
+    .map((note) => ({
+      body: String(note?.text || note?.body || '').trim(),
+      createdAt: parseNoteDate(note?.date || note?.createdAt),
+    }))
+    .filter((note) => note.body);
 }
 
 export async function POST(request) {
@@ -210,7 +238,41 @@ export async function PATCH(request) {
     [lead] = await db.update(leads).set(leadPatch).where(eq(leads.id, lead.id)).returning();
   }
 
-  return NextResponse.json({ contact: toContactPayload(contact, lead) });
+  let noteRows = await notesForContact(db, session, id);
+  if (Array.isArray(body.notes)) {
+    const previousNoteCount = noteRows.length;
+    const noteInputs = normalizeNoteInputs(body.notes);
+    await db
+      .delete(notes)
+      .where(and(eq(notes.contactId, id), eq(notes.organizationId, session.user.organizationId)));
+
+    noteRows = noteInputs.length
+      ? await db.insert(notes).values(noteInputs.map((note) => ({
+          organizationId: session.user.organizationId,
+          businessUnitId: contact.primaryBusinessUnitId,
+          contactId: id,
+          body: note.body,
+          authorUserId: session.user.id,
+          createdAt: note.createdAt,
+          updatedAt: note.createdAt,
+        }))).returning()
+      : [];
+
+    if (noteRows.length > previousNoteCount) {
+      await db.insert(activityEvents).values({
+        organizationId: session.user.organizationId,
+        businessUnitId: contact.primaryBusinessUnitId,
+        contactId: id,
+        leadId: lead?.id || null,
+        eventType: 'contact.note_added',
+        message: 'Added contact timeline note.',
+        actorUserId: session.user.id,
+        occurredAt: new Date(),
+      });
+    }
+  }
+
+  return NextResponse.json({ contact: toContactPayload(contact, lead, noteRows) });
 }
 
 export async function DELETE(request) {

@@ -40,9 +40,14 @@ export default function ContactDetailPage() {
   };
 
   const handleEditSave = () => {
-    updateContact(contact.id, editForm);
-    toast('Profile updated');
-    setIsEditModalOpen(false);
+    updateContact(contact.id, editForm)
+      .then(() => {
+        toast('Profile updated');
+        setIsEditModalOpen(false);
+      })
+      .catch((error) => {
+        toast(error.message || 'Profile update failed', 'error');
+      });
   };
 
   if (loaded && !contact) {
@@ -58,9 +63,14 @@ export default function ContactDetailPage() {
       id: crypto.randomUUID()
     };
     const updatedNotes = Array.isArray(contact.notes) ? [...contact.notes, newNote] : [newNote];
-    updateContact(contact.id, { notes: updatedNotes });
-    setNoteInput('');
-    toast('Note added');
+    updateContact(contact.id, { notes: updatedNotes })
+      .then(() => {
+        setNoteInput('');
+        toast('Note added');
+      })
+      .catch((error) => {
+        toast(error.message || 'Note save failed', 'error');
+      });
   };
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
