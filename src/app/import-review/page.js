@@ -526,24 +526,30 @@ export default function ImportReviewPage() {
                     ['Work order', activeRow.proposed_work_order_json],
                     ['Payment', activeRow.proposed_payment_json],
                     ['Note', activeRow.proposed_note_json],
-                  ].map(([title, value]) => {
+                  ].filter(([, value]) => summarizeJson(value).length > 0).map(([title, value]) => {
                     const entries = summarizeJson(value);
                     return (
                       <div className="proposal-box" key={title}>
                         <div className="proposal-title">{title}</div>
-                        {entries.length ? (
-                          entries.map(([key, v]) => (
-                            <div className="proposal-row" key={key}>
-                              <span>{key}</span>
-                              <strong>{v}</strong>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="proposal-empty">No proposed {title.toLowerCase()} payload.</div>
-                        )}
+                        {entries.map(([key, v]) => (
+                          <div className="proposal-row" key={key}>
+                            <span>{key}</span>
+                            <strong>{v}</strong>
+                          </div>
+                        ))}
                       </div>
                     );
                   })}
+                  {[
+                    activeRow.proposed_contact_json,
+                    activeRow.proposed_lead_json,
+                    activeRow.proposed_estimate_json,
+                    activeRow.proposed_work_order_json,
+                    activeRow.proposed_payment_json,
+                    activeRow.proposed_note_json,
+                  ].every((value) => summarizeJson(value).length === 0) && (
+                    <div className="proposal-empty" style={{ gridColumn: '1 / -1' }}>No proposed record data for this row.</div>
+                  )}
                 </div>
               </div>
 
