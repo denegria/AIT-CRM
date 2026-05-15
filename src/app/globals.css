@@ -315,6 +315,10 @@ a { color: inherit; text-decoration: none; }
   padding: 48px 20px;
   color: var(--text-muted);
   font-size: var(--text-md);
+  border: 2px dashed var(--border-subtle);
+  border-radius: var(--radius-lg);
+  margin: 20px 0;
+  background: var(--bg-tertiary);
 }
 
 /* ── Animations ── */
