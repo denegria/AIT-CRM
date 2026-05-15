@@ -91,7 +91,9 @@ export default function Sidebar() {
           <div className={s.userEmail}>{currentUser?.email || 'local fallback'}</div>
         </div>
         <div className={s.roleBadge}>
-          {role === 'admin' ? 'Full Access' : 'Restricted Access'}
+          {dataSource === 'postgres' && currentUser?.primaryRoleKey
+            ? currentUser.primaryRoleKey.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+            : role === 'admin' ? 'Full Access' : 'Restricted Access'}
         </div>
         {dataSource === 'postgres' && (
           <button className={s.logoutBtn} onClick={handleLogout}>
