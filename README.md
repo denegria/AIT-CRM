@@ -110,9 +110,11 @@ npm run db:promote-ait-signs-staging
 npm run db:bootstrap-auth-user
 npm run db:generate
 npm run db:migrate
+npm run verify:production
 ```
 
 Database commands require `DATABASE_URL`.
+Production release, rollback, backup, and Meta page setup steps live in [docs/production-runbook.md](./docs/production-runbook.md).
 
 For database-backed app sessions, set `AIT_CRM_SESSION_SECRET`, run migrations, then bootstrap the first admin:
 
