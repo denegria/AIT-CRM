@@ -283,11 +283,22 @@ export function CRMProvider({ children, initialData }) {
   }, [isPostgres]);
 
   const updateContact = useCallback((id, u) => {
+    const existing = contacts.find(c => c.id === id);
     setContacts(p => p.map(c => c.id===id ? {...c,...u} : c));
     if (isPostgres && access.canWriteCrm) {
-      callContactsApi('PATCH', { id, ...u }).catch((error) => console.error(error));
+      return callContactsApi('PATCH', { id, ...u })
+        .then((contact) => {
+          if (contact) setContacts(p => p.map(c => c.id === id ? contact : c));
+          return contact;
+        })
+        .catch((error) => {
+          console.error(error);
+          if (existing) setContacts(p => p.map(c => c.id === id ? existing : c));
+          throw error;
+        });
     }
-  }, [access.canWriteCrm, callContactsApi, isPostgres]);
+    return Promise.resolve(null);
+  }, [access.canWriteCrm, callContactsApi, contacts, isPostgres]);
   const addContact = useCallback((d) => {
     const tempId = gid('c');
     const payload = withBusinessUnitDefaults(d, effectiveBusinessUnitId, true);
