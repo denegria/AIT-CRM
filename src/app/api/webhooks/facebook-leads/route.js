@@ -6,6 +6,7 @@ const FB_VERIFY_TOKEN_ENV = 'FACEBOOK_WEBHOOK_VERIFY_TOKEN';
 const META_VERIFY_TOKEN_ENV = 'META_WEBHOOK_VERIFY_TOKEN';
 const FB_APP_SECRET_ENV = 'FACEBOOK_APP_SECRET';
 const META_PAGE_ACCESS_TOKEN_ENV = 'META_PAGE_ACCESS_TOKEN';
+const META_PAGE_BUSINESS_UNIT_MAP_ENV = 'META_PAGE_BUSINESS_UNIT_MAP';
 const GRAPH_API_VERSION = 'v24.0';
 const DEFAULT_SOURCE_SHEET = 'facebook_webhook';
 const MESSENGER_SOURCE_SHEET = 'facebook_messenger';
@@ -58,7 +59,34 @@ async function resolveOrganizationId(client) {
   return result.rows[0]?.id || null;
 }
 
-async function resolveBusinessUnitId(client, organizationId) {
+function parsePageBusinessUnitMap() {
+  const raw = process.env[META_PAGE_BUSINESS_UNIT_MAP_ENV] || '';
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+async function resolveBusinessUnitId(client, organizationId, pageId) {
+  const mapped = parsePageBusinessUnitMap()[pageId];
+  if (mapped) {
+    const mappedResult = await client.query(
+      `
+        select id
+        from business_units
+        where organization_id = $1
+          and is_active = true
+          and (id::text = $2 or lower(name) = lower($2))
+        limit 1
+      `,
+      [organizationId, String(mapped)],
+    );
+    if (mappedResult.rows[0]?.id) return mappedResult.rows[0].id;
+  }
+
   const result = await client.query(
     `
       select id
@@ -467,7 +495,7 @@ async function persistEvent(client, organizationId, batchId, rowNumber, event) {
   const fetched = await fetchLeadDetails(event.leadgenId);
   const graphLead = fetched.ok ? fetched.lead : null;
   const details = normalizeLeadFields(graphLead?.field_data || []);
-  const businessUnitId = await resolveBusinessUnitId(client, organizationId);
+  const businessUnitId = await resolveBusinessUnitId(client, organizationId, graphLead?.page_id || event.pageId);
 
   const rawValues = {
     source: 'facebook_lead_ads',
@@ -578,7 +606,7 @@ async function persistMessengerEvent(client, organizationId, batchId, rowNumber,
 
   const profileFetch = await fetchMessengerProfile(event.senderId);
   const profile = profileFetch.ok ? profileFetch.profile : null;
-  const businessUnitId = await resolveBusinessUnitId(client, organizationId);
+  const businessUnitId = await resolveBusinessUnitId(client, organizationId, event.pageId);
   const existing = await findExistingMessengerLead(client, event.senderId, event.pageId);
 
   const rawValues = {
