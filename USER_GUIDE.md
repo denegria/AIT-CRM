@@ -9,9 +9,10 @@ Welcome to the AIT Signs CRM! This guide will help you navigate the system and m
 ### **The Sidebar**
 - **Dashboard**: Your daily bird's-eye view of revenue, tasks, and calendar.
 - **Contacts**: Where all your leads and clients live.
+- **Import Review**: Stage and review incoming rows before they are promoted.
 - **Work Orders**: Track the production and installation of signs.
-- **Financials**: Manage Invoices, Estimates, and Receipts.
-- **Reports**: Deep dive into your business performance.
+- **Financials**: Admin-only sample/demo surface (not a v1 production workflow).
+- **Reports**: Admin-only sample/demo surface (not a v1 production workflow).
 - **Settings**: Configure automation and system preferences.
 
 ### **Pro Tips**
@@ -53,17 +54,30 @@ Professional documents are just one click away:
 
 ---
 
-## 💰 Financials (Invoices & Estimates)
+## ✅ Import Review Safety
 
-- Use the tabs at the top to switch between **Invoices**, **Estimates**, and **Receipts**.
-- Track payment statuses: **Paid**, **Pending**, or **Overdue**.
-- **Calculations**: The system automatically totals up your line items and applies taxes for you.
+- Use **Import Review** to set row status (`approved`, `needs_review`, `rejected`, `pending`).
+- Approving rows is safe: it updates staged review status only.
+- Production CRM tables are written only when promotion is run.
+- Recommended sequence:
+  1. Approve only clear rows.
+  2. Keep uncertain rows in `needs_review`.
+  3. Run a promotion dry run first.
+  4. Promote approved rows.
+
+---
+
+## 💰 Financials & Reports (v1 Note)
+
+- These pages are intentionally limited in v1 and currently serve as admin-only sample/demo surfaces.
+- They are visible to administrators and hidden/restricted for non-admin users.
+- Core v1 operational work should prioritize Contacts, Import Review, and Work Orders.
 
 ---
 
 ## 🛡️ Admin vs. Employee Roles
 
-You can toggle your role at the bottom of the sidebar to see how the app changes:
+Roles are account-based (not a sidebar toggle in database-backed sessions):
 - **Administrators**: See global revenue, track all employee progress, and have full access to Reports, Settings, and Data Exports.
 - **Account Managers / Sales Managers / Designers**: Focused on their specific operational tasks. Settings, high-level financial reports, and data exports are restricted.
 
@@ -71,5 +85,5 @@ You can toggle your role at the bottom of the sidebar to see how the app changes
 
 ## 🆘 Troubleshooting & Support
 
-- **Data Reset**: If you are using the demo version and want to start fresh, go to **Settings → Reset Data**. This will restore the system to its factory default state.
-- **Saving Data**: Currently, your data is saved to your browser. Make sure not to "Clear All Data" in your browser settings unless you have exported your CSVs first!
+- **Data Reset**: In local/demo mode, use **Settings → Reset Data** to restore defaults.
+- **Database-backed sessions**: Data is stored in Postgres; browser local data reset does not control production records.
