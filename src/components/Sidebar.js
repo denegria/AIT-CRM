@@ -36,6 +36,9 @@ export default function Sidebar() {
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
+    // Clear persisted scope so next user starts fresh
+    localStorage.removeItem('ait-crm-business-unit-scope');
+    localStorage.removeItem('ait-crm-scope-user-id');
     window.location.reload();
   };
 
