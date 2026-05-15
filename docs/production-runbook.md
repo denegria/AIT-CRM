@@ -62,6 +62,29 @@ Each Facebook Page is connected separately in Meta.
 
 Do not replace the existing Page token unless the new token covers every Page currently in production.
 
+## Website Lead Ingestion
+
+Use `/api/webhooks/website-leads` for non-Meta website forms.
+
+Required env:
+
+- `WEBSITE_LEADS_WEBHOOK_SECRET`
+
+Optional env:
+
+- `WEBSITE_LEADS_BUSINESS_UNIT_MAP`
+
+`WEBSITE_LEADS_BUSINESS_UNIT_MAP` is a JSON object. Keys can be source/form/domain identifiers from the incoming payload, and values can be a business-unit id or exact business-unit name:
+
+```json
+{
+  "ait-usa-contact": "AIT USA Institute",
+  "default": "AIT Signs"
+}
+```
+
+Send the secret as either `Authorization: Bearer <secret>` or `x-ait-webhook-secret`. The endpoint creates/updates a contact, creates a `website_form` lead, logs a `website_lead_captured` activity event, and preserves the raw submission in import staging tables for audit/recovery.
+
 ## Rollback
 
 If a release breaks production:

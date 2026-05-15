@@ -117,6 +117,13 @@ npm run verify:rbac
 Database commands require `DATABASE_URL`.
 Production release, rollback, backup, and Meta page setup steps live in [docs/production-runbook.md](./docs/production-runbook.md).
 
+Website lead ingestion is available at `/api/webhooks/website-leads` once these production env vars are configured:
+
+- `WEBSITE_LEADS_WEBHOOK_SECRET`: shared secret sent as `Authorization: Bearer <secret>` or `x-ait-webhook-secret`
+- `WEBSITE_LEADS_BUSINESS_UNIT_MAP`: optional JSON map from source/form/domain keys to business-unit name or id, for example `{"ait-usa-contact":"AIT USA Institute","default":"AIT Signs"}`
+
+POST JSON can include `name`, `firstName`, `lastName`, `email`, `phone`, `company`, `address`, `message`, `service`, `sourceKey`, `formId`, `sourceName`, `externalId`, `submittedAt`, and `businessUnit`/`division`.
+
 For database-backed app sessions, set `AIT_CRM_SESSION_SECRET`, run migrations, then bootstrap the first admin:
 
 ```bash
