@@ -24,6 +24,7 @@ After deploy, run the readiness check with production env loaded:
 
 ```bash
 node --env-file=.env.production.local scripts/verify-production-readiness.mjs
+npm run verify:rbac
 ```
 
 The check verifies:
@@ -35,8 +36,15 @@ The check verifies:
 - required CRM tables exist
 - the v1 `work_orders` columns exist
 - the Drizzle migration journal is readable
+- role permissions and scoped test-account boundaries are enforced
 
-If production env is not available locally, the HTTP-only portion can still be run with:
+Vercel may omit sensitive env values from local pulls. If the app is already deployed and Meta has been verified externally, skip only the sensitive-value check:
+
+```bash
+SKIP_SENSITIVE_ENV=1 SKIP_META_VALID_TOKEN=1 node --env-file=.env.production.local scripts/verify-production-readiness.mjs
+```
+
+If production env is not available locally at all, the HTTP-only portion can still be run with:
 
 ```bash
 SKIP_ENV=1 SKIP_DB=1 SKIP_META_VALID_TOKEN=1 npm run verify:production

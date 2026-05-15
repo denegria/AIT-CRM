@@ -4,6 +4,7 @@ const baseUrl = (process.env.AIT_CRM_BASE_URL || 'https://ait-crm-pi.vercel.app'
 const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN || process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || '';
 const skipDb = process.env.SKIP_DB === '1';
 const skipEnv = process.env.SKIP_ENV === '1';
+const skipSensitiveEnv = process.env.SKIP_SENSITIVE_ENV === '1';
 const skipMetaValidToken = process.env.SKIP_META_VALID_TOKEN === '1';
 const requiredTables = [
   'organizations',
@@ -90,9 +91,14 @@ async function checkDatabase() {
     addCheck('work order v1 columns exist', missingColumns.length === 0, missingColumns.length ? 'missing ' + missingColumns.join(', ') : '');
 
     const journal = await client.query(
-      'select tag from drizzle.__drizzle_migrations order by created_at desc limit 1',
+      'select id, hash, created_at from drizzle.__drizzle_migrations order by created_at desc limit 1',
     ).catch(() => ({ rows: [] }));
-    addCheck('drizzle migration journal readable', journal.rows.length > 0, journal.rows[0]?.tag || 'no rows');
+    const latestMigration = journal.rows[0];
+    addCheck(
+      'drizzle migration journal readable',
+      journal.rows.length > 0,
+      latestMigration ? 'latest id=' + latestMigration.id : 'no rows',
+    );
   } finally {
     await client.end();
   }
@@ -104,9 +110,13 @@ async function main() {
   } else {
     requireEnv('AIT_CRM_SESSION_SECRET');
     requireEnv('DATABASE_URL');
-    requireEnv('META_WEBHOOK_VERIFY_TOKEN', { anyOf: ['META_WEBHOOK_VERIFY_TOKEN', 'FACEBOOK_WEBHOOK_VERIFY_TOKEN'], label: 'Meta verify token is set' });
-    requireEnv('FACEBOOK_APP_SECRET');
-    requireEnv('META_PAGE_ACCESS_TOKEN', { anyOf: ['META_PAGE_ACCESS_TOKEN', 'META_PAGE_ACCESS_TOKEN_MAP'], label: 'Meta page token is set' });
+    if (skipSensitiveEnv) {
+      addCheck('sensitive Meta env check skipped', true, 'SKIP_SENSITIVE_ENV=1');
+    } else {
+      requireEnv('META_WEBHOOK_VERIFY_TOKEN', { anyOf: ['META_WEBHOOK_VERIFY_TOKEN', 'FACEBOOK_WEBHOOK_VERIFY_TOKEN'], label: 'Meta verify token is set' });
+      requireEnv('FACEBOOK_APP_SECRET');
+      requireEnv('META_PAGE_ACCESS_TOKEN', { anyOf: ['META_PAGE_ACCESS_TOKEN', 'META_PAGE_ACCESS_TOKEN_MAP'], label: 'Meta page token is set' });
+    }
   }
 
   await checkHttp();

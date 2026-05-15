@@ -111,6 +111,7 @@ npm run db:bootstrap-auth-user
 npm run db:generate
 npm run db:migrate
 npm run verify:production
+npm run verify:rbac
 ```
 
 Database commands require `DATABASE_URL`.
