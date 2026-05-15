@@ -42,8 +42,8 @@ export default function Sidebar() {
   return (
     <aside className={s.sidebar}>
       <div className={s.logo}>
-        <span className={s.logoIcon}>◆</span>
-        <span>AIT Signs</span>
+        <img src="/logo.png" alt="AIT USA" className={s.logoImage} />
+        <span>AIT USA</span>
       </div>
       <nav className={s.navSection}>
         <div className={s.navLabel}>Menu</div>
