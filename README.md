@@ -128,6 +128,7 @@ For Facebook lead webhook verification and signed payload validation:
 META_WEBHOOK_VERIFY_TOKEN=replace-me
 FACEBOOK_APP_SECRET=replace-me
 META_PAGE_ACCESS_TOKEN=replace-me
+META_PAGE_ACCESS_TOKEN_MAP='{"637956449579628":"page-token-for-this-page"}'
 META_PAGE_BUSINESS_UNIT_MAP='{"637956449579628":"AIT USA Institute"}'
 ```
 
@@ -141,8 +142,11 @@ The webhook accepts both Facebook Lead Ads `leadgen` events and Page Messenger
 `messages` events. Lead Ads events fetch full lead fields from Graph API before
 creating CRM contacts/leads. Messenger events create or link CRM leads on first
 inbound Page conversation and log subsequent messages as activity.
-`META_PAGE_BUSINESS_UNIT_MAP` optionally routes a Facebook Page ID to a business
-unit id or name; unmapped pages fall back to the first active business unit.
+`META_PAGE_ACCESS_TOKEN` is the default Page token. `META_PAGE_ACCESS_TOKEN_MAP`
+optionally maps Facebook Page IDs to per-page tokens when multiple Pages are
+connected. `META_PAGE_BUSINESS_UNIT_MAP` optionally routes a Facebook Page ID to
+a business unit id or name; unmapped pages fall back to the first active business
+unit.
 
 ## 🔄 Import Workflow
 

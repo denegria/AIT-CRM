@@ -6,6 +6,7 @@ const FB_VERIFY_TOKEN_ENV = 'FACEBOOK_WEBHOOK_VERIFY_TOKEN';
 const META_VERIFY_TOKEN_ENV = 'META_WEBHOOK_VERIFY_TOKEN';
 const FB_APP_SECRET_ENV = 'FACEBOOK_APP_SECRET';
 const META_PAGE_ACCESS_TOKEN_ENV = 'META_PAGE_ACCESS_TOKEN';
+const META_PAGE_ACCESS_TOKEN_MAP_ENV = 'META_PAGE_ACCESS_TOKEN_MAP';
 const META_PAGE_BUSINESS_UNIT_MAP_ENV = 'META_PAGE_BUSINESS_UNIT_MAP';
 const GRAPH_API_VERSION = 'v24.0';
 const DEFAULT_SOURCE_SHEET = 'facebook_webhook';
@@ -68,6 +69,22 @@ function parsePageBusinessUnitMap() {
   } catch {
     return {};
   }
+}
+
+function parsePageAccessTokenMap() {
+  const raw = process.env[META_PAGE_ACCESS_TOKEN_MAP_ENV] || '';
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function getPageAccessToken(pageId) {
+  const mapped = parsePageAccessTokenMap()[pageId];
+  return mapped || process.env[META_PAGE_ACCESS_TOKEN_ENV] || '';
 }
 
 async function resolveBusinessUnitId(client, organizationId, pageId) {
@@ -235,10 +252,10 @@ function normalizeLeadFields(fieldData = []) {
   };
 }
 
-async function fetchLeadDetails(leadgenId) {
-  const accessToken = process.env[META_PAGE_ACCESS_TOKEN_ENV];
+async function fetchLeadDetails(leadgenId, pageId) {
+  const accessToken = getPageAccessToken(pageId);
   if (!leadgenId || !accessToken) {
-    return { ok: false, reason: `${META_PAGE_ACCESS_TOKEN_ENV} missing` };
+    return { ok: false, reason: `${META_PAGE_ACCESS_TOKEN_ENV} or ${META_PAGE_ACCESS_TOKEN_MAP_ENV} missing` };
   }
 
   const url = new URL(`https://graph.facebook.com/${GRAPH_API_VERSION}/${encodeURIComponent(leadgenId)}`);
@@ -258,10 +275,10 @@ async function fetchLeadDetails(leadgenId) {
   return { ok: true, lead: body };
 }
 
-async function fetchMessengerProfile(senderId) {
-  const accessToken = process.env[META_PAGE_ACCESS_TOKEN_ENV];
+async function fetchMessengerProfile(senderId, pageId) {
+  const accessToken = getPageAccessToken(pageId);
   if (!senderId || !accessToken) {
-    return { ok: false, reason: `${META_PAGE_ACCESS_TOKEN_ENV} missing` };
+    return { ok: false, reason: `${META_PAGE_ACCESS_TOKEN_ENV} or ${META_PAGE_ACCESS_TOKEN_MAP_ENV} missing` };
   }
 
   const url = new URL(`https://graph.facebook.com/${GRAPH_API_VERSION}/${encodeURIComponent(senderId)}`);
@@ -492,7 +509,7 @@ async function persistEvent(client, organizationId, batchId, rowNumber, event) {
     return { inserted: false, skippedReason: 'duplicate_leadgen_id' };
   }
 
-  const fetched = await fetchLeadDetails(event.leadgenId);
+  const fetched = await fetchLeadDetails(event.leadgenId, event.pageId);
   const graphLead = fetched.ok ? fetched.lead : null;
   const details = normalizeLeadFields(graphLead?.field_data || []);
   const businessUnitId = await resolveBusinessUnitId(client, organizationId, graphLead?.page_id || event.pageId);
@@ -604,7 +621,7 @@ async function persistMessengerEvent(client, organizationId, batchId, rowNumber,
     return { inserted: false, promoted: false, skippedReason: classification.reason };
   }
 
-  const profileFetch = await fetchMessengerProfile(event.senderId);
+  const profileFetch = await fetchMessengerProfile(event.senderId, event.pageId);
   const profile = profileFetch.ok ? profileFetch.profile : null;
   const businessUnitId = await resolveBusinessUnitId(client, organizationId, event.pageId);
   const existing = await findExistingMessengerLead(client, event.senderId, event.pageId);
