@@ -118,6 +118,48 @@ export default function FinancialsPage() {
         ))}
       </div>
 
+      {filtered.length > 0 && (
+        <div className="card" style={{padding:'12px 16px', marginBottom:16, display:'flex', alignItems:'center', justifyContent:'space-between', flexWrap:'wrap', gap:12}}>
+          <div style={{display:'flex', alignItems:'center', gap:20, flexWrap:'wrap'}}>
+            <div>
+              <span style={{fontSize:'var(--text-xs)', color:'var(--text-muted)', textTransform:'uppercase', fontWeight:700, letterSpacing:'0.05em'}}>
+                {tab} Total
+              </span>
+              <div style={{fontSize:'var(--text-lg)', fontWeight:700, color:'var(--text-primary)'}}>
+                ${filtered.reduce((sum, f) => sum + (f.amount || 0), 0).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
+              </div>
+            </div>
+            <div style={{width:1, height:32, background:'var(--border-subtle)'}} />
+            <div>
+              <span style={{fontSize:'var(--text-xs)', color:'var(--text-muted)', textTransform:'uppercase', fontWeight:700, letterSpacing:'0.05em'}}>
+                Count
+              </span>
+              <div style={{fontSize:'var(--text-lg)', fontWeight:700, color:'var(--text-primary)'}}>
+                {filtered.length}
+              </div>
+            </div>
+          </div>
+          <div style={{display:'flex', gap:10, flexWrap:'wrap'}}>
+            {['Paid', 'Pending', 'Overdue', 'Draft'].map(status => {
+              const count = filtered.filter(f => f.status === status).length;
+              if (count === 0) return null;
+              const total = filtered.filter(f => f.status === status).reduce((s, f) => s + (f.amount || 0), 0);
+              return (
+                <div key={status} style={{textAlign:'center', minWidth:70}}>
+                  <span className={`badge ${status==='Paid'?'badge-won':status==='Overdue'?'badge-lost':status==='Pending'?'badge-medium':'badge-pending'}`}>
+                    {status}
+                  </span>
+                  <div style={{fontSize:'var(--text-sm)', fontWeight:600, marginTop:4}}>
+                    ${total.toLocaleString(undefined, {minimumFractionDigits: 0, maximumFractionDigits: 0})}
+                    <span style={{fontSize:'var(--text-xs)', color:'var(--text-muted)', marginLeft:4}}>({count})</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       <div className="card" style={{padding:16}}>
         <DataTable
           columns={columns}
