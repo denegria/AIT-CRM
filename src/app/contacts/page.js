@@ -6,9 +6,45 @@ import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import KanbanBoard from '@/components/KanbanBoard';
 import Modal from '@/components/Modal';
-import { List, LayoutDashboard as KanbanIcon } from 'lucide-react';
+import { AlertCircle, Clock3, LayoutDashboard as KanbanIcon, List, UserRoundCheck } from 'lucide-react';
+import { PIPELINE_STATUSES } from '@/lib/sales-workflow';
 
-const empty = { name:'', email:'', phone:'', status:'New Lead', source:'Facebook Ads', assignedTo:'emp-1', notes: [] };
+const empty = {
+  name: '',
+  email: '',
+  phone: '',
+  status: 'New Lead',
+  currentStage: 'Needs First Outreach',
+  source: 'Wix Historical Import',
+  assignedTo: 'emp-1',
+  tags: ['needs_first_outreach'],
+  nextAction: 'Make first outreach by phone/SMS/email; confirm program interest and schedule follow-up.',
+  notes: [],
+};
+
+function TagList({ tags = [] }) {
+  if (!tags.length) return null;
+  return (
+    <div className="workflow-tags">
+      {tags.slice(0, 3).map((tag) => (
+        <span key={tag} className="workflow-tag">{tag.replaceAll('_', ' ')}</span>
+      ))}
+    </div>
+  );
+}
+
+function WorkflowCell({ row }) {
+  return (
+    <div className="workflow-cell">
+      <div className="workflow-line">
+        {row.needsFirstOutreach ? <AlertCircle size={13} /> : <UserRoundCheck size={13} />}
+        <span>{row.currentStage || row.status}</span>
+      </div>
+      {row.nextAction && <div className="workflow-next">{row.nextAction}</div>}
+      <TagList tags={row.tags || []} />
+    </div>
+  );
+}
 
 export default function ContactsPage() {
   const {
@@ -31,6 +67,7 @@ export default function ContactsPage() {
   const [form, setForm] = useState(empty);
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'kanban'
   const [statusFilter, setStatusFilter] = useState('All');
+  const [workflowFilter, setWorkflowFilter] = useState('all');
 
   const canWrite = access.canWriteCrm;
   const defaultBusinessUnitId = currentBusinessUnitId !== 'all' && currentBusinessUnitId !== 'unassigned' ? currentBusinessUnitId : accessibleBusinessUnits[0]?.id || '';
@@ -56,18 +93,32 @@ export default function ContactsPage() {
 
   const empName = (id) => employees.find(e => e.id === id)?.name || id;
   const unitName = (id) => accessibleBusinessUnits.find((unit) => unit.id === id)?.name || 'Unassigned';
+  const workflowStats = {
+    needsFirstOutreach: contacts.filter((contact) => contact.needsFirstOutreach).length,
+    unassigned: contacts.filter((contact) => !contact.assignedTo).length,
+    active: contacts.filter((contact) => !['Won', 'Lost'].includes(contact.status)).length,
+  };
 
   const columns = [
     { key: 'name', label: 'Name', sortable: true, editable: true },
     { key: 'email', label: 'Email', sortable: true, editable: true },
     { key: 'phone', label: 'Phone', editable: true },
     { key: 'status', label: 'Status', type: 'badge', sortable: true },
+    { key: 'workflow', label: 'Next Step', sortable: false, render: (row) => <WorkflowCell row={row} /> },
     { key: 'divisionLabel', label: scopeLabel, sortable: true },
     { key: 'source', label: 'Source', sortable: true },
     { key: 'lastContact', label: 'Last Contact', sortable: true },
   ];
 
-  const filteredContacts = contacts.filter(c => statusFilter === 'All' || c.status === statusFilter);
+  const filteredContacts = contacts.filter((contact) => {
+    const statusMatch = statusFilter === 'All' || contact.status === statusFilter;
+    const workflowMatch =
+      workflowFilter === 'all' ||
+      (workflowFilter === 'needs_first_outreach' && contact.needsFirstOutreach) ||
+      (workflowFilter === 'unassigned' && !contact.assignedTo) ||
+      (workflowFilter === 'active' && !['Won', 'Lost'].includes(contact.status));
+    return statusMatch && workflowMatch;
+  });
   const dataWithEmp = filteredContacts.map(c => ({ ...c, assignedLabel: empName(c.assignedTo), divisionLabel: unitName(c.businessUnitId || c.primaryBusinessUnitId) }));
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
@@ -90,7 +141,13 @@ export default function ContactsPage() {
           </div>
           <select className="input select" style={{width:130, padding:'4px 8px'}} value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
             <option value="All">All Statuses</option>
-            {['New Lead','Contacted','Qualified','Proposal Sent','Won','Lost'].map(s=><option key={s} value={s}>{s}</option>)}
+            {PIPELINE_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
+          </select>
+          <select className="input select" style={{width:180, padding:'4px 8px'}} value={workflowFilter} onChange={e=>setWorkflowFilter(e.target.value)}>
+            <option value="all">All Workflows</option>
+            <option value="needs_first_outreach">Needs First Outreach</option>
+            <option value="active">Active Pipeline</option>
+            <option value="unassigned">Unassigned</option>
           </select>
           {canWrite && <button className="btn btn-primary" onClick={openNew}>+ Add Contact</button>}
         </div>
@@ -115,7 +172,87 @@ export default function ContactsPage() {
           color: var(--accent);
           box-shadow: var(--shadow-sm);
         }
+        .workflow-strip {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 12px;
+          margin-bottom: 16px;
+        }
+        .workflow-stat {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-height: 58px;
+          padding: 12px 14px;
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-lg);
+          box-shadow: var(--shadow-sm);
+        }
+        .workflow-stat strong {
+          display: block;
+          font-size: var(--text-xl);
+          line-height: 1;
+        }
+        .workflow-stat span {
+          color: var(--text-secondary);
+          font-size: var(--text-xs);
+        }
+        .workflow-stat svg { color: var(--accent); }
+        .workflow-cell { min-width: 190px; max-width: 260px; }
+        .workflow-line {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          color: var(--text-primary);
+          font-weight: 600;
+          font-size: var(--text-xs);
+        }
+        .workflow-line svg {
+          color: var(--warning);
+          flex: 0 0 auto;
+        }
+        .workflow-next {
+          margin-top: 4px;
+          color: var(--text-secondary);
+          font-size: var(--text-xs);
+          line-height: 1.35;
+          white-space: normal;
+        }
+        .workflow-tags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 4px;
+          margin-top: 6px;
+        }
+        .workflow-tag {
+          padding: 2px 6px;
+          border-radius: 999px;
+          background: var(--warning-muted);
+          color: var(--warning);
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: capitalize;
+        }
+        @media (max-width: 820px) {
+          .workflow-strip { grid-template-columns: 1fr; }
+        }
       `}</style>
+
+      <div className="workflow-strip">
+        <div className="workflow-stat">
+          <AlertCircle size={18} />
+          <div><strong>{workflowStats.needsFirstOutreach}</strong><span>need first outreach</span></div>
+        </div>
+        <div className="workflow-stat">
+          <Clock3 size={18} />
+          <div><strong>{workflowStats.active}</strong><span>active pipeline</span></div>
+        </div>
+        <div className="workflow-stat">
+          <UserRoundCheck size={18} />
+          <div><strong>{workflowStats.unassigned}</strong><span>unassigned contacts</span></div>
+        </div>
+      </div>
 
       {viewMode === 'table' ? (
         <div className="card" style={{padding:16}}>
@@ -140,7 +277,7 @@ export default function ContactsPage() {
       ) : (
         <KanbanBoard 
           data={dataWithEmp}
-          columns={['New Lead', 'Contacted', 'Qualified', 'Proposal Sent', 'Won', 'Lost']}
+          columns={PIPELINE_STATUSES}
           onMove={canWrite ? (id, status) => { updateContact(id, { status }); toast('Stage updated'); } : undefined}
           onEdit={(item) => router.push(`/contacts/${item.id}`)}
         />
@@ -166,13 +303,13 @@ export default function ContactsPage() {
           <div className="form-group">
             <label className="form-label">Status</label>
             <select className="input select" value={form.status} onChange={e => setForm(f => ({...f, status: e.target.value}))}>
-              {['New Lead','Contacted','Qualified','Proposal Sent','Won','Lost'].map(s => <option key={s} value={s}>{s}</option>)}
+              {PIPELINE_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <div className="form-group">
             <label className="form-label">Source</label>
             <select className="input select" value={form.source} onChange={e => setForm(f => ({...f, source: e.target.value}))}>
-              {['Facebook Ads','Website','Referral','Cold Call','Google Ads'].map(s => <option key={s} value={s}>{s}</option>)}
+              {['Wix Historical Import','Website','Facebook Ads','Referral','Cold Call','Google Ads'].map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
         </div>

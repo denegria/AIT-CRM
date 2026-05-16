@@ -58,6 +58,46 @@
   margin-bottom: 8px;
 }
 
+.workflowCard {
+  margin-bottom: 18px;
+  padding: 12px;
+  background: var(--warning-muted);
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, transparent);
+  border-radius: var(--radius-md);
+}
+.workflowHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--warning);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+.workflowNext {
+  margin-top: 8px;
+  color: var(--text-primary);
+  font-size: var(--text-xs);
+  line-height: 1.45;
+}
+.workflowTags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.workflowTag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  color: var(--warning);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
 .profileInfo {
   display: flex;
   flex-direction: column;

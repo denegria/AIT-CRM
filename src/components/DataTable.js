@@ -103,6 +103,8 @@ export default function DataTable({ columns, data, actions, onEdit, searchPlaceh
                         onChange={e=>setEditVal(e.target.value)}
                         onBlur={commitEdit}
                         onKeyDown={e=>e.key==='Enter'&&commitEdit()} />
+                    ) : c.render ? (
+                      c.render(row)
                     ) : c.type === 'badge' ? (
                       <span className={`badge ${badgeClass(row[c.key])}`}>{row[c.key]}</span>
                     ) : c.type === 'currency' ? (

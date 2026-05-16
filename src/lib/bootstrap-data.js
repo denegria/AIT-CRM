@@ -17,22 +17,13 @@ import {
   importNormalizedRecords as importNormalizedRecordsTable,
   importReviewItems as importReviewItemsTable,
 } from '../db/schema.js';
+import { workflowFromLead } from './sales-workflow';
 
 function toIsoDate(value) {
   if (!value) return '';
   const dt = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(dt.getTime())) return '';
   return dt.toISOString().slice(0, 10);
-}
-
-function toStatusFromLead(lead) {
-  if (!lead) return 'New Lead';
-  const status = String(lead.status || '').toLowerCase();
-  if (status.includes('lost')) return 'Lost';
-  if (status.includes('won') || status.includes('qualified')) return 'Qualified';
-  if (status.includes('proposal') || status.includes('estimate')) return 'Proposal Sent';
-  if (status.includes('contact')) return 'Contacted';
-  return 'New Lead';
 }
 
 function mapContacts(contactRows, leadRows, noteRows, eventRows) {
@@ -60,6 +51,7 @@ function mapContacts(contactRows, leadRows, noteRows, eventRows) {
 
   return contactRows.map((contact, index) => {
     const lead = leadByContactId.get(contact.id);
+    const workflow = workflowFromLead(lead);
     const noteItems = (notesByContactId.get(contact.id) || []).map((note) => ({
       id: note.id,
       text: note.body,
@@ -81,9 +73,15 @@ function mapContacts(contactRows, leadRows, noteRows, eventRows) {
       phone: contact.phone || '',
       businessUnitId: contact.primaryBusinessUnitId || '',
       primaryBusinessUnitId: contact.primaryBusinessUnitId || '',
-      status: toStatusFromLead(lead),
+      status: workflow.status,
+      currentStage: workflow.currentStage,
+      tags: workflow.tags,
+      nextAction: workflow.nextAction,
+      priority: workflow.priority,
+      outreachState: workflow.outreachState,
+      needsFirstOutreach: workflow.needsFirstOutreach,
       source: lead?.sourceName || lead?.sourceType || contact.sourceLabel || seedData.SOURCES[index % seedData.SOURCES.length],
-      assignedTo: lead?.assignedUserId || seedData.EMPLOYEES[index % seedData.EMPLOYEES.length].id,
+      assignedTo: lead?.assignedUserId || '',
       lastContact: recentActivity?.date || toIsoDate(contact.updatedAt) || toIsoDate(contact.createdAt),
       notes: noteItems.length ? noteItems : recentActivity ? [recentActivity] : [],
     };

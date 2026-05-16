@@ -60,6 +60,10 @@
   box-shadow: var(--shadow-md);
   border-color: var(--accent);
 }
+.kanbanCard.needsFirstOutreach {
+  border-color: color-mix(in srgb, var(--warning) 42%, var(--border-subtle));
+  box-shadow: inset 3px 0 0 var(--warning), var(--shadow-sm);
+}
 .kanbanCard:active { cursor: grabbing; }
 .kanbanCard.dragging { opacity: 0.5; transform: scale(0.95); }
 
@@ -79,6 +83,27 @@
 .cardName {
   font-weight: 600; font-size: var(--text-sm);
   color: var(--text-primary); margin-bottom: 12px;
+}
+.cardWorkflow {
+  margin: -4px 0 10px;
+  padding: 8px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+.workflowStage {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--warning);
+  font-size: 11px;
+  font-weight: 700;
+}
+.workflowAction {
+  margin-top: 4px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  line-height: 1.35;
 }
 .cardMeta {
   display: flex; flex-direction: column;
@@ -102,6 +127,19 @@
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   font-weight: 700; font-size: 10px;
+}
+.cardTag {
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--warning-muted);
+  color: var(--warning);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: capitalize;
 }
 .kanbanEmpty {
   height: 60px;

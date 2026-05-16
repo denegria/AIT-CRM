@@ -6,10 +6,11 @@ import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
 import s from './ContactDetail.module.css';
 import { 
-  ArrowLeft, Mail, Phone, MapPin, Calendar, 
+  AlertCircle, ArrowLeft, Mail, Phone, MapPin, Calendar, 
   Plus, FileText, ClipboardList, 
-  MessageSquare, Edit3
+  MessageSquare, Edit3, Tag
 } from 'lucide-react';
+import { PIPELINE_STATUSES } from '@/lib/sales-workflow';
 
 export default function ContactDetailPage() {
   const params = useParams();
@@ -91,6 +92,23 @@ export default function ContactDetailPage() {
             <h1 className={s.profileName}>{contact.name}</h1>
             <span className={`badge badge-${contact.status.toLowerCase().replace(' ', '')}`}>{contact.status}</span>
           </div>
+
+          {(contact.currentStage || contact.nextAction || contact.tags?.length) && (
+            <div className={s.workflowCard}>
+              <div className={s.workflowHeader}>
+                <AlertCircle size={15} />
+                <span>{contact.currentStage || contact.status}</span>
+              </div>
+              {contact.nextAction && <div className={s.workflowNext}>{contact.nextAction}</div>}
+              {!!contact.tags?.length && (
+                <div className={s.workflowTags}>
+                  {contact.tags.map((tag) => (
+                    <span key={tag} className={s.workflowTag}><Tag size={11} /> {tag.replaceAll('_', ' ')}</span>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           <div className={s.profileInfo}>
             <div className={s.infoItem}><Mail size={16} /> <span>{contact.email}</span></div>
@@ -234,7 +252,7 @@ export default function ContactDetailPage() {
           <div className="form-group">
             <label className="form-label">Status</label>
             <select className="input select" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}>
-              {['New Lead', 'Contacted', 'Qualified', 'Proposal Sent', 'Won', 'Lost'].map(st => <option key={st} value={st}>{st}</option>)}
+              {PIPELINE_STATUSES.map(st => <option key={st} value={st}>{st}</option>)}
             </select>
           </div>
           <div className="form-group">

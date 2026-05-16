@@ -1,6 +1,7 @@
 import { timingSafeEqual } from 'crypto';
 import { NextResponse } from 'next/server';
 import { Client } from 'pg';
+import { normalizeWorkflowTags } from '@/lib/sales-workflow';
 
 const SECRET_ENV = 'WEBSITE_LEADS_WEBHOOK_SECRET';
 const BUSINESS_UNIT_MAP_ENV = 'WEBSITE_LEADS_BUSINESS_UNIT_MAP';
@@ -99,6 +100,12 @@ function normalizeLeadBody(body) {
     externalId: firstText(body.externalId, body.submissionId, body.id),
     submittedAt: firstText(body.submittedAt, body.createdAt, body.timestamp),
     businessUnitHint: firstText(body.businessUnitId, body.businessUnit, body.businessUnitName, body.division),
+    status: firstText(body.status, 'New Lead'),
+    currentStage: firstText(body.currentStage, body.workflowStage, body.stage, body.status, 'New Lead'),
+    outreachState: firstText(body.outreachState, body.contactState),
+    priority: firstText(body.priority),
+    tags: normalizeWorkflowTags(body.workflowTags || body.tags || body.tagList),
+    nextAction: firstText(body.nextAction, body.task, body.todo),
   };
 }
 
@@ -218,11 +225,17 @@ async function upsertContact(client, organizationId, businessUnitId, lead) {
 }
 
 function originalNotesForLead(lead, sourceRowId) {
+  const tags = lead.tags?.length ? lead.tags : [];
   return [
     'website_form',
     'external_id=' + (lead.externalId || 'none'),
     'source_key=' + (lead.sourceKey || 'none'),
     'source_row_id=' + (sourceRowId || 'unknown'),
+    'current_stage=' + (lead.currentStage || lead.status || 'New Lead'),
+    lead.outreachState ? 'outreach_state=' + lead.outreachState : '',
+    lead.priority ? 'priority=' + lead.priority : '',
+    tags.length ? 'tags=' + tags.join(';') : '',
+    lead.nextAction ? 'next_action=' + lead.nextAction : '',
     lead.service ? 'service=' + lead.service : '',
     lead.message ? 'message=' + lead.message : '',
   ].filter(Boolean).join(' | ');
@@ -231,7 +244,16 @@ function originalNotesForLead(lead, sourceRowId) {
 async function persistLead(client, organizationId, businessUnitId, contactId, lead, sourceRowId, rowNumber) {
   const inserted = await client.query(
     'insert into leads (organization_id, business_unit_id, contact_id, source_type, source_name, status, current_stage, original_notes) values ($1, $2, $3, $4, $5, $6, $7, $8) returning id',
-    [organizationId, businessUnitId, contactId, SOURCE_TYPE, lead.sourceName || SOURCE_NAME, 'New Lead', 'New Lead', originalNotesForLead(lead, sourceRowId)],
+    [
+      organizationId,
+      businessUnitId,
+      contactId,
+      SOURCE_TYPE,
+      lead.sourceName || SOURCE_NAME,
+      lead.status || 'New Lead',
+      lead.currentStage || lead.status || 'New Lead',
+      originalNotesForLead(lead, sourceRowId),
+    ],
   );
   const leadId = inserted.rows[0]?.id || null;
 
@@ -286,8 +308,12 @@ async function persistImportAudit(client, batchId, rowNumber, body, lead, busine
     external_id: lead.externalId || null,
     service: lead.service || null,
     message: lead.message || null,
-    status: 'New Lead',
-    current_stage: 'New Lead',
+    status: lead.status || 'New Lead',
+    current_stage: lead.currentStage || lead.status || 'New Lead',
+    outreach_state: lead.outreachState || null,
+    priority: lead.priority || null,
+    tags: lead.tags?.length ? lead.tags : null,
+    next_action: lead.nextAction || null,
     business_unit_id: businessUnitId,
     contact_id: contactId,
     lead_id: leadId,

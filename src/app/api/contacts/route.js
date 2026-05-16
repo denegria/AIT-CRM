@@ -3,12 +3,14 @@ import { and, desc, eq } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
 import { activityEvents, businessUnits, contacts, leads, notes } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
+import { workflowFromLead } from '@/lib/sales-workflow';
 
 function isUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
 }
 
 function toContactPayload(row, lead = null, noteRows = []) {
+  const workflow = workflowFromLead(lead);
   return {
     id: row.id,
     name: row.name,
@@ -16,7 +18,13 @@ function toContactPayload(row, lead = null, noteRows = []) {
     phone: row.phone || '',
     businessUnitId: row.primaryBusinessUnitId || '',
     primaryBusinessUnitId: row.primaryBusinessUnitId || '',
-    status: lead?.status || 'New Lead',
+    status: workflow.status,
+    currentStage: workflow.currentStage,
+    tags: workflow.tags,
+    nextAction: workflow.nextAction,
+    priority: workflow.priority,
+    outreachState: workflow.outreachState,
+    needsFirstOutreach: workflow.needsFirstOutreach,
     source: lead?.sourceName || row.sourceLabel || '',
     assignedTo: lead?.assignedUserId || '',
     lastContact: row.updatedAt?.toISOString?.().slice(0, 10) || row.createdAt?.toISOString?.().slice(0, 10) || '',
