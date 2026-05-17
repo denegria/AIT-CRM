@@ -5,6 +5,7 @@ import { getRequestSession, hasPermission, isAuthEnabled, PERMISSIONS } from '@/
 
 const DEFAULT_LIMIT = 120;
 const VALID_PATCH_STATUSES = new Set(['approved', 'rejected', 'pending', 'needs_review']);
+const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 
 function parseLimit(rawLimit) {
   const value = Number(rawLimit);
@@ -58,13 +59,30 @@ async function requireImportReviewAdmin(request, permission) {
 
 async function resolveBatchId(client, batchId) {
   if (batchId) return batchId;
-  const result = await client.query(
+
+  const preferredPending = await client.query(
+    'select ib.id ' +
+    'from import_batches ib ' +
+    'where ib.source_type = any($1::text[]) ' +
+    'and exists (select 1 from import_normalized_records nr where nr.import_batch_id = ib.id and nr.status in (\'pending\', \'needs_review\')) ' +
+    'order by ib.created_at desc limit 1',
+    [OPERATOR_REVIEW_SOURCE_TYPES],
+  );
+  if (preferredPending.rows[0]?.id) return preferredPending.rows[0].id;
+
+  const anyPending = await client.query(
     'select ib.id ' +
     'from import_batches ib ' +
     'where exists (select 1 from import_normalized_records nr where nr.import_batch_id = ib.id and nr.status in (\'pending\', \'needs_review\')) ' +
     'order by ib.created_at desc limit 1',
   );
-  if (result.rows[0]?.id) return result.rows[0].id;
+  if (anyPending.rows[0]?.id) return anyPending.rows[0].id;
+
+  const preferredFallback = await client.query(
+    'select id from import_batches where source_type = any($1::text[]) order by created_at desc limit 1',
+    [OPERATOR_REVIEW_SOURCE_TYPES],
+  );
+  if (preferredFallback.rows[0]?.id) return preferredFallback.rows[0].id;
 
   const fallback = await client.query('select id from import_batches order by created_at desc limit 1');
   const resolved = fallback.rows[0]?.id;

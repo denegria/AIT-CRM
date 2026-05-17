@@ -19,6 +19,8 @@ import {
 } from '../db/schema.js';
 import { workflowFromLead } from './sales-workflow';
 
+const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
+
 function toIsoDate(value) {
   if (!value) return '';
   const dt = value instanceof Date ? value : new Date(value);
@@ -221,19 +223,39 @@ function scopedBusinessUnitWhere(table, session) {
   return buScope ? and(orgScope, buScope) : orgScope;
 }
 
-async function countRows(db, table) {
-  const rows = await db.select({ count: sql`count(*)::int` }).from(table);
+async function countRowsForBatch(db, table, batchId) {
+  if (!batchId) return 0;
+  const rows = await db
+    .select({ count: sql`count(*)::int` })
+    .from(table)
+    .where(eq(table.importBatchId, batchId));
   return Number(rows[0]?.count || 0);
 }
 
+async function getOperatorReviewBatch(db) {
+  const preferred = await db
+    .select()
+    .from(importBatchesTable)
+    .where(inArray(importBatchesTable.sourceType, OPERATOR_REVIEW_SOURCE_TYPES))
+    .orderBy(desc(importBatchesTable.createdAt))
+    .limit(1);
+  if (preferred[0]) return preferred[0];
+
+  const fallback = await db
+    .select()
+    .from(importBatchesTable)
+    .orderBy(desc(importBatchesTable.createdAt))
+    .limit(1);
+  return fallback[0] || null;
+}
+
 async function getImportStagingSummary(db) {
-  const [latestBatchRows, sourceRows, normalizedRecords, reviewItems] = await Promise.all([
-    db.select().from(importBatchesTable).orderBy(desc(importBatchesTable.createdAt)).limit(1),
-    countRows(db, importSourceRowsTable),
-    countRows(db, importNormalizedRecordsTable),
-    countRows(db, importReviewItemsTable),
+  const latestBatch = await getOperatorReviewBatch(db);
+  const [sourceRows, normalizedRecords, reviewItems] = await Promise.all([
+    countRowsForBatch(db, importSourceRowsTable, latestBatch?.id),
+    countRowsForBatch(db, importNormalizedRecordsTable, latestBatch?.id),
+    countRowsForBatch(db, importReviewItemsTable, latestBatch?.id),
   ]);
-  const latestBatch = latestBatchRows[0];
 
   return {
     latestBatch: latestBatch ? {
