@@ -28,6 +28,62 @@ const AUDIT_OMITTED_KEY_NAMES = new Set([
   'content-type',
   'contenttype',
 ]);
+const CORE_FORM_FIELD_KEY_NAMES = new Set([
+  'sourcekey',
+  'formid',
+  'formname',
+  'domain',
+  'source',
+  'sourcename',
+  'firstname',
+  'lastname',
+  'name',
+  'fullname',
+  'contactname',
+  'company',
+  'companyname',
+  'businessname',
+  'email',
+  'phone',
+  'address',
+  'streetaddress',
+  'location',
+  'city',
+  'country',
+  'countrycity',
+  'message',
+  'notes',
+  'comments',
+  'description',
+  'service',
+  'servicetype',
+  'interest',
+  'externalid',
+  'submissionid',
+  'id',
+  'submittedat',
+  'createdat',
+  'timestamp',
+  'businessunitid',
+  'businessunit',
+  'businessunitname',
+  'division',
+  'status',
+  'currentstage',
+  'workflowstage',
+  'stage',
+  'outreachstate',
+  'contactstate',
+  'priority',
+  'workflowtags',
+  'tags',
+  'taglist',
+  'nextaction',
+  'task',
+  'todo',
+  'age',
+  'edad',
+]);
 
 function jsonError(message, status) {
   return NextResponse.json({ error: message }, { status });
@@ -132,6 +188,10 @@ function normalizeText(value) {
   return String(value || '').trim();
 }
 
+function normalizeNoteText(value) {
+  return normalizeText(value).replace(/\s+/g, ' ').replace(/\|/g, '/');
+}
+
 function normalizeEmail(value) {
   return normalizeText(value).toLowerCase();
 }
@@ -170,6 +230,36 @@ function sourceKeyForBody(body) {
   );
 }
 
+function normalizeFormFieldValue(value) {
+  if (Array.isArray(value)) {
+    return value.map(normalizeFormFieldValue).filter(Boolean).join(', ');
+  }
+  if (value && typeof value === 'object') {
+    const sanitized = sanitizeWebhookBodyForAudit(value);
+    return normalizeNoteText(JSON.stringify(sanitized));
+  }
+  return normalizeNoteText(value);
+}
+
+function collectAdditionalFormFields(body) {
+  const fields = {};
+  const sanitized = sanitizeWebhookBodyForAudit(body);
+  for (const [key, value] of Object.entries(sanitized)) {
+    const normalizedKey = normalizeAuditKeyName(key);
+    if (
+      CORE_FORM_FIELD_KEY_NAMES.has(normalizedKey) ||
+      AUDIT_REDACTED_KEY_NAMES.has(normalizedKey) ||
+      AUDIT_OMITTED_KEY_NAMES.has(normalizedKey)
+    ) {
+      continue;
+    }
+
+    const normalizedValue = normalizeFormFieldValue(value);
+    if (normalizedValue) fields[key] = normalizedValue;
+  }
+  return fields;
+}
+
 function normalizeLeadBody(body) {
   const firstName = normalizeText(body.firstName);
   const lastName = normalizeText(body.lastName);
@@ -182,7 +272,8 @@ function normalizeLeadBody(body) {
     company: firstText(body.company, body.companyName, body.businessName),
     email: normalizeEmail(body.email),
     phone: normalizePhone(body.phone),
-    address: firstText(body.address, body.streetAddress),
+    address: firstText(body.address, body.streetAddress, body.location, body.city, body.countryCity),
+    age: firstText(body.age, body.edad, body.Edad),
     message: firstText(body.message, body.notes, body.comments, body.description),
     service: firstText(body.service, body.serviceType, body.interest),
     sourceKey,
@@ -196,6 +287,7 @@ function normalizeLeadBody(body) {
     priority: firstText(body.priority),
     tags: normalizeWorkflowTags(body.workflowTags || body.tags || body.tagList),
     nextAction: firstText(body.nextAction, body.task, body.todo),
+    formFields: collectAdditionalFormFields(body),
   };
 }
 
@@ -316,6 +408,7 @@ async function upsertContact(client, organizationId, businessUnitId, lead) {
 
 function originalNotesForLead(lead, sourceRowId) {
   const tags = lead.tags?.length ? lead.tags : [];
+  const formFields = formatFormFieldsForNotes(lead.formFields);
   return [
     'website_form',
     'external_id=' + (lead.externalId || 'none'),
@@ -327,8 +420,31 @@ function originalNotesForLead(lead, sourceRowId) {
     tags.length ? 'tags=' + tags.join(';') : '',
     lead.nextAction ? 'next_action=' + lead.nextAction : '',
     lead.service ? 'service=' + lead.service : '',
+    lead.address ? 'address=' + normalizeNoteText(lead.address) : '',
+    lead.age ? 'age=' + normalizeNoteText(lead.age) : '',
+    formFields ? 'form_fields=' + formFields : '',
     lead.message ? 'message=' + lead.message : '',
   ].filter(Boolean).join(' | ');
+}
+
+function formatFormFieldsForNotes(fields) {
+  if (!fields || typeof fields !== 'object') return '';
+  return Object.entries(fields)
+    .map(([key, value]) => [normalizeNoteText(key), normalizeNoteText(value)])
+    .filter(([key, value]) => key && value)
+    .map(([key, value]) => key + ': ' + value)
+    .join('; ');
+}
+
+function leadFormDetailsNote(lead) {
+  const rows = [];
+  if (lead.age) rows.push('Age: ' + normalizeNoteText(lead.age));
+  if (lead.address) rows.push('Location: ' + normalizeNoteText(lead.address));
+  if (lead.service) rows.push('Interest: ' + normalizeNoteText(lead.service));
+  const formFields = formatFormFieldsForNotes(lead.formFields);
+  if (formFields) rows.push('Additional form fields: ' + formFields);
+  if (!rows.length) return '';
+  return ['Website form details:', ...rows.map((row) => '- ' + row)].join('\n');
 }
 
 async function persistLead(client, organizationId, businessUnitId, contactId, lead, sourceRowId, rowNumber) {
@@ -361,6 +477,14 @@ async function persistLead(client, organizationId, businessUnitId, contactId, le
       parseTimestamp(lead.submittedAt),
     ],
   );
+
+  const detailsNote = leadFormDetailsNote(lead);
+  if (detailsNote) {
+    await client.query(
+      'insert into notes (organization_id, business_unit_id, contact_id, lead_id, body) values ($1, $2, $3, $4, $5)',
+      [organizationId, businessUnitId, contactId, leadId, detailsNote],
+    );
+  }
 
   return leadId;
 }
@@ -398,6 +522,9 @@ async function persistImportAudit(client, batchId, rowNumber, body, lead, busine
     external_id: lead.externalId || null,
     service: lead.service || null,
     message: lead.message || null,
+    address: lead.address || null,
+    age: lead.age || null,
+    form_fields: lead.formFields && Object.keys(lead.formFields).length ? lead.formFields : null,
     status: lead.status || 'New Lead',
     current_stage: lead.currentStage || lead.status || 'New Lead',
     outreach_state: lead.outreachState || null,

@@ -16,6 +16,7 @@ function toContactPayload(row, lead = null, noteRows = []) {
     name: row.name,
     email: row.email || '',
     phone: row.phone || '',
+    address: row.address || '',
     businessUnitId: row.primaryBusinessUnitId || '',
     primaryBusinessUnitId: row.primaryBusinessUnitId || '',
     status: workflow.status,
@@ -165,6 +166,7 @@ export async function POST(request) {
     name,
     email: body.email || null,
     phone: body.phone || null,
+    address: body.address || null,
     sourceLabel: body.source || null,
   }).returning();
 
@@ -212,6 +214,7 @@ export async function PATCH(request) {
   if ('name' in body) patch.name = String(body.name || '').trim() || existing.name;
   if ('email' in body) patch.email = body.email || null;
   if ('phone' in body) patch.phone = body.phone || null;
+  if ('address' in body) patch.address = body.address || null;
   if ('source' in body) patch.sourceLabel = body.source || null;
   if ('businessUnitId' in body || 'primaryBusinessUnitId' in body) {
     const requestedId = requestedBusinessUnitId(body);

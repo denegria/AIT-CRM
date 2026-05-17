@@ -113,7 +113,7 @@ export default function ContactDetailPage() {
           <div className={s.profileInfo}>
             <div className={s.infoItem}><Mail size={16} /> <span>{contact.email}</span></div>
             <div className={s.infoItem}><Phone size={16} /> <span>{contact.phone}</span></div>
-            <div className={s.infoItem}><MapPin size={16} /> <span>Austin, TX</span></div>
+            {contact.address && <div className={s.infoItem}><MapPin size={16} /> <span>{contact.address}</span></div>}
             <div className={s.infoItem}><Calendar size={16} /> <span>Last contact: {contact.lastContact}</span></div>
           </div>
 

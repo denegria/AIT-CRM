@@ -71,6 +71,7 @@ function mapContacts(contactRows, leadRows, noteRows, eventRows) {
       name: contact.name,
       email: contact.email || '',
       phone: contact.phone || '',
+      address: contact.address || '',
       businessUnitId: contact.primaryBusinessUnitId || '',
       primaryBusinessUnitId: contact.primaryBusinessUnitId || '',
       status: workflow.status,
