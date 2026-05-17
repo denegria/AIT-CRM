@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'crypto';
+import { createHash, timingSafeEqual } from 'crypto';
 import { NextResponse } from 'next/server';
 import { Client } from 'pg';
 import { normalizeWorkflowTags } from '@/lib/sales-workflow';
@@ -130,6 +130,27 @@ function readSubmittedSecrets(request, body) {
 
 function verifyRequest(request, body) {
   return readSubmittedSecrets(request, body).some((secret) => safeEqual(secret, process.env[SECRET_ENV]));
+}
+
+function secretFingerprint(value) {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  return {
+    length: text.length,
+    hashPrefix: createHash('sha256').update(text).digest('hex').slice(0, 12),
+  };
+}
+
+function authFailureDiagnostics(request, body) {
+  const bodyKeys = body && typeof body === 'object' && !Array.isArray(body)
+    ? Object.keys(body)
+    : [];
+  return {
+    contentType: request.headers.get('content-type') || '',
+    bodyKeys,
+    submittedSecretFingerprints: readSubmittedSecrets(request, body).map(secretFingerprint).filter(Boolean),
+    expectedSecretFingerprint: secretFingerprint(process.env[SECRET_ENV]),
+  };
 }
 
 function formDataToObject(formData) {
@@ -593,6 +614,7 @@ export async function POST(request) {
   }
   const body = await parseWebhookBody(request);
   if (!verifyRequest(request, body)) {
+    console.warn('website_leads_auth_failed', authFailureDiagnostics(request, body));
     return jsonError('Invalid website lead webhook secret.', 401);
   }
 
