@@ -52,7 +52,7 @@
 .empty { padding:34px; text-align:center; color:var(--text-muted); font-size:var(--text-md); background:color-mix(in srgb, var(--bg-secondary) 70%, var(--bg-tertiary)); border:1px dashed var(--border-default); border-radius:var(--radius-lg); }
 .mobileCards { display:none; }
 
-@media (max-width: 640px) {
+@media (max-width: 1100px) {
   .wrap { width:100%; overflow-x:hidden; }
   .toolbar { align-items:stretch; }
   .searchWrap, .search { width:100%; max-width:none; }

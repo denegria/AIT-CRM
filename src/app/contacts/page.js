@@ -238,7 +238,31 @@ export default function ContactsPage() {
           flex-wrap: wrap;
           justify-content: flex-end;
         }
-        @media (max-width: 820px) {
+        @media (max-width: 900px) and (min-width: 641px) {
+          .workflow-strip {
+            gap: 8px;
+          }
+          .workflow-stat {
+            min-height: 48px;
+            padding: 9px 10px;
+            gap: 8px;
+          }
+          .workflow-stat strong {
+            font-size: var(--text-lg);
+          }
+          .workflow-stat span {
+            font-size: 10px;
+            line-height: 1.15;
+          }
+          .workflow-stat svg {
+            width: 15px;
+            height: 15px;
+          }
+          .contacts-header-actions {
+            gap: 6px;
+          }
+        }
+        @media (max-width: 640px) {
           .workflow-strip { grid-template-columns: 1fr; }
           .contacts-header-actions {
             width: 100%;
