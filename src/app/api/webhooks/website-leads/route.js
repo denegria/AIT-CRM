@@ -128,8 +128,18 @@ function readSubmittedSecrets(request, body) {
   return secrets.filter(Boolean);
 }
 
+function webhookPayloadFromBody(body) {
+  if (!body || typeof body !== 'object' || Array.isArray(body)) return body;
+  if (body.data && typeof body.data === 'object' && !Array.isArray(body.data)) {
+    return body.data;
+  }
+  return body;
+}
+
 function verifyRequest(request, body) {
-  return readSubmittedSecrets(request, body).some((secret) => safeEqual(secret, process.env[SECRET_ENV]));
+  const payload = webhookPayloadFromBody(body);
+  return [...readSubmittedSecrets(request, body), ...readSubmittedSecrets(request, payload)]
+    .some((secret) => safeEqual(secret, process.env[SECRET_ENV]));
 }
 
 function secretFingerprint(value) {
@@ -142,13 +152,21 @@ function secretFingerprint(value) {
 }
 
 function authFailureDiagnostics(request, body) {
+  const payload = webhookPayloadFromBody(body);
   const bodyKeys = body && typeof body === 'object' && !Array.isArray(body)
     ? Object.keys(body)
+    : [];
+  const payloadKeys = payload && payload !== body && typeof payload === 'object' && !Array.isArray(payload)
+    ? Object.keys(payload)
     : [];
   return {
     contentType: request.headers.get('content-type') || '',
     bodyKeys,
-    submittedSecretFingerprints: readSubmittedSecrets(request, body).map(secretFingerprint).filter(Boolean),
+    payloadKeys,
+    submittedSecretFingerprints: [
+      ...readSubmittedSecrets(request, body),
+      ...readSubmittedSecrets(request, payload),
+    ].map(secretFingerprint).filter(Boolean),
     expectedSecretFingerprint: secretFingerprint(process.env[SECRET_ENV]),
   };
 }
@@ -618,11 +636,13 @@ export async function POST(request) {
     return jsonError('Invalid website lead webhook secret.', 401);
   }
 
-  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+  const payload = webhookPayloadFromBody(body);
+
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return jsonError('JSON object body is required.', 400);
   }
 
-  const lead = normalizeLeadBody(body);
+  const lead = normalizeLeadBody(payload);
   if (!lead.email && !lead.phone && !lead.message) {
     return jsonError('At least one of email, phone, or message is required.', 400);
   }
@@ -642,7 +662,7 @@ export async function POST(request) {
       await client.query('begin');
       try {
         if (duplicate) {
-          await persistImportAudit(client, batchId, rowNumber, body, lead, businessUnitId, duplicate.contact_id, duplicate.lead_id, duplicate);
+          await persistImportAudit(client, batchId, rowNumber, payload, lead, businessUnitId, duplicate.contact_id, duplicate.lead_id, duplicate);
           await client.query('commit');
           return NextResponse.json({
             ok: true,
@@ -654,7 +674,7 @@ export async function POST(request) {
 
         const contactId = await upsertContact(client, organizationId, businessUnitId, lead);
         const leadId = await persistLead(client, organizationId, businessUnitId, contactId, lead, 'pending', rowNumber);
-        const sourceRowId = await persistImportAudit(client, batchId, rowNumber, body, lead, businessUnitId, contactId, leadId, null);
+        const sourceRowId = await persistImportAudit(client, batchId, rowNumber, payload, lead, businessUnitId, contactId, leadId, null);
         await client.query(
           'update leads set original_notes = replace(original_notes, $1, $2), updated_at = now() where id = $3',
           ['source_row_id=pending', 'source_row_id=' + sourceRowId, leadId],
