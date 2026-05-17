@@ -76,7 +76,7 @@ export default function Sidebar() {
           if (href === '/import-review' && !access.canReadImportReview) return null;
           if ((href === '/reports' || href === '/financials') && role !== 'admin') return null;
           return (
-            <Link key={href} href={href} className={`${s.navItem} ${pathname === href ? s.active : ''}`}>
+            <Link key={href} href={href} className={`${s.navItem} ${pathname === href ? s.active : ''}`} aria-label={label} title={label}>
               <Icon /><span>{label}</span>
             </Link>
           );

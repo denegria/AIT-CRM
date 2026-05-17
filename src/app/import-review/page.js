@@ -663,7 +663,7 @@ export default function ImportReviewPage() {
           color: var(--text-muted);
           font-size: var(--text-xs);
           text-transform: uppercase;
-          letter-spacing: 0.05em;
+          letter-spacing: 0;
           font-weight: 700;
           background: var(--bg-tertiary);
         }
@@ -713,7 +713,7 @@ export default function ImportReviewPage() {
         .review-meta-label {
           font-size: var(--text-xs);
           text-transform: uppercase;
-          letter-spacing: 0.05em;
+          letter-spacing: 0;
           color: var(--text-muted);
           margin-bottom: 4px;
           font-weight: 700;

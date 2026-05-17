@@ -47,6 +47,28 @@ export default function DataTable({ columns, data, actions, onEdit, searchPlaceh
     setEditCell(null);
   };
 
+  const renderCell = (column, row, allowInlineEdit = true) => {
+    if (editCell?.rowId === row.id && editCell?.key === column.key && allowInlineEdit) {
+      return (
+        <input className={s.editInput} value={editVal} autoFocus
+          onChange={e=>setEditVal(e.target.value)}
+          onBlur={commitEdit}
+          onKeyDown={e=>e.key==='Enter'&&commitEdit()} />
+      );
+    }
+    if (column.render) return column.render(row);
+    if (column.type === 'badge') return <span className={'badge ' + badgeClass(row[column.key])}>{row[column.key]}</span>;
+    if (column.type === 'currency') return <span>{'$' + (row[column.key]||0).toLocaleString()}</span>;
+    if (column.editable && onEdit && allowInlineEdit) {
+      return <span style={{cursor:'pointer'}} onDoubleClick={()=>startEdit(row.id,column.key,row[column.key])}>{row[column.key]||'—'}</span>;
+    }
+    return <span>{row[column.key]||'—'}</span>;
+  };
+
+  const mobilePrimary = columns[0];
+  const mobileSecondary = columns[1];
+  const mobileBadge = columns.find((column) => column.type === 'badge');
+
   return (
     <div className={s.wrap}>
       <div className={s.toolbar}>
@@ -62,6 +84,7 @@ export default function DataTable({ columns, data, actions, onEdit, searchPlaceh
           <div>No records found</div>
         </div>
       ) : (
+        <>
         <table className={s.table}>
           <thead><tr>
             {selectable && (
@@ -80,7 +103,7 @@ export default function DataTable({ columns, data, actions, onEdit, searchPlaceh
                 </div>
               </th>
             ))}
-            {actions && <th>Actions</th>}
+            {actions && <th className={s.actionHeader}>Actions</th>}
           </tr></thead>
           <tbody>
             {filtered.map(row => (
@@ -97,27 +120,10 @@ export default function DataTable({ columns, data, actions, onEdit, searchPlaceh
                   </td>
                 )}
                 {columns.map(c => (
-                  <td key={c.key}>
-                    {editCell?.rowId===row.id && editCell?.key===c.key ? (
-                      <input className={s.editInput} value={editVal} autoFocus
-                        onChange={e=>setEditVal(e.target.value)}
-                        onBlur={commitEdit}
-                        onKeyDown={e=>e.key==='Enter'&&commitEdit()} />
-                    ) : c.render ? (
-                      c.render(row)
-                    ) : c.type === 'badge' ? (
-                      <span className={`badge ${badgeClass(row[c.key])}`}>{row[c.key]}</span>
-                    ) : c.type === 'currency' ? (
-                      <span>${(row[c.key]||0).toLocaleString()}</span>
-                    ) : c.editable && onEdit ? (
-                      <span style={{cursor:'pointer'}} onDoubleClick={()=>startEdit(row.id,c.key,row[c.key])}>{row[c.key]||'—'}</span>
-                    ) : (
-                      <span>{row[c.key]||'—'}</span>
-                    )}
-                  </td>
+                  <td key={c.key}>{renderCell(c, row)}</td>
                 ))}
                 {actions && (
-                  <td><div className={s.actions}>
+                  <td className={s.actionCell}><div className={s.actions}>
                     {actions.map((a,i) => (
                       <button key={i} className={`${s.actBtn} ${a.danger?s.actBtnDanger:''}`} onClick={()=>{
                         if (a.danger) {
@@ -137,6 +143,35 @@ export default function DataTable({ columns, data, actions, onEdit, searchPlaceh
             ))}
           </tbody>
         </table>
+        <div className={s.mobileCards}>
+          {filtered.map((row) => (
+            <div key={row.id} className={s.mobileCard}>
+              <div className={s.mobileCardMain}>
+                <div className={s.mobileTitle}>{mobilePrimary ? renderCell(mobilePrimary, row, false) : row.id}</div>
+                {mobileSecondary && <div className={s.mobileSubtitle}>{renderCell(mobileSecondary, row, false)}</div>}
+              </div>
+              {mobileBadge && <div className={s.mobileBadge}>{renderCell(mobileBadge, row, false)}</div>}
+              {actions && (
+                <div className={s.mobileActions}>
+                  {actions.map((a, i) => (
+                    <button key={i} className={`${s.actBtn} ${a.danger?s.actBtnDanger:''}`} onClick={() => {
+                      if (a.danger) {
+                        setConfirm({
+                          title: `${a.label} Record`,
+                          message: `Are you sure you want to ${a.label.toLowerCase()} this record? This action cannot be undone.`,
+                          onConfirm: () => a.onClick(row)
+                        });
+                      } else {
+                        a.onClick(row);
+                      }
+                    }}>{a.label}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        </>
       )}
       <ConfirmDialog 
         open={!!confirm} 
