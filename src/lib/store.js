@@ -52,6 +52,10 @@ function getInitialData(seedData = defaults) {
   };
 }
 
+function crmWriteAccessError() {
+  return new Error('Insufficient CRM write access.');
+}
+
 function LoginGate({ authError }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -296,6 +300,9 @@ export function CRMProvider({ children, initialData }) {
   }, [isPostgres]);
 
   const updateContact = useCallback((id, u) => {
+    if (isPostgres && !access.canWriteCrm) {
+      return Promise.reject(crmWriteAccessError());
+    }
     const existing = contacts.find(c => c.id === id);
     setContacts(p => p.map(c => c.id===id ? {...c,...u} : c));
     if (isPostgres && access.canWriteCrm) {
@@ -313,30 +320,41 @@ export function CRMProvider({ children, initialData }) {
     return Promise.resolve(null);
   }, [access.canWriteCrm, callContactsApi, contacts, isPostgres]);
   const addContact = useCallback((d) => {
+    if (isPostgres && !access.canWriteCrm) {
+      return Promise.reject(crmWriteAccessError());
+    }
     const tempId = gid('c');
     const payload = withBusinessUnitDefaults(d, effectiveBusinessUnitId, true);
     const draft = { id: tempId, ...payload };
     setContacts(p => [draft,...p]);
     if (isPostgres && access.canWriteCrm) {
-      callContactsApi('POST', payload)
+      return callContactsApi('POST', payload)
         .then((contact) => {
           if (contact) setContacts(p => p.map(c => c.id === tempId ? contact : c));
+          return contact;
         })
         .catch((error) => {
           console.error(error);
           setContacts(p => p.filter(c => c.id !== tempId));
+          throw error;
         });
     }
+    return Promise.resolve(draft);
   }, [access.canWriteCrm, callContactsApi, effectiveBusinessUnitId, isPostgres]);
   const deleteContact = useCallback((id) => {
+    if (isPostgres && !access.canWriteCrm) {
+      return Promise.reject(crmWriteAccessError());
+    }
     const existing = contacts.find(c => c.id === id);
     setContacts(p => p.filter(c => c.id!==id));
     if (isPostgres && access.canWriteCrm) {
-      callContactsApi('DELETE', { id }).catch((error) => {
+      return callContactsApi('DELETE', { id }).catch((error) => {
         console.error(error);
         if (existing) setContacts(p => [existing, ...p]);
+        throw error;
       });
     }
+    return Promise.resolve({ id });
   }, [access.canWriteCrm, callContactsApi, contacts, isPostgres]);
 
   const updateWorkOrder = useCallback((id, u) => {

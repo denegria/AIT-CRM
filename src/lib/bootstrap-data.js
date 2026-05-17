@@ -336,6 +336,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
 
   try {
     const db = getDb();
+    const access = sessionAccess(session);
     const [
       businessUnitRows,
       contactRows,
@@ -355,14 +356,14 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       db.select().from(paymentSnapshotsTable).where(scopedBusinessUnitWhere(paymentSnapshotsTable, session)).orderBy(desc(paymentSnapshotsTable.createdAt)),
       db.select().from(notesTable).where(scopedOrgWhere(notesTable, session)).orderBy(desc(notesTable.createdAt)),
       db.select().from(activityEventsTable).where(scopedOrgWhere(activityEventsTable, session)).orderBy(desc(activityEventsTable.createdAt)),
-      getImportStagingSummary(db),
+      access.canReadImportReview ? getImportStagingSummary(db) : Promise.resolve(null),
     ]);
 
     if (!contactRows.length) {
       return {
         ...emptyDbData(businessUnitRows, importStaging),
         currentUser: session.user,
-        access: sessionAccess(session),
+        access,
       };
     }
 
@@ -376,7 +377,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       authRequired: false,
       authError: '',
       currentUser: session.user,
-      access: sessionAccess(session),
+      access,
       businessUnits: mapBusinessUnits(businessUnitRows),
       contacts,
       workOrders,

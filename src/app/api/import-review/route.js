@@ -18,6 +18,10 @@ function normalizeText(value, fallback = 'all') {
   return String(value);
 }
 
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(String(value || ''));
+}
+
 async function withClient(handler) {
   if (!process.env.DATABASE_URL) {
     return NextResponse.json(
@@ -94,12 +98,12 @@ async function resolveBatchId(client, batchId) {
 
 async function loadSummary(client, batchId) {
   const [
-    sourceRows,
-    normalizedRecords,
-    reviewItems,
-    statusCounts,
-    recordTypeCounts,
+    sourceRowStatusCounts,
+    normalizedStatusCounts,
     reviewStatusCounts,
+    sourceRowTotal,
+    recordTypeCounts,
+    reviewTypeCounts,
   ] = await Promise.all([
     client.query(
       'select parse_status as status, count(*)::int as count from import_source_rows where import_batch_id = $1 group by parse_status',
@@ -129,14 +133,15 @@ async function loadSummary(client, batchId) {
 
   return {
     counts: {
-      sourceRows: Number(sourceRows.rows.reduce((sum, row) => sum + row.count, 0)),
-      normalizedRecords: Number(normalizedRecords.rows.reduce((sum, row) => sum + row.count, 0)),
-      reviewItems: Number(reviewItems.rows.reduce((sum, row) => sum + row.count, 0)),
+      sourceRows: Number(sourceRowTotal.rows[0]?.count || 0),
+      normalizedRecords: Number(normalizedStatusCounts.rows.reduce((sum, row) => sum + row.count, 0)),
+      reviewItems: Number(reviewStatusCounts.rows.reduce((sum, row) => sum + row.count, 0)),
     },
-    sourceRowStatusCounts: sourceRows.rows,
-    normalizedStatusCounts: statusCounts.rows,
+    sourceRowStatusCounts: sourceRowStatusCounts.rows,
+    normalizedStatusCounts: normalizedStatusCounts.rows,
     recordTypeCounts: recordTypeCounts.rows,
     reviewStatusCounts: reviewStatusCounts.rows,
+    reviewTypeCounts: reviewTypeCounts.rows,
   };
 }
 
@@ -283,9 +288,13 @@ export async function PATCH(request) {
 
   try {
     return await withClient(async (client) => {
-      const body = await request.json();
+      const body = await request.json().catch(() => null);
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        return NextResponse.json({ error: 'JSON object body is required.' }, { status: 400 });
+      }
+
       const status = normalizeText(body.status, '');
-      const batchId = body.batchId || null;
+      const batchId = body.batchId ? String(body.batchId) : null;
       const recordIds = Array.isArray(body.recordIds)
         ? [...new Set(body.recordIds.map((id) => String(id)).filter(Boolean))]
         : [];
@@ -296,6 +305,12 @@ export async function PATCH(request) {
 
       if (!recordIds.length) {
         return NextResponse.json({ error: 'recordIds must be a non-empty array.' }, { status: 400 });
+      }
+      if (batchId && !isUuid(batchId)) {
+        return NextResponse.json({ error: 'A valid batchId is required.' }, { status: 400 });
+      }
+      if (recordIds.some((recordId) => !isUuid(recordId))) {
+        return NextResponse.json({ error: 'recordIds must contain only valid UUIDs.' }, { status: 400 });
       }
 
       const resolvedBatchId = await resolveBatchId(client, batchId);

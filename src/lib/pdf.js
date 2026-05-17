@@ -56,13 +56,18 @@ function footer(doc) {
 }
 
 export function generateInvoicePDF(record) {
-  const doc = new jsPDF();
-  let y = header(doc, 'INVOICE', record.number);
-  y = clientBlock(doc, y, record);
-  y = itemsTable(doc, y, record.items);
-  totalBlock(doc, y + 4, record.amount);
-  footer(doc);
-  doc.save(`${record.number}.pdf`);
+  try {
+    const doc = new jsPDF();
+    let y = header(doc, 'INVOICE', record.number);
+    y = clientBlock(doc, y, record);
+    y = itemsTable(doc, y, record.items);
+    totalBlock(doc, y + 4, record.amount);
+    footer(doc);
+    doc.save(`${record.number}.pdf`);
+  } catch (err) {
+    console.error('PDF Generation Error:', err);
+    alert('Failed to generate PDF. Please check console for details.');
+  }
 }
 
 export function generateEstimatePDF(record) {

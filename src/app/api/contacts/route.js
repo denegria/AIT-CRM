@@ -216,7 +216,8 @@ export async function PATCH(request) {
   if ('phone' in body) patch.phone = body.phone || null;
   if ('address' in body) patch.address = body.address || null;
   if ('source' in body) patch.sourceLabel = body.source || null;
-  if ('businessUnitId' in body || 'primaryBusinessUnitId' in body) {
+  const hasBusinessUnitPatch = hasBusinessUnitRequest(body);
+  if (hasBusinessUnitPatch) {
     const requestedId = requestedBusinessUnitId(body);
     if (!requestedId && !session.user.canAccessAllBusinessUnits && existing.primaryBusinessUnitId) {
       return NextResponse.json({ error: 'Only all-division users can unassign a contact.' }, { status: 403 });
@@ -228,62 +229,79 @@ export async function PATCH(request) {
     }
   }
 
-  const [contact] = await db
-    .update(contacts)
-    .set(patch)
-    .where(eq(contacts.id, id))
-    .returning();
-
   let lead = await latestLeadForContact(db, id);
-  if (lead && ('status' in body || 'source' in body || 'assignedTo' in body || 'businessUnitId' in body || 'primaryBusinessUnitId' in body)) {
-    const leadPatch = { updatedAt: new Date() };
-    if ('status' in body) {
-      leadPatch.status = body.status || lead.status;
-      leadPatch.currentStage = body.status || lead.currentStage;
-    }
-    if ('source' in body) leadPatch.sourceName = body.source || null;
-    if ('assignedTo' in body) leadPatch.assignedUserId = isUuid(body.assignedTo) ? body.assignedTo : null;
-    if (patch.primaryBusinessUnitId && ('businessUnitId' in body || 'primaryBusinessUnitId' in body)) {
-      leadPatch.businessUnitId = patch.primaryBusinessUnitId || lead.businessUnitId;
-    }
-    [lead] = await db.update(leads).set(leadPatch).where(eq(leads.id, lead.id)).returning();
+  if (hasBusinessUnitPatch && patch.primaryBusinessUnitId === null && lead) {
+    return NextResponse.json(
+      { error: 'Contacts with leads must stay assigned to a business unit.' },
+      { status: 400 },
+    );
   }
 
-  let noteRows = await notesForContact(db, session, id);
-  if (Array.isArray(body.notes)) {
-    const previousNoteCount = noteRows.length;
-    const noteInputs = normalizeNoteInputs(body.notes);
-    await db
-      .delete(notes)
-      .where(and(eq(notes.contactId, id), eq(notes.organizationId, session.user.organizationId)));
+  const hasLeadPatch = 'status' in body || 'source' in body || 'assignedTo' in body || hasBusinessUnitPatch;
+  let result;
+  try {
+    result = await db.transaction(async (tx) => {
+      const [contact] = await tx
+        .update(contacts)
+        .set(patch)
+        .where(eq(contacts.id, id))
+        .returning();
 
-    noteRows = noteInputs.length
-      ? await db.insert(notes).values(noteInputs.map((note) => ({
-          organizationId: session.user.organizationId,
-          businessUnitId: contact.primaryBusinessUnitId,
-          contactId: id,
-          body: note.body,
-          authorUserId: session.user.id,
-          createdAt: note.createdAt,
-          updatedAt: note.createdAt,
-        }))).returning()
-      : [];
+      if (lead && hasLeadPatch) {
+        const leadPatch = { updatedAt: new Date() };
+        if ('status' in body) {
+          leadPatch.status = body.status || lead.status;
+          leadPatch.currentStage = body.status || lead.currentStage;
+        }
+        if ('source' in body) leadPatch.sourceName = body.source || null;
+        if ('assignedTo' in body) leadPatch.assignedUserId = isUuid(body.assignedTo) ? body.assignedTo : null;
+        if (hasBusinessUnitPatch && patch.primaryBusinessUnitId) {
+          leadPatch.businessUnitId = patch.primaryBusinessUnitId;
+        }
+        [lead] = await tx.update(leads).set(leadPatch).where(eq(leads.id, lead.id)).returning();
+      }
 
-    if (noteRows.length > previousNoteCount) {
-      await db.insert(activityEvents).values({
-        organizationId: session.user.organizationId,
-        businessUnitId: contact.primaryBusinessUnitId,
-        contactId: id,
-        leadId: lead?.id || null,
-        eventType: 'contact.note_added',
-        message: 'Added contact timeline note.',
-        actorUserId: session.user.id,
-        occurredAt: new Date(),
-      });
-    }
+      let noteRows = await notesForContact(tx, session, id);
+      if (Array.isArray(body.notes)) {
+        const previousNoteCount = noteRows.length;
+        const noteInputs = normalizeNoteInputs(body.notes);
+        await tx
+          .delete(notes)
+          .where(and(eq(notes.contactId, id), eq(notes.organizationId, session.user.organizationId)));
+
+        noteRows = noteInputs.length
+          ? await tx.insert(notes).values(noteInputs.map((note) => ({
+              organizationId: session.user.organizationId,
+              businessUnitId: contact.primaryBusinessUnitId,
+              contactId: id,
+              body: note.body,
+              authorUserId: session.user.id,
+              createdAt: note.createdAt,
+              updatedAt: note.createdAt,
+            }))).returning()
+          : [];
+
+        if (noteRows.length > previousNoteCount) {
+          await tx.insert(activityEvents).values({
+            organizationId: session.user.organizationId,
+            businessUnitId: contact.primaryBusinessUnitId,
+            contactId: id,
+            leadId: lead?.id || null,
+            eventType: 'contact.note_added',
+            message: 'Added contact timeline note.',
+            actorUserId: session.user.id,
+            occurredAt: new Date(),
+          });
+        }
+      }
+
+      return { contact, lead, noteRows };
+    });
+  } catch (error) {
+    return NextResponse.json({ error: error.message || 'Contact update failed.' }, { status: 500 });
   }
 
-  return NextResponse.json({ contact: toContactPayload(contact, lead, noteRows) });
+  return NextResponse.json({ contact: toContactPayload(result.contact, result.lead, result.noteRows) });
 }
 
 export async function DELETE(request) {
