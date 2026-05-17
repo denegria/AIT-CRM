@@ -10,6 +10,24 @@ const SOURCE_NAME = 'Website Form';
 const BATCH_SOURCE_NAME = 'Website Leads';
 const BATCH_FILE_NAME = 'website-leads-webhook.json';
 const SOURCE_SHEET = 'Website Leads Webhook';
+const BODY_SECRET_KEYS = [
+  'webhookSecret',
+  'webhook_secret',
+  'x-ait-webhook-secret',
+  'xAitWebhookSecret',
+];
+const BODY_AUTHORIZATION_KEYS = ['authorization', 'Authorization'];
+const AUDIT_REDACTED_KEY_NAMES = new Set([
+  'authorization',
+  'webhooksecret',
+  'webhook-secret',
+  'x-ait-webhook-secret',
+  'xaitwebhooksecret',
+]);
+const AUDIT_OMITTED_KEY_NAMES = new Set([
+  'content-type',
+  'contenttype',
+]);
 
 function jsonError(message, status) {
   return NextResponse.json({ error: message }, { status });
@@ -26,16 +44,88 @@ function safeEqual(left, right) {
   return timingSafeEqual(leftBuffer, rightBuffer);
 }
 
-function readSubmittedSecret(request) {
-  const authorization = request.headers.get('authorization') || '';
-  if (authorization.toLowerCase().startsWith('bearer ')) {
-    return authorization.slice(7).trim();
+function authSecretFromValue(value) {
+  const text = String(value || '').trim();
+  if (text.toLowerCase().startsWith('bearer ')) {
+    return text.slice(7).trim();
   }
-  return request.headers.get('x-ait-webhook-secret') || '';
+  return text;
 }
 
-function verifyRequest(request) {
-  return safeEqual(readSubmittedSecret(request), process.env[SECRET_ENV]);
+function readSubmittedSecrets(request, body) {
+  const secrets = [];
+  const authorization = request.headers.get('authorization') || '';
+  if (authorization) secrets.push(authSecretFromValue(authorization));
+
+  const headerSecret = request.headers.get('x-ait-webhook-secret') || '';
+  if (headerSecret) secrets.push(headerSecret.trim());
+
+  if (body && typeof body === 'object' && !Array.isArray(body)) {
+    for (const key of BODY_SECRET_KEYS) {
+      if (body[key]) secrets.push(String(body[key]).trim());
+    }
+    for (const key of BODY_AUTHORIZATION_KEYS) {
+      if (body[key]) secrets.push(authSecretFromValue(body[key]));
+    }
+  }
+
+  return secrets.filter(Boolean);
+}
+
+function verifyRequest(request, body) {
+  return readSubmittedSecrets(request, body).some((secret) => safeEqual(secret, process.env[SECRET_ENV]));
+}
+
+function formDataToObject(formData) {
+  if (!formData) return null;
+  const body = {};
+  for (const [key, value] of formData.entries()) {
+    const nextValue = typeof value === 'string' ? value : value.name || '';
+    if (Object.prototype.hasOwnProperty.call(body, key)) {
+      body[key] = Array.isArray(body[key]) ? [...body[key], nextValue] : [body[key], nextValue];
+    } else {
+      body[key] = nextValue;
+    }
+  }
+  return body;
+}
+
+async function parseWebhookBody(request) {
+  const contentType = (request.headers.get('content-type') || '').toLowerCase();
+
+  if (contentType.includes('application/json') || contentType.includes('+json')) {
+    return request.json().catch(() => null);
+  }
+  if (contentType.includes('application/x-www-form-urlencoded') || contentType.includes('multipart/form-data')) {
+    return request.formData().then(formDataToObject).catch(() => null);
+  }
+
+  const jsonBody = await request.clone().json().catch(() => null);
+  if (jsonBody && typeof jsonBody === 'object') return jsonBody;
+
+  const formBody = await request.clone().formData().then(formDataToObject).catch(() => null);
+  if (formBody && typeof formBody === 'object') return formBody;
+
+  return null;
+}
+
+function normalizeAuditKeyName(key) {
+  return String(key || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+}
+
+function sanitizeWebhookBodyForAudit(value) {
+  if (Array.isArray(value)) return value.map(sanitizeWebhookBodyForAudit);
+  if (!value || typeof value !== 'object') return value;
+
+  const sanitized = {};
+  for (const [key, rawValue] of Object.entries(value)) {
+    const normalizedKey = normalizeAuditKeyName(key);
+    if (AUDIT_OMITTED_KEY_NAMES.has(normalizedKey)) continue;
+    sanitized[key] = AUDIT_REDACTED_KEY_NAMES.has(normalizedKey)
+      ? '[redacted]'
+      : sanitizeWebhookBodyForAudit(rawValue);
+  }
+  return sanitized;
 }
 
 function normalizeText(value) {
@@ -282,7 +372,7 @@ async function persistImportAudit(client, batchId, rowNumber, body, lead, busine
     source_name: lead.sourceName || SOURCE_NAME,
     external_id: lead.externalId || null,
     business_unit_id: businessUnitId,
-    raw: body,
+    raw: sanitizeWebhookBodyForAudit(body),
   };
 
   const sourceRow = await client.query(
@@ -358,7 +448,12 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     configured: isConfigured(),
-    requiredSecretHeader: 'Authorization: Bearer <secret> or x-ait-webhook-secret',
+    acceptedSecretLocations: [
+      'Authorization: Bearer <secret>',
+      'x-ait-webhook-secret header',
+      'x-ait-webhook-secret body field',
+      'webhookSecret body field',
+    ],
   });
 }
 
@@ -369,11 +464,11 @@ export async function POST(request) {
   if (!process.env[SECRET_ENV]) {
     return jsonError(SECRET_ENV + ' is required for website lead ingestion.', 503);
   }
-  if (!verifyRequest(request)) {
+  const body = await parseWebhookBody(request);
+  if (!verifyRequest(request, body)) {
     return jsonError('Invalid website lead webhook secret.', 401);
   }
 
-  const body = await request.json().catch(() => null);
   if (!body || typeof body !== 'object' || Array.isArray(body)) {
     return jsonError('JSON object body is required.', 400);
   }
