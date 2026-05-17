@@ -175,6 +175,17 @@ export default function SettingsPage() {
     });
   }
 
+  function formatRoleLabel(roleKey) {
+    return String(roleKey || '')
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (char) => char.toUpperCase()) || 'Unassigned';
+  }
+
+  function divisionBadgeLabel(businessUnitId) {
+    const unit = businessUnitRows.find((row) => row.id === businessUnitId);
+    return unit?.name || 'Unknown division';
+  }
+
   if (!loaded || !access.canReadSettings) return <div className="empty-state">Loading...</div>;
 
   return (
@@ -416,9 +427,21 @@ export default function SettingsPage() {
                       <div style={{fontSize:'var(--text-sm)',fontWeight:500}}>{user.name}</div>
                       <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>{user.email}</div>
                     </div>
-                    <div style={{textAlign:'right'}}>
-                      <div style={{fontSize:'var(--text-xs)',color:'var(--text-secondary)'}}>{user.primaryRoleKey}</div>
-                      <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>{user.businessUnitIds?.length || 0} division(s)</div>
+                    <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,maxWidth:240}}>
+                      <div style={{fontSize:'var(--text-xs)',color:'var(--text-secondary)'}}>{formatRoleLabel(user.primaryRoleKey)}</div>
+                      <div style={{display:'flex',gap:4,flexWrap:'wrap',justifyContent:'flex-end'}}>
+                        {user.primaryRoleKey === 'admin' ? (
+                          <span className="badge badge-won" style={{fontSize:9,padding:'2px 6px'}}>All divisions</span>
+                        ) : user.businessUnitIds?.length ? (
+                          user.businessUnitIds.map((businessUnitId) => (
+                            <span key={businessUnitId} className="badge" style={{background:'var(--bg-hover)',color:'var(--text-secondary)',border:'1px solid var(--border-subtle)',fontSize:9,padding:'2px 6px'}}>
+                              {divisionBadgeLabel(businessUnitId)}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="badge badge-draft" style={{fontSize:9,padding:'2px 6px'}}>No divisions</span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}

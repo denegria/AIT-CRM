@@ -8,14 +8,14 @@
   padding: 0;
 }
 .logo {
-  display: flex; align-items: center; gap: 10px;
-  padding: 20px 20px 24px;
-  font-size: var(--text-lg); font-weight: 700;
+  display: flex; align-items: center; gap: 14px;
+  padding: 24px 20px 24px;
+  font-size: 1.25rem; font-weight: 700;
   letter-spacing: 0;
   color: var(--text-primary);
 }
 .logoImage {
-  width: 28px; height: 28px;
+  width: 40px; height: 40px;
   object-fit: contain;
 }
 .navSection {

@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
@@ -9,6 +10,7 @@ import { generateWorkOrderPDF } from '@/lib/pdf';
 const empty = { number:'', title:'', client:'', contactId:'', priority:'Medium', status:'Pending', assignedTo:'emp-1', dueDate:'', description:'', estimatedCost:0 };
 
 export default function WorkOrdersPage() {
+  const router = useRouter();
   const {
     workOrders,
     addWorkOrder,
@@ -130,6 +132,7 @@ export default function WorkOrdersPage() {
             </div>
           }
           actions={[
+            { label: 'View', onClick: (r) => router.push(`/work-orders/${r.id}`) },
             ...(canWriteWorkOrders ? [{ label: 'Edit', onClick: openEdit }] : []),
             { label: 'PDF', onClick: (r) => { generateWorkOrderPDF(r); toast('PDF Generated'); } },
             ...(canWriteWorkOrders ? [{

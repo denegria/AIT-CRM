@@ -35,7 +35,7 @@ export default function CommandPalette() {
       .map(c => ({ id: c.id, title: c.name, subtitle: c.email, type: 'contact', icon: <User size={16} />, path: `/contacts/${c.id}` }));
     
     const matchedWO = workOrders.filter(w => w.title.toLowerCase().includes(q) || w.number.toLowerCase().includes(q))
-      .map(w => ({ id: w.id, title: w.title, subtitle: w.number, type: 'work-order', icon: <ClipboardList size={16} />, path: '/work-orders' }));
+      .map(w => ({ id: w.id, title: w.title, subtitle: w.number, type: 'work-order', icon: <ClipboardList size={16} />, path: `/work-orders/${w.id}` }));
     
     const matchedFin = financials.filter(f => f.number.toLowerCase().includes(q) || f.client.toLowerCase().includes(q))
       .map(f => ({ id: f.id, title: `${f.type} ${f.number}`, subtitle: f.client, type: 'financial', icon: <FileText size={16} />, path: '/financials' }));

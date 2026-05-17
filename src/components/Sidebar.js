@@ -46,7 +46,7 @@ export default function Sidebar() {
   return (
     <aside className={s.sidebar}>
       <div className={s.logo}>
-        <Image src="/logo.png" alt="AIT USA" width={28} height={28} className={s.logoImage} />
+        <Image src="/logo.png" alt="AIT USA" width={40} height={40} className={s.logoImage} />
         <span>AIT USA</span>
       </div>
       <nav className={s.navSection}>
