@@ -130,7 +130,7 @@ export default function ContactsPage() {
           <h1 className="page-title">Contacts & Leads</h1>
           <p className="page-subtitle">{contacts.length} contacts in {currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}</p>
         </div>
-        <div className="flex-gap">
+        <div className="flex-gap contacts-header-actions">
           <div className="view-toggle">
             <button className={`btn-icon ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setViewMode('table')} title="Table View">
               <List size={18} />
@@ -139,11 +139,11 @@ export default function ContactsPage() {
               <KanbanIcon size={18} />
             </button>
           </div>
-          <select className="input select" style={{width:130, padding:'4px 8px'}} value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
+          <select className="input select contacts-filter" style={{width:130, padding:'4px 8px'}} value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
             <option value="All">All Statuses</option>
             {PIPELINE_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
           </select>
-          <select className="input select" style={{width:180, padding:'4px 8px'}} value={workflowFilter} onChange={e=>setWorkflowFilter(e.target.value)}>
+          <select className="input select contacts-filter contacts-workflow-filter" style={{width:180, padding:'4px 8px'}} value={workflowFilter} onChange={e=>setWorkflowFilter(e.target.value)}>
             <option value="all">All Workflows</option>
             <option value="needs_first_outreach">Needs First Outreach</option>
             <option value="active">Active Pipeline</option>
@@ -234,8 +234,30 @@ export default function ContactsPage() {
           font-weight: 600;
           text-transform: capitalize;
         }
+        .contacts-header-actions {
+          flex-wrap: wrap;
+          justify-content: flex-end;
+        }
         @media (max-width: 820px) {
           .workflow-strip { grid-template-columns: 1fr; }
+          .contacts-header-actions {
+            width: 100%;
+            justify-content: stretch;
+          }
+          .contacts-header-actions :global(.btn),
+          .contacts-header-actions :global(.input),
+          .contacts-filter {
+            flex: 1 1 100%;
+            width: 100% !important;
+          }
+          .view-toggle {
+            width: 100%;
+            margin-right: 0;
+          }
+          .view-toggle .btn-icon {
+            flex: 1;
+            justify-content: center;
+          }
         }
       `}</style>
 

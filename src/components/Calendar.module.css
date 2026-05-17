@@ -6,6 +6,7 @@
   border:1px solid var(--border-default); border-radius:var(--radius-sm);
   background:var(--bg-elevated); color:var(--text-muted); cursor:pointer;
   font-size:14px; transition:all var(--transition-fast);
+  box-shadow: var(--shadow-sm);
 }
 .navBtn:hover { background:var(--bg-hover); color:var(--text-primary); }
 .grid { display:grid; grid-template-columns:repeat(7,1fr); gap:2px; }
@@ -19,7 +20,7 @@
   cursor:default; position:relative; gap:2px;
 }
 .day:hover { background:var(--bg-hover); }
-.today { background:var(--accent-muted); color:var(--accent); font-weight:600; }
+.today { background:var(--accent-muted); color:var(--accent); font-weight:700; box-shadow:inset 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent); }
 .otherMonth { color:var(--text-muted); opacity:0.4; }
 .dot {
   width:4px; height:4px; border-radius:50%; position:absolute; bottom:3px;

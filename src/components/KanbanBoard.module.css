@@ -7,10 +7,11 @@
 }
 .kanbanColumn {
   flex: 0 0 280px;
-  background: var(--bg-tertiary);
+  background: color-mix(in srgb, var(--bg-tertiary) 78%, var(--bg-secondary));
   border-radius: var(--radius-lg);
   display: flex; flex-direction: column;
   border: 1px solid var(--border-subtle);
+  box-shadow: var(--shadow-sm);
   transition: opacity 0.2s;
 }
 .kanbanColumn.terminal {
@@ -29,6 +30,8 @@
   padding: 12px 16px;
   display: flex; justify-content: space-between; align-items: center;
   border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-secondary) 54%, transparent);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 .kanbanTitle {
   font-weight: 600; font-size: var(--text-sm);
@@ -54,11 +57,12 @@
   padding: 12px;
   cursor: grab;
   box-shadow: var(--shadow-sm);
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition: transform 0.16s, box-shadow 0.16s, border-color 0.16s;
 }
 .kanbanCard:hover {
   box-shadow: var(--shadow-md);
   border-color: var(--accent);
+  transform: translateY(-1px);
 }
 .kanbanCard.needsFirstOutreach {
   border-color: color-mix(in srgb, var(--warning) 42%, var(--border-subtle));
@@ -73,7 +77,7 @@
 }
 .cardSource {
   font-size: 10px; text-transform: uppercase;
-  letter-spacing: 0.05em; color: var(--text-muted);
+  letter-spacing: 0; color: var(--text-muted);
   font-weight: 700;
 }
 .cardMore {
@@ -87,7 +91,7 @@
 .cardWorkflow {
   margin: -4px 0 10px;
   padding: 8px;
-  background: var(--bg-tertiary);
+  background: color-mix(in srgb, var(--warning-muted) 42%, var(--bg-tertiary));
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
 }
@@ -143,7 +147,7 @@
 }
 .kanbanEmpty {
   height: 60px;
-  border: 2px dashed var(--border-subtle);
+  border: 1px dashed var(--border-default);
   border-radius: var(--radius-md);
   display: flex; align-items: center; justify-content: center;
   color: var(--text-muted); font-size: var(--text-xs);
