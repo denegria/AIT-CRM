@@ -28,9 +28,17 @@ function verifyTokenErrorMessage() {
   return `${FB_VERIFY_TOKEN_ENV} or ${META_VERIFY_TOKEN_ENV} is required before Facebook lead webhook verification can run.`;
 }
 
+function appSecretConfigured() {
+  return Boolean(process.env[FB_APP_SECRET_ENV]);
+}
+
+function appSecretErrorMessage() {
+  return `${FB_APP_SECRET_ENV} is required before Facebook lead webhook POST processing can run.`;
+}
+
 function signatureIsValid(bodyText, signatureHeader) {
   const appSecret = process.env[FB_APP_SECRET_ENV];
-  if (!appSecret) return true;
+  if (!appSecret) return false;
   if (!signatureHeader || !signatureHeader.startsWith('sha256=')) return false;
 
   const signature = signatureHeader.slice('sha256='.length);
@@ -157,6 +165,45 @@ async function nextRowNumber(client, batchId) {
   return Number(result.rows[0]?.max_row || 0) + 1;
 }
 
+async function lockedNextRowNumber(client, batchId) {
+  await client.query('select id from import_batches where id = $1 for update', [batchId]);
+  return nextRowNumber(client, batchId);
+}
+
+async function lockWebhookEvent(client, eventKey) {
+  if (!eventKey) return;
+  await client.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [eventKey]);
+}
+
+async function withSerializedWebhookEvent(client, eventKey, handler) {
+  await client.query('begin');
+  try {
+    await lockWebhookEvent(client, eventKey);
+    const result = await handler();
+    await client.query('commit');
+    return result;
+  } catch (error) {
+    await client.query('rollback');
+    throw error;
+  }
+}
+
+function leadgenEventKey(event) {
+  if (event.leadgenId) return `facebook-leadgen:${event.pageId || 'unknown'}:${event.leadgenId}`;
+  return `facebook-leadgen-fallback:${event.pageId || 'unknown'}:${event.formId || 'unknown'}:${event.createdTime || 'unknown'}`;
+}
+
+function messengerEventKey(event) {
+  if (event.messageId) return `facebook-messenger-message:${event.pageId || 'unknown'}:${event.messageId}`;
+  return [
+    'facebook-messenger-fallback',
+    event.pageId || 'unknown',
+    event.senderId || 'unknown',
+    event.timestamp || 'unknown',
+    event.postbackPayload || event.text || '[attachment]',
+  ].join(':');
+}
+
 function flattenLeadgenChanges(payload) {
   if (payload?.object !== 'page') return [];
   const events = [];
@@ -215,6 +262,22 @@ async function hasLeadgenId(client, leadgenId) {
       limit 1
     `,
     [leadgenId],
+  );
+  return Boolean(result.rows.length);
+}
+
+async function hasMessengerMessageId(client, messageId, pageId) {
+  if (!messageId) return false;
+  const result = await client.query(
+    `
+      select 1
+      from import_normalized_records
+      where record_type = 'lead'
+        and coalesce(proposed_lead_json->>'message_id', '') = $1
+        and coalesce(proposed_lead_json->>'page_id', '') = $2
+      limit 1
+    `,
+    [messageId, pageId || ''],
   );
   return Boolean(result.rows.length);
 }
@@ -620,6 +683,9 @@ async function persistMessengerEvent(client, organizationId, batchId, rowNumber,
   if (classification.action === 'ignore') {
     return { inserted: false, promoted: false, skippedReason: classification.reason };
   }
+  if (event.messageId && await hasMessengerMessageId(client, event.messageId, event.pageId)) {
+    return { inserted: false, promoted: false, skippedReason: 'duplicate_messenger_message_id' };
+  }
 
   const profileFetch = await fetchMessengerProfile(event.senderId, event.pageId);
   const profile = profileFetch.ok ? profileFetch.profile : null;
@@ -764,6 +830,9 @@ export async function POST(request) {
   if (!verifyTokenConfigured()) {
     return jsonError(verifyTokenErrorMessage(), 503);
   }
+  if (!appSecretConfigured()) {
+    return jsonError(appSecretErrorMessage(), 503);
+  }
 
   const signature = request.headers.get('x-hub-signature-256');
   const rawBody = await request.text();
@@ -801,8 +870,6 @@ export async function POST(request) {
     if (leadgenEvents.length && !leadBatchId) return { inserted: 0, skipped: received, received, reason: 'Failed to resolve lead import batch' };
     if (messengerEvents.length && !messengerBatchId) return { inserted: 0, skipped: received, received, reason: 'Failed to resolve messenger import batch' };
 
-    let leadRowNumber = leadBatchId ? await nextRowNumber(client, leadBatchId) : 1;
-    let messengerRowNumber = messengerBatchId ? await nextRowNumber(client, messengerBatchId) : 1;
     let inserted = 0;
     let promoted = 0;
     let graphFetched = 0;
@@ -812,26 +879,30 @@ export async function POST(request) {
     let skipped = 0;
 
     for (const event of leadgenEvents) {
-      const stored = await persistEvent(client, organizationId, leadBatchId, leadRowNumber, event);
+      const stored = await withSerializedWebhookEvent(client, leadgenEventKey(event), async () => {
+        const rowNumber = await lockedNextRowNumber(client, leadBatchId);
+        return persistEvent(client, organizationId, leadBatchId, rowNumber, event);
+      });
       if (stored.inserted) {
         inserted += 1;
         if (stored.promoted) promoted += 1;
         if (stored.graphFetched) graphFetched += 1;
-        leadRowNumber += 1;
       } else {
         skipped += 1;
       }
     }
 
     for (const event of messengerEvents) {
-      const stored = await persistMessengerEvent(client, organizationId, messengerBatchId, messengerRowNumber, event);
+      const stored = await withSerializedWebhookEvent(client, messengerEventKey(event), async () => {
+        const rowNumber = await lockedNextRowNumber(client, messengerBatchId);
+        return persistMessengerEvent(client, organizationId, messengerBatchId, rowNumber, event);
+      });
       if (stored.inserted) {
         inserted += 1;
         if (stored.promoted) promoted += 1;
         if (stored.profileFetched) profileFetched += 1;
         if (stored.linked) linked += 1;
         if (stored.review) review += 1;
-        messengerRowNumber += 1;
       } else {
         skipped += 1;
       }

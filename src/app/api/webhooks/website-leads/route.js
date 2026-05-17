@@ -400,10 +400,23 @@ async function findExistingContact(client, organizationId, lead) {
 async function findDuplicateSubmission(client, organizationId, externalId) {
   if (!externalId) return null;
   const result = await client.query(
-    'select l.id as lead_id, l.contact_id from leads l where l.organization_id = $1 and l.source_type = $2 and l.original_notes like $3 order by l.created_at desc limit 1',
-    [organizationId, SOURCE_TYPE, '%external_id=' + externalId + '%'],
+    `
+      select l.id as lead_id, l.contact_id
+      from import_normalized_records nr
+      join import_batches ib on ib.id = nr.import_batch_id
+      left join leads l on l.id::text = nullif(nr.proposed_lead_json->>'lead_id', '')
+      where ib.organization_id = $1
+        and ib.source_type = $2
+        and nr.record_type = 'lead'
+        and coalesce(nr.proposed_lead_json->>'source_type', '') = $2
+        and coalesce(nr.proposed_lead_json->>'external_id', '') = $3
+        and nullif(nr.proposed_lead_json->>'lead_id', '') is not null
+      order by nr.created_at desc
+      limit 1
+    `,
+    [organizationId, SOURCE_TYPE, externalId],
   );
-  return result.rows[0] || null;
+  return result.rows[0]?.lead_id ? result.rows[0] : null;
 }
 
 async function getOrCreateBatch(client, organizationId) {
@@ -657,10 +670,11 @@ export async function POST(request) {
 
       const duplicate = await findDuplicateSubmission(client, organizationId, lead.externalId);
       const batchId = await getOrCreateBatch(client, organizationId);
-      const rowNumber = await nextSourceRowNumber(client, batchId);
 
       await client.query('begin');
       try {
+        await client.query('select id from import_batches where id = $1 for update', [batchId]);
+        const rowNumber = await nextSourceRowNumber(client, batchId);
         if (duplicate) {
           await persistImportAudit(client, batchId, rowNumber, payload, lead, businessUnitId, duplicate.contact_id, duplicate.lead_id, duplicate);
           await client.query('commit');

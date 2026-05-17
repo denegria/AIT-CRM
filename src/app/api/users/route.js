@@ -150,6 +150,18 @@ export async function POST(request) {
         throw new Error(`Role "${roleKey}" was not found. Run bootstrap role provisioning first.`);
       }
 
+      const managedRoleRows = await tx
+        .select({ id: roles.id })
+        .from(roles)
+        .where(and(
+          eq(roles.organizationId, session.user.organizationId),
+          inArray(roles.key, MANAGED_ROLE_KEYS),
+        ));
+      const managedRoleIds = managedRoleRows.map((row) => row.id);
+      if (!managedRoleIds.length) {
+        throw new Error('Managed roles were not found. Run bootstrap role provisioning first.');
+      }
+
       if (businessUnitIds.length) {
         const validUnits = await tx
           .select({ id: businessUnits.id })
@@ -164,16 +176,19 @@ export async function POST(request) {
       }
 
       const [existing] = await tx
-        .select({ id: users.id })
+        .select({ id: users.id, organizationId: users.organizationId })
         .from(users)
         .where(eq(users.email, email))
         .limit(1);
 
       let userId = existing?.id;
       if (userId) {
+        if (existing.organizationId !== session.user.organizationId) {
+          throw new Error('A user with this email already belongs to another organization.');
+        }
         await tx
           .update(users)
-          .set({ organizationId: session.user.organizationId, name, isActive: true, updatedAt: new Date() })
+          .set({ name, isActive: true, updatedAt: new Date() })
           .where(eq(users.id, userId));
       } else {
         const [insertedUser] = await tx
@@ -213,7 +228,9 @@ export async function POST(request) {
           });
       }
 
-      await tx.delete(userRoles).where(eq(userRoles.userId, userId));
+      await tx
+        .delete(userRoles)
+        .where(and(eq(userRoles.userId, userId), inArray(userRoles.roleId, managedRoleIds)));
       await tx.insert(userRoles).values({ userId, roleId: roleRow.id });
 
       await tx.delete(businessUnitMemberships).where(eq(businessUnitMemberships.userId, userId));
