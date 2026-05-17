@@ -54,6 +54,16 @@ Professional documents are just one click away:
 
 ---
 
+## ✅ Daily Lead Workflow
+
+1. Start in **Contacts** and filter for New Lead or the relevant pipeline stage.
+2. Open the contact detail before outreach so notes, source, website form details, and work history are visible.
+3. After outreach, update the stage and add a note with the call/message result.
+4. Use the pipeline view when managing many leads at once.
+5. Use Work Orders only once a job is real enough to track production or install work.
+
+---
+
 ## ✅ Import Review Safety
 
 - Use **Import Review** to set row status (`approved`, `needs_review`, `rejected`, `pending`).
@@ -64,6 +74,7 @@ Professional documents are just one click away:
   2. Keep uncertain rows in `needs_review`.
   3. Run a promotion dry run first.
   4. Promote approved rows.
+- Capture sheet name, row number, and reason when approving or rejecting from the CLI.
 
 ---
 
@@ -72,6 +83,14 @@ Professional documents are just one click away:
 - These pages are intentionally limited in v1 and currently serve as admin-only sample/demo surfaces.
 - They are visible to administrators and hidden/restricted for non-admin users.
 - Core v1 operational work should prioritize Contacts, Import Review, and Work Orders.
+
+---
+
+## 🌐 Website Leads (v1 Note)
+
+- AIT USA Wix lead ingestion is connected through the CRM website-leads webhook.
+- Website form details such as address/location, age, message, source, and extra submitted fields are preserved in the contact/lead record or notes.
+- AIT Signs WordPress/Divi lead ingestion is not a v1 blocker. It should wait until the live form stack is renewed, replaced, or otherwise stable.
 
 ---
 
@@ -87,3 +106,5 @@ Roles are account-based (not a sidebar toggle in database-backed sessions):
 
 - **Data Reset**: In local/demo mode, use **Settings → Reset Data** to restore defaults.
 - **Database-backed sessions**: Data is stored in Postgres; browser local data reset does not control production records.
+- **Bad imported data**: Capture the contact/lead name, email/phone, business unit, source sheet, source row, and what field looks wrong.
+- **Missing website lead**: Capture the website/page, timestamp, submitted email/phone, and source form. Do not share webhook secrets in support notes.

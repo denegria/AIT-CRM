@@ -83,7 +83,9 @@ Optional env:
 }
 ```
 
-Send the secret as either `Authorization: Bearer <secret>` or `x-ait-webhook-secret`. The endpoint creates/updates a contact, creates a `website_form` lead, logs a `website_lead_captured` activity event, and preserves the raw submission in import staging tables for audit/recovery.
+Send the secret as `Authorization: Bearer <secret>`, `x-ait-webhook-secret`, or a body field named `x-ait-webhook-secret` when the form platform cannot send custom headers. Wix-style payloads wrapped as `{ "data": { ... } }` are accepted. The endpoint creates/updates a contact, creates a `website_form` lead, logs a `website_lead_captured` activity event, and preserves the raw submission in import staging tables for audit/recovery. Secret-like fields are redacted from audit/import storage.
+
+AIT USA Wix ingestion is V1-ready. AIT Signs WordPress/Divi ingestion is not a V1 launch blocker; connect it only after the live WordPress form stack is renewed, replaced, or otherwise stable.
 
 ## Rollback
 

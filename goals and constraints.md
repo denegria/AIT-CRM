@@ -7,7 +7,7 @@ This is not intended to be a wrapper around a generic CRM. The product should ow
 ## Product Goals
 
 - Give AIT one operational source of truth across AIT Signs, AIT USA Institute, AIT Photo & Video, and AIT Taxes.
-- Replace spreadsheet-driven work tracking with structured contacts, leads, estimates, work orders, files, notes, tasks, payments snapshots, and activity history.
+- Replace spreadsheet-driven work tracking with structured contacts, leads, estimates, work orders, notes, tasks, payments snapshots, and activity history. Files are planned once object storage is configured.
 - Preserve business-unit separation while still allowing consolidated organization-level reporting.
 - Make lead ingestion from Facebook, website forms, spreadsheets, and future sources reliable, traceable, and reviewable.
 - Support role-specific workflows for administrators, designers, account managers, and sales managers.
@@ -36,7 +36,7 @@ The migration is product work, not a one-time CSV load. Raw rows need to be stag
 - Authentication proves identity; AIT CRM owns authorization through app-controlled roles, permissions, organization scope, business-unit scope, assignment, and ownership.
 - Clerk is not the default auth choice because the project should avoid unnecessary vendor cost and complexity unless polished hosted user management becomes more valuable than owning the auth path.
 - QuickBooks remains the accounting source of truth for V1. AIT CRM can store invoice/payment visibility and estimate context, but it should not try to become a full accounting ledger.
-- Files should live in object storage, with metadata and permissions in Postgres. File blobs should not live in the database.
+- Files should live in object storage, with metadata and permissions in Postgres. File blobs should not live in the database. V1 file/attachment work is blocked until Cloudflare R2 or another S3-compatible bucket is configured.
 - Secrets belong in hosting/provider dashboards or local environment variables, never in committed files.
 
 ## Data And Import Constraints
@@ -98,6 +98,14 @@ The CRM should eventually support:
 
 The near-term product should prioritize trustworthy data, import review, business-unit scoping, and manual operations before automated outreach.
 
+## V1 Launch Boundaries
+
+- V1 launch focus is Contacts/Leads, Import Review, Work Orders, business-unit scoping, auth/RBAC, production verification, and verified website lead ingestion for the stable forms.
+- AIT USA Wix ingestion is part of V1.
+- AIT Signs WordPress/Divi ingestion is post-V1 until the public form stack is renewed, replaced, or otherwise stable.
+- QuickBooks stays out of V1 and remains the accounting source of truth.
+- File/attachment storage waits for object storage setup.
+
 ## Build And Operating Constraints
 
 - Keep the current UI stable while the data layer moves from generated/local data to Postgres-backed reads and writes.
@@ -116,8 +124,9 @@ The near-term product should prioritize trustworthy data, import review, busines
 - Database: Postgres
 - ORM/migrations: Drizzle
 - Current fallback state: sanitized demo records are used only when no database is configured; live empty databases should stay empty until import staging is loaded
-- Live database status: the initial schema and import staging migrations have been applied to Neon; staged AIT Signs source rows are loaded, but production CRM records still require human review/promote
+- Live database status: the initial schema and import staging migrations have been applied to Neon; AIT Signs rows flow through import review before promotion into production CRM tables
 - Auth status: database-backed sessions require `AIT_CRM_SESSION_SECRET` plus a bootstrapped user; local no-database mode still uses sanitized demo data
+- Website lead status: AIT USA Wix ingestion is proven through the website-leads webhook; WordPress/Divi ingestion is parked until the form stack is stabilized
 
 ## Development
 

@@ -18,10 +18,11 @@ Refer to `src/app/globals.css` for:
 - `--accent`, `--success`, `--danger` (Semantic colors)
 - `--shadow-md`, `--radius-lg` (Elevation & Corners)
 
-## 🛣️ Roadmap for Next Agent
-1. **Directus Integration**: Transition from `localStorage` to a Dockerized PostgreSQL + Directus backend.
-2. **CSV Import**: Build a mapper in `src/app/contacts/import/page.js` for Google Sheets data.
-3. **Mobile Polish**: Enhance the bottom nav behavior for mobile screen widths.
+## 🛣️ Current V1 Direction
+1. **Postgres is the source of truth**: keep live reads/writes on the Drizzle/Postgres path. Local seed data is fallback only when no database is configured.
+2. **Import Review is the safety gate**: staged AIT Signs rows must be approved before promotion. Do not bypass review for ambiguous rows.
+3. **Website leads are webhook-backed**: non-Meta website forms use `/api/webhooks/website-leads`. Wix-style top-level `data` payloads and body-secret fields are supported; secret fields must stay redacted.
+4. **V1 boundaries**: QuickBooks, automated outbound follow-up, WordPress/Divi lead capture, and file attachments are not launch blockers. Attachments require object storage setup first.
 
 ## ✅ Import Review Approval
 - Use `npm run db:review-ait-signs-staging summary` to inspect the current batch before approving anything.
@@ -30,3 +31,4 @@ Refer to `src/app/globals.css` for:
 - Reject a staged row with `npm run db:review-ait-signs-staging reject-row --sheet "Sheet Name" --row 123 --reason "bad match"`.
 - In the app, the same queue lives at `/import-review`; approve from the row actions or the bulk approve button after unlocking access.
 - Only rows with `approved` status are promoted into production tables. Leave ambiguous rows as `needs_review` or reject them instead of forcing a bad match.
+- Run `npm run db:promote-ait-signs-staging --dry-run` before a real promotion.

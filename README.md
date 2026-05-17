@@ -116,13 +116,16 @@ npm run verify:rbac
 
 Database commands require `DATABASE_URL`.
 Production release, rollback, backup, and Meta page setup steps live in [docs/production-runbook.md](./docs/production-runbook.md).
+The short V1 operator/admin handoff lives in [docs/v1-handoff.md](./docs/v1-handoff.md).
 
 Website lead ingestion is available at `/api/webhooks/website-leads` once these production env vars are configured:
 
-- `WEBSITE_LEADS_WEBHOOK_SECRET`: shared secret sent as `Authorization: Bearer <secret>` or `x-ait-webhook-secret`
+- `WEBSITE_LEADS_WEBHOOK_SECRET`: shared secret sent as `Authorization: Bearer <secret>`, `x-ait-webhook-secret`, or a body field named `x-ait-webhook-secret`
 - `WEBSITE_LEADS_BUSINESS_UNIT_MAP`: optional JSON map from source/form/domain keys to business-unit name or id, for example `{"ait-usa-contact":"AIT USA Institute","default":"AIT Signs"}`
 
-POST JSON can include `name`, `firstName`, `lastName`, `email`, `phone`, `company`, `address`, `message`, `service`, `sourceKey`, `formId`, `sourceName`, `externalId`, `submittedAt`, and `businessUnit`/`division`.
+POST JSON can include `name`, `firstName`, `lastName`, `email`, `phone`, `company`, `address`, `location`, `age`, `message`, `service`, `sourceKey`, `formId`, `sourceName`, `externalId`, `submittedAt`, and `businessUnit`/`division`. Wix-style payloads wrapped as `{ "data": { ... } }` are accepted. Secret fields are redacted from audit/import storage.
+
+AIT USA Wix lead ingestion is V1-ready. AIT Signs WordPress/Divi lead ingestion is intentionally parked until the public form stack is stabilized or replaced.
 
 For database-backed app sessions, set `AIT_CRM_SESSION_SECRET`, run migrations, then bootstrap the first admin:
 
@@ -171,6 +174,14 @@ npm run db:review-ait-signs-staging approve-row --sheet "Sheet Name" --row 123 -
 ```
 
 4. Use `needs_review` or reject the row if the mapping is unclear.
-5. Promote only approved rows with `npm run db:promote-ait-signs-staging`.
+5. Run `npm run db:promote-ait-signs-staging --dry-run` before writing production records.
+6. Promote only approved rows with `npm run db:promote-ait-signs-staging`.
 
 Import review also accepts the temporary `AIT_CRM_ADMIN_TOKEN` path for internal unlocks until app-owned auth/RBAC covers every case.
+
+## V1 Boundaries
+
+- QuickBooks remains the accounting source of truth.
+- Financials and Reports are limited/admin surfaces in V1.
+- File/attachment storage is blocked until an object store such as Cloudflare R2 is configured.
+- WordPress/Divi lead capture is post-V1 unless the site form stack is renewed, replaced, or otherwise stabilized.
