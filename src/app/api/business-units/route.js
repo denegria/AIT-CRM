@@ -3,20 +3,8 @@ import { and, asc, eq, ne } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
 import { activityEvents, businessUnits } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
-
-function isUuid(value) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i.test(String(value || ''));
-}
-
-function toBusinessUnitPayload(row) {
-  return {
-    id: row.id,
-    name: row.name,
-    label: row.label || 'Divisions',
-    color: row.color || '',
-    isActive: row.isActive !== false,
-  };
-}
+import { toBusinessUnitPayload } from '@/lib/crm/payloads.js';
+import { isUuid } from '@/lib/crm/validation.js';
 
 function cleanString(value) {
   return String(value || '').trim();

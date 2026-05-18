@@ -3,11 +3,14 @@ import { and, desc, eq } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
 import { activityEvents, businessUnits, contacts, leads, notes } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
+import {
+  canAccessContact,
+  resolveBusinessUnitId,
+  resolveOptionalBusinessUnitId,
+} from '@/lib/crm/access.js';
+import { crmErrorResponse } from '@/lib/crm/errors.js';
+import { isUuid } from '@/lib/crm/validation.js';
 import { workflowFromLead } from '@/lib/sales-workflow';
-
-function isUuid(value) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
-}
 
 function toContactPayload(row, lead = null, noteRows = []) {
   const workflow = workflowFromLead(lead);
@@ -45,68 +48,11 @@ function hasBusinessUnitRequest(body) {
   return 'businessUnitId' in body || 'primaryBusinessUnitId' in body;
 }
 
-function businessUnitError(message, status = 400) {
-  const error = new Error(message);
-  error.status = status;
-  return error;
-}
-
-function businessUnitErrorResponse(error) {
-  if (!error?.status) throw error;
-  return NextResponse.json({ error: error.message }, { status: error.status });
-}
-
-function canAccessContact(session, contact) {
-  return Boolean(
-    session.user.canAccessAllBusinessUnits ||
-    !contact.primaryBusinessUnitId ||
-    session.user.businessUnitIds.includes(contact.primaryBusinessUnitId)
-  );
-}
-
-async function resolveBusinessUnitId(db, session, requestedId) {
-  if (requestedId) {
-    if (!isUuid(requestedId)) {
-      throw businessUnitError('A valid business unit id is required.');
-    }
-
-    const [row] = await db
-      .select({ id: businessUnits.id })
-      .from(businessUnits)
-      .where(and(eq(businessUnits.id, requestedId), eq(businessUnits.organizationId, session.user.organizationId)))
-      .limit(1);
-
-    if (!row) {
-      throw businessUnitError('Business unit not found.');
-    }
-    if (session.user.canAccessAllBusinessUnits || session.user.businessUnitIds.includes(requestedId)) {
-      return row.id;
-    }
-    throw businessUnitError('Insufficient business-unit access.', 403);
-  }
-
-  if (!session.user.canAccessAllBusinessUnits && session.user.businessUnitIds.length) {
-    return session.user.businessUnitIds[0];
-  }
-
-  const [row] = await db
-    .select({ id: businessUnits.id })
-    .from(businessUnits)
-    .where(eq(businessUnits.organizationId, session.user.organizationId))
-    .orderBy(businessUnits.name)
-    .limit(1);
-  return row?.id || null;
-}
-
-async function resolveOptionalBusinessUnitId(db, session, requestedId) {
-  if (!requestedId) return null;
-  return resolveBusinessUnitId(db, session, requestedId);
-}
 
 async function resolveContactBusinessUnitForCreate(db, session, body) {
   const requestedId = requestedBusinessUnitId(body);
   if (!requestedId && hasBusinessUnitRequest(body) && session.user.canAccessAllBusinessUnits) return null;
-  return resolveBusinessUnitId(db, session, requestedId);
+  return resolveBusinessUnitId({ db, session, businessUnitsTable: businessUnits, requestedId });
 }
 
 async function latestLeadForContact(db, contactId) {
@@ -158,7 +104,7 @@ export async function POST(request) {
   try {
     businessUnitId = await resolveContactBusinessUnitForCreate(db, session, body);
   } catch (error) {
-    return businessUnitErrorResponse(error);
+    return crmErrorResponse(error);
   }
   const [contact] = await db.insert(contacts).values({
     organizationId: session.user.organizationId,
@@ -223,9 +169,14 @@ export async function PATCH(request) {
       return NextResponse.json({ error: 'Only all-division users can unassign a contact.' }, { status: 403 });
     }
     try {
-      patch.primaryBusinessUnitId = await resolveOptionalBusinessUnitId(db, session, requestedId);
+      patch.primaryBusinessUnitId = await resolveOptionalBusinessUnitId({
+        db,
+        session,
+        businessUnitsTable: businessUnits,
+        requestedId,
+      });
     } catch (error) {
-      return businessUnitErrorResponse(error);
+      return crmErrorResponse(error);
     }
   }
 

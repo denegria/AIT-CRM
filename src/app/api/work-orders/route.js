@@ -3,10 +3,13 @@ import { and, eq, desc } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
 import { activityEvents, businessUnits, contacts, leads, workOrders } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
-
-function isUuid(value) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ''));
-}
+import {
+  canAccessBusinessUnit,
+  resolveBusinessUnitId,
+  resolveContactById,
+} from '@/lib/crm/access.js';
+import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
+import { isUuid } from '@/lib/crm/validation.js';
 
 function toDateOnly(value) {
   if (!value) return '';
@@ -27,21 +30,6 @@ function parseDeliveryDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(dateString) ? dateString : null;
 }
 
-function canAccessBusinessUnit(session, businessUnitId) {
-  return Boolean(
-    session.user.canAccessAllBusinessUnits ||
-    session.user.businessUnitIds.includes(businessUnitId)
-  );
-}
-
-function canAccessContact(session, contact) {
-  return Boolean(
-    session.user.canAccessAllBusinessUnits ||
-    !contact.primaryBusinessUnitId ||
-    session.user.businessUnitIds.includes(contact.primaryBusinessUnitId)
-  );
-}
-
 function toWorkOrderPayload(row, contact = null) {
   return {
     id: row.id,
@@ -59,67 +47,6 @@ function toWorkOrderPayload(row, contact = null) {
   };
 }
 
-function businessUnitError(message, status = 400) {
-  const error = new Error(message);
-  error.status = status;
-  return error;
-}
-
-function businessUnitErrorResponse(error) {
-  if (!error?.status) throw error;
-  return NextResponse.json({ error: error.message }, { status: error.status });
-}
-
-async function resolveBusinessUnitId(db, session, requestedId) {
-  if (requestedId) {
-    if (!isUuid(requestedId)) {
-      throw businessUnitError('A valid business unit id is required.');
-    }
-    const [row] = await db
-      .select({ id: businessUnits.id })
-      .from(businessUnits)
-      .where(and(eq(businessUnits.id, requestedId), eq(businessUnits.organizationId, session.user.organizationId)))
-      .limit(1);
-
-    if (!row) throw businessUnitError('Business unit not found.');
-    if (canAccessBusinessUnit(session, requestedId)) return requestedId;
-    throw businessUnitError('Insufficient business-unit access.', 403);
-  }
-
-  if (!session.user.canAccessAllBusinessUnits && session.user.businessUnitIds.length) {
-    return session.user.businessUnitIds[0];
-  }
-
-  const [row] = await db
-    .select({ id: businessUnits.id })
-    .from(businessUnits)
-    .where(eq(businessUnits.organizationId, session.user.organizationId))
-    .orderBy(businessUnits.name)
-    .limit(1);
-
-  if (!row?.id) throw businessUnitError('No business units available for this organization.');
-  return row.id;
-}
-
-async function resolveContact(db, session, contactId) {
-  if (!contactId) return null;
-  if (!isUuid(contactId)) {
-    throw businessUnitError('A valid contact id is required.');
-  }
-
-  const [contact] = await db
-    .select()
-    .from(contacts)
-    .where(and(eq(contacts.id, contactId), eq(contacts.organizationId, session.user.organizationId)))
-    .limit(1);
-
-  if (!contact) throw businessUnitError('Contact not found.', 404);
-  if (!canAccessContact(session, contact)) {
-    throw businessUnitError('Insufficient business-unit access for this contact.', 403);
-  }
-  return contact;
-}
-
 async function resolveLeadId(db, contactId) {
   if (!contactId) return null;
   const [lead] = await db
@@ -135,18 +62,19 @@ async function resolveCreateBusinessUnitId(db, session, body, contact) {
   const requestedId = String(body.businessUnitId || '').trim();
   if (contact?.primaryBusinessUnitId) {
     if (requestedId && requestedId !== contact.primaryBusinessUnitId) {
-      throw businessUnitError('Work order division must match the selected contact.');
+      throw createCrmError('Work order division must match the selected contact.');
     }
-    return resolveBusinessUnitId(db, session, contact.primaryBusinessUnitId);
+    return resolveBusinessUnitId({ db, session, businessUnitsTable: businessUnits, requestedId: contact.primaryBusinessUnitId });
   }
-  return resolveBusinessUnitId(db, session, requestedId);
+  const businessUnitId = await resolveBusinessUnitId({ db, session, businessUnitsTable: businessUnits, requestedId });
+  if (!businessUnitId) {
+    throw createCrmError('No business units available for this organization.');
+  }
+  return businessUnitId;
 }
 
 function canAccessWorkOrder(session, workOrder) {
-  return Boolean(
-    session.user.canAccessAllBusinessUnits ||
-    session.user.businessUnitIds.includes(workOrder.businessUnitId)
-  );
+  return canAccessBusinessUnit(session, workOrder.businessUnitId);
 }
 
 export async function POST(request) {
@@ -159,7 +87,12 @@ export async function POST(request) {
 
   const db = getDb();
   try {
-    const contact = await resolveContact(db, session, String(body.contactId || '').trim());
+    const contact = await resolveContactById({
+      db,
+      session,
+      contactsTable: contacts,
+      contactId: String(body.contactId || '').trim(),
+    });
     const businessUnitId = await resolveCreateBusinessUnitId(db, session, body, contact);
     const leadId = await resolveLeadId(db, contact?.id || null);
 
@@ -195,7 +128,7 @@ export async function POST(request) {
 
     return NextResponse.json({ workOrder: toWorkOrderPayload(workOrder, contact) }, { status: 201 });
   } catch (err) {
-    return businessUnitErrorResponse(err);
+    return crmErrorResponse(err);
   }
 }
 
@@ -224,7 +157,12 @@ export async function PATCH(request) {
   try {
     const contactProvided = Object.prototype.hasOwnProperty.call(body, 'contactId');
     const requestedContactId = contactProvided ? String(body.contactId || '').trim() : existing.contactId || '';
-    const contact = await resolveContact(db, session, requestedContactId);
+    const contact = await resolveContactById({
+      db,
+      session,
+      contactsTable: contacts,
+      contactId: requestedContactId,
+    });
     const requestedBusinessUnitId = Object.prototype.hasOwnProperty.call(body, 'businessUnitId')
       ? String(body.businessUnitId || '').trim()
       : existing.businessUnitId;
@@ -232,11 +170,14 @@ export async function PATCH(request) {
     let businessUnitId = existing.businessUnitId;
     if (contact?.primaryBusinessUnitId) {
       if (requestedBusinessUnitId && requestedBusinessUnitId !== contact.primaryBusinessUnitId) {
-        throw businessUnitError('Work order division must match the selected contact.');
+        throw createCrmError('Work order division must match the selected contact.');
       }
-      businessUnitId = await resolveBusinessUnitId(db, session, contact.primaryBusinessUnitId);
+      businessUnitId = await resolveBusinessUnitId({ db, session, businessUnitsTable: businessUnits, requestedId: contact.primaryBusinessUnitId });
     } else if (Object.prototype.hasOwnProperty.call(body, 'businessUnitId')) {
-      businessUnitId = await resolveBusinessUnitId(db, session, requestedBusinessUnitId);
+      businessUnitId = await resolveBusinessUnitId({ db, session, businessUnitsTable: businessUnits, requestedId: requestedBusinessUnitId });
+      if (!businessUnitId) {
+        throw createCrmError('No business units available for this organization.');
+      }
     }
 
     const patch = { updatedAt: new Date(), businessUnitId };
@@ -275,7 +216,7 @@ export async function PATCH(request) {
 
     return NextResponse.json({ workOrder: toWorkOrderPayload(workOrder, contact) });
   } catch (err) {
-    return businessUnitErrorResponse(err);
+    return crmErrorResponse(err);
   }
 }
 

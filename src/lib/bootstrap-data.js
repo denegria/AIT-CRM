@@ -1,9 +1,10 @@
 import { cache } from 'react';
-import { and, asc, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { asc, desc, eq } from 'drizzle-orm';
 import * as seedData from './data';
 import { getDb } from '../db/index.js';
 import { hasPermission, isAuthEnabled, PERMISSIONS, SESSION_SECRET_ENV } from './auth';
 import {
+  businessUnits as businessUnitsTable,
   contacts as contactsTable,
   workOrders as workOrdersTable,
   estimates as estimatesTable,
@@ -11,12 +12,17 @@ import {
   notes as notesTable,
   activityEvents as activityEventsTable,
   leads as leadsTable,
-  businessUnits as businessUnitsTable,
   importBatches as importBatchesTable,
   importSourceRows as importSourceRowsTable,
   importNormalizedRecords as importNormalizedRecordsTable,
   importReviewItems as importReviewItemsTable,
 } from '../db/schema.js';
+import {
+  scopedBusinessUnitWhere,
+  scopedContactWhere,
+  scopedOrgWhere,
+} from './crm/access.js';
+import { toBusinessUnitPayload } from './crm/payloads.js';
 import { workflowFromLead } from './sales-workflow';
 
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
@@ -139,17 +145,6 @@ function mapFinancials(estimateRows, paymentRows, contactLookup) {
   return [...estimates, ...receipts];
 }
 
-function mapBusinessUnits(rows) {
-  if (!rows.length) return seedData.businessUnits || [];
-  return rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    label: row.label || 'Divisions',
-    color: row.color || null,
-    isActive: row.isActive ?? true,
-  }));
-}
-
 function authData({ authRequired = false, authError = '', currentUser = null } = {}) {
   return {
     ...seedData,
@@ -190,37 +185,6 @@ function sessionAccess(session) {
     canWriteFinancials: hasPermission(session, PERMISSIONS.FINANCIALS_WRITE),
     canWriteWorkOrders: hasPermission(session, PERMISSIONS.WORK_ORDERS_WRITE),
   };
-}
-
-function businessUnitScope(column, session) {
-  if (session.user.canAccessAllBusinessUnits) return undefined;
-  if (!session.user.businessUnitIds.length) return sql`false`;
-  return inArray(column, session.user.businessUnitIds);
-}
-
-function scopedContactWhere(session) {
-  const orgScope = eq(contactsTable.organizationId, session.user.organizationId);
-  if (session.user.canAccessAllBusinessUnits) return orgScope;
-  if (!session.user.businessUnitIds.length) {
-    return and(orgScope, isNull(contactsTable.primaryBusinessUnitId));
-  }
-  return and(
-    orgScope,
-    or(
-      isNull(contactsTable.primaryBusinessUnitId),
-      inArray(contactsTable.primaryBusinessUnitId, session.user.businessUnitIds),
-    ),
-  );
-}
-
-function scopedOrgWhere(table, session) {
-  return eq(table.organizationId, session.user.organizationId);
-}
-
-function scopedBusinessUnitWhere(table, session) {
-  const orgScope = scopedOrgWhere(table, session);
-  const buScope = businessUnitScope(table.businessUnitId, session);
-  return buScope ? and(orgScope, buScope) : orgScope;
 }
 
 async function countRowsForBatch(db, table, batchId) {
@@ -283,7 +247,7 @@ function emptyDbData(businessUnitRows = [], importStaging = null) {
     authError: '',
     currentUser: null,
     access: authData().access,
-    businessUnits: mapBusinessUnits(businessUnitRows),
+    businessUnits: businessUnitRows.length ? businessUnitRows.map(toBusinessUnitPayload) : (seedData.businessUnits || []),
     contacts: [],
     workOrders: [],
     financials: [],
@@ -349,7 +313,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       importStaging,
     ] = await Promise.all([
       db.select().from(businessUnitsTable).where(scopedOrgWhere(businessUnitsTable, session)).orderBy(asc(businessUnitsTable.name)),
-      db.select().from(contactsTable).where(scopedContactWhere(session)).orderBy(desc(contactsTable.createdAt)),
+      db.select().from(contactsTable).where(scopedContactWhere(contactsTable, session)).orderBy(desc(contactsTable.createdAt)),
       db.select().from(leadsTable).where(scopedBusinessUnitWhere(leadsTable, session)).orderBy(desc(leadsTable.createdAt)),
       db.select().from(workOrdersTable).where(scopedBusinessUnitWhere(workOrdersTable, session)).orderBy(desc(workOrdersTable.createdAt)),
       db.select().from(estimatesTable).where(scopedBusinessUnitWhere(estimatesTable, session)).orderBy(desc(estimatesTable.createdAt)),
@@ -378,7 +342,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       authError: '',
       currentUser: session.user,
       access,
-      businessUnits: mapBusinessUnits(businessUnitRows),
+      businessUnits: businessUnitRows.map(toBusinessUnitPayload),
       contacts,
       workOrders,
       financials,
