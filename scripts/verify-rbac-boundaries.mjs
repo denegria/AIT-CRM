@@ -161,7 +161,14 @@ async function checkHttpBoundaries() {
   const session = await requestJson(new URL('/api/auth/session', baseUrl), {
     headers: { cookie: sessionCookie },
   });
+  addCheck('session route accepts login cookie', session.response.status === 200, 'status=' + session.response.status);
+  addCheck('session route reports authenticated user', session.body.authenticated === true, 'authenticated=' + session.body.authenticated);
   const user = session.body.user || {};
+  addCheck(
+    'session route returns expected user email',
+    String(user.email || '').toLowerCase() === email.toLowerCase(),
+    'email=' + (user.email || 'missing'),
+  );
   const permissions = user.permissions || [];
   addCheck('test account is business-unit scoped', user.canAccessAllBusinessUnits === false, 'canAccessAllBusinessUnits=' + user.canAccessAllBusinessUnits);
   addCheck('test account has assigned business unit', Array.isArray(user.businessUnitIds) && user.businessUnitIds.length > 0, (user.businessUnitIds || []).join(','));

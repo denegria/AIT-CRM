@@ -41,6 +41,15 @@ async function checkHttp() {
   const root = await fetch(baseUrl, { redirect: 'manual' });
   addCheck('production root responds', root.status >= 200 && root.status < 400, 'HTTP ' + root.status);
 
+  const session = await fetch(new URL('/api/auth/session', baseUrl));
+  const sessionBody = await readJson(session);
+  addCheck('auth session route responds', session.status === 200, 'HTTP ' + session.status);
+  addCheck(
+    'auth session route reports anonymous visitors unauthenticated',
+    sessionBody.authenticated === false && sessionBody.user === null,
+    JSON.stringify(sessionBody),
+  );
+
   const wrongUrl = new URL('/api/webhooks/facebook-leads', baseUrl);
   wrongUrl.searchParams.set('hub.mode', 'subscribe');
   wrongUrl.searchParams.set('hub.verify_token', 'definitely-wrong-token');
@@ -58,6 +67,16 @@ async function checkHttp() {
     const valid = await fetch(validUrl);
     const body = await valid.text();
     addCheck('webhook accepts configured verify token', valid.status === 200 && body === 'readiness-check', 'HTTP ' + valid.status);
+  }
+}
+
+async function readJson(response) {
+  const text = await response.text();
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { raw: text };
   }
 }
 
