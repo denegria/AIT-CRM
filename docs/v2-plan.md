@@ -4,10 +4,11 @@ V2 should make AIT CRM the system that reliably drives follow-up. The money feat
 
 ## Decision
 
-Build V2 in two connected milestones:
+Build V2 with a short architecture-prep lane, then two connected product milestones:
 
-1. **V2.0 Ops Core:** make the CRM operationally trustworthy for assignment, follow-up, reporting, and admin control.
-2. **V2.1 Comms Engine:** add WhatsApp and Messenger as first-class conversation/follow-up channels on top of the shared CRM workflow state.
+1. **V2 Prep:** extract reusable V1 mechanics that V2 will depend on, without changing product behavior.
+2. **V2.0 Ops Core:** make the CRM operationally trustworthy for assignment, follow-up, reporting, and admin control.
+3. **V2.1 Comms Engine:** add WhatsApp and Messenger as first-class conversation/follow-up channels on top of the shared CRM workflow state.
 
 Do not create a separate V2 social-monitoring phase. WhatsApp and Messenger should absorb inbound replies, outbound follow-up, conversation history, and agent-assisted triage for V2. Broader social monitoring outside this lane is V3.
 
@@ -28,6 +29,7 @@ Known constraints:
 - File/attachment storage is blocked until an R2/S3-compatible bucket and env/access posture are approved.
 - WordPress/Divi ingestion replacement remains deferred.
 - WhatsApp/Messenger outbound sending must respect Meta policy, template approval, 24-hour messaging windows, consent, opt-out, and rate/failure handling.
+- Several V1 routes intentionally shipped fast and now contain reusable mechanics that should be extracted before V2 builds on them: webhook/provider adapters, import-review operations, business-unit access helpers, and multi-write CRM mutation patterns.
 
 ## V2 Goals
 
@@ -59,10 +61,15 @@ Keep the same action/service split:
 
 Recommended new internal modules:
 
+- src/lib/crm/* for shared access, scoping, payload, activity, and transactional CRM write mechanics.
+- src/lib/import-review/* for shared API/CLI import-review mechanics.
+- src/lib/ingestion/* for provider-neutral inbound lead/import mechanics.
 - src/lib/tasks/* for task/follow-up mechanics.
 - src/lib/conversations/* for provider-neutral conversation/message mechanics.
 - src/lib/messaging/providers/* for WhatsApp and Messenger adapters.
 - src/lib/automation/* for follow-up sequence scheduling and idempotent job execution.
+
+Do not scale the current one-shot bootstrap/client-state pattern into V2 tasks, timelines, and conversations. V2 read models should have explicit API/service contracts so follow-up queues and conversations can grow without loading the whole CRM state blob.
 
 Recommended background execution:
 
@@ -92,6 +99,13 @@ Keep V2 issues consistent with the V1 Linear pattern:
 
 ## Issue Label Index
 
+- V2-PRE-001 Shared CRM Access Helpers: Priority High; labels Improvement, Needs Full Model, Complexity: Standard; owner lane Builder.
+- V2-PRE-002 Transactional CRM Write Helpers: Priority High; labels Improvement, Needs Full Model, Complexity: Complex; owner lane Builder.
+- V2-PRE-003 Import Review Service Parity: Priority High; labels Improvement, Needs Full Model, Complexity: Standard; owner lane Builder.
+- V2-PRE-004 Website Lead Ingestion Service: Priority High; labels Improvement, Needs Full Model, Complexity: Complex; owner lane Builder plus Sentry review.
+- V2-PRE-005 Meta Webhook And Graph Client Adapter: Priority High; labels Improvement, Needs Full Model, Complexity: High Risk; owner lane Builder plus Sentry/Titan review.
+- V2-PRE-006 Facebook Lead Ads Ingestion Service: Priority High; labels Improvement, Needs Full Model, Complexity: Complex; owner lane Builder plus Sentry review.
+- V2-PRE-007 Messenger Inbound Ingestion Service: Priority High; labels Improvement, Needs Full Model, Complexity: Complex; owner lane Builder plus Sentry review.
 - V2-001 Task And Follow-Up Schema: Priority High; labels Feature, Needs Full Model, Complexity: Complex; owner lane Builder.
 - V2-002 Task Service And API: Priority High; labels Feature, Needs Full Model, Complexity: Complex; owner lane Builder.
 - V2-003 Follow-Up Queue UI: Priority High; labels Feature, Needs Full Model, Complexity: Standard; owner lane Builder.
@@ -111,6 +125,258 @@ Keep V2 issues consistent with the V1 Linear pattern:
 - V2-017 Follow-Up Sequence MVP: Priority High; labels Feature, Needs Full Model, Complexity: High Risk; owner lane Builder plus Sentry/Titan review.
 - V2-018 Agent Triage And Draft Replies: Priority Medium; labels Feature, Needs Full Model, Complexity: Complex; owner lane Builder plus Sentry review.
 - V2-019 Comms Observability And Runbook: Priority Medium; labels Improvement, Needs Full Model, Complexity: Standard; owner lane Builder/Sentry/Giuseppe.
+
+## V2 Prep Architecture Slices
+
+These slices should preserve V1 behavior while making the codebase easier to review and reuse. They are intentionally split by boundary instead of grouped into one refactor ticket.
+
+### V2-PRE-001: Shared CRM Access Helpers
+
+Linear metadata:
+
+- Title: [AIT CRM V2 Prep] Shared CRM access helpers
+- Priority: High
+- Labels: Improvement, Needs Full Model, Complexity: Standard
+- Owner lane: Builder
+- Dependencies: none
+
+Objective: centralize repeated organization, business-unit, UUID, and access helper mechanics used by CRM routes.
+
+Scope:
+
+- Add focused helpers under src/lib/crm/* for UUID validation, business-unit access checks, business-unit resolution, contact access checks, and common CRM payload conversion where it is duplicated.
+- Update contacts, work-orders, bootstrap, and business-unit routes only where helpers remove current duplication.
+- Preserve route-owned permission checks and user-facing error wording.
+
+Action/service boundary:
+
+- Routes keep auth, permission choice, operation intent, and response status.
+- Helpers provide reusable mechanics with explicit session, organization, and business-unit inputs; they must not read request/session globals.
+
+Acceptance:
+
+- Existing CRM APIs keep the same success/error behavior.
+- V2 task/conversation slices can reuse the same access helpers without importing route files.
+- No helper silently widens business-unit access.
+
+Validation:
+
+- npm run lint
+- npm run build
+- npm run verify:rbac when database env is available
+
+### V2-PRE-002: Transactional CRM Write Helpers
+
+Linear metadata:
+
+- Title: [AIT CRM V2 Prep] Transactional CRM write helpers
+- Priority: High
+- Labels: Improvement, Needs Full Model, Complexity: Complex
+- Owner lane: Builder
+- Dependencies: V2-PRE-001 preferred
+
+Objective: make existing multi-write CRM mutations atomic and reusable before automation starts writing follow-up state.
+
+Scope:
+
+- Introduce focused write helpers for common CRM mutations such as create contact with lead, update contact with lead/note changes, create/update/delete work order with activity event, and business-unit change with activity event.
+- Wrap current multi-write operations in transactions where partial writes would leave inconsistent CRM state.
+- Keep payloads and event messages compatible with V1.
+
+Action/service boundary:
+
+- Routes decide whether the current user can perform the mutation and which transition is allowed.
+- Write helpers own the actual grouped database operations and return structured rows/results.
+
+Acceptance:
+
+- A failed secondary write rolls back the full related mutation.
+- Activity events remain present for the same user-visible actions.
+- No new broad service decides permissions on behalf of routes.
+
+Validation:
+
+- npm run lint
+- npm run build
+- focused failure-path tests or a documented local transaction smoke
+
+### V2-PRE-003: Import Review Service Parity
+
+Linear metadata:
+
+- Title: [AIT CRM V2 Prep] Import review service parity
+- Priority: High
+- Labels: Improvement, Needs Full Model, Complexity: Standard
+- Owner lane: Builder
+- Dependencies: none
+
+Objective: make the import-review UI/API and CLI use the same batch selection, row loading, and status-update mechanics.
+
+Scope:
+
+- Extract import-review mechanics from src/app/api/import-review/route.js and scripts/review-ait-signs-staging.mjs into src/lib/import-review/*.
+- Align batch resolution rules so operator review batches and pending/needs_review rows are handled consistently.
+- Keep both API record-id updates and CLI sheet/row updates, but route them through one shared service contract.
+
+Action/service boundary:
+
+- API route owns auth/RBAC/admin-token compatibility and HTTP responses.
+- CLI owns command parsing/output.
+- Import-review service owns batch resolution, summary loading, row loading, and status updates.
+
+Acceptance:
+
+- API and CLI summaries return equivalent counts for the same batch.
+- Approve/reject through CLI and API update normalized records and review items consistently.
+- Existing V1 operator commands continue to work.
+
+Validation:
+
+- npm run lint
+- npm run build
+- DATABASE_URL-backed dry smoke for summary and one non-destructive sample read when env is available
+
+### V2-PRE-004: Website Lead Ingestion Service
+
+Linear metadata:
+
+- Title: [AIT CRM V2 Prep] Website lead ingestion service
+- Priority: High
+- Labels: Improvement, Needs Full Model, Complexity: Complex
+- Owner lane: Builder plus Sentry review
+- Dependencies: V2-PRE-001 and V2-PRE-002 preferred
+
+Objective: extract website-form parsing, verification, normalization, audit, duplicate handling, and persistence into reusable ingestion mechanics.
+
+Scope:
+
+- Move website lead mechanics out of src/app/api/webhooks/website-leads/route.js into src/lib/ingestion/website-leads.js or equivalent focused modules.
+- Preserve supported secret locations, Wix { data: ... } unwrapping, audit redaction, form field preservation, duplicate externalId handling, and CRM contact/lead creation behavior.
+- Add fixtures for plain JSON, Wix-wrapped JSON, body-secret auth, duplicate externalId, and audit redaction.
+
+Action/service boundary:
+
+- Route owns HTTP parsing entrypoint, configuration checks, secret policy, and response status.
+- Ingestion service owns reusable normalization/audit/persistence mechanics with explicit organization, business-unit, and body inputs.
+
+Acceptance:
+
+- Production Wix/AIT USA behavior remains compatible.
+- Secret-like fields are still redacted from import/audit storage.
+- The service can be reused by future non-Wix website form adapters.
+
+Validation:
+
+- npm run lint
+- npm run build
+- fixture tests for normalize/auth/audit behavior
+
+### V2-PRE-005: Meta Webhook And Graph Client Adapter
+
+Linear metadata:
+
+- Title: [AIT CRM V2 Prep] Meta webhook and Graph client adapter
+- Priority: High
+- Labels: Improvement, Needs Full Model, Complexity: High Risk
+- Owner lane: Builder plus Sentry/Titan review
+- Dependencies: none
+
+Objective: isolate Meta webhook verification, signature checking, page-token lookup, business-unit map parsing, and Graph API calls behind a provider adapter.
+
+Scope:
+
+- Extract Meta verify-token handling, app-secret signature validation, Page token lookup, Page business-unit mapping, Graph lead fetch, and Messenger profile fetch into src/lib/messaging/providers/meta.js or equivalent.
+- Keep provider adapter free of CRM persistence and request/session globals.
+- Add signed-payload and Graph failure fixtures.
+
+Action/service boundary:
+
+- Route owns HTTP GET/POST responses and provider config missing errors.
+- Provider adapter owns Meta-specific mechanics and structured provider results.
+- CRM ingestion services decide how provider results affect CRM/import state.
+
+Acceptance:
+
+- Facebook webhook verification and signed POST validation keep current behavior.
+- Graph API failures return structured reasons without throwing raw provider noise into routes.
+- Page token/business-unit mapping can be reused by V2 WhatsApp/Messenger work.
+
+Validation:
+
+- npm run lint
+- npm run build
+- provider fixture tests for signature, token lookup, and failed Graph responses
+
+### V2-PRE-006: Facebook Lead Ads Ingestion Service
+
+Linear metadata:
+
+- Title: [AIT CRM V2 Prep] Facebook Lead Ads ingestion service
+- Priority: High
+- Labels: Improvement, Needs Full Model, Complexity: Complex
+- Owner lane: Builder plus Sentry review
+- Dependencies: V2-PRE-001, V2-PRE-002, V2-PRE-005
+
+Objective: extract Facebook Lead Ads event flattening, idempotency, normalization, import audit, and CRM lead creation from the webhook route.
+
+Scope:
+
+- Move Lead Ads-specific logic from src/app/api/webhooks/facebook-leads/route.js into src/lib/ingestion/facebook-lead-ads.js or equivalent.
+- Preserve leadgen event keys, duplicate leadgen handling, import batch/source row/normalized record/review item writes, and activity event behavior.
+- Keep the route responsible for parsing the provider webhook and dispatching returned event results.
+
+Action/service boundary:
+
+- Route owns HTTP auth/config, webhook dispatch, and response shape.
+- Lead Ads ingestion service owns idempotent event storage, Graph field normalization, CRM contact/lead writes, and import audit mechanics.
+
+Acceptance:
+
+- Duplicate leadgen IDs are skipped as before.
+- Successful Graph fetch still creates/updates contact, creates lead, logs activity, and records promoted import audit.
+- Failed Graph fetch still preserves source/audit rows and marks review needed.
+
+Validation:
+
+- npm run lint
+- npm run build
+- provider/event fixture tests for duplicate, success, and Graph failure paths
+
+### V2-PRE-007: Messenger Inbound Ingestion Service
+
+Linear metadata:
+
+- Title: [AIT CRM V2 Prep] Messenger inbound ingestion service
+- Priority: High
+- Labels: Improvement, Needs Full Model, Complexity: Complex
+- Owner lane: Builder plus Sentry review
+- Dependencies: V2-PRE-001, V2-PRE-002, V2-PRE-005
+
+Objective: extract current Messenger inbound capture into a reusable service that V2 conversations can build on.
+
+Scope:
+
+- Move Messenger event flattening, spam/review classification, message idempotency, profile fetch handling, contact/lead creation/linking, activity logging, and import audit writes into src/lib/ingestion/messenger-inbound.js or equivalent.
+- Preserve current Page self-message ignore behavior, duplicate message handling, review classification, and linked-message behavior.
+- Return a structured result that can later feed conversation/message tables.
+
+Action/service boundary:
+
+- Route owns provider webhook dispatch and HTTP response aggregation.
+- Messenger ingestion service owns idempotent storage and CRM/import mechanics.
+- V2 conversation services should later consume this structured result rather than re-parsing provider payloads.
+
+Acceptance:
+
+- Existing Messenger inbound lead/link behavior remains compatible.
+- Review-worthy or failed-profile events remain visible in import review instead of disappearing.
+- The service result exposes enough fields for V2 conversation creation without requiring route internals.
+
+Validation:
+
+- npm run lint
+- npm run build
+- fixture tests for ignore, duplicate, promote, linked-message, and review paths
 
 ## Proposed Data Model Additions
 
@@ -812,13 +1078,20 @@ Validation:
 
 Start here:
 
-1. V2-001 Task And Follow-Up Schema
-2. V2-002 Task Service And API
-3. V2-003 Follow-Up Queue UI
-4. V2-004 Contact Detail Timeline Upgrade
-5. V2-011 Provider-Neutral Conversation Schema
+1. V2-PRE-001 Shared CRM Access Helpers
+2. V2-PRE-002 Transactional CRM Write Helpers
+3. V2-PRE-003 Import Review Service Parity
+4. V2-PRE-004 Website Lead Ingestion Service
+5. V2-PRE-005 Meta Webhook And Graph Client Adapter
+6. V2-PRE-006 Facebook Lead Ads Ingestion Service
+7. V2-PRE-007 Messenger Inbound Ingestion Service
+8. V2-001 Task And Follow-Up Schema
+9. V2-002 Task Service And API
+10. V2-003 Follow-Up Queue UI
+11. V2-004 Contact Detail Timeline Upgrade
+12. V2-011 Provider-Neutral Conversation Schema
 
-This order gives the product a real follow-up spine before external sending begins. Once those are in place, WhatsApp and Messenger become adapters attached to trusted CRM state.
+This order keeps V1 stable while turning the fast-shipped mechanics into reusable modules first. Then the product gets a real follow-up spine before external sending begins. Once those are in place, WhatsApp and Messenger become adapters attached to trusted CRM state.
 
 ## External Setup Checklist
 
