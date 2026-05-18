@@ -117,6 +117,7 @@ npm run verify:rbac
 Database commands require `DATABASE_URL`.
 Production release, rollback, backup, and Meta page setup steps live in [docs/production-runbook.md](./docs/production-runbook.md).
 The short V1 operator/admin handoff lives in [docs/v1-handoff.md](./docs/v1-handoff.md).
+The V2 execution plan and issue-sized slices live in [docs/v2-plan.md](./docs/v2-plan.md).
 
 Website lead ingestion is available at `/api/webhooks/website-leads` once these production env vars are configured:
 
