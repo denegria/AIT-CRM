@@ -164,7 +164,7 @@ export async function PATCH(request) {
     }
   }
 
-  let lead = await latestLeadForContact(db, id);
+  let lead = await latestLeadForContact(db, session.user.organizationId, id);
   if (hasBusinessUnitPatch && patch.primaryBusinessUnitId === null && lead) {
     return NextResponse.json(
       { error: 'Contacts with leads must stay assigned to a business unit.' },

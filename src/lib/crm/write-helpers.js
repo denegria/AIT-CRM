@@ -1,11 +1,11 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { activityEvents, businessUnits, contacts, leads, notes, workOrders } from '@/db/schema.js';
 
-export async function latestLeadForContact(db, contactId) {
+export async function latestLeadForContact(db, organizationId, contactId) {
   const [lead] = await db
     .select()
     .from(leads)
-    .where(eq(leads.contactId, contactId))
+    .where(and(eq(leads.contactId, contactId), eq(leads.organizationId, organizationId)))
     .orderBy(desc(leads.createdAt))
     .limit(1);
   return lead || null;
