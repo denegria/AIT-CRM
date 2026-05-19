@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
-import { activityEvents, businessUnits, contacts, leads, notes } from '@/db/schema.js';
+import { businessUnits, contacts } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import {
   canAccessContact,
@@ -10,6 +10,11 @@ import {
 } from '@/lib/crm/access.js';
 import { crmErrorResponse } from '@/lib/crm/errors.js';
 import { isUuid } from '@/lib/crm/validation.js';
+import {
+  createContactWithLead,
+  latestLeadForContact,
+  updateContactWithLeadAndNotes,
+} from '@/lib/crm/write-helpers.js';
 import { workflowFromLead } from '@/lib/sales-workflow';
 
 function toContactPayload(row, lead = null, noteRows = []) {
@@ -55,24 +60,6 @@ async function resolveContactBusinessUnitForCreate(db, session, body) {
   return resolveBusinessUnitId({ db, session, businessUnitsTable: businessUnits, requestedId });
 }
 
-async function latestLeadForContact(db, contactId) {
-  const [lead] = await db
-    .select()
-    .from(leads)
-    .where(eq(leads.contactId, contactId))
-    .orderBy(desc(leads.createdAt))
-    .limit(1);
-  return lead || null;
-}
-
-async function notesForContact(db, session, contactId) {
-  return db
-    .select()
-    .from(notes)
-    .where(and(eq(notes.contactId, contactId), eq(notes.organizationId, session.user.organizationId)))
-    .orderBy(desc(notes.createdAt));
-}
-
 function parseNoteDate(value) {
   if (!value) return new Date();
   const date = new Date(value);
@@ -106,29 +93,26 @@ export async function POST(request) {
   } catch (error) {
     return crmErrorResponse(error);
   }
-  const [contact] = await db.insert(contacts).values({
+  const { contact, lead } = await createContactWithLead({
+    db,
     organizationId: session.user.organizationId,
-    primaryBusinessUnitId: businessUnitId,
-    name,
-    email: body.email || null,
-    phone: body.phone || null,
-    address: body.address || null,
-    sourceLabel: body.source || null,
-  }).returning();
-
-  let lead = null;
-  if (businessUnitId) {
-    [lead] = await db.insert(leads).values({
-      organizationId: session.user.organizationId,
+    contactValues: {
+      primaryBusinessUnitId: businessUnitId,
+      name,
+      email: body.email || null,
+      phone: body.phone || null,
+      address: body.address || null,
+      sourceLabel: body.source || null,
+    },
+    leadValues: businessUnitId ? {
       businessUnitId,
-      contactId: contact.id,
       sourceType: 'manual',
       sourceName: body.source || 'Manual',
       status: body.status || 'New Lead',
       currentStage: body.status || 'New Lead',
       assignedUserId: isUuid(body.assignedTo) ? body.assignedTo : null,
-    }).returning();
-  }
+    } : null,
+  });
 
   return NextResponse.json({ contact: toContactPayload(contact, lead) }, { status: 201 });
 }
@@ -189,64 +173,33 @@ export async function PATCH(request) {
   }
 
   const hasLeadPatch = 'status' in body || 'source' in body || 'assignedTo' in body || hasBusinessUnitPatch;
+  let leadPatch = null;
+  if (lead && hasLeadPatch) {
+    leadPatch = { updatedAt: new Date() };
+    if ('status' in body) {
+      leadPatch.status = body.status || lead.status;
+      leadPatch.currentStage = body.status || lead.currentStage;
+    }
+    if ('source' in body) leadPatch.sourceName = body.source || null;
+    if ('assignedTo' in body) leadPatch.assignedUserId = isUuid(body.assignedTo) ? body.assignedTo : null;
+    if (hasBusinessUnitPatch && patch.primaryBusinessUnitId) {
+      leadPatch.businessUnitId = patch.primaryBusinessUnitId;
+    }
+  }
+
   let result;
   try {
-    result = await db.transaction(async (tx) => {
-      const [contact] = await tx
-        .update(contacts)
-        .set(patch)
-        .where(eq(contacts.id, id))
-        .returning();
-
-      if (lead && hasLeadPatch) {
-        const leadPatch = { updatedAt: new Date() };
-        if ('status' in body) {
-          leadPatch.status = body.status || lead.status;
-          leadPatch.currentStage = body.status || lead.currentStage;
-        }
-        if ('source' in body) leadPatch.sourceName = body.source || null;
-        if ('assignedTo' in body) leadPatch.assignedUserId = isUuid(body.assignedTo) ? body.assignedTo : null;
-        if (hasBusinessUnitPatch && patch.primaryBusinessUnitId) {
-          leadPatch.businessUnitId = patch.primaryBusinessUnitId;
-        }
-        [lead] = await tx.update(leads).set(leadPatch).where(eq(leads.id, lead.id)).returning();
-      }
-
-      let noteRows = await notesForContact(tx, session, id);
-      if (Array.isArray(body.notes)) {
-        const previousNoteCount = noteRows.length;
-        const noteInputs = normalizeNoteInputs(body.notes);
-        await tx
-          .delete(notes)
-          .where(and(eq(notes.contactId, id), eq(notes.organizationId, session.user.organizationId)));
-
-        noteRows = noteInputs.length
-          ? await tx.insert(notes).values(noteInputs.map((note) => ({
-              organizationId: session.user.organizationId,
-              businessUnitId: contact.primaryBusinessUnitId,
-              contactId: id,
-              body: note.body,
-              authorUserId: session.user.id,
-              createdAt: note.createdAt,
-              updatedAt: note.createdAt,
-            }))).returning()
-          : [];
-
-        if (noteRows.length > previousNoteCount) {
-          await tx.insert(activityEvents).values({
-            organizationId: session.user.organizationId,
-            businessUnitId: contact.primaryBusinessUnitId,
-            contactId: id,
-            leadId: lead?.id || null,
-            eventType: 'contact.note_added',
-            message: 'Added contact timeline note.',
-            actorUserId: session.user.id,
-            occurredAt: new Date(),
-          });
-        }
-      }
-
-      return { contact, lead, noteRows };
+    result = await updateContactWithLeadAndNotes({
+      db,
+      organizationId: session.user.organizationId,
+      actorUserId: session.user.id,
+      contactId: id,
+      contactPatch: patch,
+      existingLead: lead,
+      leadPatch,
+      replaceNotes: Array.isArray(body.notes)
+        ? { noteInputs: normalizeNoteInputs(body.notes) }
+        : null,
     });
   } catch (error) {
     return NextResponse.json({ error: error.message || 'Contact update failed.' }, { status: 500 });

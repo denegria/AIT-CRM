@@ -1,24 +1,17 @@
 import { NextResponse } from 'next/server';
 import { and, asc, eq, ne } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
-import { activityEvents, businessUnits } from '@/db/schema.js';
+import { businessUnits } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import { toBusinessUnitPayload } from '@/lib/crm/payloads.js';
 import { isUuid } from '@/lib/crm/validation.js';
+import {
+  createBusinessUnitWithActivity,
+  updateBusinessUnitWithActivity,
+} from '@/lib/crm/write-helpers.js';
 
 function cleanString(value) {
   return String(value || '').trim();
-}
-
-async function logBusinessUnitEvent(db, session, businessUnit, eventType) {
-  await db.insert(activityEvents).values({
-    organizationId: session.user.organizationId,
-    businessUnitId: businessUnit.id,
-    eventType,
-    message: (eventType === 'business_unit.created' ? 'Created' : 'Updated') + ' division ' + businessUnit.name + '.',
-    actorUserId: session.user.id,
-    occurredAt: new Date(),
-  });
 }
 
 export async function GET(request) {
@@ -45,18 +38,17 @@ export async function POST(request) {
   }
 
   const db = getDb();
-  const [businessUnit] = await db
-    .insert(businessUnits)
-    .values({
-      organizationId: session.user.organizationId,
+  const { businessUnit } = await createBusinessUnitWithActivity({
+    db,
+    organizationId: session.user.organizationId,
+    actorUserId: session.user.id,
+    businessUnitValues: {
       name,
       label: cleanString(body.label) || 'Divisions',
       color: cleanString(body.color) || null,
       isActive: body.isActive === undefined ? true : Boolean(body.isActive),
-    })
-    .returning();
-
-  await logBusinessUnitEvent(db, session, businessUnit, 'business_unit.created');
+    },
+  });
 
   const rows = await db
     .select()
@@ -114,13 +106,13 @@ export async function PATCH(request) {
   if ('color' in body) patch.color = cleanString(body.color) || null;
   if ('isActive' in body) patch.isActive = Boolean(body.isActive);
 
-  const [businessUnit] = await db
-    .update(businessUnits)
-    .set(patch)
-    .where(eq(businessUnits.id, id))
-    .returning();
-
-  await logBusinessUnitEvent(db, session, businessUnit, 'business_unit.updated');
+  const { businessUnit } = await updateBusinessUnitWithActivity({
+    db,
+    organizationId: session.user.organizationId,
+    actorUserId: session.user.id,
+    businessUnitId: id,
+    businessUnitPatch: patch,
+  });
 
   const rows = await db
     .select()

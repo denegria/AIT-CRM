@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { and, eq, desc } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
-import { activityEvents, businessUnits, contacts, leads, workOrders } from '@/db/schema.js';
+import { businessUnits, contacts, leads, workOrders } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import {
   canAccessBusinessUnit,
@@ -10,6 +10,11 @@ import {
 } from '@/lib/crm/access.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
 import { isUuid } from '@/lib/crm/validation.js';
+import {
+  createWorkOrderWithActivity,
+  deleteWorkOrderWithActivity,
+  updateWorkOrderWithActivity,
+} from '@/lib/crm/write-helpers.js';
 
 function toDateOnly(value) {
   if (!value) return '';
@@ -96,10 +101,11 @@ export async function POST(request) {
     const businessUnitId = await resolveCreateBusinessUnitId(db, session, body, contact);
     const leadId = await resolveLeadId(db, contact?.id || null);
 
-    const [workOrder] = await db
-      .insert(workOrders)
-      .values({
-        organizationId: session.user.organizationId,
+    const { workOrder } = await createWorkOrderWithActivity({
+      db,
+      organizationId: session.user.organizationId,
+      actorUserId: session.user.id,
+      workOrderValues: {
         businessUnitId,
         contactId: contact?.id || null,
         leadId,
@@ -111,19 +117,7 @@ export async function POST(request) {
         deliveryDate: parseDeliveryDate(body.dueDate),
         description: String(body.description || '').trim() || null,
         estimatedCost: parseEstimatedCost(body.estimatedCost),
-      })
-      .returning();
-
-    await db.insert(activityEvents).values({
-      organizationId: session.user.organizationId,
-      businessUnitId: workOrder.businessUnitId,
-      contactId: workOrder.contactId,
-      leadId: workOrder.leadId,
-      workOrderId: workOrder.id,
-      eventType: 'work_order.created',
-      message: `Created work order ${workOrder.workOrderNumber || workOrder.id}.`,
-      actorUserId: session.user.id,
-      occurredAt: new Date(),
+      },
     });
 
     return NextResponse.json({ workOrder: toWorkOrderPayload(workOrder, contact) }, { status: 201 });
@@ -196,22 +190,12 @@ export async function PATCH(request) {
     if (Object.prototype.hasOwnProperty.call(body, 'estimatedCost')) patch.estimatedCost = parseEstimatedCost(body.estimatedCost);
     patch.leadId = await resolveLeadId(db, patch.contactId ?? existing.contactId);
 
-    const [workOrder] = await db
-      .update(workOrders)
-      .set(patch)
-      .where(eq(workOrders.id, id))
-      .returning();
-
-    await db.insert(activityEvents).values({
+    const { workOrder } = await updateWorkOrderWithActivity({
+      db,
       organizationId: session.user.organizationId,
-      businessUnitId: workOrder.businessUnitId,
-      contactId: workOrder.contactId,
-      leadId: workOrder.leadId,
-      workOrderId: workOrder.id,
-      eventType: 'work_order.updated',
-      message: `Updated work order ${workOrder.workOrderNumber || workOrder.id}.`,
       actorUserId: session.user.id,
-      occurredAt: new Date(),
+      workOrderId: id,
+      workOrderPatch: patch,
     });
 
     return NextResponse.json({ workOrder: toWorkOrderPayload(workOrder, contact) });
@@ -242,20 +226,11 @@ export async function DELETE(request) {
     return NextResponse.json({ error: 'Insufficient business-unit access.' }, { status: 403 });
   }
 
-  await db
-    .delete(workOrders)
-    .where(eq(workOrders.id, id));
-
-  await db.insert(activityEvents).values({
+  await deleteWorkOrderWithActivity({
+    db,
     organizationId: session.user.organizationId,
-    businessUnitId: existing.businessUnitId,
-    contactId: existing.contactId,
-    leadId: existing.leadId,
-    workOrderId: null,
-    eventType: 'work_order.deleted',
-    message: `Deleted work order ${existing.workOrderNumber || existing.id}.`,
     actorUserId: session.user.id,
-    occurredAt: new Date(),
+    existingWorkOrder: existing,
   });
 
   return NextResponse.json({ ok: true, id });
