@@ -26,6 +26,7 @@ import { toBusinessUnitPayload } from './crm/payloads.js';
 import { workflowFromLead } from './sales-workflow';
 
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
+const toBootstrapBusinessUnitPayload = (row) => toBusinessUnitPayload(row, { emptyColor: null });
 
 function toIsoDate(value) {
   if (!value) return '';
@@ -247,7 +248,7 @@ function emptyDbData(businessUnitRows = [], importStaging = null) {
     authError: '',
     currentUser: null,
     access: authData().access,
-    businessUnits: businessUnitRows.length ? businessUnitRows.map(toBusinessUnitPayload) : (seedData.businessUnits || []),
+    businessUnits: businessUnitRows.length ? businessUnitRows.map(toBootstrapBusinessUnitPayload) : (seedData.businessUnits || []),
     contacts: [],
     workOrders: [],
     financials: [],
@@ -342,7 +343,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       authError: '',
       currentUser: session.user,
       access,
-      businessUnits: businessUnitRows.map(toBusinessUnitPayload),
+      businessUnits: businessUnitRows.map(toBootstrapBusinessUnitPayload),
       contacts,
       workOrders,
       financials,
