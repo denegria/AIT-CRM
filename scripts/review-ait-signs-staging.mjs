@@ -2,6 +2,15 @@
 
 import process from 'node:process';
 import { Client } from 'pg';
+import {
+  flattenImportReviewSummary,
+  loadImportReviewRows,
+  loadImportReviewSummary,
+  normalizeImportReviewText,
+  parseImportReviewSampleLimit,
+  resolveImportReviewBatchId,
+  updateImportReviewStatus,
+} from '../src/lib/import-review/service.js';
 
 function parseArgs(argv) {
   const options = {
@@ -46,118 +55,15 @@ function parseArgs(argv) {
   return options;
 }
 
-async function getLatestBatchId(client) {
-  const result = await client.query('select id from import_batches order by created_at desc limit 1');
-  return result.rows[0]?.id || null;
-}
-
-async function resolveBatchId(client, batchId) {
-  const resolved = batchId || await getLatestBatchId(client);
-  if (!resolved) throw new Error('No import batch found.');
-  return resolved;
-}
-
-async function summary(client, batchId) {
-  const result = await client.query(
-    `
-      select 'source_rows' as bucket, parse_status as status, count(*)::int as count
-      from import_source_rows
-      where import_batch_id = $1
-      group by parse_status
-      union all
-      select 'normalized_records' as bucket, status, count(*)::int as count
-      from import_normalized_records
-      where import_batch_id = $1
-      group by status
-      union all
-      select 'review_items' as bucket, review_status as status, count(*)::int as count
-      from import_review_items
-      where import_batch_id = $1
-      group by review_status
-      order by bucket, status
-    `,
-    [batchId],
-  );
-  return result.rows;
-}
-
-async function samples(client, batchId, options) {
-  const params = [batchId];
-  const filters = ['nr.import_batch_id = $1'];
-  if (options.status) {
-    params.push(options.status);
-    filters.push(`nr.status = $${params.length}`);
-  }
-  if (options.type) {
-    params.push(options.type);
-    filters.push(`nr.record_type = $${params.length}`);
-  }
-  params.push(options.limit);
-
-  const result = await client.query(
-    `
-      select
-        nr.id,
-        nr.record_type,
-        nr.status,
-        sr.source_sheet,
-        sr.source_row_number,
-        left(coalesce(sr.raw_text, ''), 220) as sample
-      from import_normalized_records nr
-      join import_source_rows sr on sr.id = nr.source_row_id
-      where ${filters.join(' and ')}
-      order by sr.source_sheet, sr.source_row_number
-      limit $${params.length}
-    `,
-    params,
-  );
-  return result.rows;
-}
-
-async function setRowStatus(client, batchId, options, status) {
-  if (!options.sheet || !options.row) {
-    throw new Error(`${options.command} requires --sheet and --row`);
-  }
-
-  const result = await client.query(
-    `
-      update import_normalized_records nr
-      set status = $1
-      from import_source_rows sr
-      where sr.id = nr.source_row_id
-        and nr.import_batch_id = $2
-        and sr.source_sheet = $3
-        and sr.source_row_number = $4
-      returning nr.id, nr.record_type, nr.status
-    `,
-    [status, batchId, options.sheet, options.row],
-  );
-
-  if (options.reason) {
-    await client.query(
-      `
-        update import_review_items ri
-        set
-          review_status = $1,
-          proposed_resolution_json = coalesce(ri.proposed_resolution_json, '{}'::jsonb) || $2::jsonb,
-          reviewed_at = now()
-        from import_source_rows sr
-        where sr.id = ri.source_row_id
-          and ri.import_batch_id = $3
-          and sr.source_sheet = $4
-          and sr.source_row_number = $5
-      `,
-      [
-        status === 'approved' ? 'approved' : 'rejected',
-        JSON.stringify({ operatorReason: options.reason }),
-        batchId,
-        options.sheet,
-        options.row,
-      ],
-    );
-  }
-
-  return result.rows;
+function toSampleRow(row) {
+  return {
+    id: row.id,
+    record_type: row.record_type,
+    status: row.status,
+    source_sheet: row.source_sheet,
+    source_row_number: row.source_row_number,
+    sample: String(row.raw_text || '').slice(0, 220),
+  };
 }
 
 async function main() {
@@ -168,22 +74,47 @@ async function main() {
   await client.connect();
 
   try {
-    const batchId = await resolveBatchId(client, options.batchId);
+    const batchId = await resolveImportReviewBatchId(client, options.batchId);
     let output;
+    let summary = null;
+    let result = null;
 
     if (options.command === 'summary') {
-      output = await summary(client, batchId);
+      summary = await loadImportReviewSummary(client, batchId);
+      output = flattenImportReviewSummary(summary);
     } else if (options.command === 'samples') {
-      output = await samples(client, batchId, options);
+      output = (await loadImportReviewRows(client, batchId, {
+        status: normalizeImportReviewText(options.status),
+        type: normalizeImportReviewText(options.type),
+        limit: parseImportReviewSampleLimit(options.limit),
+      })).map(toSampleRow);
     } else if (options.command === 'approve-row') {
-      output = await setRowStatus(client, batchId, options, 'approved');
+      result = await updateImportReviewStatus(client, {
+        batchId,
+        status: 'approved',
+        rowSelector: {
+          sheet: options.sheet,
+          rowNumber: options.row,
+        },
+        reason: options.reason,
+      });
+      output = result.updatedRecords;
     } else if (options.command === 'reject-row') {
-      output = await setRowStatus(client, batchId, options, 'rejected');
+      result = await updateImportReviewStatus(client, {
+        batchId,
+        status: 'rejected',
+        rowSelector: {
+          sheet: options.sheet,
+          rowNumber: options.row,
+        },
+        reason: options.reason,
+      });
+      output = result.updatedRecords;
     } else {
       throw new Error(`Unknown command: ${options.command}`);
     }
 
-    console.log(JSON.stringify({ batchId, command: options.command, output }, null, 2));
+    console.log(JSON.stringify({ batchId, command: options.command, summary, result, output }, null, 2));
   } finally {
     await client.end();
   }
