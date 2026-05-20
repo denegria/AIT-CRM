@@ -1,14 +1,23 @@
-import { createHmac, timingSafeEqual } from 'crypto';
 import { NextResponse } from 'next/server';
 import { Client } from 'pg';
+import {
+  FB_APP_SECRET_ENV,
+  FB_VERIFY_TOKEN_ENV,
+  META_PAGE_ACCESS_TOKEN_ENV,
+  META_PAGE_ACCESS_TOKEN_MAP_ENV,
+  META_PAGE_BUSINESS_UNIT_MAP_ENV,
+  META_VERIFY_TOKEN_ENV,
+  createMetaProviderConfig,
+  fetchMetaLeadDetails,
+  fetchMetaMessengerProfile,
+  flattenMetaLeadgenChanges,
+  flattenMetaMessengerEvents,
+  normalizeMetaLeadFields,
+  resolveMetaPageBusinessUnitMapping,
+  validateMetaAppSecretSignature,
+  verifyMetaWebhookChallenge,
+} from '@/lib/messaging/providers/meta.js';
 
-const FB_VERIFY_TOKEN_ENV = 'FACEBOOK_WEBHOOK_VERIFY_TOKEN';
-const META_VERIFY_TOKEN_ENV = 'META_WEBHOOK_VERIFY_TOKEN';
-const FB_APP_SECRET_ENV = 'FACEBOOK_APP_SECRET';
-const META_PAGE_ACCESS_TOKEN_ENV = 'META_PAGE_ACCESS_TOKEN';
-const META_PAGE_ACCESS_TOKEN_MAP_ENV = 'META_PAGE_ACCESS_TOKEN_MAP';
-const META_PAGE_BUSINESS_UNIT_MAP_ENV = 'META_PAGE_BUSINESS_UNIT_MAP';
-const GRAPH_API_VERSION = 'v24.0';
 const DEFAULT_SOURCE_SHEET = 'facebook_webhook';
 const MESSENGER_SOURCE_SHEET = 'facebook_messenger';
 
@@ -16,37 +25,31 @@ function jsonError(message, status = 400) {
   return NextResponse.json({ error: message }, { status });
 }
 
-function getVerifyToken() {
-  return process.env[FB_VERIFY_TOKEN_ENV] || process.env[META_VERIFY_TOKEN_ENV] || '';
+function getMetaProviderConfig() {
+  return createMetaProviderConfig({
+    facebookVerifyToken: process.env[FB_VERIFY_TOKEN_ENV],
+    metaVerifyToken: process.env[META_VERIFY_TOKEN_ENV],
+    appSecret: process.env[FB_APP_SECRET_ENV],
+    defaultPageAccessToken: process.env[META_PAGE_ACCESS_TOKEN_ENV],
+    pageAccessTokenMapRaw: process.env[META_PAGE_ACCESS_TOKEN_MAP_ENV],
+    pageBusinessUnitMapRaw: process.env[META_PAGE_BUSINESS_UNIT_MAP_ENV],
+  });
 }
 
-function verifyTokenConfigured() {
-  return Boolean(getVerifyToken());
+function verifyTokenConfigured(metaConfig) {
+  return Boolean(metaConfig.verifyToken);
 }
 
 function verifyTokenErrorMessage() {
   return `${FB_VERIFY_TOKEN_ENV} or ${META_VERIFY_TOKEN_ENV} is required before Facebook lead webhook verification can run.`;
 }
 
-function appSecretConfigured() {
-  return Boolean(process.env[FB_APP_SECRET_ENV]);
+function appSecretConfigured(metaConfig) {
+  return Boolean(metaConfig.appSecret);
 }
 
 function appSecretErrorMessage() {
   return `${FB_APP_SECRET_ENV} is required before Facebook lead webhook POST processing can run.`;
-}
-
-function signatureIsValid(bodyText, signatureHeader) {
-  const appSecret = process.env[FB_APP_SECRET_ENV];
-  if (!appSecret) return false;
-  if (!signatureHeader || !signatureHeader.startsWith('sha256=')) return false;
-
-  const signature = signatureHeader.slice('sha256='.length);
-  const expected = createHmac('sha256', appSecret).update(bodyText).digest('hex');
-  const left = Buffer.from(signature);
-  const right = Buffer.from(expected);
-  if (left.length !== right.length) return false;
-  return timingSafeEqual(left, right);
 }
 
 async function withClient(handler) {
@@ -68,35 +71,8 @@ async function resolveOrganizationId(client) {
   return result.rows[0]?.id || null;
 }
 
-function parsePageBusinessUnitMap() {
-  const raw = process.env[META_PAGE_BUSINESS_UNIT_MAP_ENV] || '';
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function parsePageAccessTokenMap() {
-  const raw = process.env[META_PAGE_ACCESS_TOKEN_MAP_ENV] || '';
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-  } catch {
-    return {};
-  }
-}
-
-function getPageAccessToken(pageId) {
-  const mapped = parsePageAccessTokenMap()[pageId];
-  return mapped || process.env[META_PAGE_ACCESS_TOKEN_ENV] || '';
-}
-
-async function resolveBusinessUnitId(client, organizationId, pageId) {
-  const mapped = parsePageBusinessUnitMap()[pageId];
+async function resolveBusinessUnitId(client, organizationId, pageId, metaConfig) {
+  const mapped = resolveMetaPageBusinessUnitMapping(pageId, metaConfig).businessUnit;
   if (mapped) {
     const mappedResult = await client.query(
       `
@@ -204,53 +180,6 @@ function messengerEventKey(event) {
   ].join(':');
 }
 
-function flattenLeadgenChanges(payload) {
-  if (payload?.object !== 'page') return [];
-  const events = [];
-  for (const entry of payload.entry || []) {
-    for (const change of entry.changes || []) {
-      if (change?.field !== 'leadgen') continue;
-      const value = change.value || {};
-      events.push({
-        entryId: entry.id || '',
-        leadgenId: value.leadgen_id || '',
-        pageId: value.page_id || entry.id || '',
-        formId: value.form_id || '',
-        adId: value.ad_id || '',
-        createdTime: value.created_time || null,
-        raw: { entry, change },
-      });
-    }
-  }
-  return events;
-}
-
-function flattenMessengerEvents(payload) {
-  if (payload?.object !== 'page') return [];
-  const events = [];
-  for (const entry of payload.entry || []) {
-    for (const messaging of entry.messaging || []) {
-      const message = messaging.message || null;
-      const postback = messaging.postback || null;
-      const senderId = messaging.sender?.id || '';
-      const pageId = messaging.recipient?.id || entry.id || '';
-      if (message?.is_echo) continue;
-      events.push({
-        entryId: entry.id || '',
-        senderId,
-        pageId,
-        messageId: message?.mid || '',
-        text: message?.text || '',
-        attachments: Array.isArray(message?.attachments) ? message.attachments : [],
-        postbackPayload: postback?.payload || '',
-        timestamp: messaging.timestamp || null,
-        raw: { entry, messaging },
-      });
-    }
-  }
-  return events;
-}
-
 async function hasLeadgenId(client, leadgenId) {
   if (!leadgenId) return false;
   const result = await client.query(
@@ -280,85 +209,6 @@ async function hasMessengerMessageId(client, messageId, pageId) {
     [messageId, pageId || ''],
   );
   return Boolean(result.rows.length);
-}
-
-function firstField(fields, names) {
-  for (const name of names) {
-    const field = fields.find((item) => item.key === name);
-    const value = field?.values?.[0];
-    if (value) return String(value).trim();
-  }
-  return '';
-}
-
-function normalizeLeadFields(fieldData = []) {
-  const fields = fieldData.map((field) => ({
-    key: String(field?.name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, ''),
-    values: Array.isArray(field?.values) ? field.values : [],
-  }));
-
-  const firstName = firstField(fields, ['first_name', 'firstname']);
-  const lastName = firstField(fields, ['last_name', 'lastname']);
-  const fullName = firstField(fields, ['full_name', 'name', 'nombre', 'contact_name']) || [firstName, lastName].filter(Boolean).join(' ');
-  const email = firstField(fields, ['email', 'email_address', 'correo', 'correo_electronico']);
-  const phone = firstField(fields, ['phone_number', 'phone', 'mobile_phone_number', 'telefono', 'celular']);
-  const company = firstField(fields, ['company_name', 'company', 'business_name', 'empresa']);
-  const address = firstField(fields, ['street_address', 'address', 'direccion']);
-
-  return {
-    name: fullName || email || phone || 'Facebook Lead',
-    email,
-    phone,
-    company,
-    address,
-    field_data: fieldData,
-  };
-}
-
-async function fetchLeadDetails(leadgenId, pageId) {
-  const accessToken = getPageAccessToken(pageId);
-  if (!leadgenId || !accessToken) {
-    return { ok: false, reason: `${META_PAGE_ACCESS_TOKEN_ENV} or ${META_PAGE_ACCESS_TOKEN_MAP_ENV} missing` };
-  }
-
-  const url = new URL(`https://graph.facebook.com/${GRAPH_API_VERSION}/${encodeURIComponent(leadgenId)}`);
-  url.searchParams.set('fields', 'id,created_time,ad_id,form_id,page_id,field_data');
-  url.searchParams.set('access_token', accessToken);
-
-  const response = await fetch(url, { cache: 'no-store' });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    return {
-      ok: false,
-      reason: body?.error?.message || `Graph API returned ${response.status}`,
-      graphStatus: response.status,
-    };
-  }
-
-  return { ok: true, lead: body };
-}
-
-async function fetchMessengerProfile(senderId, pageId) {
-  const accessToken = getPageAccessToken(pageId);
-  if (!senderId || !accessToken) {
-    return { ok: false, reason: `${META_PAGE_ACCESS_TOKEN_ENV} or ${META_PAGE_ACCESS_TOKEN_MAP_ENV} missing` };
-  }
-
-  const url = new URL(`https://graph.facebook.com/${GRAPH_API_VERSION}/${encodeURIComponent(senderId)}`);
-  url.searchParams.set('fields', 'id,name,first_name,last_name,profile_pic');
-  url.searchParams.set('access_token', accessToken);
-
-  const response = await fetch(url, { cache: 'no-store' });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    return {
-      ok: false,
-      reason: body?.error?.message || `Graph API returned ${response.status}`,
-      graphStatus: response.status,
-    };
-  }
-
-  return { ok: true, profile: body };
 }
 
 async function findExistingContact(client, organizationId, details) {
@@ -567,15 +417,15 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
   return { contactId, leadId, reason: null };
 }
 
-async function persistEvent(client, organizationId, batchId, rowNumber, event) {
+async function persistEvent(client, organizationId, batchId, rowNumber, event, metaConfig) {
   if (event.leadgenId && await hasLeadgenId(client, event.leadgenId)) {
     return { inserted: false, skippedReason: 'duplicate_leadgen_id' };
   }
 
-  const fetched = await fetchLeadDetails(event.leadgenId, event.pageId);
+  const fetched = await fetchMetaLeadDetails({ leadgenId: event.leadgenId, pageId: event.pageId, config: metaConfig });
   const graphLead = fetched.ok ? fetched.lead : null;
-  const details = normalizeLeadFields(graphLead?.field_data || []);
-  const businessUnitId = await resolveBusinessUnitId(client, organizationId, graphLead?.page_id || event.pageId);
+  const details = normalizeMetaLeadFields(graphLead?.field_data || []);
+  const businessUnitId = await resolveBusinessUnitId(client, organizationId, graphLead?.page_id || event.pageId, metaConfig);
 
   const rawValues = {
     source: 'facebook_lead_ads',
@@ -678,7 +528,7 @@ async function persistEvent(client, organizationId, batchId, rowNumber, event) {
   return { inserted: true, promoted: Boolean(crmWrite.leadId), graphFetched: fetched.ok };
 }
 
-async function persistMessengerEvent(client, organizationId, batchId, rowNumber, event) {
+async function persistMessengerEvent(client, organizationId, batchId, rowNumber, event, metaConfig) {
   const classification = classifyMessengerEvent(event);
   if (classification.action === 'ignore') {
     return { inserted: false, promoted: false, skippedReason: classification.reason };
@@ -687,9 +537,9 @@ async function persistMessengerEvent(client, organizationId, batchId, rowNumber,
     return { inserted: false, promoted: false, skippedReason: 'duplicate_messenger_message_id' };
   }
 
-  const profileFetch = await fetchMessengerProfile(event.senderId, event.pageId);
+  const profileFetch = await fetchMetaMessengerProfile({ senderId: event.senderId, pageId: event.pageId, config: metaConfig });
   const profile = profileFetch.ok ? profileFetch.profile : null;
-  const businessUnitId = await resolveBusinessUnitId(client, organizationId, event.pageId);
+  const businessUnitId = await resolveBusinessUnitId(client, organizationId, event.pageId, metaConfig);
   const existing = await findExistingMessengerLead(client, event.senderId, event.pageId);
 
   const rawValues = {
@@ -810,33 +660,38 @@ async function persistMessengerEvent(client, organizationId, batchId, rowNumber,
 }
 
 export async function GET(request) {
-  if (!verifyTokenConfigured()) {
+  const metaConfig = getMetaProviderConfig();
+  if (!verifyTokenConfigured(metaConfig)) {
     return jsonError(verifyTokenErrorMessage(), 503);
   }
 
   const url = new URL(request.url);
-  const mode = url.searchParams.get('hub.mode');
-  const verifyToken = url.searchParams.get('hub.verify_token');
-  const challenge = url.searchParams.get('hub.challenge');
+  const verification = verifyMetaWebhookChallenge({
+    mode: url.searchParams.get('hub.mode'),
+    verifyToken: url.searchParams.get('hub.verify_token'),
+    challenge: url.searchParams.get('hub.challenge'),
+    config: metaConfig,
+  });
 
-  if (mode === 'subscribe' && verifyToken === getVerifyToken()) {
-    return new NextResponse(challenge || '', { status: 200 });
+  if (verification.ok) {
+    return new NextResponse(verification.challenge, { status: 200 });
   }
 
   return jsonError('Verification token mismatch.', 403);
 }
 
 export async function POST(request) {
-  if (!verifyTokenConfigured()) {
+  const metaConfig = getMetaProviderConfig();
+  if (!verifyTokenConfigured(metaConfig)) {
     return jsonError(verifyTokenErrorMessage(), 503);
   }
-  if (!appSecretConfigured()) {
+  if (!appSecretConfigured(metaConfig)) {
     return jsonError(appSecretErrorMessage(), 503);
   }
 
   const signature = request.headers.get('x-hub-signature-256');
   const rawBody = await request.text();
-  if (!signatureIsValid(rawBody, signature)) {
+  if (!validateMetaAppSecretSignature({ bodyText: rawBody, signatureHeader: signature, config: metaConfig }).ok) {
     return jsonError('Invalid Facebook webhook signature.', 401);
   }
 
@@ -847,8 +702,8 @@ export async function POST(request) {
     return jsonError('Invalid JSON payload.', 400);
   }
 
-  const leadgenEvents = flattenLeadgenChanges(payload);
-  const messengerEvents = flattenMessengerEvents(payload);
+  const leadgenEvents = flattenMetaLeadgenChanges(payload);
+  const messengerEvents = flattenMetaMessengerEvents(payload);
   if (!leadgenEvents.length && !messengerEvents.length) {
     return NextResponse.json({ ok: true, received: 0, inserted: 0, skipped: 0 });
   }
@@ -881,7 +736,7 @@ export async function POST(request) {
     for (const event of leadgenEvents) {
       const stored = await withSerializedWebhookEvent(client, leadgenEventKey(event), async () => {
         const rowNumber = await lockedNextRowNumber(client, leadBatchId);
-        return persistEvent(client, organizationId, leadBatchId, rowNumber, event);
+        return persistEvent(client, organizationId, leadBatchId, rowNumber, event, metaConfig);
       });
       if (stored.inserted) {
         inserted += 1;
@@ -895,7 +750,7 @@ export async function POST(request) {
     for (const event of messengerEvents) {
       const stored = await withSerializedWebhookEvent(client, messengerEventKey(event), async () => {
         const rowNumber = await lockedNextRowNumber(client, messengerBatchId);
-        return persistMessengerEvent(client, organizationId, messengerBatchId, rowNumber, event);
+        return persistMessengerEvent(client, organizationId, messengerBatchId, rowNumber, event, metaConfig);
       });
       if (stored.inserted) {
         inserted += 1;
