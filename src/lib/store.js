@@ -1,5 +1,6 @@
 'use client';
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { usePathname } from 'next/navigation';
 import * as defaults from './data';
 
 const CRMContext = createContext(null);
@@ -107,7 +108,9 @@ function LoginGate({ authError }) {
 }
 
 export function CRMProvider({ children, initialData }) {
+  const pathname = usePathname();
   const [bootstrapData] = useState(() => getInitialData(initialData));
+  const isPublicJoinPage = pathname === '/join';
   const isPostgres = bootstrapData.dataSource === 'postgres';
   const initialRole = bootstrapData.currentUser?.primaryRoleKey || 'admin';
   const [role, setRole] = useState(() => {
@@ -454,7 +457,7 @@ export function CRMProvider({ children, initialData }) {
     resetData,
   };
 
-  if (bootstrapData.authRequired) {
+  if (bootstrapData.authRequired && !isPublicJoinPage) {
     return (
       <CRMContext.Provider value={value}>
         <LoginGate authError={bootstrapData.authError} />

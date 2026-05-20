@@ -1,8 +1,7 @@
 import './globals.css';
 import { CRMProvider } from '@/lib/store';
 import { ToastProvider } from '@/components/Toast';
-import CommandPalette from '@/components/CommandPalette';
-import Sidebar from '@/components/Sidebar';
+import AppShell from '@/components/AppShell';
 import { getBootstrapData } from '@/lib/bootstrap-data';
 import { getCurrentSession } from '@/lib/auth';
 
@@ -19,13 +18,7 @@ export default async function RootLayout({ children }) {
       <body suppressHydrationWarning>
         <ToastProvider>
           <CRMProvider initialData={bootstrapData}>
-            <CommandPalette />
-            <div className="app-layout">
-              <Sidebar />
-              <main className="main-content">
-                {children}
-              </main>
-            </div>
+            <AppShell>{children}</AppShell>
           </CRMProvider>
         </ToastProvider>
       </body>
