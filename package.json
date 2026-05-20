@@ -8,6 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:website-leads": "node --test src/lib/ingestion/website-leads.test.js",
     "profile:ait-signs": "python3 scripts/profile-ait-signs.py",
     "import:ait-signs-staging": "python3 scripts/build-ait-signs-import-staging.py",
     "seed:ait-signs": "python3 scripts/build-ait-signs-seed.py",
