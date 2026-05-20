@@ -8,17 +8,18 @@ import {
   META_PAGE_BUSINESS_UNIT_MAP_ENV,
   META_VERIFY_TOKEN_ENV,
   createMetaProviderConfig,
-  fetchMetaLeadDetails,
   fetchMetaMessengerProfile,
   flattenMetaLeadgenChanges,
   flattenMetaMessengerEvents,
-  normalizeMetaLeadFields,
   resolveMetaPageBusinessUnitMapping,
   validateMetaAppSecretSignature,
   verifyMetaWebhookChallenge,
 } from '@/lib/messaging/providers/meta.js';
+import {
+  findOrCreateFacebookLeadAdsBatch,
+  ingestFacebookLeadAdsEvents,
+} from '@/lib/ingestion/facebook-lead-ads.js';
 
-const DEFAULT_SOURCE_SHEET = 'facebook_webhook';
 const MESSENGER_SOURCE_SHEET = 'facebook_messenger';
 
 function jsonError(message, status = 400) {
@@ -101,11 +102,11 @@ async function resolveBusinessUnitId(client, organizationId, pageId, metaConfig)
   return result.rows[0]?.id || null;
 }
 
-async function findOrCreateBatch(client, organizationId, options = {}) {
-  const sourceName = options.sourceName || 'Facebook Lead Ads';
-  const sourceType = options.sourceType || 'facebook_leads';
-  const filePrefix = options.filePrefix || 'facebook-webhook';
-  const sheetName = options.sheetName || DEFAULT_SOURCE_SHEET;
+async function findOrCreateMessengerBatch(client, organizationId) {
+  const sourceName = 'Facebook Messenger';
+  const sourceType = 'facebook_messenger';
+  const filePrefix = 'facebook-messenger';
+  const sheetName = MESSENGER_SOURCE_SHEET;
   const day = new Date().toISOString().slice(0, 10);
   const fileName = `${filePrefix}-${day}`;
 
@@ -164,11 +165,6 @@ async function withSerializedWebhookEvent(client, eventKey, handler) {
   }
 }
 
-function leadgenEventKey(event) {
-  if (event.leadgenId) return `facebook-leadgen:${event.pageId || 'unknown'}:${event.leadgenId}`;
-  return `facebook-leadgen-fallback:${event.pageId || 'unknown'}:${event.formId || 'unknown'}:${event.createdTime || 'unknown'}`;
-}
-
 function messengerEventKey(event) {
   if (event.messageId) return `facebook-messenger-message:${event.pageId || 'unknown'}:${event.messageId}`;
   return [
@@ -178,21 +174,6 @@ function messengerEventKey(event) {
     event.timestamp || 'unknown',
     event.postbackPayload || event.text || '[attachment]',
   ].join(':');
-}
-
-async function hasLeadgenId(client, leadgenId) {
-  if (!leadgenId) return false;
-  const result = await client.query(
-    `
-      select 1
-      from import_normalized_records
-      where record_type = 'lead'
-        and coalesce(proposed_lead_json->>'leadgen_id', '') = $1
-      limit 1
-    `,
-    [leadgenId],
-  );
-  return Boolean(result.rows.length);
 }
 
 async function hasMessengerMessageId(client, messageId, pageId) {
@@ -209,38 +190,6 @@ async function hasMessengerMessageId(client, messageId, pageId) {
     [messageId, pageId || ''],
   );
   return Boolean(result.rows.length);
-}
-
-async function findExistingContact(client, organizationId, details) {
-  if (details.email) {
-    const byEmail = await client.query(
-      `
-        select id, primary_business_unit_id
-        from contacts
-        where organization_id = $1 and lower(email) = lower($2)
-        order by updated_at desc
-        limit 1
-      `,
-      [organizationId, details.email],
-    );
-    if (byEmail.rows[0]) return byEmail.rows[0];
-  }
-
-  if (details.phone) {
-    const byPhone = await client.query(
-      `
-        select id, primary_business_unit_id
-        from contacts
-        where organization_id = $1 and phone = $2
-        order by updated_at desc
-        limit 1
-      `,
-      [organizationId, details.phone],
-    );
-    if (byPhone.rows[0]) return byPhone.rows[0];
-  }
-
-  return null;
 }
 
 async function findExistingMessengerLead(client, senderId, pageId) {
@@ -344,188 +293,6 @@ async function logMessengerActivity(client, organizationId, businessUnitId, even
       event.timestamp ? new Date(Number(event.timestamp)) : new Date(),
     ],
   );
-}
-
-async function upsertContactAndLead(client, organizationId, businessUnitId, event, details, sourceRowId, rowNumber) {
-  if (!businessUnitId) return { contactId: null, leadId: null, reason: 'No business unit found' };
-
-  const existing = await findExistingContact(client, organizationId, details);
-  let contactId = existing?.id || null;
-  if (contactId) {
-    await client.query(
-      `
-        update contacts
-        set
-          name = coalesce(nullif($2, ''), name),
-          company_name = coalesce(nullif($3, ''), company_name),
-          phone = coalesce(nullif($4, ''), phone),
-          email = coalesce(nullif($5, ''), email),
-          address = coalesce(nullif($6, ''), address),
-          source_label = 'Facebook Ads',
-          primary_business_unit_id = coalesce(primary_business_unit_id, $7),
-          updated_at = now()
-        where id = $1
-      `,
-      [contactId, details.name, details.company, details.phone, details.email, details.address, businessUnitId],
-    );
-  } else {
-    const inserted = await client.query(
-      `
-        insert into contacts
-        (organization_id, primary_business_unit_id, name, company_name, phone, email, address, source_label)
-        values ($1, $2, $3, nullif($4, ''), nullif($5, ''), nullif($6, ''), nullif($7, ''), 'Facebook Ads')
-        returning id
-      `,
-      [organizationId, businessUnitId, details.name, details.company, details.phone, details.email, details.address],
-    );
-    contactId = inserted.rows[0]?.id || null;
-  }
-
-  const lead = await client.query(
-    `
-      insert into leads
-      (organization_id, business_unit_id, contact_id, source_type, source_name, status, current_stage, original_notes)
-      values ($1, $2, $3, 'facebook_lead_ads', 'Facebook Ads', 'New Lead', 'New Lead', $4)
-      returning id
-    `,
-    [
-      organizationId,
-      businessUnitId,
-      contactId,
-      `Facebook leadgen_id=${event.leadgenId || 'unknown'} source_row_id=${sourceRowId || 'unknown'}`,
-    ],
-  );
-  const leadId = lead.rows[0]?.id || null;
-
-  await client.query(
-    `
-      insert into activity_events
-      (organization_id, business_unit_id, contact_id, lead_id, event_type, message, source_sheet, source_row, occurred_at)
-      values ($1, $2, $3, $4, 'facebook_lead_captured', $5, $6, $7, now())
-    `,
-    [
-      organizationId,
-      businessUnitId,
-      contactId,
-      leadId,
-      `Facebook lead captured from form ${event.formId || 'unknown'}.`,
-      DEFAULT_SOURCE_SHEET,
-      rowNumber,
-    ],
-  );
-
-  return { contactId, leadId, reason: null };
-}
-
-async function persistEvent(client, organizationId, batchId, rowNumber, event, metaConfig) {
-  if (event.leadgenId && await hasLeadgenId(client, event.leadgenId)) {
-    return { inserted: false, skippedReason: 'duplicate_leadgen_id' };
-  }
-
-  const fetched = await fetchMetaLeadDetails({ leadgenId: event.leadgenId, pageId: event.pageId, config: metaConfig });
-  const graphLead = fetched.ok ? fetched.lead : null;
-  const details = normalizeMetaLeadFields(graphLead?.field_data || []);
-  const businessUnitId = await resolveBusinessUnitId(client, organizationId, graphLead?.page_id || event.pageId, metaConfig);
-
-  const rawValues = {
-    source: 'facebook_lead_ads',
-    leadgen_id: event.leadgenId,
-    page_id: graphLead?.page_id || event.pageId,
-    form_id: graphLead?.form_id || event.formId,
-    ad_id: graphLead?.ad_id || event.adId,
-    created_time: graphLead?.created_time || event.createdTime,
-    graph_fetch: fetched.ok ? 'ok' : 'failed',
-    graph_fetch_reason: fetched.ok ? null : fetched.reason,
-    field_data: graphLead?.field_data || null,
-    raw: event.raw,
-  };
-  const rawText = JSON.stringify(rawValues);
-
-  const sourceRow = await client.query(
-    `
-      insert into import_source_rows
-      (import_batch_id, source_sheet, source_row_number, raw_values_json, raw_text, parse_status)
-      values ($1, $2, $3, $4::jsonb, $5, 'parsed')
-      returning id
-    `,
-    [batchId, DEFAULT_SOURCE_SHEET, rowNumber, JSON.stringify(rawValues), rawText],
-  );
-  const sourceRowId = sourceRow.rows[0]?.id;
-  if (!sourceRowId) return { inserted: false };
-
-  const crmWrite = fetched.ok
-    ? await upsertContactAndLead(client, organizationId, businessUnitId, event, details, sourceRowId, rowNumber)
-    : { contactId: null, leadId: null, reason: fetched.reason };
-
-  const proposedContact = {
-    name: details.name,
-    email: details.email || null,
-    phone: details.phone || null,
-    company_name: details.company || null,
-    address: details.address || null,
-    source_label: 'Facebook Ads',
-    business_unit_id: businessUnitId,
-    contact_id: crmWrite.contactId,
-  };
-  const proposedLead = {
-    source_type: 'facebook_webhook',
-    source_name: 'Facebook Ads',
-    leadgen_id: event.leadgenId,
-    page_id: graphLead?.page_id || event.pageId,
-    form_id: graphLead?.form_id || event.formId,
-    ad_id: graphLead?.ad_id || event.adId,
-    created_time: graphLead?.created_time || event.createdTime,
-    status: 'New Lead',
-    current_stage: 'New Lead',
-    field_data: graphLead?.field_data || null,
-    business_unit_id: businessUnitId,
-    contact_id: crmWrite.contactId,
-    lead_id: crmWrite.leadId,
-    notes: fetched.ok
-      ? 'Webhook captured, Graph fields fetched, and CRM lead created.'
-      : `Webhook captured, but Graph field fetch failed: ${fetched.reason}`,
-  };
-
-  const normalized = await client.query(
-    `
-      insert into import_normalized_records
-      (import_batch_id, source_row_id, record_type, proposed_contact_json, proposed_lead_json, confidence_score, status)
-      values ($1, $2, 'lead', $3::jsonb, $4::jsonb, $5, $6)
-      returning id
-    `,
-    [
-      batchId,
-      sourceRowId,
-      JSON.stringify(proposedContact),
-      JSON.stringify(proposedLead),
-      fetched.ok ? 0.85 : 0.35,
-      fetched.ok && crmWrite.leadId ? 'promoted' : 'needs_review',
-    ],
-  );
-  const normalizedId = normalized.rows[0]?.id;
-
-  await client.query(
-    `
-      insert into import_review_items
-      (import_batch_id, source_row_id, review_type, reason, review_status, proposed_resolution_json)
-      values ($1, $2, 'facebook_lead_review', $3, 'pending', $4::jsonb)
-    `,
-    [
-      batchId,
-      sourceRowId,
-      fetched.ok && crmWrite.leadId
-        ? 'Facebook lead captured and promoted to CRM contact/lead.'
-        : `Facebook lead captured but needs review: ${crmWrite.reason || fetched.reason || 'unknown reason'}.`,
-      JSON.stringify({
-        action: fetched.ok && crmWrite.leadId ? 'verify_facebook_lead' : 'review_facebook_lead',
-        normalizedRecordId: normalizedId || null,
-        contactId: crmWrite.contactId,
-        leadId: crmWrite.leadId,
-      }),
-    ],
-  );
-
-  return { inserted: true, promoted: Boolean(crmWrite.leadId), graphFetched: fetched.ok };
 }
 
 async function persistMessengerEvent(client, organizationId, batchId, rowNumber, event, metaConfig) {
@@ -713,39 +480,25 @@ export async function POST(request) {
     const received = leadgenEvents.length + messengerEvents.length;
     if (!organizationId) return { inserted: 0, skipped: received, received, reason: 'No organization found' };
 
-    const leadBatchId = leadgenEvents.length ? await findOrCreateBatch(client, organizationId) : null;
-    const messengerBatchId = messengerEvents.length
-      ? await findOrCreateBatch(client, organizationId, {
-        sourceName: 'Facebook Messenger',
-        sourceType: 'facebook_messenger',
-        filePrefix: 'facebook-messenger',
-        sheetName: MESSENGER_SOURCE_SHEET,
-      })
-      : null;
+    const leadBatchId = leadgenEvents.length ? await findOrCreateFacebookLeadAdsBatch(client, organizationId) : null;
+    const messengerBatchId = messengerEvents.length ? await findOrCreateMessengerBatch(client, organizationId) : null;
     if (leadgenEvents.length && !leadBatchId) return { inserted: 0, skipped: received, received, reason: 'Failed to resolve lead import batch' };
     if (messengerEvents.length && !messengerBatchId) return { inserted: 0, skipped: received, received, reason: 'Failed to resolve messenger import batch' };
 
-    let inserted = 0;
-    let promoted = 0;
-    let graphFetched = 0;
+    const leadResult = await ingestFacebookLeadAdsEvents(client, {
+      organizationId,
+      batchId: leadBatchId,
+      events: leadgenEvents,
+      metaConfig,
+    });
+
+    let inserted = leadResult.inserted;
+    let promoted = leadResult.promoted;
+    let graphFetched = leadResult.graphFetched;
     let profileFetched = 0;
     let linked = 0;
     let review = 0;
-    let skipped = 0;
-
-    for (const event of leadgenEvents) {
-      const stored = await withSerializedWebhookEvent(client, leadgenEventKey(event), async () => {
-        const rowNumber = await lockedNextRowNumber(client, leadBatchId);
-        return persistEvent(client, organizationId, leadBatchId, rowNumber, event, metaConfig);
-      });
-      if (stored.inserted) {
-        inserted += 1;
-        if (stored.promoted) promoted += 1;
-        if (stored.graphFetched) graphFetched += 1;
-      } else {
-        skipped += 1;
-      }
-    }
+    let skipped = leadResult.skipped;
 
     for (const event of messengerEvents) {
       const stored = await withSerializedWebhookEvent(client, messengerEventKey(event), async () => {
