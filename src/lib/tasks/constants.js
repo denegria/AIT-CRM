@@ -24,6 +24,7 @@ export const TASK_PRIORITIES = Object.freeze({
 
 export const TASK_EVENT_TYPES = Object.freeze({
   CREATED: 'created',
+  UPDATED: 'updated',
   ASSIGNED: 'assigned',
   DUE_DATE_CHANGED: 'due_date_changed',
   SNOOZED: 'snoozed',
