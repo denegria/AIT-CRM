@@ -29,6 +29,13 @@
       "when": 1778760579621,
       "tag": "0003_work_order_details",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1779554221042,
+      "tag": "0004_task_follow_up_schema",
+      "breakpoints": true
     }
   ]
 }

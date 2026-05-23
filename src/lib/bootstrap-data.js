@@ -11,6 +11,7 @@ import {
   paymentSnapshots as paymentSnapshotsTable,
   notes as notesTable,
   activityEvents as activityEventsTable,
+  tasks as tasksTable,
   leads as leadsTable,
   importBatches as importBatchesTable,
   importSourceRows as importSourceRowsTable,
@@ -24,6 +25,7 @@ import {
 } from './crm/access.js';
 import { toBusinessUnitPayload } from './crm/payloads.js';
 import { workflowFromLead } from './sales-workflow';
+import { TASK_STATUSES } from './tasks/constants.js';
 
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const toBootstrapBusinessUnitPayload = (row) => toBusinessUnitPayload(row, { emptyColor: null });
@@ -144,6 +146,36 @@ function mapFinancials(estimateRows, paymentRows, contactLookup) {
   }));
 
   return [...estimates, ...receipts];
+}
+
+function toDisplayPriority(value) {
+  if (!value) return 'Medium';
+  return value
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`)
+    .join(' ');
+}
+
+function mapTasks(rows, contactLookup) {
+  return rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    description: row.description || '',
+    businessUnitId: row.businessUnitId || '',
+    contactId: row.contactId || '',
+    leadId: row.leadId || '',
+    workOrderId: row.workOrderId || '',
+    client: contactLookup.get(row.contactId)?.name || '',
+    assignedTo: row.ownerUserId || '',
+    dueDate: toIsoDate(row.dueAt),
+    completed: Boolean(row.completedAt || row.status === TASK_STATUSES.COMPLETED),
+    priority: toDisplayPriority(row.priority),
+    taskType: row.taskType,
+    taskStatus: row.status,
+    sourceType: row.sourceType || '',
+    sourceLabel: row.sourceLabel || '',
+  }));
 }
 
 function authData({ authRequired = false, authError = '', currentUser = null } = {}) {
@@ -314,6 +346,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       paymentRows,
       noteRows,
       eventRows,
+      taskRows,
       importStaging,
     ] = await Promise.all([
       db.select().from(businessUnitsTable).where(scopedOrgWhere(businessUnitsTable, session)).orderBy(asc(businessUnitsTable.name)),
@@ -324,10 +357,11 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       db.select().from(paymentSnapshotsTable).where(scopedBusinessUnitWhere(paymentSnapshotsTable, session)).orderBy(desc(paymentSnapshotsTable.createdAt)),
       db.select().from(notesTable).where(scopedOrgWhere(notesTable, session)).orderBy(desc(notesTable.createdAt)),
       db.select().from(activityEventsTable).where(scopedOrgWhere(activityEventsTable, session)).orderBy(desc(activityEventsTable.createdAt)),
+      db.select().from(tasksTable).where(scopedBusinessUnitWhere(tasksTable, session)).orderBy(asc(tasksTable.dueAt), desc(tasksTable.createdAt)),
       access.canReadImportReview ? getImportStagingSummary(db) : Promise.resolve(null),
     ]);
 
-    if (!contactRows.length) {
+    if (!contactRows.length && !taskRows.length) {
       return {
         ...emptyDbData(businessUnitRows, importStaging),
         currentUser: session.user,
@@ -339,6 +373,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
     const contactLookup = new Map(contacts.map((contact) => [contact.id, contact]));
     const workOrders = mapWorkOrders(workOrderRows, contactLookup);
     const financials = mapFinancials(estimateRows, paymentRows, contactLookup);
+    const tasks = mapTasks(taskRows, contactLookup);
     return {
       ...seedData,
       dataSource: 'postgres',
@@ -350,6 +385,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       contacts,
       workOrders,
       financials,
+      tasks,
       importStaging,
     };
   } catch (error) {
