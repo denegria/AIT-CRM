@@ -11,6 +11,12 @@ import {
 
 const CLOSED_STATUSES = new Set([TASK_STATUSES.COMPLETED, TASK_STATUSES.CANCELED]);
 
+function taskPolicyError(message) {
+  const error = new Error(message);
+  error.status = 400;
+  return error;
+}
+
 export function isClosedTaskStatus(status) {
   return CLOSED_STATUSES.has(status);
 }
@@ -25,6 +31,24 @@ export function normalizeTaskStatus(value) {
   return TASK_STATUS_VALUES.includes(status) ? status : DEFAULT_TASK_STATUS;
 }
 
+export function parseTaskStatusFilter(value) {
+  const status = String(value || '').trim();
+  if (!status) return '';
+  if (!TASK_STATUS_VALUES.includes(status)) {
+    throw taskPolicyError('Invalid task status filter.');
+  }
+  return status;
+}
+
+export function parseTaskTypeFilter(value) {
+  const taskType = String(value || '').trim();
+  if (!taskType) return '';
+  if (!TASK_TYPE_VALUES.includes(taskType)) {
+    throw taskPolicyError('Invalid task type filter.');
+  }
+  return taskType;
+}
+
 export function normalizeTaskPriority(value) {
   const priority = String(value || '').trim().toLowerCase();
   return TASK_PRIORITY_VALUES.includes(priority) ? priority : DEFAULT_TASK_PRIORITY;
@@ -34,9 +58,7 @@ export function parseTaskDateTime(value, fieldName) {
   if (value === null || value === undefined || value === '') return null;
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) {
-    const error = new Error(`${fieldName} must be a valid date/time.`);
-    error.status = 400;
-    throw error;
+    throw taskPolicyError(`${fieldName} must be a valid date/time.`);
   }
   return date;
 }
@@ -48,9 +70,7 @@ export function buildTaskTransition({ task, action, now = new Date(), payload = 
   let message = 'Updated task.';
 
   if (isClosedTaskStatus(task.status) && normalizedAction !== 'reopen') {
-    const error = new Error('Completed or canceled tasks must be reopened before further changes.');
-    error.status = 400;
-    throw error;
+    throw taskPolicyError('Completed or canceled tasks must be reopened before further changes.');
   }
 
   if (normalizedAction === 'assign') {
@@ -69,9 +89,7 @@ export function buildTaskTransition({ task, action, now = new Date(), payload = 
     patch.status = TASK_STATUSES.SNOOZED;
     patch.snoozedUntil = parseTaskDateTime(payload.snoozedUntil || payload.dueAt, 'snoozedUntil');
     if (!patch.snoozedUntil) {
-      const error = new Error('snoozedUntil must be provided when snoozing a task.');
-      error.status = 400;
-      throw error;
+      throw taskPolicyError('snoozedUntil must be provided when snoozing a task.');
     }
     patch.dueAt = patch.snoozedUntil;
   } else if (normalizedAction === 'cancel') {
@@ -91,17 +109,13 @@ export function buildTaskTransition({ task, action, now = new Date(), payload = 
     patch.canceledAt = null;
     patch.snoozedUntil = null;
   } else if (normalizedAction !== 'update') {
-    const error = new Error('Unsupported task action.');
-    error.status = 400;
-    throw error;
+    throw taskPolicyError('Unsupported task action.');
   }
 
   if (Object.prototype.hasOwnProperty.call(payload, 'title')) {
     const title = String(payload.title || '').trim();
     if (!title) {
-      const error = new Error('Task title is required.');
-      error.status = 400;
-      throw error;
+      throw taskPolicyError('Task title is required.');
     }
     patch.title = title;
   }

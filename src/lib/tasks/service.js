@@ -78,7 +78,6 @@ export function toTaskPayload(row) {
     id: row.id,
     title: row.title,
     description: row.description || '',
-    organizationId: row.organizationId,
     businessUnitId: row.businessUnitId,
     contactId: row.contactId || '',
     leadId: row.leadId || '',

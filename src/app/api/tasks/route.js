@@ -22,6 +22,8 @@ import {
   normalizeTaskPriority,
   normalizeTaskStatus,
   normalizeTaskType,
+  parseTaskStatusFilter,
+  parseTaskTypeFilter,
   parseTaskDateTime,
 } from '@/lib/tasks/policy.js';
 import {
@@ -236,8 +238,8 @@ export async function GET(request) {
       });
       businessUnitIds = [filters.businessUnitId];
     }
-    if (filters.status) filters.status = normalizeTaskStatus(filters.status);
-    if (filters.taskType) filters.taskType = normalizeTaskType(filters.taskType);
+    if (filters.status) filters.status = parseTaskStatusFilter(filters.status);
+    if (filters.taskType) filters.taskType = parseTaskTypeFilter(filters.taskType);
 
     const due = stringParam(searchParams.get('due'));
     if (due === 'overdue') filters.dueBefore = new Date();

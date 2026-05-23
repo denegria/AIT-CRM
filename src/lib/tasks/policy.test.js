@@ -9,6 +9,8 @@ import {
   buildTaskTransition,
   normalizeTaskPriority,
   normalizeTaskType,
+  parseTaskStatusFilter,
+  parseTaskTypeFilter,
 } from './policy.js';
 
 function task(overrides = {}) {
@@ -26,6 +28,22 @@ test('normalizes task type and priority to safe defaults', () => {
   assert.equal(normalizeTaskType('not-real'), TASK_TYPES.MANUAL_REMINDER);
   assert.equal(normalizeTaskPriority('HIGH'), 'high');
   assert.equal(normalizeTaskPriority('not-real'), 'medium');
+});
+
+test('rejects invalid task list filters instead of silently defaulting', () => {
+  assert.equal(parseTaskStatusFilter(TASK_STATUSES.OPEN), TASK_STATUSES.OPEN);
+  assert.equal(parseTaskStatusFilter(''), '');
+  assert.equal(parseTaskTypeFilter(TASK_TYPES.FOLLOW_UP), TASK_TYPES.FOLLOW_UP);
+  assert.equal(parseTaskTypeFilter(null), '');
+
+  assert.throws(
+    () => parseTaskStatusFilter('not-real'),
+    /Invalid task status filter/,
+  );
+  assert.throws(
+    () => parseTaskTypeFilter('not-real'),
+    /Invalid task type filter/,
+  );
 });
 
 test('builds complete transition patch with audit event metadata', () => {
