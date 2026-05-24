@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
 import {
   businessUnits,
@@ -54,6 +54,18 @@ function endOfToday() {
   const end = new Date(now);
   end.setHours(23, 59, 59, 999);
   return end;
+}
+
+async function listAssignableUsers(db, organizationId) {
+  return db
+    .select({
+      id: users.id,
+      name: users.name,
+      email: users.email,
+    })
+    .from(users)
+    .where(and(eq(users.organizationId, organizationId), eq(users.isActive, true)))
+    .orderBy(asc(users.name), asc(users.email));
 }
 
 async function resolveOrganizationUserId(db, session, value, fieldName = 'ownerUserId') {
@@ -251,7 +263,11 @@ export async function GET(request) {
       businessUnitIds,
       filters,
     });
-    return NextResponse.json({ tasks: rows.map(toTaskPayload) });
+    const assignableUsers = await listAssignableUsers(db, session.user.organizationId);
+    return NextResponse.json({
+      tasks: rows.map(toTaskPayload),
+      users: assignableUsers,
+    });
   } catch (err) {
     return crmErrorResponse(err);
   }

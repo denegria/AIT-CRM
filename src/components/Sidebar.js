@@ -6,11 +6,12 @@ import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import s from './Sidebar.module.css';
 
-import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, Database, LogOut, Building2 } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, Database, LogOut, Building2, ListTodo } from 'lucide-react';
 
 const nav = [
   { href: '/', label: 'Dashboard', Icon: LayoutDashboard },
   { href: '/contacts', label: 'Contacts', Icon: Users },
+  { href: '/tasks', label: 'Follow-ups', Icon: ListTodo },
   { href: '/import-review', label: 'Import Review', Icon: Database },
   { href: '/work-orders', label: 'Work Orders', Icon: ClipboardList },
   { href: '/financials', label: 'Financials', Icon: DollarSign },

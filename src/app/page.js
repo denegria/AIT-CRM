@@ -78,6 +78,18 @@ export default function Dashboard() {
     });
   }, [employees, tasks, contacts]);
 
+  const followUpStats = useMemo(() => {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    const openTasks = tasks.filter(t => !t.completed && !['completed', 'canceled'].includes(t.taskStatus || t.status || ''));
+    const dueToday = openTasks.filter(t => (t.dueDate || t.dueAt || '').slice(0, 10) === todayKey).length;
+    const overdue = openTasks.filter(t => {
+      const due = (t.dueDate || t.dueAt || '').slice(0, 10);
+      return due && due < todayKey;
+    }).length;
+    const unassigned = openTasks.filter(t => !(t.assignedTo || t.ownerUserId)).length;
+    return { open: openTasks.length, dueToday, overdue, unassigned };
+  }, [tasks]);
+
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
   const today = new Date();
@@ -146,6 +158,20 @@ export default function Dashboard() {
           <KPICard label="Assigned Work Orders" value={kpis.assignedWOs} change="In progress" trend="up" />
         </div>
       )}
+
+      <div className="card" style={{marginBottom:20, padding:16}}>
+        <div className="flex-between" style={{alignItems:'flex-start', gap:16}}>
+          <div>
+            <div className="card-title" style={{marginBottom:4}}>Follow-up queue</div>
+            <p className="page-subtitle" style={{margin:0}}>
+              {followUpStats.open} open · {followUpStats.dueToday} due today · {followUpStats.overdue} overdue · {followUpStats.unassigned} unassigned
+            </p>
+          </div>
+          <Link className="btn btn-sm btn-primary" href="/tasks">
+            Open follow-ups
+          </Link>
+        </div>
+      </div>
 
       <div className="grid-2" style={{marginBottom:20}}>
         <div className="card">
