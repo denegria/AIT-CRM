@@ -94,6 +94,12 @@ function createServiceClient({
         ) {
           return { rows: businessUnitId ? [{ id: businessUnitId }] : [] };
         }
+        if (normalized.startsWith('select u.id, u.name, u.email from users u')) {
+          return { rows: [{ id: 'user-owner-1', name: 'Owner One', email: 'owner@example.com' }] };
+        }
+        if (normalized.startsWith('select id, name, email from users')) {
+          return { rows: [{ id: 'user-owner-fallback', name: 'Fallback Owner', email: 'fallback@example.com' }] };
+        }
         if (normalized.startsWith('insert into import_source_rows')) {
           return { rows: [{ id: sourceRowId }] };
         }
@@ -242,9 +248,13 @@ test('promotes clean Messenger messages into CRM and import audit tables', async
     'bu-1',
     'contact-1',
     'Messenger sender_id=sender-1 page_id=page-1 source_row_id=source-row-5',
+    'user-owner-1',
   ]);
 
-  const activityInsert = calls.find((call) => call.sql.startsWith('insert into activity_events'));
+  const activityInsert = calls.find((call) => (
+    call.sql.startsWith('insert into activity_events') &&
+    call.params[5] === MESSENGER_INBOUND_SOURCE_SHEET
+  ));
   assert.equal(activityInsert.params[4], 'Need a storefront sign');
   assert.equal(activityInsert.params[5], MESSENGER_INBOUND_SOURCE_SHEET);
   assert.equal(activityInsert.params[6], 5);
@@ -255,6 +265,7 @@ test('promotes clean Messenger messages into CRM and import audit tables', async
   assert.equal(proposedContact.contact_id, 'contact-1');
   assert.equal(proposedContact.name, 'Ada Signs');
   assert.equal(proposedLead.lead_id, 'lead-1');
+  assert.equal(proposedLead.assigned_user_id, 'user-owner-1');
   assert.equal(proposedLead.first_message, 'Need a storefront sign');
   assert.equal(normalizedInsert.params[4], 0.8);
   assert.equal(normalizedInsert.params[5], 'promoted');

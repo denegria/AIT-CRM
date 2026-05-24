@@ -2,6 +2,10 @@ import {
   fetchMetaMessengerProfile,
   resolveMetaPageBusinessUnitMapping,
 } from '../messaging/providers/meta.js';
+import {
+  recordInboundLeadAssignmentActivity,
+  resolveDefaultInboundLeadOwnerUserId,
+} from '../crm/assignment.js';
 
 export const MESSENGER_INBOUND_BATCH_SOURCE_NAME = 'Facebook Messenger';
 export const MESSENGER_INBOUND_BATCH_SOURCE_TYPE = 'facebook_messenger';
@@ -182,6 +186,12 @@ export function messengerInboundDisplayName(profile, senderId) {
 
 async function createMessengerContactAndLead(client, organizationId, businessUnitId, event, profile, sourceRowId) {
   if (!businessUnitId) return { contactId: null, leadId: null, reason: 'No business unit found' };
+  const assignedUserId = await resolveDefaultInboundLeadOwnerUserId(client, {
+    organizationId,
+    businessUnitId,
+    sourceType: 'facebook_messenger',
+    sourceKey: event.senderId || event.messageId || sourceRowId,
+  });
 
   const contact = await client.query(
     `
@@ -197,8 +207,8 @@ async function createMessengerContactAndLead(client, organizationId, businessUni
   const lead = await client.query(
     `
       insert into leads
-      (organization_id, business_unit_id, contact_id, source_type, source_name, status, current_stage, original_notes)
-      values ($1, $2, $3, 'facebook_messenger', 'Facebook Messenger', 'New Lead', 'New Lead', $4)
+      (organization_id, business_unit_id, contact_id, source_type, source_name, status, current_stage, original_notes, assigned_user_id)
+      values ($1, $2, $3, 'facebook_messenger', 'Facebook Messenger', 'New Lead', 'New Lead', $4, $5)
       returning id
     `,
     [
@@ -206,10 +216,20 @@ async function createMessengerContactAndLead(client, organizationId, businessUni
       businessUnitId,
       contactId,
       `Messenger sender_id=${event.senderId || 'unknown'} page_id=${event.pageId || 'unknown'} source_row_id=${sourceRowId || 'unknown'}`,
+      assignedUserId,
     ],
   );
 
-  return { contactId, leadId: lead.rows[0]?.id || null, reason: null };
+  const leadId = lead.rows[0]?.id || null;
+  await recordInboundLeadAssignmentActivity(client, {
+    organizationId,
+    businessUnitId,
+    contactId,
+    leadId,
+    ownerUserId: assignedUserId,
+  });
+
+  return { contactId, leadId, assignedUserId, reason: null };
 }
 
 async function logMessengerActivity(client, organizationId, businessUnitId, event, crmIds, rowNumber) {
@@ -366,6 +386,7 @@ export async function persistMessengerInboundEvent(
     business_unit_id: businessUnitId,
     contact_id: crmWrite.contactId,
     lead_id: crmWrite.leadId,
+    assigned_user_id: crmWrite.assignedUserId || null,
     first_message: event.text || event.postbackPayload || '[Messenger attachment]',
     profile,
     notes: crmWrite.leadId

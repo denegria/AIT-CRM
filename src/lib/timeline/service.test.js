@@ -51,6 +51,8 @@ test('buildContactTimeline consolidates notes, activity, tasks, messages, and le
       eventType: 'created',
       message: 'Created task Follow up.',
       actorUserId: 'user-1',
+      fromOwnerUserId: null,
+      toOwnerUserId: 'user-2',
       occurredAt: new Date('2026-05-23T12:00:00.000Z'),
     }],
     leads: [{
@@ -62,12 +64,13 @@ test('buildContactTimeline consolidates notes, activity, tasks, messages, and le
       status: 'New Lead',
       createdAt: new Date('2026-05-23T09:00:00.000Z'),
     }],
-    users: [{ id: 'user-1', name: 'Alvaro' }],
+    users: [{ id: 'user-1', name: 'Alvaro' }, { id: 'user-2', name: 'Ada' }],
     businessUnits: [{ id: 'bu-1', name: 'AIT Signs', label: 'Divisions' }],
   });
 
   assert.deepEqual(timeline.map((entry) => entry.type), ['task', 'message', 'note', 'lead']);
   assert.equal(timeline.find((entry) => entry.type === 'task').eventType, 'task.created');
+  assert.equal(timeline.find((entry) => entry.type === 'task').ownerChange.to.name, 'Ada');
   assert.equal(timeline.find((entry) => entry.type === 'message').source.label, 'facebook_messenger');
   assert.equal(timeline.find((entry) => entry.type === 'note').actor.name, 'Alvaro');
   assert.equal(timeline.find((entry) => entry.type === 'lead').businessUnit.name, 'AIT Signs');

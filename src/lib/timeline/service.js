@@ -197,6 +197,10 @@ export function buildContactTimeline({
         from: taskEvent.fromStatus,
         to: taskEvent.toStatus,
       }),
+      ownerChange: compactObject({
+        from: userPayload(taskEvent.fromOwnerUserId, userLookup),
+        to: userPayload(taskEvent.toOwnerUserId, userLookup),
+      }),
     });
   }
 

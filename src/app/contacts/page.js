@@ -6,7 +6,7 @@ import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import KanbanBoard from '@/components/KanbanBoard';
 import Modal from '@/components/Modal';
-import { AlertCircle, Clock3, LayoutDashboard as KanbanIcon, List, UserRoundCheck } from 'lucide-react';
+import { AlertCircle, Clock3, LayoutDashboard as KanbanIcon, List, UserPlus, UserRoundCheck } from 'lucide-react';
 import { PIPELINE_STATUSES } from '@/lib/sales-workflow';
 
 const empty = {
@@ -16,7 +16,7 @@ const empty = {
   status: 'New Lead',
   currentStage: 'Needs First Outreach',
   source: 'Wix Historical Import',
-  assignedTo: 'emp-1',
+  assignedTo: '',
   tags: ['needs_first_outreach'],
   nextAction: 'Make first outreach by phone/SMS/email; confirm program interest and schedule follow-up.',
   notes: [],
@@ -58,6 +58,7 @@ export default function ContactsPage() {
     accessibleBusinessUnits,
     currentBusinessUnitId,
     currentBusinessUnit,
+    currentUser,
     canUseConsolidatedScope,
     scopeLabel,
   } = useCRM();
@@ -68,6 +69,7 @@ export default function ContactsPage() {
   const [viewMode, setViewMode] = useState('table'); // 'table' | 'kanban'
   const [statusFilter, setStatusFilter] = useState('All');
   const [workflowFilter, setWorkflowFilter] = useState('all');
+  const [ownerFilter, setOwnerFilter] = useState('all');
 
   const canWrite = access.canWriteCrm;
   const defaultBusinessUnitId = currentBusinessUnitId !== 'all' && currentBusinessUnitId !== 'unassigned' ? currentBusinessUnitId : accessibleBusinessUnits[0]?.id || '';
@@ -91,7 +93,7 @@ export default function ContactsPage() {
     close();
   };
 
-  const empName = (id) => employees.find(e => e.id === id)?.name || id;
+  const empName = (id) => employees.find(e => e.id === id)?.name || (id ? id : 'Unassigned');
   const unitName = (id) => accessibleBusinessUnits.find((unit) => unit.id === id)?.name || 'Unassigned';
   const workflowStats = {
     needsFirstOutreach: contacts.filter((contact) => contact.needsFirstOutreach).length,
@@ -105,6 +107,7 @@ export default function ContactsPage() {
     { key: 'phone', label: 'Phone', editable: true },
     { key: 'status', label: 'Status', type: 'badge', sortable: true },
     { key: 'workflow', label: 'Next Step', sortable: false, render: (row) => <WorkflowCell row={row} /> },
+    { key: 'assignedLabel', label: 'Owner', sortable: true },
     { key: 'divisionLabel', label: scopeLabel, sortable: true },
     { key: 'source', label: 'Source', sortable: true },
     { key: 'lastContact', label: 'Last Contact', sortable: true },
@@ -117,7 +120,11 @@ export default function ContactsPage() {
       (workflowFilter === 'needs_first_outreach' && contact.needsFirstOutreach) ||
       (workflowFilter === 'unassigned' && !contact.assignedTo) ||
       (workflowFilter === 'active' && !['Won', 'Lost'].includes(contact.status));
-    return statusMatch && workflowMatch;
+    const ownerMatch =
+      ownerFilter === 'all' ||
+      (ownerFilter === 'unassigned' && !contact.assignedTo) ||
+      contact.assignedTo === ownerFilter;
+    return statusMatch && workflowMatch && ownerMatch;
   });
   const dataWithEmp = filteredContacts.map(c => ({ ...c, assignedLabel: empName(c.assignedTo), divisionLabel: unitName(c.businessUnitId || c.primaryBusinessUnitId) }));
 
@@ -148,6 +155,11 @@ export default function ContactsPage() {
             <option value="needs_first_outreach">Needs First Outreach</option>
             <option value="active">Active Pipeline</option>
             <option value="unassigned">Unassigned</option>
+          </select>
+          <select className="input select contacts-filter" style={{width:150, padding:'4px 8px'}} value={ownerFilter} onChange={e=>setOwnerFilter(e.target.value)}>
+            <option value="all">All Owners</option>
+            <option value="unassigned">Unassigned</option>
+            {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
           </select>
           {canWrite && <button className="btn btn-primary" onClick={openNew}>+ Add Contact</button>}
         </div>
@@ -314,6 +326,15 @@ export default function ContactsPage() {
             actions={[
               { label: 'View', onClick: (r) => router.push(`/contacts/${r.id}`) },
               ...(canWrite ? [
+                ...(currentUser?.id ? [{
+                  label: 'Assign to me',
+                  icon: <UserPlus size={14} />,
+                  onClick: (r) => {
+                    updateContact(r.id, { assignedTo: currentUser.id })
+                      .then(() => toast('Contact assigned'))
+                      .catch((error) => toast(error?.message || 'Assignment failed.', 'error'));
+                  },
+                }] : []),
                 { label: 'Edit', onClick: openEdit },
                 { label: 'Delete', onClick: (r) => { deleteContact(r.id); toast('Contact deleted', 'error'); }, danger: true },
               ] : []),
@@ -362,6 +383,7 @@ export default function ContactsPage() {
         <div className="form-group">
           <label className="form-label">Assigned To</label>
           <select className="input select" value={form.assignedTo} onChange={e => setForm(f => ({...f, assignedTo: e.target.value}))}>
+            <option value="">Unassigned</option>
             {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
           </select>
         </div>

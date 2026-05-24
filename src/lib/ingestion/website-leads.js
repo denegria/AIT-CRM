@@ -1,4 +1,8 @@
 import { createHash, timingSafeEqual } from 'crypto';
+import {
+  recordInboundLeadAssignmentActivity,
+  resolveDefaultInboundLeadOwnerUserId,
+} from '../crm/assignment.js';
 import { normalizeWorkflowTags } from '../sales-workflow.js';
 
 export const WEBSITE_LEAD_SECRET_HEADER = 'x-ait-webhook-secret';
@@ -477,9 +481,9 @@ function leadFormDetailsNote(lead) {
   return ['Website form details:', ...rows.map((row) => '- ' + row)].join('\n');
 }
 
-async function persistLead(client, organizationId, businessUnitId, contactId, lead, sourceRowId, rowNumber) {
+async function persistLead(client, organizationId, businessUnitId, contactId, lead, sourceRowId, rowNumber, ownerUserId = null) {
   const inserted = await client.query(
-    'insert into leads (organization_id, business_unit_id, contact_id, source_type, source_name, status, current_stage, original_notes) values ($1, $2, $3, $4, $5, $6, $7, $8) returning id',
+    'insert into leads (organization_id, business_unit_id, contact_id, source_type, source_name, status, current_stage, original_notes, assigned_user_id) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id',
     [
       organizationId,
       businessUnitId,
@@ -489,6 +493,7 @@ async function persistLead(client, organizationId, businessUnitId, contactId, le
       lead.status || 'New Lead',
       lead.currentStage || lead.status || 'New Lead',
       originalNotesForLead(lead, sourceRowId),
+      ownerUserId,
     ],
   );
   const leadId = inserted.rows[0]?.id || null;
@@ -507,6 +512,13 @@ async function persistLead(client, organizationId, businessUnitId, contactId, le
       parseTimestamp(lead.submittedAt),
     ],
   );
+  await recordInboundLeadAssignmentActivity(client, {
+    organizationId,
+    businessUnitId,
+    contactId,
+    leadId,
+    ownerUserId,
+  });
 
   const detailsNote = leadFormDetailsNote(lead);
   if (detailsNote) {
@@ -521,7 +533,7 @@ async function persistLead(client, organizationId, businessUnitId, contactId, le
 
 export async function persistWebsiteLeadImportAudit(
   client,
-  { batchId, rowNumber, body, lead, businessUnitId, contactId, leadId, duplicate = null },
+  { batchId, rowNumber, body, lead, businessUnitId, contactId, leadId, assignedUserId = null, duplicate = null },
 ) {
   const rawValues = {
     source: WEBSITE_LEAD_SOURCE_TYPE,
@@ -567,6 +579,7 @@ export async function persistWebsiteLeadImportAudit(
     business_unit_id: businessUnitId,
     contact_id: contactId,
     lead_id: leadId,
+    assigned_user_id: assignedUserId,
     duplicate_lead_id: duplicate?.lead_id || null,
   };
 
@@ -648,8 +661,14 @@ export async function ingestWebsiteLeadSubmission(client, {
       };
     }
 
+    const assignedUserId = await resolveDefaultInboundLeadOwnerUserId(client, {
+      organizationId,
+      businessUnitId,
+      sourceType: WEBSITE_LEAD_SOURCE_TYPE,
+      sourceKey: lead.externalId || lead.sourceKey || String(rowNumber),
+    });
     const contactId = await upsertContact(client, organizationId, businessUnitId, lead);
-    const leadId = await persistLead(client, organizationId, businessUnitId, contactId, lead, 'pending', rowNumber);
+    const leadId = await persistLead(client, organizationId, businessUnitId, contactId, lead, 'pending', rowNumber, assignedUserId);
     const sourceRowId = await persistWebsiteLeadImportAudit(client, {
       batchId,
       rowNumber,
@@ -658,6 +677,7 @@ export async function ingestWebsiteLeadSubmission(client, {
       businessUnitId,
       contactId,
       leadId,
+      assignedUserId,
     });
     await client.query(
       'update leads set original_notes = replace(original_notes, $1, $2), updated_at = now() where id = $3',
@@ -671,6 +691,7 @@ export async function ingestWebsiteLeadSubmission(client, {
       contactId,
       leadId,
       businessUnitId,
+      assignedUserId,
     };
   } catch (error) {
     await client.query('rollback');

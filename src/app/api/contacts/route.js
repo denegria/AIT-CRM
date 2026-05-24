@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
-import { businessUnits, contacts } from '@/db/schema.js';
+import { businessUnits, contacts, users } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import {
   canAccessContact,
   resolveBusinessUnitId,
   resolveOptionalBusinessUnitId,
 } from '@/lib/crm/access.js';
-import { crmErrorResponse } from '@/lib/crm/errors.js';
+import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
 import { isUuid } from '@/lib/crm/validation.js';
 import {
   createContactWithLead,
@@ -53,6 +53,25 @@ function hasBusinessUnitRequest(body) {
   return 'businessUnitId' in body || 'primaryBusinessUnitId' in body;
 }
 
+async function resolveAssignableUserId(db, session, value, fieldName = 'assignedTo') {
+  const id = String(value || '').trim();
+  if (!id) return null;
+  if (!isUuid(id)) throw createCrmError(`${fieldName} must be a valid user id.`);
+
+  const [user] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(
+      eq(users.id, id),
+      eq(users.organizationId, session.user.organizationId),
+      eq(users.isActive, true),
+    ))
+    .limit(1);
+
+  if (!user) throw createCrmError('Assigned user not found.', 404);
+  return user.id;
+}
+
 
 async function resolveContactBusinessUnitForCreate(db, session, body) {
   const requestedId = requestedBusinessUnitId(body);
@@ -93,6 +112,12 @@ export async function POST(request) {
   } catch (error) {
     return crmErrorResponse(error);
   }
+  let assignedUserId = null;
+  try {
+    assignedUserId = await resolveAssignableUserId(db, session, body.assignedTo);
+  } catch (error) {
+    return crmErrorResponse(error);
+  }
   const { contact, lead } = await createContactWithLead({
     db,
     organizationId: session.user.organizationId,
@@ -110,7 +135,7 @@ export async function POST(request) {
       sourceName: body.source || 'Manual',
       status: body.status || 'New Lead',
       currentStage: body.status || 'New Lead',
-      assignedUserId: isUuid(body.assignedTo) ? body.assignedTo : null,
+      assignedUserId,
     } : null,
   });
 
@@ -181,7 +206,13 @@ export async function PATCH(request) {
       leadPatch.currentStage = body.status || lead.currentStage;
     }
     if ('source' in body) leadPatch.sourceName = body.source || null;
-    if ('assignedTo' in body) leadPatch.assignedUserId = isUuid(body.assignedTo) ? body.assignedTo : null;
+    if ('assignedTo' in body) {
+      try {
+        leadPatch.assignedUserId = await resolveAssignableUserId(db, session, body.assignedTo);
+      } catch (error) {
+        return crmErrorResponse(error);
+      }
+    }
     if (hasBusinessUnitPatch && patch.primaryBusinessUnitId) {
       leadPatch.businessUnitId = patch.primaryBusinessUnitId;
     }

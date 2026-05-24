@@ -1,5 +1,6 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { activityEvents, businessUnits, contacts, leads, notes, workOrders } from '@/db/schema.js';
+import { updateLeadOwnerWithActivity } from './assignment.js';
 
 export async function latestLeadForContact(db, organizationId, contactId) {
   const [lead] = await db
@@ -94,11 +95,27 @@ export async function updateContactWithLeadAndNotes({
 
     let lead = existingLead;
     if (existingLead && leadPatch) {
+      const hasOwnerPatch = Object.prototype.hasOwnProperty.call(leadPatch, 'assignedUserId');
+      const ownerUserId = hasOwnerPatch ? leadPatch.assignedUserId || null : undefined;
+      const leadPatchWithoutOwner = { ...leadPatch };
+      delete leadPatchWithoutOwner.assignedUserId;
+
       [lead] = await tx
         .update(leads)
-        .set(leadPatch)
+        .set(leadPatchWithoutOwner)
         .where(and(eq(leads.id, existingLead.id), eq(leads.organizationId, organizationId)))
         .returning();
+
+      if (hasOwnerPatch) {
+        const assignment = await updateLeadOwnerWithActivity({
+          tx,
+          organizationId,
+          actorUserId,
+          existingLead: lead,
+          ownerUserId,
+        });
+        lead = assignment.lead;
+      }
     }
 
     let noteRows = await notesForContact(tx, organizationId, contactId);

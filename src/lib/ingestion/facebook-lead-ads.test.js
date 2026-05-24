@@ -84,6 +84,12 @@ function createServiceClient({
         ) {
           return { rows: businessUnitId ? [{ id: businessUnitId }] : [] };
         }
+        if (normalized.startsWith('select u.id, u.name, u.email from users u')) {
+          return { rows: [{ id: 'user-owner-1', name: 'Owner One', email: 'owner@example.com' }] };
+        }
+        if (normalized.startsWith('select id, name, email from users')) {
+          return { rows: [{ id: 'user-owner-fallback', name: 'Fallback Owner', email: 'fallback@example.com' }] };
+        }
         if (
           normalized.startsWith('select id, primary_business_unit_id from contacts')
           && normalized.includes('lower(email) = lower($2)')
@@ -254,6 +260,7 @@ test('ingests successful leadgen events into CRM and import review audit tables'
     'bu-1',
     'contact-1',
     'Facebook leadgen_id=leadgen-1 source_row_id=source-row-5',
+    'user-owner-1',
   ]);
 
   const activityInsert = calls.find((call) => call.sql.startsWith('insert into activity_events'));
@@ -267,6 +274,7 @@ test('ingests successful leadgen events into CRM and import review audit tables'
   assert.equal(proposedContact.contact_id, 'contact-1');
   assert.equal(proposedLead.source_type, 'facebook_webhook');
   assert.equal(proposedLead.lead_id, 'lead-1');
+  assert.equal(proposedLead.assigned_user_id, 'user-owner-1');
   assert.equal(proposedLead.notes, 'Webhook captured, Graph fields fetched, and CRM lead created.');
   assert.equal(normalizedInsert.params[4], 0.85);
   assert.equal(normalizedInsert.params[5], 'promoted');

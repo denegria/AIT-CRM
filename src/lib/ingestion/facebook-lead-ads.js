@@ -3,6 +3,10 @@ import {
   normalizeMetaLeadFields,
   resolveMetaPageBusinessUnitMapping,
 } from '../messaging/providers/meta.js';
+import {
+  recordInboundLeadAssignmentActivity,
+  resolveDefaultInboundLeadOwnerUserId,
+} from '../crm/assignment.js';
 
 export const FACEBOOK_LEAD_ADS_BATCH_SOURCE_NAME = 'Facebook Lead Ads';
 export const FACEBOOK_LEAD_ADS_BATCH_SOURCE_TYPE = 'facebook_leads';
@@ -156,6 +160,12 @@ async function findExistingContact(client, organizationId, details) {
 
 async function upsertContactAndLead(client, organizationId, businessUnitId, event, details, sourceRowId, rowNumber) {
   if (!businessUnitId) return { contactId: null, leadId: null, reason: 'No business unit found' };
+  const assignedUserId = await resolveDefaultInboundLeadOwnerUserId(client, {
+    organizationId,
+    businessUnitId,
+    sourceType: 'facebook_lead_ads',
+    sourceKey: event.leadgenId || event.formId || String(rowNumber),
+  });
 
   const existing = await findExistingContact(client, organizationId, details);
   let contactId = existing?.id || null;
@@ -192,8 +202,8 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
   const lead = await client.query(
     `
       insert into leads
-      (organization_id, business_unit_id, contact_id, source_type, source_name, status, current_stage, original_notes)
-      values ($1, $2, $3, 'facebook_lead_ads', 'Facebook Ads', 'New Lead', 'New Lead', $4)
+      (organization_id, business_unit_id, contact_id, source_type, source_name, status, current_stage, original_notes, assigned_user_id)
+      values ($1, $2, $3, 'facebook_lead_ads', 'Facebook Ads', 'New Lead', 'New Lead', $4, $5)
       returning id
     `,
     [
@@ -201,6 +211,7 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
       businessUnitId,
       contactId,
       `Facebook leadgen_id=${event.leadgenId || 'unknown'} source_row_id=${sourceRowId || 'unknown'}`,
+      assignedUserId,
     ],
   );
   const leadId = lead.rows[0]?.id || null;
@@ -221,8 +232,15 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
       rowNumber,
     ],
   );
+  await recordInboundLeadAssignmentActivity(client, {
+    organizationId,
+    businessUnitId,
+    contactId,
+    leadId,
+    ownerUserId: assignedUserId,
+  });
 
-  return { contactId, leadId, reason: null };
+  return { contactId, leadId, assignedUserId, reason: null };
 }
 
 export async function persistFacebookLeadAdsEvent(
@@ -311,6 +329,7 @@ export async function persistFacebookLeadAdsEvent(
     business_unit_id: businessUnitId,
     contact_id: crmWrite.contactId,
     lead_id: crmWrite.leadId,
+    assigned_user_id: crmWrite.assignedUserId || null,
     notes: fetched.ok
       ? 'Webhook captured, Graph fields fetched, and CRM lead created.'
       : `Webhook captured, but Graph field fetch failed: ${fetched.reason}`,

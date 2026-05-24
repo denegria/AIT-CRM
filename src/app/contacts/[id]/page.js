@@ -221,7 +221,7 @@ export default function ContactDetailPage() {
             <div className={s.assignmentLabel}>Assigned To</div>
             <div className={s.assignmentUser}>
               <div className={s.userAvatarSmall}>{assignedEmployee?.name?.charAt(0)}</div>
-              <span>{assignedEmployee?.name}</span>
+              <span>{assignedEmployee?.name || 'Unassigned'}</span>
             </div>
           </div>
           
@@ -387,6 +387,7 @@ export default function ContactDetailPage() {
           <div className="form-group">
             <label className="form-label">Assigned To</label>
             <select className="input select" value={editForm.assignedTo} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
+              <option value="">Unassigned</option>
               {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
             </select>
           </div>
