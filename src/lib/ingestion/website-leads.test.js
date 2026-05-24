@@ -49,6 +49,25 @@ test('unwraps Wix-style data payloads before normalization', () => {
   assert.equal(lead.externalId, 'wix-001');
 });
 
+test('normalizes website lead lifecycle status fields', () => {
+  const { lead } = normalizeWebsiteLeadSubmission({
+    email: 'qualified@example.com',
+    status: 'qualified',
+    currentStage: 'proposal_sent',
+  });
+
+  assert.equal(lead.status, 'Qualified');
+  assert.equal(lead.currentStage, 'Proposal Sent');
+
+  const { lead: fallbackLead } = normalizeWebsiteLeadSubmission({
+    email: 'fallback@example.com',
+    status: 'random-invalid-foo',
+  });
+
+  assert.equal(fallbackLead.status, 'New Lead');
+  assert.equal(fallbackLead.currentStage, 'New Lead');
+});
+
 test('accepts body-secret authentication from wrapped payloads', () => {
   const body = {
     webhook_secret: 'shared-secret',

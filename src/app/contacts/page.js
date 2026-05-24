@@ -84,13 +84,20 @@ export default function ContactsPage() {
   const save = () => {
     if (!form.name.trim()) return;
     if (drawer === 'new') {
-      addContact(form);
-      toast('Contact created successfully');
+      addContact(form)
+        .then(() => {
+          toast('Contact created successfully');
+          close();
+        })
+        .catch((error) => toast(error?.message || 'Contact create failed.', 'error'));
     } else {
-      updateContact(drawer.id, form);
-      toast('Contact updated successfully');
+      updateContact(drawer.id, form)
+        .then(() => {
+          toast('Contact updated successfully');
+          close();
+        })
+        .catch((error) => toast(error?.message || 'Contact update failed.', 'error'));
     }
-    close();
   };
 
   const empName = (id) => employees.find(e => e.id === id)?.name || (id ? id : 'Unassigned');
@@ -345,7 +352,11 @@ export default function ContactsPage() {
         <KanbanBoard 
           data={dataWithEmp}
           columns={PIPELINE_STATUSES}
-          onMove={canWrite ? (id, status) => { updateContact(id, { status }); toast('Stage updated'); } : undefined}
+          onMove={canWrite ? (id, status) => {
+            updateContact(id, { status })
+              .then(() => toast('Stage updated'))
+              .catch((error) => toast(error?.message || 'Stage update failed.', 'error'));
+          } : undefined}
           onEdit={(item) => router.push(`/contacts/${item.id}`)}
         />
       )}

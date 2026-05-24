@@ -9,6 +9,7 @@ import {
   resolveOptionalBusinessUnitId,
 } from '@/lib/crm/access.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
+import { evaluateLifecycleTransition, requireLifecycleStatus } from '@/lib/crm/lifecycle.js';
 import { isUuid } from '@/lib/crm/validation.js';
 import {
   createContactWithLead,
@@ -118,6 +119,13 @@ export async function POST(request) {
   } catch (error) {
     return crmErrorResponse(error);
   }
+  let status;
+  try {
+    status = requireLifecycleStatus(body.status || 'New Lead');
+  } catch (error) {
+    return NextResponse.json({ error: error.message }, { status: 400 });
+  }
+
   const { contact, lead } = await createContactWithLead({
     db,
     organizationId: session.user.organizationId,
@@ -133,8 +141,8 @@ export async function POST(request) {
       businessUnitId,
       sourceType: 'manual',
       sourceName: body.source || 'Manual',
-      status: body.status || 'New Lead',
-      currentStage: body.status || 'New Lead',
+      status,
+      currentStage: status,
       assignedUserId,
     } : null,
   });
@@ -196,14 +204,35 @@ export async function PATCH(request) {
       { status: 400 },
     );
   }
+  if ('status' in body && !lead) {
+    return NextResponse.json(
+      { error: 'Contact has no lead lifecycle status to update.' },
+      { status: 400 },
+    );
+  }
 
   const hasLeadPatch = 'status' in body || 'source' in body || 'assignedTo' in body || hasBusinessUnitPatch;
   let leadPatch = null;
+  let leadStatusChange = null;
   if (lead && hasLeadPatch) {
     leadPatch = { updatedAt: new Date() };
     if ('status' in body) {
-      leadPatch.status = body.status || lead.status;
-      leadPatch.currentStage = body.status || lead.currentStage;
+      let transition;
+      try {
+        transition = evaluateLifecycleTransition({
+          fromStatus: lead.status,
+          toStatus: body.status,
+          canReopenClosedStatus: session.user.canAccessAllBusinessUnits,
+        });
+      } catch (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+      if (!transition.allowed) {
+        return NextResponse.json({ error: transition.reason }, { status: 403 });
+      }
+      leadPatch.status = transition.toStatus;
+      leadPatch.currentStage = transition.toStatus;
+      leadStatusChange = transition;
     }
     if ('source' in body) leadPatch.sourceName = body.source || null;
     if ('assignedTo' in body) {
@@ -228,6 +257,7 @@ export async function PATCH(request) {
       contactPatch: patch,
       existingLead: lead,
       leadPatch,
+      leadStatusChange,
       replaceNotes: Array.isArray(body.notes)
         ? { noteInputs: normalizeNoteInputs(body.notes) }
         : null,

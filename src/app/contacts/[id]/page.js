@@ -143,6 +143,7 @@ export default function ContactDetailPage() {
     updateContact(contact.id, editForm)
       .then(() => {
         toast('Profile updated');
+        setTimelineReloadKey((key) => key + 1);
         setIsEditModalOpen(false);
       })
       .catch((error) => {

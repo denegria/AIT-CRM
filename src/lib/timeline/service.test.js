@@ -55,6 +55,16 @@ test('buildContactTimeline consolidates notes, activity, tasks, messages, and le
       toOwnerUserId: 'user-2',
       occurredAt: new Date('2026-05-23T12:00:00.000Z'),
     }],
+    leadStatusHistory: [{
+      id: 'lead-status-1',
+      contactId: 'contact-1',
+      leadId: 'lead-1',
+      businessUnitId: 'bu-1',
+      fromStatus: 'Contacted',
+      toStatus: 'Qualified',
+      actorUserId: 'user-1',
+      occurredAt: new Date('2026-05-23T12:30:00.000Z'),
+    }],
     leads: [{
       id: 'lead-1',
       contactId: 'contact-1',
@@ -68,7 +78,9 @@ test('buildContactTimeline consolidates notes, activity, tasks, messages, and le
     businessUnits: [{ id: 'bu-1', name: 'AIT Signs', label: 'Divisions' }],
   });
 
-  assert.deepEqual(timeline.map((entry) => entry.type), ['task', 'message', 'note', 'lead']);
+  assert.deepEqual(timeline.map((entry) => entry.type), ['lead', 'task', 'message', 'note', 'lead']);
+  assert.equal(timeline[0].eventType, 'lead.status_changed');
+  assert.deepEqual(timeline[0].leadStatus, { from: 'Contacted', to: 'Qualified' });
   assert.equal(timeline.find((entry) => entry.type === 'task').eventType, 'task.created');
   assert.equal(timeline.find((entry) => entry.type === 'task').ownerChange.to.name, 'Ada');
   assert.equal(timeline.find((entry) => entry.type === 'message').source.label, 'facebook_messenger');

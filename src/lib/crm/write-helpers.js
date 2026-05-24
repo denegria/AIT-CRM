@@ -1,5 +1,5 @@
 import { and, desc, eq } from 'drizzle-orm';
-import { activityEvents, businessUnits, contacts, leads, notes, workOrders } from '@/db/schema.js';
+import { activityEvents, businessUnits, contacts, leadStatusHistory, leads, notes, workOrders } from '@/db/schema.js';
 import { updateLeadOwnerWithActivity } from './assignment.js';
 
 export async function latestLeadForContact(db, organizationId, contactId) {
@@ -84,6 +84,7 @@ export async function updateContactWithLeadAndNotes({
   contactPatch,
   existingLead = null,
   leadPatch = null,
+  leadStatusChange = null,
   replaceNotes = null,
 }) {
   return db.transaction(async (tx) => {
@@ -105,6 +106,20 @@ export async function updateContactWithLeadAndNotes({
         .set(leadPatchWithoutOwner)
         .where(and(eq(leads.id, existingLead.id), eq(leads.organizationId, organizationId)))
         .returning();
+
+      if (leadStatusChange?.changed) {
+        await tx.insert(leadStatusHistory).values({
+          organizationId,
+          businessUnitId: lead.businessUnitId,
+          contactId: lead.contactId,
+          leadId: lead.id,
+          fromStatus: leadStatusChange.fromStatus,
+          toStatus: leadStatusChange.toStatus,
+          actorUserId,
+          reason: leadStatusChange.reason || null,
+          occurredAt: new Date(),
+        });
+      }
 
       if (hasOwnerPatch) {
         const assignment = await updateLeadOwnerWithActivity({

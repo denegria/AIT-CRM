@@ -1,4 +1,6 @@
-export const PIPELINE_STATUSES = ['New Lead', 'Contacted', 'Qualified', 'Proposal Sent', 'Won', 'Lost'];
+import { LIFECYCLE_STATUSES, normalizeLifecycleStatus } from './crm/lifecycle.js';
+
+export const PIPELINE_STATUSES = LIFECYCLE_STATUSES;
 
 export const FIRST_OUTREACH_TAGS = ['wix_history', 'needs_first_outreach', 'unworked_lead'];
 
@@ -30,6 +32,8 @@ export function tagsFromLeadNotes(notes) {
 
 export function pipelineStatusFromLead(lead) {
   if (!lead) return 'New Lead';
+  const canonicalStatus = normalizeLifecycleStatus(lead.status);
+  if (canonicalStatus) return canonicalStatus;
   const status = clean(lead.status).toLowerCase();
   if (status.includes('lost')) return 'Lost';
   if (status.includes('won')) return 'Won';
@@ -45,7 +49,7 @@ export function workflowFromLead(lead) {
   const outreachState = textAfter('outreach_state', notes);
   const nextAction = textAfter('next_action', notes);
   const priority = textAfter('priority', notes);
-  const currentStage = clean(lead?.currentStage) || pipelineStatusFromLead(lead);
+  const currentStage = normalizeLifecycleStatus(lead?.currentStage) || pipelineStatusFromLead(lead);
   const sourceName = clean(lead?.sourceName || lead?.sourceType).toLowerCase();
   const needsFirstOutreach =
     tags.includes('needs_first_outreach') ||

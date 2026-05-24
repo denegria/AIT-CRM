@@ -2,6 +2,7 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import {
   activityEvents,
   businessUnits,
+  leadStatusHistory,
   leads,
   notes,
   taskEvents,
@@ -130,6 +131,7 @@ export function buildContactTimeline({
   notes: noteRows = [],
   activityEvents: activityRows = [],
   taskEvents: taskEventRows = [],
+  leadStatusHistory: leadStatusRows = [],
   tasks: taskRows = [],
   leads: leadRows = [],
   users: userRows = [],
@@ -204,6 +206,28 @@ export function buildContactTimeline({
     });
   }
 
+  for (const statusEvent of leadStatusRows) {
+    entries.push({
+      id: `lead_status:${statusEvent.id}`,
+      type: TIMELINE_TYPES.LEAD,
+      typeLabel: TIMELINE_TYPE_LABELS[TIMELINE_TYPES.LEAD],
+      eventType: 'lead.status_changed',
+      title: 'Lead status changed',
+      text: statusEvent.fromStatus
+        ? `Lead status changed from ${statusEvent.fromStatus} to ${statusEvent.toStatus}.`
+        : `Lead status set to ${statusEvent.toStatus}.`,
+      timestamp: isoTimestamp(statusEvent.occurredAt || statusEvent.createdAt),
+      date: isoDate(statusEvent.occurredAt || statusEvent.createdAt),
+      actor: userPayload(statusEvent.actorUserId, userLookup),
+      businessUnit: businessUnitPayload(statusEvent.businessUnitId, businessUnitLookup),
+      linkedRecords: linkedRecordPayload(statusEvent),
+      leadStatus: compactObject({
+        from: statusEvent.fromStatus,
+        to: statusEvent.toStatus,
+      }),
+    });
+  }
+
   for (const lead of leadRows) {
     entries.push({
       id: `lead:${lead.id}`,
@@ -243,7 +267,7 @@ export async function listContactTimeline({
   businessUnitIds = null,
   type = '',
 }) {
-  const [noteRowsRaw, activityRowsRaw, leadRowsRaw, taskRowsRaw] = await Promise.all([
+  const [noteRowsRaw, activityRowsRaw, leadRowsRaw, taskRowsRaw, leadStatusRowsRaw] = await Promise.all([
     db
       .select()
       .from(notes)
@@ -264,12 +288,18 @@ export async function listContactTimeline({
       .from(tasks)
       .where(and(eq(tasks.organizationId, organizationId), eq(tasks.contactId, contactId)))
       .orderBy(desc(tasks.createdAt)),
+    db
+      .select()
+      .from(leadStatusHistory)
+      .where(and(eq(leadStatusHistory.organizationId, organizationId), eq(leadStatusHistory.contactId, contactId)))
+      .orderBy(desc(leadStatusHistory.occurredAt), desc(leadStatusHistory.createdAt)),
   ]);
 
   const noteRows = filterTimelineRowsForBusinessUnit(noteRowsRaw, businessUnitIds);
   const activityRows = filterTimelineRowsForBusinessUnit(activityRowsRaw, businessUnitIds);
   const leadRows = filterTimelineRowsForBusinessUnit(leadRowsRaw, businessUnitIds);
   const taskRows = filterTimelineRowsForBusinessUnit(taskRowsRaw, businessUnitIds);
+  const leadStatusRows = filterTimelineRowsForBusinessUnit(leadStatusRowsRaw, businessUnitIds);
   const taskIds = taskRows.map((task) => task.id);
 
   const taskEventRows = taskIds.length
@@ -281,11 +311,11 @@ export async function listContactTimeline({
     : [];
 
   const userIds = uniqueIds(
-    [...noteRows, ...activityRows, ...leadRows, ...taskEventRows],
+    [...noteRows, ...activityRows, ...leadRows, ...taskEventRows, ...leadStatusRows],
     ['authorUserId', 'actorUserId', 'assignedUserId', 'fromOwnerUserId', 'toOwnerUserId'],
   );
   const businessUnitLookupIds = uniqueIds(
-    [...noteRows, ...activityRows, ...leadRows, ...taskRows, ...taskEventRows],
+    [...noteRows, ...activityRows, ...leadRows, ...taskRows, ...taskEventRows, ...leadStatusRows],
     ['businessUnitId'],
   );
 
@@ -308,6 +338,7 @@ export async function listContactTimeline({
     notes: noteRows,
     activityEvents: activityRows,
     taskEvents: taskEventRows,
+    leadStatusHistory: leadStatusRows,
     tasks: taskRows,
     leads: leadRows,
     users: userRows,

@@ -153,6 +153,25 @@ export const leads = pgTable('leads', {
   updatedAt,
 });
 
+export const leadStatusHistory = pgTable('lead_status_history', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
+  contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+  leadId: uuid('lead_id').notNull().references(() => leads.id, { onDelete: 'cascade' }),
+  fromStatus: text('from_status'),
+  toStatus: text('to_status').notNull(),
+  actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+  reason: text('reason'),
+  metadataJson: jsonb('metadata_json').notNull().default({}),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt,
+}, (table) => ({
+  leadOccurredIdx: index('lead_status_history_lead_occurred_idx').on(table.leadId, table.occurredAt),
+  orgOccurredIdx: index('lead_status_history_org_occurred_idx').on(table.organizationId, table.occurredAt),
+  contactOccurredIdx: index('lead_status_history_contact_occurred_idx').on(table.contactId, table.occurredAt),
+}));
+
 export const estimates = pgTable('estimates', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
@@ -377,6 +396,7 @@ export const allTables = {
   businessUnitMemberships,
   contacts,
   leads,
+  leadStatusHistory,
   estimates,
   workOrders,
   paymentSnapshots,

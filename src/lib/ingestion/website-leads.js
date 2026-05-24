@@ -3,6 +3,7 @@ import {
   recordInboundLeadAssignmentActivity,
   resolveDefaultInboundLeadOwnerUserId,
 } from '../crm/assignment.js';
+import { normalizeLifecycleStatus } from '../crm/lifecycle.js';
 import { normalizeWorkflowTags } from '../sales-workflow.js';
 
 export const WEBSITE_LEAD_SECRET_HEADER = 'x-ait-webhook-secret';
@@ -288,6 +289,10 @@ export function normalizeWebsiteLeadBody(body) {
   const combinedName = [firstName, lastName].filter(Boolean).join(' ');
   const name = firstText(body.name, body.fullName, combinedName, body.contactName, body.email, body.phone, 'Website Lead');
   const sourceKey = sourceKeyForBody(body);
+  const status = normalizeLifecycleStatus(body.status) || 'New Lead';
+  const currentStage = normalizeLifecycleStatus(
+    firstText(body.currentStage, body.workflowStage, body.stage, body.status),
+  ) || status;
 
   return {
     name,
@@ -303,8 +308,8 @@ export function normalizeWebsiteLeadBody(body) {
     externalId: firstText(body.externalId, body.submissionId, body.id),
     submittedAt: firstText(body.submittedAt, body.createdAt, body.timestamp),
     businessUnitHint: firstText(body.businessUnitId, body.businessUnit, body.businessUnitName, body.division),
-    status: firstText(body.status, 'New Lead'),
-    currentStage: firstText(body.currentStage, body.workflowStage, body.stage, body.status, 'New Lead'),
+    status,
+    currentStage,
     outreachState: firstText(body.outreachState, body.contactState),
     priority: firstText(body.priority),
     tags: normalizeWorkflowTags(body.workflowTags || body.tags || body.tagList),
