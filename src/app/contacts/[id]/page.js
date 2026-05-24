@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
@@ -8,16 +8,65 @@ import s from './ContactDetail.module.css';
 import { 
   AlertCircle, ArrowLeft, Mail, Phone, MapPin, Calendar, 
   Plus, FileText, ClipboardList, 
-  MessageSquare, Edit3, Tag
+  MessageSquare, Edit3, Tag, Activity, CheckSquare, MessageCircle
 } from 'lucide-react';
 import { PIPELINE_STATUSES } from '@/lib/sales-workflow';
+
+const TIMELINE_FILTERS = [
+  { value: 'all', label: 'All' },
+  { value: 'note', label: 'Notes' },
+  { value: 'task', label: 'Tasks' },
+  { value: 'message', label: 'Messages' },
+  { value: 'work_order', label: 'Work orders' },
+  { value: 'lead', label: 'Leads' },
+  { value: 'activity', label: 'Activity' },
+];
+
+function noteTimelineItem(note) {
+  return {
+    id: `note:${note.id || note.date || note.text}`,
+    type: 'note',
+    typeLabel: 'Note',
+    title: 'Note',
+    text: note.text || note.body || '',
+    date: note.date || note.createdAt || '',
+    timestamp: note.timestamp || note.createdAt || note.date || '',
+    linkedRecords: [],
+  };
+}
+
+function dateLabel(item) {
+  const raw = item.timestamp || item.date;
+  if (!raw) return '';
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return String(raw).slice(0, 10);
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: item.timestamp ? 'numeric' : undefined,
+    minute: item.timestamp ? '2-digit' : undefined,
+  }).format(date);
+}
+
+function timelineIcon(type) {
+  if (type === 'task') return <CheckSquare size={16} />;
+  if (type === 'message') return <MessageCircle size={16} />;
+  if (type === 'work_order') return <ClipboardList size={16} />;
+  if (type === 'lead') return <Tag size={16} />;
+  if (type === 'note') return <MessageSquare size={16} />;
+  return <Activity size={16} />;
+}
 
 export default function ContactDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
-  const { contacts, workOrders, financials, updateContact, loaded, employees, sources, access } = useCRM();
+  const { contacts, workOrders, financials, updateContact, loaded, employees, sources, access, dataSource } = useCRM();
   const [activeTab, setActiveTab] = useState('timeline');
+  const [timelineFilter, setTimelineFilter] = useState('all');
+  const [serverTimeline, setServerTimeline] = useState({ contactId: '', reloadKey: -1, items: null, error: false });
+  const [timelineReloadKey, setTimelineReloadKey] = useState(0);
   const [noteInput, setNoteInput] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
@@ -25,11 +74,61 @@ export default function ContactDetailPage() {
   const contactWorkOrders = useMemo(() => workOrders.filter(wo => wo.contactId === params.id), [workOrders, params.id]);
   const contactFinancials = useMemo(() => financials.filter(f => f.contactId === params.id), [financials, params.id]);
   const assignedEmployee = useMemo(() => employees.find(e => e.id === contact?.assignedTo), [employees, contact]);
-  const timeline = useMemo(() => {
+  const fallbackTimeline = useMemo(() => {
     if (!contact) return [];
-    const notes = (contact.notes || []).map(n => ({ ...n, type: 'note', icon: <MessageSquare size={16} /> }));
-    return [...notes].sort((a, b) => b.date.localeCompare(a.date));
+    if (Array.isArray(contact.timeline) && contact.timeline.length) return contact.timeline;
+    return (contact.notes || []).map(noteTimelineItem).sort((a, b) => (b.timestamp || b.date).localeCompare(a.timestamp || a.date));
   }, [contact]);
+  const hasMatchingServerTimeline = serverTimeline.contactId === contact?.id && serverTimeline.reloadKey === timelineReloadKey;
+  const timelineStatus = dataSource === 'postgres' && contact?.id && !hasMatchingServerTimeline
+    ? 'loading'
+    : hasMatchingServerTimeline && serverTimeline.error
+      ? 'error'
+      : 'idle';
+  const timelineSource = hasMatchingServerTimeline && serverTimeline.items ? serverTimeline.items : fallbackTimeline;
+  const timelineCounts = useMemo(() => timelineSource.reduce((counts, item) => {
+    counts.all += 1;
+    counts[item.type] = (counts[item.type] || 0) + 1;
+    return counts;
+  }, { all: 0 }), [timelineSource]);
+  const timeline = useMemo(() => {
+    if (timelineFilter === 'all') return timelineSource;
+    return timelineSource.filter((item) => item.type === timelineFilter);
+  }, [timelineFilter, timelineSource]);
+
+  useEffect(() => {
+    if (!contact?.id || dataSource !== 'postgres') return undefined;
+    let cancelled = false;
+    const requestContactId = contact.id;
+    const requestReloadKey = timelineReloadKey;
+    fetch(`/api/contacts/${contact.id}/timeline`, { cache: 'no-store' })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Timeline load failed.');
+        if (!cancelled) {
+          setServerTimeline({
+            contactId: requestContactId,
+            reloadKey: requestReloadKey,
+            items: Array.isArray(payload.timeline) ? payload.timeline : [],
+            error: false,
+          });
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+        if (!cancelled) {
+          setServerTimeline({
+            contactId: requestContactId,
+            reloadKey: requestReloadKey,
+            items: null,
+            error: true,
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [contact?.id, dataSource, timelineReloadKey]);
 
   // For Edit Modal
   const [editForm, setEditForm] = useState(null);
@@ -67,6 +166,7 @@ export default function ContactDetailPage() {
     updateContact(contact.id, { notes: updatedNotes })
       .then(() => {
         setNoteInput('');
+        setTimelineReloadKey((key) => key + 1);
         toast('Note added');
       })
       .catch((error) => {
@@ -157,16 +257,45 @@ export default function ContactDetailPage() {
                   </div>
                 </div>
 
+                <div className={s.timelineToolbar}>
+                  <div className={s.timelineFilters} aria-label="Timeline filters">
+                    {TIMELINE_FILTERS.map((filter) => (
+                      <button
+                        key={filter.value}
+                        className={`${s.timelineFilter} ${timelineFilter === filter.value ? s.active : ''}`}
+                        onClick={() => setTimelineFilter(filter.value)}
+                        type="button"
+                      >
+                        {filter.label}
+                        <span>{timelineCounts[filter.value] || 0}</span>
+                      </button>
+                    ))}
+                  </div>
+                  {timelineStatus === 'loading' && <div className={s.timelineStatus}>Syncing</div>}
+                  {timelineStatus === 'error' && <div className={s.timelineStatus}>Using cached timeline</div>}
+                </div>
+
                 <div className={s.timeline}>
-                  {timeline.map((item, i) => (
-                    <div key={i} className={s.timelineItem}>
-                      <div className={s.timelineIcon}>{item.icon}</div>
+                  {timeline.map((item) => (
+                    <div key={item.id} className={s.timelineItem}>
+                      <div className={s.timelineIcon}>{timelineIcon(item.type)}</div>
                       <div className={s.timelineBody}>
                         <div className={s.timelineMeta}>
-                          <span className={s.timelineType}>Note</span>
-                          <span className={s.timelineDate}>{item.date}</span>
+                          <span className={s.timelineType}>{item.typeLabel || item.type}</span>
+                          <span className={s.timelineDate}>{dateLabel(item)}</span>
                         </div>
+                        {item.title && item.title !== item.typeLabel && (
+                          <div className={s.timelineTitle}>{item.title}</div>
+                        )}
                         <div className={s.timelineText}>{item.text}</div>
+                        <div className={s.timelineDetails}>
+                          {item.actor?.name && <span>By {item.actor.name}</span>}
+                          {item.source?.label && <span>{item.source.label}{item.source.row ? ` row ${item.source.row}` : ''}</span>}
+                          {item.businessUnit?.name && <span>{item.businessUnit.name}</span>}
+                          {(item.linkedRecords || [])
+                            .filter((record) => record.type !== 'contact')
+                            .map((record) => <span key={`${item.id}-${record.type}-${record.id}`}>{record.label}</span>)}
+                        </div>
                       </div>
                     </div>
                   ))}

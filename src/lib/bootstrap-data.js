@@ -26,6 +26,7 @@ import {
 import { toBusinessUnitPayload } from './crm/payloads.js';
 import { workflowFromLead } from './sales-workflow';
 import { TASK_STATUSES } from './tasks/constants.js';
+import { buildContactTimeline, filterTimelineRowsForBusinessUnit } from './timeline/service.js';
 
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const toBootstrapBusinessUnitPayload = (row) => toBusinessUnitPayload(row, { emptyColor: null });
@@ -37,7 +38,7 @@ function toIsoDate(value) {
   return dt.toISOString().slice(0, 10);
 }
 
-function mapContacts(contactRows, leadRows, noteRows, eventRows) {
+function mapContacts(contactRows, leadRows, noteRows, eventRows, businessUnitRows = [], businessUnitIds = null) {
   const leadByContactId = new Map();
   for (const lead of leadRows) {
     if (!lead.contactId || leadByContactId.has(lead.contactId)) continue;
@@ -63,16 +64,24 @@ function mapContacts(contactRows, leadRows, noteRows, eventRows) {
   return contactRows.map((contact, index) => {
     const lead = leadByContactId.get(contact.id);
     const workflow = workflowFromLead(lead);
-    const noteItems = (notesByContactId.get(contact.id) || []).map((note) => ({
+    const contactNotes = filterTimelineRowsForBusinessUnit(notesByContactId.get(contact.id) || [], businessUnitIds);
+    const contactEvents = filterTimelineRowsForBusinessUnit(eventsByContactId.get(contact.id) || [], businessUnitIds);
+    const noteItems = contactNotes.map((note) => ({
       id: note.id,
       text: note.body,
       date: toIsoDate(note.createdAt),
     }));
-    const eventItems = (eventsByContactId.get(contact.id) || []).map((event) => ({
+    const eventItems = contactEvents.map((event) => ({
       id: event.id,
       text: event.message || event.eventType,
       date: toIsoDate(event.occurredAt || event.createdAt),
     }));
+    const timelineItems = buildContactTimeline({
+      notes: contactNotes,
+      activityEvents: contactEvents,
+      leads: lead ? [lead] : [],
+      businessUnits: businessUnitRows,
+    });
     const recentActivity = [...noteItems, ...eventItems]
       .filter((item) => item.date)
       .sort((a, b) => b.date.localeCompare(a.date))[0];
@@ -96,6 +105,7 @@ function mapContacts(contactRows, leadRows, noteRows, eventRows) {
       assignedTo: lead?.assignedUserId || '',
       lastContact: recentActivity?.date || toIsoDate(contact.updatedAt) || toIsoDate(contact.createdAt),
       notes: noteItems.length ? noteItems : recentActivity ? [recentActivity] : [],
+      timeline: timelineItems,
     };
   });
 }
@@ -369,7 +379,14 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       };
     }
 
-    const contacts = mapContacts(contactRows, leadRows, noteRows, eventRows);
+    const contacts = mapContacts(
+      contactRows,
+      leadRows,
+      noteRows,
+      eventRows,
+      businessUnitRows,
+      session.user.canAccessAllBusinessUnits ? null : session.user.businessUnitIds,
+    );
     const contactLookup = new Map(contacts.map((contact) => [contact.id, contact]));
     const workOrders = mapWorkOrders(workOrderRows, contactLookup);
     const financials = mapFinancials(estimateRows, paymentRows, contactLookup);

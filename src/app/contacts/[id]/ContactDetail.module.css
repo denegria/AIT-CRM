@@ -20,6 +20,7 @@
   grid-template-columns: 320px 1fr;
   gap: 24px;
   margin-top: 16px;
+  min-width: 0;
 }
 
 .profileCard {
@@ -31,6 +32,7 @@
   position: sticky;
   top: 24px;
   box-shadow: var(--shadow-sm);
+  min-width: 0;
 }
 .profileHeader {
   display: flex;
@@ -154,6 +156,7 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
 }
 .contentTabs {
   display: flex;
@@ -191,6 +194,7 @@
   min-height: 500px;
   padding: 24px;
   box-shadow: var(--shadow-sm);
+  min-width: 0;
 }
 
 .noteBox {
@@ -216,6 +220,57 @@
   justify-content: flex-end;
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-secondary);
+}
+
+.timelineToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.timelineFilters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.timelineFilter {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 30px;
+  padding: 6px 9px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+.timelineFilter:hover {
+  border-color: var(--border-default);
+  color: var(--text-primary);
+}
+.timelineFilter.active {
+  background: var(--accent-muted);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border-subtle));
+  color: var(--accent);
+}
+.timelineFilter span {
+  min-width: 18px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 11%, transparent);
+  text-align: center;
+  font-size: 10px;
+}
+.timelineStatus {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  white-space: nowrap;
 }
 
 .timeline {
@@ -264,6 +319,7 @@
 .timelineMeta {
   display: flex;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 8px;
 }
 .timelineType {
@@ -275,11 +331,43 @@
 .timelineDate {
   font-size: var(--text-xs);
   color: var(--text-muted);
+  white-space: nowrap;
+}
+.timelineTitle {
+  color: var(--text-primary);
+  font-size: var(--text-md);
+  font-weight: 700;
+  margin-bottom: 6px;
 }
 .timelineText {
   font-size: var(--text-sm);
   color: var(--text-primary);
   line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.timelineDetails {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.timelineDetails span {
+  max-width: 100%;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.timelineEmpty {
+  padding: 24px;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-lg);
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-tertiary) 52%, transparent);
+  text-align: center;
 }
 
 .recordsList {
@@ -328,4 +416,53 @@
   font-weight: 700;
   font-size: var(--text-md);
   margin-bottom: 4px;
+}
+
+@media (max-width: 900px) {
+  .detailLayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .profileCard {
+    position: static;
+  }
+  .contentTabs {
+    overflow-x: auto;
+  }
+  .contentTab {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .tabContent {
+    min-height: 360px;
+    padding: 16px;
+  }
+  .timelineToolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .timelineFilters {
+    flex-wrap: nowrap;
+    max-width: 100%;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .timelineFilter {
+    flex: 0 0 auto;
+  }
+  .timelineItem {
+    gap: 12px;
+  }
+  .timelineMeta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .timelineDate {
+    white-space: normal;
+  }
+  .recordCard {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
+  }
 }
