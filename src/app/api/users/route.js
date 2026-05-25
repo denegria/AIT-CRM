@@ -1,44 +1,62 @@
 import { NextResponse } from 'next/server';
-import { and, asc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
 import {
   businessUnitMemberships,
   businessUnits,
   roles,
-  userPasswordCredentials,
   userRoles,
   users,
 } from '@/db/schema.js';
-import { hashPassword, PERMISSIONS, requirePermission } from '@/lib/auth';
+import {
+  MANAGED_ROLE_KEYS,
+  normalizeBusinessUnitIds,
+  normalizeEmail,
+  normalizeManagedRoleKey,
+  normalizeName,
+  requiresBusinessUnitMembership,
+  toRoleOption,
+  validateUserAccessDraft,
+} from '@/lib/admin/user-policy.js';
+import {
+  deactivateUserAccount,
+  provisionUserAccess,
+  updateUserAccess,
+} from '@/lib/admin/user-management.js';
+import { PERMISSIONS, requirePermission } from '@/lib/auth';
+import { isUuid } from '@/lib/crm/validation.js';
 
-const MANAGED_ROLE_KEYS = ['admin', 'designer', 'account_manager', 'sales_manager'];
-
-function normalizeEmail(value) {
-  return String(value || '').trim().toLowerCase();
+function httpError(message, status = 400) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
 }
 
-function normalizeName(value) {
-  return String(value || '').trim();
+function errorResponse(error, fallback = 'User administration request failed.') {
+  return NextResponse.json(
+    { error: error.message || fallback },
+    { status: error.status || 400 },
+  );
 }
 
-function normalizeRoleKey(value) {
-  const key = String(value || '').trim();
-  return MANAGED_ROLE_KEYS.includes(key) ? key : '';
-}
-
-function normalizeBusinessUnitIds(input) {
-  if (!Array.isArray(input)) return [];
-  return [...new Set(input.map((value) => String(value || '').trim()).filter(Boolean))];
+function sortRoleKeys(roleKeys) {
+  return [...roleKeys].sort((left, right) => {
+    const leftIndex = MANAGED_ROLE_KEYS.indexOf(left);
+    const rightIndex = MANAGED_ROLE_KEYS.indexOf(right);
+    return (leftIndex === -1 ? 99 : leftIndex) - (rightIndex === -1 ? 99 : rightIndex)
+      || left.localeCompare(right);
+  });
 }
 
 function toUserPayload(user, roleKeys, memberships) {
+  const sortedRoleKeys = sortRoleKeys(roleKeys);
   return {
     id: user.id,
     name: user.name,
     email: user.email,
     isActive: user.isActive,
-    roleKeys,
-    primaryRoleKey: roleKeys.includes('admin') ? 'admin' : roleKeys[0] || 'account_manager',
+    roleKeys: sortedRoleKeys,
+    primaryRoleKey: sortedRoleKeys.includes('admin') ? 'admin' : sortedRoleKeys[0] || 'account_manager',
     businessUnitIds: memberships.map((membership) => membership.businessUnitId),
     memberships,
     createdAt: user.createdAt?.toISOString?.() || null,
@@ -58,7 +76,7 @@ async function readUsersForOrganization(db, organizationId) {
     })
     .from(users)
     .where(eq(users.organizationId, organizationId))
-    .orderBy(asc(users.name), asc(users.email));
+    .orderBy(desc(users.isActive), asc(users.name), asc(users.email));
 
   if (!userRows.length) return [];
   const userIds = userRows.map((row) => row.id);
@@ -71,17 +89,24 @@ async function readUsersForOrganization(db, organizationId) {
       })
       .from(userRoles)
       .innerJoin(roles, eq(userRoles.roleId, roles.id))
-      .where(inArray(userRoles.userId, userIds)),
+      .where(and(
+        inArray(userRoles.userId, userIds),
+        eq(roles.organizationId, organizationId),
+      )),
     db
       .select({
         userId: businessUnitMemberships.userId,
         businessUnitId: businessUnitMemberships.businessUnitId,
         isPrimary: businessUnitMemberships.isPrimary,
         businessUnitName: businessUnits.name,
+        businessUnitIsActive: businessUnits.isActive,
       })
       .from(businessUnitMemberships)
       .innerJoin(businessUnits, eq(businessUnitMemberships.businessUnitId, businessUnits.id))
-      .where(inArray(businessUnitMemberships.userId, userIds)),
+      .where(and(
+        inArray(businessUnitMemberships.userId, userIds),
+        eq(businessUnits.organizationId, organizationId),
+      )),
   ]);
 
   const rolesByUser = new Map();
@@ -96,6 +121,7 @@ async function readUsersForOrganization(db, organizationId) {
     membershipsByUser.get(membership.userId).push({
       businessUnitId: membership.businessUnitId,
       businessUnitName: membership.businessUnitName,
+      businessUnitIsActive: Boolean(membership.businessUnitIsActive),
       isPrimary: Boolean(membership.isPrimary),
     });
   }
@@ -107,13 +133,113 @@ async function readUsersForOrganization(db, organizationId) {
   });
 }
 
+async function readManagedRoleContext(tx, organizationId) {
+  const roleRows = await tx
+    .select({ id: roles.id, key: roles.key })
+    .from(roles)
+    .where(and(
+      eq(roles.organizationId, organizationId),
+      inArray(roles.key, MANAGED_ROLE_KEYS),
+    ));
+
+  const roleByKey = new Map(roleRows.map((role) => [role.key, role]));
+  const missingRoles = MANAGED_ROLE_KEYS.filter((roleKey) => !roleByKey.has(roleKey));
+  if (missingRoles.length) {
+    throw httpError(`Managed roles are missing: ${missingRoles.join(', ')}. Run bootstrap role provisioning first.`, 500);
+  }
+
+  return {
+    roleByKey,
+    managedRoleIds: roleRows.map((role) => role.id),
+  };
+}
+
+async function validateBusinessUnitMemberships(tx, organizationId, businessUnitIds) {
+  if (!businessUnitIds.length) return;
+
+  const validUnits = await tx
+    .select({ id: businessUnits.id })
+    .from(businessUnits)
+    .where(and(
+      eq(businessUnits.organizationId, organizationId),
+      eq(businessUnits.isActive, true),
+      inArray(businessUnits.id, businessUnitIds),
+    ));
+
+  if (validUnits.length !== businessUnitIds.length) {
+    throw httpError('One or more divisions are inactive or invalid for this organization.', 400);
+  }
+}
+
+async function readOrganizationUserById(tx, organizationId, id) {
+  const [user] = await tx
+    .select({
+      id: users.id,
+      organizationId: users.organizationId,
+      name: users.name,
+      email: users.email,
+      isActive: users.isActive,
+    })
+    .from(users)
+    .where(and(eq(users.id, id), eq(users.organizationId, organizationId)))
+    .limit(1);
+  return user || null;
+}
+
+async function readExistingUserByEmail(tx, email) {
+  const [user] = await tx
+    .select({
+      id: users.id,
+      organizationId: users.organizationId,
+      name: users.name,
+      email: users.email,
+      isActive: users.isActive,
+    })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+  return user || null;
+}
+
+async function readUserRoleKeys(tx, userId) {
+  const roleRows = await tx
+    .select({ key: roles.key })
+    .from(userRoles)
+    .innerJoin(roles, eq(userRoles.roleId, roles.id))
+    .where(eq(userRoles.userId, userId));
+  return roleRows.map((role) => role.key);
+}
+
+async function countActiveAdmins(tx, organizationId) {
+  const adminRows = await tx
+    .select({ id: users.id })
+    .from(users)
+    .innerJoin(userRoles, eq(userRoles.userId, users.id))
+    .innerJoin(roles, eq(userRoles.roleId, roles.id))
+    .where(and(
+      eq(users.organizationId, organizationId),
+      eq(users.isActive, true),
+      eq(roles.key, 'admin'),
+    ));
+
+  return new Set(adminRows.map((row) => row.id)).size;
+}
+
+async function readResponseUsers(db, organizationId, selectedUserId = null) {
+  const records = await readUsersForOrganization(db, organizationId);
+  return {
+    users: records,
+    user: selectedUserId ? records.find((record) => record.id === selectedUserId) || null : null,
+    roleOptions: MANAGED_ROLE_KEYS.map(toRoleOption),
+  };
+}
+
 export async function GET(request) {
   const { error, session } = await requirePermission(request, PERMISSIONS.SETTINGS_WRITE);
   if (error) return error;
 
   const db = getDb();
-  const records = await readUsersForOrganization(db, session.user.organizationId);
-  return NextResponse.json({ users: records });
+  return NextResponse.json(await readResponseUsers(db, session.user.organizationId));
 }
 
 export async function POST(request) {
@@ -124,130 +250,153 @@ export async function POST(request) {
   const email = normalizeEmail(body.email);
   const name = normalizeName(body.name);
   const password = String(body.password || '');
-  const roleKey = normalizeRoleKey(body.roleKey);
-  const businessUnitIds = normalizeBusinessUnitIds(body.businessUnitIds);
-
-  if (!email) return NextResponse.json({ error: 'Email is required.' }, { status: 400 });
-  if (!name) return NextResponse.json({ error: 'Name is required.' }, { status: 400 });
-  if (!roleKey) {
-    return NextResponse.json({ error: `Role must be one of: ${MANAGED_ROLE_KEYS.join(', ')}.` }, { status: 400 });
-  }
-  if (roleKey !== 'admin' && !businessUnitIds.length) {
-    return NextResponse.json({ error: 'At least one business unit is required for non-admin users.' }, { status: 400 });
+  const roleKey = normalizeManagedRoleKey(body.roleKey);
+  const businessUnitIds = roleKey === 'admin' ? [] : normalizeBusinessUnitIds(body.businessUnitIds);
+  const validation = validateUserAccessDraft({
+    email,
+    name,
+    password,
+    roleKey,
+    businessUnitIds,
+    requirePassword: true,
+  });
+  if (!validation.ok) {
+    return NextResponse.json({ error: validation.error }, { status: validation.status });
   }
 
   const db = getDb();
 
   try {
+    let savedUserId = null;
     await db.transaction(async (tx) => {
-      const [roleRow] = await tx
-        .select({ id: roles.id })
-        .from(roles)
-        .where(and(eq(roles.organizationId, session.user.organizationId), eq(roles.key, roleKey)))
-        .limit(1);
+      const { roleByKey, managedRoleIds } = await readManagedRoleContext(tx, session.user.organizationId);
+      const roleRow = roleByKey.get(roleKey);
 
-      if (!roleRow) {
-        throw new Error(`Role "${roleKey}" was not found. Run bootstrap role provisioning first.`);
+      if (requiresBusinessUnitMembership(roleKey)) {
+        await validateBusinessUnitMemberships(tx, session.user.organizationId, businessUnitIds);
       }
 
-      const managedRoleRows = await tx
-        .select({ id: roles.id })
-        .from(roles)
-        .where(and(
-          eq(roles.organizationId, session.user.organizationId),
-          inArray(roles.key, MANAGED_ROLE_KEYS),
-        ));
-      const managedRoleIds = managedRoleRows.map((row) => row.id);
-      if (!managedRoleIds.length) {
-        throw new Error('Managed roles were not found. Run bootstrap role provisioning first.');
+      const existingUser = await readExistingUserByEmail(tx, email);
+      if (existingUser && existingUser.organizationId !== session.user.organizationId) {
+        throw httpError('A user with this email already belongs to another organization.', 409);
       }
-
-      if (businessUnitIds.length) {
-        const validUnits = await tx
-          .select({ id: businessUnits.id })
-          .from(businessUnits)
-          .where(and(
-            eq(businessUnits.organizationId, session.user.organizationId),
-            inArray(businessUnits.id, businessUnitIds),
-          ));
-        if (validUnits.length !== businessUnitIds.length) {
-          throw new Error('One or more business units are invalid for this organization.');
+      if (existingUser) {
+        const existingRoleKeys = await readUserRoleKeys(tx, existingUser.id);
+        if (existingUser.id === session.user.id && roleKey !== 'admin') {
+          throw httpError('Admins cannot remove their own administrator access.', 400);
+        }
+        if (existingRoleKeys.includes('admin') && roleKey !== 'admin' && await countActiveAdmins(tx, session.user.organizationId) <= 1) {
+          throw httpError('At least one active administrator is required.', 400);
         }
       }
 
-      const [existing] = await tx
-        .select({ id: users.id, organizationId: users.organizationId })
-        .from(users)
-        .where(eq(users.email, email))
-        .limit(1);
+      const result = await provisionUserAccess({
+        tx,
+        organizationId: session.user.organizationId,
+        existingUser,
+        name,
+        email,
+        password,
+        roleId: roleRow.id,
+        managedRoleIds,
+        businessUnitIds,
+        isActive: true,
+      });
+      savedUserId = result.userId;
+    });
 
-      let userId = existing?.id;
-      if (userId) {
-        if (existing.organizationId !== session.user.organizationId) {
-          throw new Error('A user with this email already belongs to another organization.');
+    const response = await readResponseUsers(db, session.user.organizationId, savedUserId);
+    return NextResponse.json(response, { status: 201 });
+  } catch (txError) {
+    return errorResponse(txError, 'User provisioning failed.');
+  }
+}
+
+export async function PATCH(request) {
+  const { error, session } = await requirePermission(request, PERMISSIONS.SETTINGS_WRITE);
+  if (error) return error;
+
+  const body = await request.json().catch(() => ({}));
+  const id = String(body.id || '').trim();
+  if (!isUuid(id)) {
+    return NextResponse.json({ error: 'A valid user id is required.' }, { status: 400 });
+  }
+
+  const db = getDb();
+
+  try {
+    let savedUserId = id;
+    await db.transaction(async (tx) => {
+      const existingUser = await readOrganizationUserById(tx, session.user.organizationId, id);
+      if (!existingUser) throw httpError('User not found in this organization.', 404);
+
+      const existingRoleKeys = await readUserRoleKeys(tx, id);
+      const deactivationOnly = body.isActive === false
+        && !Object.prototype.hasOwnProperty.call(body, 'roleKey')
+        && !Object.prototype.hasOwnProperty.call(body, 'name')
+        && !Object.prototype.hasOwnProperty.call(body, 'businessUnitIds');
+
+      if (deactivationOnly) {
+        if (id === session.user.id) throw httpError('Admins cannot deactivate their own account.', 400);
+        if (existingRoleKeys.includes('admin') && await countActiveAdmins(tx, session.user.organizationId) <= 1) {
+          throw httpError('At least one active administrator is required.', 400);
         }
-        await tx
-          .update(users)
-          .set({ name, isActive: true, updatedAt: new Date() })
-          .where(eq(users.id, userId));
-      } else {
-        const [insertedUser] = await tx
-          .insert(users)
-          .values({
-            organizationId: session.user.organizationId,
-            name,
-            email,
-            isActive: true,
-          })
-          .returning({ id: users.id });
-        userId = insertedUser.id;
+        await deactivateUserAccount({ tx, userId: id });
+        return;
       }
 
-      if (!userId) throw new Error('Failed to create user.');
+      const { roleByKey, managedRoleIds } = await readManagedRoleContext(tx, session.user.organizationId);
+      const name = normalizeName(body.name);
+      const roleKey = normalizeManagedRoleKey(body.roleKey);
+      const isActive = Object.prototype.hasOwnProperty.call(body, 'isActive')
+        ? Boolean(body.isActive)
+        : existingUser.isActive;
+      const businessUnitIds = roleKey === 'admin' ? [] : normalizeBusinessUnitIds(body.businessUnitIds);
+      const validation = validateUserAccessDraft({
+        name,
+        password: String(body.password || ''),
+        roleKey,
+        businessUnitIds,
+        requireEmail: false,
+      });
+      if (!validation.ok) throw httpError(validation.error, validation.status);
 
-      if (password) {
-        const passwordData = hashPassword(password);
-        await tx
-          .insert(userPasswordCredentials)
-          .values({
-            userId,
-            email,
-            passwordHash: passwordData.hash,
-            passwordSalt: passwordData.salt,
-            passwordIterations: passwordData.iterations,
-          })
-          .onConflictDoUpdate({
-            target: userPasswordCredentials.email,
-            set: {
-              userId,
-              passwordHash: passwordData.hash,
-              passwordSalt: passwordData.salt,
-              passwordIterations: passwordData.iterations,
-              updatedAt: new Date(),
-            },
-          });
+      const removesOwnAdminAccess = id === session.user.id && (roleKey !== 'admin' || !isActive);
+      if (removesOwnAdminAccess) {
+        throw httpError('Admins cannot remove their own administrator access.', 400);
       }
 
-      await tx
-        .delete(userRoles)
-        .where(and(eq(userRoles.userId, userId), inArray(userRoles.roleId, managedRoleIds)));
-      await tx.insert(userRoles).values({ userId, roleId: roleRow.id });
+      const removesAdminAccess = existingRoleKeys.includes('admin') && (roleKey !== 'admin' || !isActive);
+      if (removesAdminAccess && await countActiveAdmins(tx, session.user.organizationId) <= 1) {
+        throw httpError('At least one active administrator is required.', 400);
+      }
 
-      await tx.delete(businessUnitMemberships).where(eq(businessUnitMemberships.userId, userId));
-      for (let index = 0; index < businessUnitIds.length; index += 1) {
-        await tx.insert(businessUnitMemberships).values({
-          userId,
-          businessUnitId: businessUnitIds[index],
-          roleId: roleRow.id,
-          isPrimary: index === 0,
-        });
+      if (requiresBusinessUnitMembership(roleKey)) {
+        await validateBusinessUnitMemberships(tx, session.user.organizationId, businessUnitIds);
+      }
+
+      const roleRow = roleByKey.get(roleKey);
+      const result = await updateUserAccess({
+        tx,
+        existingUser,
+        name,
+        email: existingUser.email,
+        password: String(body.password || ''),
+        roleId: roleRow.id,
+        managedRoleIds,
+        businessUnitIds,
+        isActive,
+      });
+      savedUserId = result.userId;
+
+      if (!isActive) {
+        await deactivateUserAccount({ tx, userId: id });
       }
     });
 
-    const records = await readUsersForOrganization(db, session.user.organizationId);
-    const created = records.find((record) => record.email === email) || null;
-    return NextResponse.json({ user: created, users: records }, { status: created ? 201 : 200 });
+    const response = await readResponseUsers(db, session.user.organizationId, savedUserId);
+    return NextResponse.json(response);
   } catch (txError) {
-    return NextResponse.json({ error: txError.message || 'User provisioning failed.' }, { status: 400 });
+    return errorResponse(txError, 'User update failed.');
   }
 }

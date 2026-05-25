@@ -1,10 +1,11 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { Check, Pencil, RotateCcw, Shield, UserMinus, UserPlus } from 'lucide-react';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 
-const roleOptions = [
+const defaultRoleOptions = [
   { key: 'admin', label: 'Administrator' },
   { key: 'account_manager', label: 'Account Manager' },
   { key: 'sales_manager', label: 'Sales Manager' },
@@ -12,19 +13,22 @@ const roleOptions = [
 ];
 
 export default function SettingsPage() {
-  const { resetData, loaded, access, dataSource, businessUnits, setBusinessUnits } = useCRM();
+  const { resetData, loaded, access, dataSource, businessUnits, setBusinessUnits, currentUser } = useCRM();
   const router = useRouter();
   const { toast } = useToast();
   const [users, setUsers] = useState([]);
+  const [userRoleOptions, setUserRoleOptions] = useState(defaultRoleOptions);
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersError, setUsersError] = useState('');
   const [savingUser, setSavingUser] = useState(false);
   const [userForm, setUserForm] = useState({
+    id: '',
     name: '',
     email: '',
     password: '',
     roleKey: 'account_manager',
-    businessUnitId: '',
+    businessUnitIds: [],
+    isActive: true,
   });
   const [businessUnitRows, setBusinessUnitRows] = useState(businessUnits || []);
   const [businessUnitsLoading, setBusinessUnitsLoading] = useState(false);
@@ -37,7 +41,6 @@ export default function SettingsPage() {
     color: '#2563eb',
     isActive: true,
   });
-  const activeBusinessUnitOptions = businessUnitRows.filter((unit) => unit.isActive !== false);
 
   useEffect(() => {
     if (loaded && !access.canReadSettings) {
@@ -56,7 +59,12 @@ export default function SettingsPage() {
         const response = await fetch('/api/users');
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload.error || 'Failed to load users.');
-        if (!cancelled) setUsers(Array.isArray(payload.users) ? payload.users : []);
+        if (!cancelled) {
+          setUsers(Array.isArray(payload.users) ? payload.users : []);
+          if (Array.isArray(payload.roleOptions) && payload.roleOptions.length) {
+            setUserRoleOptions(payload.roleOptions);
+          }
+        }
       } catch (error) {
         if (!cancelled) setUsersError(error.message || 'Failed to load users.');
       } finally {
@@ -99,6 +107,35 @@ export default function SettingsPage() {
     };
   }, [access.canReadSettings, dataSource, loaded, setBusinessUnits]);
 
+  function resetUserForm() {
+    setUserForm({
+      id: '',
+      name: '',
+      email: '',
+      password: '',
+      roleKey: 'account_manager',
+      businessUnitIds: [],
+      isActive: true,
+    });
+  }
+
+  function setUserRole(roleKey) {
+    setUserForm((prev) => ({
+      ...prev,
+      roleKey,
+      businessUnitIds: roleKey === 'admin' ? [] : prev.businessUnitIds,
+    }));
+  }
+
+  function toggleUserBusinessUnit(businessUnitId, checked) {
+    setUserForm((prev) => {
+      const selected = new Set(prev.businessUnitIds);
+      if (checked) selected.add(businessUnitId);
+      else selected.delete(businessUnitId);
+      return { ...prev, businessUnitIds: [...selected] };
+    });
+  }
+
   async function handleCreateOrUpdateUser(event) {
     event.preventDefault();
     if (!access.canWriteSettings || dataSource !== 'postgres') return;
@@ -106,15 +143,18 @@ export default function SettingsPage() {
     setSavingUser(true);
     setUsersError('');
     try {
+      const isEditing = Boolean(userForm.id);
       const payload = {
+        id: userForm.id,
         name: userForm.name.trim(),
         email: userForm.email.trim(),
         password: userForm.password,
         roleKey: userForm.roleKey,
-        businessUnitIds: userForm.roleKey === 'admin' ? [] : [userForm.businessUnitId].filter(Boolean),
+        businessUnitIds: userForm.roleKey === 'admin' ? [] : userForm.businessUnitIds,
+        isActive: Boolean(userForm.isActive),
       };
       const response = await fetch('/api/users', {
-        method: 'POST',
+        method: isEditing ? 'PATCH' : 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
       });
@@ -122,10 +162,44 @@ export default function SettingsPage() {
       if (!response.ok) throw new Error(result.error || 'Failed to save user.');
 
       setUsers(Array.isArray(result.users) ? result.users : []);
-      setUserForm((prev) => ({ ...prev, name: '', email: '', password: '' }));
-      toast('User saved');
+      if (Array.isArray(result.roleOptions) && result.roleOptions.length) {
+        setUserRoleOptions(result.roleOptions);
+      }
+      resetUserForm();
+      toast(isEditing ? 'User updated' : 'User created');
     } catch (error) {
       setUsersError(error.message || 'Failed to save user.');
+    } finally {
+      setSavingUser(false);
+    }
+  }
+
+  async function updateUserStatus(user, isActive) {
+    if (!access.canWriteSettings || dataSource !== 'postgres') return;
+    setSavingUser(true);
+    setUsersError('');
+    try {
+      const payload = isActive
+        ? {
+            id: user.id,
+            name: user.name,
+            roleKey: user.primaryRoleKey,
+            businessUnitIds: user.primaryRoleKey === 'admin' ? [] : user.businessUnitIds || [],
+            isActive: true,
+          }
+        : { id: user.id, isActive: false };
+      const response = await fetch('/api/users', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Failed to update user.');
+      setUsers(Array.isArray(result.users) ? result.users : []);
+      resetUserForm();
+      toast(isActive ? 'User reactivated' : 'User deactivated');
+    } catch (error) {
+      setUsersError(error.message || 'Failed to update user.');
     } finally {
       setSavingUser(false);
     }
@@ -175,7 +249,21 @@ export default function SettingsPage() {
     });
   }
 
+  function editUser(user) {
+    setUserForm({
+      id: user.id,
+      name: user.name || '',
+      email: user.email || '',
+      password: '',
+      roleKey: user.primaryRoleKey || 'account_manager',
+      businessUnitIds: user.primaryRoleKey === 'admin' ? [] : user.businessUnitIds || [],
+      isActive: user.isActive !== false,
+    });
+  }
+
   function formatRoleLabel(roleKey) {
+    const option = userRoleOptions.find((row) => row.key === roleKey);
+    if (option) return option.label;
     return String(roleKey || '')
       .replace(/_/g, ' ')
       .replace(/\b\w/g, (char) => char.toUpperCase()) || 'Unassigned';
@@ -184,6 +272,11 @@ export default function SettingsPage() {
   function divisionBadgeLabel(businessUnitId) {
     const unit = businessUnitRows.find((row) => row.id === businessUnitId);
     return unit?.name || 'Unknown division';
+  }
+
+  function membershipOptionsForForm() {
+    const selectedIds = new Set(userForm.businessUnitIds);
+    return businessUnitRows.filter((unit) => unit.isActive !== false || selectedIds.has(unit.id));
   }
 
   if (!loaded || !access.canReadSettings) return <div className="empty-state">Loading...</div>;
@@ -327,46 +420,23 @@ export default function SettingsPage() {
           )}
         </div>
 
-        <div className="card">
-          <div className="card-title">Role Management</div>
-          <p style={{fontSize:'var(--text-sm)',color:'var(--text-secondary)',marginBottom:12}}>Employee access is role + division scoped.</p>
-          <div style={{display:'flex',flexDirection:'column',gap:10}}>
-            <div style={{padding:'10px 12px',background:'var(--bg-tertiary)',borderRadius:'var(--radius-md)'}}>
-              <div className="flex-between">
-                <span style={{fontSize:'var(--text-sm)',fontWeight:500}}>Administrator</span>
-                <span className="badge badge-won">Full Access</span>
-              </div>
-              <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)',marginTop:4}}>All data, reports, employee tracking, financial oversight</div>
-            </div>
-            <div style={{padding:'10px 12px',background:'var(--bg-tertiary)',borderRadius:'var(--radius-md)'}}>
-              <div className="flex-between">
-                <span style={{fontSize:'var(--text-sm)',fontWeight:500}}>Account Manager</span>
-                <span className="badge badge-contacted">Limited</span>
-              </div>
-              <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)',marginTop:4}}>CRM write access with division scope; no settings/admin controls</div>
-            </div>
-            <div style={{padding:'10px 12px',background:'var(--bg-tertiary)',borderRadius:'var(--radius-md)'}}>
-              <div className="flex-between">
-                <span style={{fontSize:'var(--text-sm)',fontWeight:500}}>Designer / Sales Manager</span>
-                <span className="badge badge-contacted">Limited</span>
-              </div>
-              <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)',marginTop:4}}>Role-specific access and division-scoped visibility</div>
-            </div>
-            <div style={{padding:'10px 12px',background:'rgba(74,122,255,0.08)',borderRadius:'var(--radius-md)',border:'1px solid rgba(74,122,255,0.2)'}}>
-              <div style={{fontSize:'var(--text-xs)',color:'var(--text-secondary)',marginBottom:6}}>
-                Employee accounts are currently provisioned via script:
-              </div>
-              <code style={{display:'block',fontSize:'var(--text-xs)',lineHeight:1.5,whiteSpace:'pre-wrap'}}>
-                AIT_CRM_BOOTSTRAP_EMAIL=employee@aitcrm.com{'\n'}
-                AIT_CRM_BOOTSTRAP_PASSWORD=...{'\n'}
-                AIT_CRM_BOOTSTRAP_ROLE=account_manager{'\n'}
-                AIT_CRM_BOOTSTRAP_BUSINESS_UNIT_IDS=&lt;division-uuid&gt;{'\n'}
-                npm run db:bootstrap-auth-user
-              </code>
-            </div>
-            {dataSource === 'postgres' && access.canWriteSettings && (
-              <form onSubmit={handleCreateOrUpdateUser} style={{display:'flex',flexDirection:'column',gap:10,padding:'10px 12px',background:'var(--bg-tertiary)',borderRadius:'var(--radius-md)'}}>
-                <div style={{fontSize:'var(--text-xs)',color:'var(--text-secondary)'}}>Create or update employee account</div>
+        <div className="card" style={{gridColumn:'1 / -1'}}>
+          <div className="card-title">Product Admin</div>
+          <p style={{fontSize:'var(--text-sm)',color:'var(--text-secondary)',marginBottom:12}}>Manage employee access, managed roles, and division memberships.</p>
+          {dataSource === 'postgres' && access.canWriteSettings ? (
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,340px),1fr))',gap:14,alignItems:'start'}}>
+              <form onSubmit={handleCreateOrUpdateUser} style={{display:'flex',flexDirection:'column',gap:10,padding:'12px',background:'var(--bg-tertiary)',borderRadius:'var(--radius-md)',border:'1px solid var(--border-subtle)'}}>
+                <div className="flex-between" style={{gap:10}}>
+                  <div>
+                    <div style={{fontSize:'var(--text-sm)',fontWeight:700}}>{userForm.id ? 'Edit user' : 'Create user'}</div>
+                    <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>{userForm.id ? userForm.email : 'New employee account'}</div>
+                  </div>
+                  {userForm.id && (
+                    <button className="btn btn-sm" type="button" onClick={resetUserForm}>
+                      <RotateCcw size={13} /> New
+                    </button>
+                  )}
+                </div>
                 <input
                   className="input"
                   placeholder="Full name"
@@ -380,75 +450,128 @@ export default function SettingsPage() {
                   placeholder="Email"
                   value={userForm.email}
                   onChange={(event) => setUserForm((prev) => ({ ...prev, email: event.target.value }))}
-                  required
+                  disabled={Boolean(userForm.id)}
+                  required={!userForm.id}
                 />
                 <input
                   className="input"
                   type="password"
-                  placeholder="Password (leave empty to keep current)"
+                  placeholder={userForm.id ? 'New password (optional)' : 'Initial password'}
                   value={userForm.password}
                   onChange={(event) => setUserForm((prev) => ({ ...prev, password: event.target.value }))}
+                  required={!userForm.id}
+                  minLength={8}
                 />
                 <select
                   className="input select"
                   value={userForm.roleKey}
-                  onChange={(event) => setUserForm((prev) => ({ ...prev, roleKey: event.target.value }))}
+                  onChange={(event) => setUserRole(event.target.value)}
                 >
-                  {roleOptions.map((option) => (
+                  {userRoleOptions.map((option) => (
                     <option key={option.key} value={option.key}>{option.label}</option>
                   ))}
                 </select>
-                {userForm.roleKey !== 'admin' && (
-                  <select
-                    className="input select"
-                    value={userForm.businessUnitId}
-                    onChange={(event) => setUserForm((prev) => ({ ...prev, businessUnitId: event.target.value }))}
-                    required
-                  >
-                    <option value="">Select division</option>
-                    {activeBusinessUnitOptions.map((unit) => (
-                      <option key={unit.id} value={unit.id}>{unit.name}</option>
-                    ))}
-                  </select>
+                {userForm.roleKey !== 'admin' ? (
+                  <div style={{display:'flex',flexDirection:'column',gap:6}}>
+                    <div style={{fontSize:'var(--text-xs)',fontWeight:650,color:'var(--text-secondary)',textTransform:'uppercase'}}>Division Memberships</div>
+                    <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:6}}>
+                      {membershipOptionsForForm().map((unit) => (
+                        <label key={unit.id} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:'var(--bg-secondary)',border:'1px solid var(--border-subtle)',borderRadius:'var(--radius-md)',fontSize:'var(--text-sm)'}}>
+                          <input
+                            type="checkbox"
+                            checked={userForm.businessUnitIds.includes(unit.id)}
+                            onChange={(event) => toggleUserBusinessUnit(unit.id, event.target.checked)}
+                            disabled={unit.isActive === false}
+                          />
+                          <span style={{width:9,height:9,borderRadius:999,background:unit.color || 'var(--accent)',flex:'0 0 auto'}} />
+                          <span style={{minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{unit.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',background:'var(--accent-muted)',borderRadius:'var(--radius-md)',fontSize:'var(--text-xs)',color:'var(--accent)'}}>
+                    <Shield size={14} /> Full division access
+                  </div>
+                )}
+                {userForm.id && (
+                  <label style={{display:'flex',alignItems:'center',gap:8,fontSize:'var(--text-sm)',color:'var(--text-secondary)'}}>
+                    <input
+                      type="checkbox"
+                      checked={userForm.isActive}
+                      onChange={(event) => setUserForm((prev) => ({ ...prev, isActive: event.target.checked }))}
+                    />
+                    Active user
+                  </label>
                 )}
                 <button className="btn btn-primary" type="submit" disabled={savingUser}>
-                  {savingUser ? 'Saving...' : 'Save User'}
+                  {userForm.id ? <Check size={14} /> : <UserPlus size={14} />}
+                  {savingUser ? 'Saving...' : userForm.id ? 'Save Changes' : 'Create User'}
                 </button>
               </form>
-            )}
-            {dataSource === 'postgres' && access.canWriteSettings && (
-              <div style={{padding:'10px 12px',background:'var(--bg-tertiary)',borderRadius:'var(--radius-md)'}}>
-                <div style={{fontSize:'var(--text-xs)',color:'var(--text-secondary)',marginBottom:8}}>Provisioned users</div>
-                {usersLoading && <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>Loading users...</div>}
+
+              <div style={{display:'flex',flexDirection:'column',gap:10,padding:'12px',background:'var(--bg-tertiary)',borderRadius:'var(--radius-md)',border:'1px solid var(--border-subtle)'}}>
+                <div className="flex-between" style={{gap:12}}>
+                  <div>
+                    <div style={{fontSize:'var(--text-sm)',fontWeight:700}}>Users</div>
+                    <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>{users.length} provisioned account{users.length === 1 ? '' : 's'}</div>
+                  </div>
+                  {usersLoading && <span className="badge badge-draft">Loading</span>}
+                </div>
                 {!usersLoading && users.length === 0 && <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>No users found yet.</div>}
-                {!usersLoading && users.map((user) => (
-                  <div key={user.id} className="flex-between" style={{padding:'6px 0',borderBottom:'1px solid var(--border)'}}>
-                    <div>
-                      <div style={{fontSize:'var(--text-sm)',fontWeight:500}}>{user.name}</div>
-                      <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>{user.email}</div>
-                    </div>
-                    <div style={{textAlign:'right',display:'flex',flexDirection:'column',alignItems:'flex-end',gap:4,maxWidth:240}}>
-                      <div style={{fontSize:'var(--text-xs)',color:'var(--text-secondary)'}}>{formatRoleLabel(user.primaryRoleKey)}</div>
-                      <div style={{display:'flex',gap:4,flexWrap:'wrap',justifyContent:'flex-end'}}>
-                        {user.primaryRoleKey === 'admin' ? (
-                          <span className="badge badge-won" style={{fontSize:9,padding:'2px 6px'}}>All divisions</span>
-                        ) : user.businessUnitIds?.length ? (
-                          user.businessUnitIds.map((businessUnitId) => (
-                            <span key={businessUnitId} className="badge" style={{background:'var(--bg-hover)',color:'var(--text-secondary)',border:'1px solid var(--border-subtle)',fontSize:9,padding:'2px 6px'}}>
-                              {divisionBadgeLabel(businessUnitId)}
-                            </span>
-                          ))
+                {!usersLoading && users.map((user) => {
+                  const isCurrentUser = user.id === currentUser?.id;
+                  return (
+                    <div key={user.id} style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,180px),1fr))',gap:12,alignItems:'center',padding:'10px 0',borderBottom:'1px solid var(--border-subtle)'}}>
+                      <div style={{minWidth:0}}>
+                        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
+                          <div style={{fontSize:'var(--text-sm)',fontWeight:650,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{user.name}</div>
+                          <span className={'badge ' + (user.isActive !== false ? 'badge-won' : 'badge-draft')} style={{fontSize:9,padding:'2px 6px'}}>
+                            {user.isActive !== false ? 'Active' : 'Inactive'}
+                          </span>
+                          {isCurrentUser && <span className="badge badge-contacted" style={{fontSize:9,padding:'2px 6px'}}>You</span>}
+                        </div>
+                        <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{user.email}</div>
+                      </div>
+                      <div style={{display:'flex',flexDirection:'column',gap:5,minWidth:0}}>
+                        <div style={{fontSize:'var(--text-xs)',color:'var(--text-secondary)'}}>{formatRoleLabel(user.primaryRoleKey)}</div>
+                        <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
+                          {user.primaryRoleKey === 'admin' ? (
+                            <span className="badge badge-won" style={{fontSize:9,padding:'2px 6px'}}>All divisions</span>
+                          ) : user.businessUnitIds?.length ? (
+                            user.businessUnitIds.map((businessUnitId) => (
+                              <span key={businessUnitId} className="badge" style={{background:'var(--bg-hover)',color:'var(--text-secondary)',border:'1px solid var(--border-subtle)',fontSize:9,padding:'2px 6px'}}>
+                                {divisionBadgeLabel(businessUnitId)}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="badge badge-draft" style={{fontSize:9,padding:'2px 6px'}}>No divisions</span>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{display:'flex',gap:6,justifyContent:'flex-end',flexWrap:'wrap'}}>
+                        <button className="btn btn-sm" type="button" onClick={() => editUser(user)}>
+                          <Pencil size={13} /> Edit
+                        </button>
+                        {user.isActive !== false ? (
+                          <button className="btn btn-sm btn-danger" type="button" disabled={savingUser || isCurrentUser} onClick={() => updateUserStatus(user, false)}>
+                            <UserMinus size={13} /> Deactivate
+                          </button>
                         ) : (
-                          <span className="badge badge-draft" style={{fontSize:9,padding:'2px 6px'}}>No divisions</span>
+                          <button className="btn btn-sm" type="button" disabled={savingUser} onClick={() => updateUserStatus(user, true)}>
+                            <UserPlus size={13} /> Reactivate
+                          </button>
                         )}
                       </div>
                     </div>
-                  </div>
-                ))}
-                {usersError && <div style={{fontSize:'var(--text-xs)',color:'var(--danger)',marginTop:8}}>{usersError}</div>}
+                  );
+                })}
+                {usersError && <div style={{fontSize:'var(--text-xs)',color:'var(--danger)',marginTop:2}}>{usersError}</div>}
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>Product admin controls are available in database-backed admin sessions.</div>
+          )}
         </div>
       </div>
 

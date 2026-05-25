@@ -12,6 +12,7 @@
     "test:facebook-lead-ads": "node --test src/lib/ingestion/facebook-lead-ads.test.js",
     "test:messenger-inbound": "node --test src/lib/ingestion/messenger-inbound.test.js",
     "test:assignment": "node --test src/lib/crm/assignment.test.js src/lib/timeline/service.test.js",
+    "test:admin": "node --test src/lib/admin/*.test.js",
     "test:lifecycle": "node --test src/lib/crm/lifecycle.test.js",
     "test:tasks": "node --test src/lib/tasks/*.test.js",
     "test:timeline": "node --test src/lib/timeline/*.test.js",
