@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Check, Pencil, RotateCcw, Shield, UserMinus, UserPlus } from 'lucide-react';
+import { Check, MessageSquare, Pencil, RotateCcw, Shield, ToggleLeft, ToggleRight, UserMinus, UserPlus } from 'lucide-react';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 
@@ -11,6 +11,53 @@ const defaultRoleOptions = [
   { key: 'sales_manager', label: 'Sales Manager' },
   { key: 'designer', label: 'Designer' },
 ];
+
+const followUpChannels = [
+  { key: 'messenger', label: 'Messenger' },
+  { key: 'whatsapp', label: 'WhatsApp' },
+];
+
+const templateChannelOptions = [
+  { key: 'all', label: 'All channels' },
+  ...followUpChannels,
+];
+
+const templatePurposeOptions = [
+  { key: 'warmup', label: 'Warmup' },
+  { key: 'qualification', label: 'Qualification' },
+  { key: 'handoff', label: 'Handoff' },
+  { key: 'opt_out', label: 'Opt out' },
+  { key: 'manual_follow_up', label: 'Manual follow-up' },
+  { key: 'fallback', label: 'Fallback' },
+];
+
+const templateStatusOptions = [
+  { key: 'draft', label: 'Draft' },
+  { key: 'active', label: 'Active' },
+  { key: 'archived', label: 'Archived' },
+];
+
+const providerStatusOptions = [
+  { key: 'not_required', label: 'Not required' },
+  { key: 'not_submitted', label: 'Not submitted' },
+  { key: 'pending', label: 'Pending' },
+  { key: 'approved', label: 'Approved' },
+  { key: 'rejected', label: 'Rejected' },
+];
+
+function defaultTemplateForm() {
+  return {
+    id: '',
+    businessUnitId: '',
+    channel: 'all',
+    purpose: 'manual_follow_up',
+    displayName: '',
+    bodyText: '',
+    status: 'draft',
+    providerStatus: 'not_required',
+    isEnabled: false,
+  };
+}
 
 export default function SettingsPage() {
   const { resetData, loaded, access, dataSource, businessUnits, setBusinessUnits, currentUser } = useCRM();
@@ -41,6 +88,12 @@ export default function SettingsPage() {
     color: '#2563eb',
     isActive: true,
   });
+  const [messageTemplates, setMessageTemplates] = useState([]);
+  const [channelSettings, setChannelSettings] = useState([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [templatesError, setTemplatesError] = useState('');
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [templateForm, setTemplateForm] = useState(defaultTemplateForm);
 
   useEffect(() => {
     if (loaded && !access.canReadSettings) {
@@ -107,6 +160,34 @@ export default function SettingsPage() {
     };
   }, [access.canReadSettings, dataSource, loaded, setBusinessUnits]);
 
+  useEffect(() => {
+    if (!loaded || !access.canReadSettings || dataSource !== 'postgres') return;
+    let cancelled = false;
+
+    async function loadMessageTemplateRegistry() {
+      setTemplatesLoading(true);
+      setTemplatesError('');
+      try {
+        const response = await fetch('/api/message-templates');
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Failed to load message templates.');
+        if (!cancelled) {
+          setMessageTemplates(Array.isArray(payload.templates) ? payload.templates : []);
+          setChannelSettings(Array.isArray(payload.channelSettings) ? payload.channelSettings : []);
+        }
+      } catch (error) {
+        if (!cancelled) setTemplatesError(error.message || 'Failed to load message templates.');
+      } finally {
+        if (!cancelled) setTemplatesLoading(false);
+      }
+    }
+
+    loadMessageTemplateRegistry();
+    return () => {
+      cancelled = true;
+    };
+  }, [access.canReadSettings, dataSource, loaded]);
+
   function resetUserForm() {
     setUserForm({
       id: '',
@@ -117,6 +198,10 @@ export default function SettingsPage() {
       businessUnitIds: [],
       isActive: true,
     });
+  }
+
+  function resetTemplateForm() {
+    setTemplateForm(defaultTemplateForm());
   }
 
   function setUserRole(roleKey) {
@@ -239,6 +324,101 @@ export default function SettingsPage() {
     }
   }
 
+  async function handleSaveTemplate(event) {
+    event.preventDefault();
+    if (!access.canWriteSettings || dataSource !== 'postgres') return;
+
+    setSavingTemplate(true);
+    setTemplatesError('');
+    try {
+      const payload = {
+        ...templateForm,
+        businessUnitId: templateForm.businessUnitId || null,
+        displayName: templateForm.displayName.trim(),
+        bodyText: templateForm.bodyText.trim(),
+        isEnabled: Boolean(templateForm.isEnabled),
+      };
+      const response = await fetch('/api/message-templates', {
+        method: payload.id ? 'PATCH' : 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Failed to save template.');
+
+      setMessageTemplates(Array.isArray(result.templates) ? result.templates : []);
+      setChannelSettings(Array.isArray(result.channelSettings) ? result.channelSettings : []);
+      resetTemplateForm();
+      toast(payload.id ? 'Template updated' : 'Template created');
+    } catch (error) {
+      setTemplatesError(error.message || 'Failed to save template.');
+    } finally {
+      setSavingTemplate(false);
+    }
+  }
+
+  async function toggleChannelSetting(channel, nextEnabled) {
+    if (!access.canWriteSettings || dataSource !== 'postgres') return;
+
+    setSavingTemplate(true);
+    setTemplatesError('');
+    try {
+      const response = await fetch('/api/message-templates', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          kind: 'channel_setting',
+          channel,
+          businessUnitId: null,
+          intakeRouteKey: 'default',
+          isEnabled: nextEnabled,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Failed to update channel setting.');
+      setMessageTemplates(Array.isArray(result.templates) ? result.templates : []);
+      setChannelSettings(Array.isArray(result.channelSettings) ? result.channelSettings : []);
+      toast(`${channel === 'whatsapp' ? 'WhatsApp' : 'Messenger'} follow-up ${nextEnabled ? 'enabled' : 'disabled'}`);
+    } catch (error) {
+      setTemplatesError(error.message || 'Failed to update channel setting.');
+    } finally {
+      setSavingTemplate(false);
+    }
+  }
+
+  async function toggleTemplateEnabled(template, nextEnabled) {
+    if (!access.canWriteSettings || dataSource !== 'postgres') return;
+
+    setSavingTemplate(true);
+    setTemplatesError('');
+    try {
+      const response = await fetch('/api/message-templates', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: template.id,
+          businessUnitId: template.businessUnitId || null,
+          channel: template.channel,
+          purpose: template.purpose,
+          displayName: template.displayName,
+          bodyText: template.bodyText,
+          status: template.status,
+          providerStatus: template.providerStatus,
+          isEnabled: nextEnabled,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Failed to update template.');
+      setMessageTemplates(Array.isArray(result.templates) ? result.templates : []);
+      setChannelSettings(Array.isArray(result.channelSettings) ? result.channelSettings : []);
+      toast(`Template ${nextEnabled ? 'enabled' : 'disabled'}`);
+    } catch (error) {
+      setTemplatesError(error.message || 'Failed to update template.');
+    } finally {
+      setSavingTemplate(false);
+    }
+  }
+
   function editBusinessUnit(unit) {
     setBusinessUnitForm({
       id: unit.id,
@@ -246,6 +426,20 @@ export default function SettingsPage() {
       label: unit.label || 'Divisions',
       color: unit.color || '#2563eb',
       isActive: unit.isActive !== false,
+    });
+  }
+
+  function editTemplate(template) {
+    setTemplateForm({
+      id: template.id,
+      businessUnitId: template.businessUnitId || '',
+      channel: template.channel || 'all',
+      purpose: template.purpose || 'manual_follow_up',
+      displayName: template.displayName || '',
+      bodyText: template.bodyText || '',
+      status: template.status || 'draft',
+      providerStatus: template.providerStatus || 'not_required',
+      isEnabled: Boolean(template.isEnabled),
     });
   }
 
@@ -279,6 +473,16 @@ export default function SettingsPage() {
     return businessUnitRows.filter((unit) => unit.isActive !== false || selectedIds.has(unit.id));
   }
 
+  function businessUnitLabel(businessUnitId) {
+    if (!businessUnitId) return 'Organization-wide';
+    const unit = businessUnitRows.find((row) => row.id === businessUnitId);
+    return unit?.name || 'Unknown division';
+  }
+
+  function channelSettingFor(channel) {
+    return channelSettings.find((setting) => setting.channel === channel && !setting.businessUnitId) || null;
+  }
+
   if (!loaded || !access.canReadSettings) return <div className="empty-state">Loading...</div>;
 
   return (
@@ -288,6 +492,190 @@ export default function SettingsPage() {
           <h1 className="page-title">Settings</h1>
           <p className="page-subtitle">System configuration & integrations</p>
         </div>
+      </div>
+
+      <div className="card" style={{marginBottom:20}}>
+        <div className="flex-between" style={{gap:12,alignItems:'flex-start',marginBottom:12}}>
+          <div>
+            <div className="card-title" style={{display:'flex',alignItems:'center',gap:8}}>
+              <MessageSquare size={16} /> Message Template Registry
+            </div>
+            <p style={{fontSize:'var(--text-sm)',color:'var(--text-secondary)',margin:0}}>Warm-lead follow-up controls for Messenger and WhatsApp. Channels and templates start disabled.</p>
+          </div>
+          {templatesLoading && <span className="badge badge-draft">Loading</span>}
+        </div>
+
+        {dataSource === 'postgres' && access.canWriteSettings ? (
+          <div style={{display:'grid',gridTemplateColumns:'minmax(min(100%,320px),0.7fr) minmax(min(100%,420px),1fr)',gap:14,alignItems:'start'}}>
+            <div style={{display:'flex',flexDirection:'column',gap:10}}>
+              <div style={{padding:'12px',background:'var(--bg-tertiary)',border:'1px solid var(--border-subtle)',borderRadius:'var(--radius-md)'}}>
+                <div style={{fontSize:'var(--text-sm)',fontWeight:700,marginBottom:8}}>Channel Controls</div>
+                <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                  {followUpChannels.map((channel) => {
+                    const setting = channelSettingFor(channel.key);
+                    const enabled = Boolean(setting?.isEnabled);
+                    return (
+                      <div key={channel.key} className="flex-between" style={{gap:10,padding:'8px 10px',background:'var(--bg-secondary)',border:'1px solid var(--border-subtle)',borderRadius:'var(--radius-md)'}}>
+                        <div style={{minWidth:0}}>
+                          <div style={{fontSize:'var(--text-sm)',fontWeight:650}}>{channel.label}</div>
+                          <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>Organization route</div>
+                        </div>
+                        <button
+                          className={`btn btn-sm ${enabled ? '' : 'btn-secondary'}`}
+                          type="button"
+                          disabled={savingTemplate}
+                          onClick={() => toggleChannelSetting(channel.key, !enabled)}
+                        >
+                          {enabled ? <ToggleRight size={15} /> : <ToggleLeft size={15} />}
+                          {enabled ? 'On' : 'Off'}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <form onSubmit={handleSaveTemplate} style={{display:'flex',flexDirection:'column',gap:8,padding:'12px',background:'var(--bg-tertiary)',border:'1px solid var(--border-subtle)',borderRadius:'var(--radius-md)'}}>
+                <div className="flex-between" style={{gap:10}}>
+                  <div>
+                    <div style={{fontSize:'var(--text-sm)',fontWeight:700}}>{templateForm.id ? 'Edit template' : 'Create template'}</div>
+                    <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>Draft-safe registry entry</div>
+                  </div>
+                  {templateForm.id && (
+                    <button className="btn btn-sm" type="button" onClick={resetTemplateForm}>
+                      <RotateCcw size={13} /> New
+                    </button>
+                  )}
+                </div>
+                <input
+                  className="input"
+                  placeholder="Display name"
+                  value={templateForm.displayName}
+                  onChange={(event) => setTemplateForm((prev) => ({ ...prev, displayName: event.target.value }))}
+                  required
+                />
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:8}}>
+                  <select
+                    className="input select"
+                    value={templateForm.channel}
+                    onChange={(event) => setTemplateForm((prev) => ({
+                      ...prev,
+                      channel: event.target.value,
+                      providerStatus: event.target.value === 'whatsapp' ? 'not_submitted' : 'not_required',
+                      isEnabled: false,
+                    }))}
+                  >
+                    {templateChannelOptions.map((option) => (
+                      <option key={option.key} value={option.key}>{option.label}</option>
+                    ))}
+                  </select>
+                  <select
+                    className="input select"
+                    value={templateForm.purpose}
+                    onChange={(event) => setTemplateForm((prev) => ({ ...prev, purpose: event.target.value }))}
+                  >
+                    {templatePurposeOptions.map((option) => (
+                      <option key={option.key} value={option.key}>{option.label}</option>
+                    ))}
+                  </select>
+                  <select
+                    className="input select"
+                    value={templateForm.businessUnitId}
+                    onChange={(event) => setTemplateForm((prev) => ({ ...prev, businessUnitId: event.target.value }))}
+                  >
+                    <option value="">Organization-wide</option>
+                    {businessUnitRows.map((unit) => (
+                      <option key={unit.id} value={unit.id}>{unit.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <textarea
+                  className="input"
+                  placeholder="Message body"
+                  value={templateForm.bodyText}
+                  onChange={(event) => setTemplateForm((prev) => ({ ...prev, bodyText: event.target.value }))}
+                  required
+                  rows={4}
+                  style={{resize:'vertical',minHeight:88}}
+                />
+                <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(130px,1fr))',gap:8}}>
+                  <select
+                    className="input select"
+                    value={templateForm.status}
+                    onChange={(event) => setTemplateForm((prev) => ({ ...prev, status: event.target.value, isEnabled: false }))}
+                  >
+                    {templateStatusOptions.map((option) => (
+                      <option key={option.key} value={option.key}>{option.label}</option>
+                    ))}
+                  </select>
+                  <select
+                    className="input select"
+                    value={templateForm.providerStatus}
+                    onChange={(event) => setTemplateForm((prev) => ({ ...prev, providerStatus: event.target.value, isEnabled: false }))}
+                  >
+                    {providerStatusOptions.map((option) => (
+                      <option key={option.key} value={option.key}>{option.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <label style={{display:'flex',alignItems:'center',gap:8,fontSize:'var(--text-sm)',color:'var(--text-secondary)'}}>
+                  <input
+                    type="checkbox"
+                    checked={templateForm.isEnabled}
+                    onChange={(event) => setTemplateForm((prev) => ({ ...prev, isEnabled: event.target.checked }))}
+                  />
+                  Enabled template
+                </label>
+                <button className="btn btn-primary" type="submit" disabled={savingTemplate}>
+                  {savingTemplate ? 'Saving...' : templateForm.id ? 'Save Template' : 'Add Template'}
+                </button>
+              </form>
+            </div>
+
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              <div className="flex-between" style={{gap:12}}>
+                <div style={{fontSize:'var(--text-sm)',fontWeight:700}}>Templates</div>
+                <span className="badge badge-draft">{messageTemplates.length} total</span>
+              </div>
+              {!templatesLoading && messageTemplates.length === 0 && (
+                <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)',padding:'10px',background:'var(--bg-tertiary)',borderRadius:'var(--radius-md)'}}>No templates registered yet.</div>
+              )}
+              {messageTemplates.map((template) => (
+                <div key={template.id} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto',gap:10,alignItems:'start',padding:'10px',background:'var(--bg-tertiary)',border:'1px solid var(--border-subtle)',borderRadius:'var(--radius-md)'}}>
+                  <div style={{minWidth:0}}>
+                    <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:4}}>
+                      <span style={{fontSize:'var(--text-sm)',fontWeight:700}}>{template.displayName}</span>
+                      <span className={`badge ${template.status === 'active' ? 'badge-contacted' : template.status === 'archived' ? 'badge-draft' : 'badge-new'}`} style={{fontSize:9,padding:'2px 6px'}}>{template.statusLabel}</span>
+                      <span className={`badge ${template.isEnabled ? 'badge-won' : 'badge-draft'}`} style={{fontSize:9,padding:'2px 6px'}}>{template.isEnabled ? 'Enabled' : 'Disabled'}</span>
+                    </div>
+                    <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)',marginBottom:6}}>
+                      {template.channelLabel} / {template.purposeLabel} / {businessUnitLabel(template.businessUnitId)}
+                    </div>
+                    <div style={{fontSize:'var(--text-sm)',color:'var(--text-secondary)',whiteSpace:'pre-wrap',lineHeight:1.35}}>{template.bodyText}</div>
+                    <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)',marginTop:6}}>Provider: {template.providerStatusLabel}</div>
+                  </div>
+                  <div style={{display:'flex',gap:6,justifyContent:'flex-end',flexWrap:'wrap'}}>
+                    <button className="btn btn-sm" type="button" onClick={() => editTemplate(template)}>
+                      <Pencil size={13} /> Edit
+                    </button>
+                    <button
+                      className="btn btn-sm"
+                      type="button"
+                      disabled={savingTemplate || (!template.isEnabled && !template.canEnable)}
+                      onClick={() => toggleTemplateEnabled(template, !template.isEnabled)}
+                    >
+                      {template.isEnabled ? <ToggleRight size={14} /> : <ToggleLeft size={14} />}
+                      {template.isEnabled ? 'Disable' : 'Enable'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+              {templatesError && <div style={{fontSize:'var(--text-xs)',color:'var(--danger)'}}>{templatesError}</div>}
+            </div>
+          </div>
+        ) : (
+          <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>Message template controls are available in database-backed admin sessions.</div>
+        )}
       </div>
 
       <div className="grid-2" style={{marginBottom:20}}>

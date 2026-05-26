@@ -406,6 +406,54 @@ export const conversationMessages = pgTable('conversation_messages', {
   businessUnitStatusIdx: index('conversation_messages_business_unit_status_idx').on(table.businessUnitId, table.deliveryStatus),
 }));
 
+export const messageTemplates = pgTable('message_templates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').references(() => businessUnits.id, { onDelete: 'cascade' }),
+  channel: text('channel').notNull().default('all'),
+  purpose: text('purpose').notNull(),
+  displayName: text('display_name').notNull(),
+  bodyText: text('body_text').notNull(),
+  status: text('status').notNull().default('draft'),
+  providerStatus: text('provider_status').notNull().default('not_required'),
+  isEnabled: boolean('is_enabled').notNull().default(false),
+  createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  updatedByUserId: uuid('updated_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  metadataJson: jsonb('metadata_json').notNull().default({}),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  orgChannelPurposeIdx: index('message_templates_org_channel_purpose_idx').on(
+    table.organizationId,
+    table.channel,
+    table.purpose,
+    table.status,
+  ),
+  businessUnitIdx: index('message_templates_business_unit_idx').on(table.businessUnitId),
+}));
+
+export const messageChannelSettings = pgTable('message_channel_settings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').references(() => businessUnits.id, { onDelete: 'cascade' }),
+  scopeKey: text('scope_key').notNull(),
+  intakeRouteKey: text('intake_route_key').notNull().default('default'),
+  channel: text('channel').notNull(),
+  isEnabled: boolean('is_enabled').notNull().default(false),
+  createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  updatedByUserId: uuid('updated_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  settingsJson: jsonb('settings_json').notNull().default({}),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  orgScopeChannelIdx: uniqueIndex('message_channel_settings_org_scope_channel_idx').on(
+    table.organizationId,
+    table.scopeKey,
+    table.channel,
+  ),
+  businessUnitIdx: index('message_channel_settings_business_unit_idx').on(table.businessUnitId),
+}));
+
 export const files = pgTable('files', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
@@ -497,6 +545,8 @@ export const allTables = {
   conversationChannels,
   conversations,
   conversationMessages,
+  messageTemplates,
+  messageChannelSettings,
   files,
   importBatches,
   importSourceRows,

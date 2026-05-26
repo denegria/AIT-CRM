@@ -902,30 +902,33 @@ Linear metadata:
 - Owner lane: Builder
 - Dependencies: V2-011
 
-Objective: manage approved follow-up copy and provider template mapping.
+Objective: manage approved follow-up copy, provider approval state, and the admin-controlled Messenger/WhatsApp follow-up posture before any outbound send path exists.
 
 Scope:
 
-- Add template registry for business unit, channel, language, purpose, approval state, and provider template IDs.
-- Support variable definitions and preview rendering.
+- Add a channel-neutral template registry for organization-wide and business-unit-scoped warm-lead follow-up copy.
+- Support Messenger and WhatsApp as first-class V2 channels; Messenger follow-up remains in V2 because every business receives Facebook/Messenger messages.
+- Add channel/template enablement settings that default to disabled and can represent shared intake routes without assuming a 1:1 WhatsApp phone-number-to-business-unit mapping.
+- Track draft/active/archived state plus provider approval status where relevant.
 - Do not send messages yet.
 
 Action/service boundary:
 
-- Template routes/actions own who can create/approve/use templates and which business unit/language/channel they apply to.
-- Template service owns variable parsing, preview rendering, provider-template mapping, and structured validation.
+- Template routes/actions own who can create/update/enable templates and which organization, business unit, channel, and shared intake route they apply to.
+- Template service owns draft-safe defaults, enablement validation, provider-status gating, and structured validation.
 - Do not call WhatsApp or Messenger send APIs in this slice.
 
 Acceptance:
 
-- Operators/admins can define templates for first outreach and follow-up.
-- WhatsApp templates can map to provider-approved template names/IDs.
-- Invalid variables are caught before use.
+- Operators/admins can define templates for warmup, qualification, handoff, opt-out, manual follow-up, and fallback.
+- Messenger and WhatsApp channel controls can be switched on/off independently without starting automation execution.
+- WhatsApp templates cannot be enabled until active and provider approved.
 
 Validation:
 
-- Template rendering tests.
-- Browser smoke for template create/edit/preview.
+- Template validation and disabled-by-default tests.
+- API/service tests for channel/template enablement and no-send guardrails.
+- Browser smoke for template create/edit/toggle controls.
 
 ### V2-016: Manual Outbound Sending With Approval Guardrails
 
