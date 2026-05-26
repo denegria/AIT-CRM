@@ -3,9 +3,13 @@ import { createHmac, timingSafeEqual } from 'crypto';
 export const FB_VERIFY_TOKEN_ENV = 'FACEBOOK_WEBHOOK_VERIFY_TOKEN';
 export const META_VERIFY_TOKEN_ENV = 'META_WEBHOOK_VERIFY_TOKEN';
 export const FB_APP_SECRET_ENV = 'FACEBOOK_APP_SECRET';
+export const META_APP_SECRET_ENV = 'META_APP_SECRET';
+export const WHATSAPP_VERIFY_TOKEN_ENV = 'WHATSAPP_WEBHOOK_VERIFY_TOKEN';
+export const WHATSAPP_APP_SECRET_ENV = 'WHATSAPP_APP_SECRET';
 export const META_PAGE_ACCESS_TOKEN_ENV = 'META_PAGE_ACCESS_TOKEN';
 export const META_PAGE_ACCESS_TOKEN_MAP_ENV = 'META_PAGE_ACCESS_TOKEN_MAP';
 export const META_PAGE_BUSINESS_UNIT_MAP_ENV = 'META_PAGE_BUSINESS_UNIT_MAP';
+export const META_WHATSAPP_BUSINESS_UNIT_MAP_ENV = 'META_WHATSAPP_BUSINESS_UNIT_MAP';
 export const META_GRAPH_API_VERSION = 'v24.0';
 export const META_PAGE_ACCESS_TOKEN_MISSING_REASON = `${META_PAGE_ACCESS_TOKEN_ENV} or ${META_PAGE_ACCESS_TOKEN_MAP_ENV} missing`;
 
@@ -27,21 +31,28 @@ export function parseMetaPageBusinessUnitMap(raw) {
   return parseMetaObjectMap(raw);
 }
 
+export function parseMetaWhatsAppBusinessUnitMap(raw) {
+  return parseMetaObjectMap(raw);
+}
+
 export function createMetaProviderConfig({
   facebookVerifyToken = '',
+  whatsappVerifyToken = '',
   metaVerifyToken = '',
   appSecret = '',
   defaultPageAccessToken = '',
   pageAccessTokenMapRaw = '',
   pageBusinessUnitMapRaw = '',
+  whatsappBusinessUnitMapRaw = '',
   graphApiVersion = META_GRAPH_API_VERSION,
 } = {}) {
   return {
-    verifyToken: facebookVerifyToken || metaVerifyToken || '',
+    verifyToken: facebookVerifyToken || whatsappVerifyToken || metaVerifyToken || '',
     appSecret: appSecret || '',
     defaultPageAccessToken: defaultPageAccessToken || '',
     pageAccessTokenMap: parseMetaPageAccessTokenMap(pageAccessTokenMapRaw),
     pageBusinessUnitMap: parseMetaPageBusinessUnitMap(pageBusinessUnitMapRaw),
+    whatsappBusinessUnitMap: parseMetaWhatsAppBusinessUnitMap(whatsappBusinessUnitMapRaw),
     graphApiVersion: graphApiVersion || META_GRAPH_API_VERSION,
   };
 }
@@ -113,6 +124,16 @@ export function resolveMetaPageBusinessUnitMapping(pageId, config = {}) {
     ok: Boolean(mapped),
     businessUnit: mapped || null,
     source: mapped ? 'page_map' : null,
+  };
+}
+
+export function resolveMetaWhatsAppBusinessUnitMapping(phoneNumberId, displayPhoneNumber = '', config = {}) {
+  const map = config.whatsappBusinessUnitMap || {};
+  const mapped = map[phoneNumberId] || map[displayPhoneNumber];
+  return {
+    ok: Boolean(mapped),
+    businessUnit: mapped || null,
+    source: mapped ? 'whatsapp_map' : null,
   };
 }
 
@@ -259,6 +280,85 @@ export function flattenMetaMessengerEvents(payload) {
         timestamp: messaging.timestamp || null,
         raw: { entry, messaging },
       });
+    }
+  }
+  return events;
+}
+
+function contactForWaId(contacts = [], waId = '') {
+  return contacts.find((contact) => String(contact?.wa_id || '') === String(waId || '')) || contacts[0] || null;
+}
+
+function normalizeWhatsAppMessageText(message = {}) {
+  const type = String(message.type || '').trim().toLowerCase();
+  if (type === 'text') return String(message.text?.body || '').trim();
+  if (type === 'button') return String(message.button?.text || message.button?.payload || '').trim();
+  if (type === 'interactive') {
+    return String(
+      message.interactive?.button_reply?.title
+        || message.interactive?.button_reply?.id
+        || message.interactive?.list_reply?.title
+        || message.interactive?.list_reply?.id
+        || '',
+    ).trim();
+  }
+  return String(message[type]?.caption || '').trim();
+}
+
+function normalizeWhatsAppAttachments(message = {}) {
+  const type = String(message.type || '').trim().toLowerCase();
+  const supportedMediaTypes = new Set(['audio', 'document', 'image', 'sticker', 'video']);
+  if (supportedMediaTypes.has(type) && message[type]) {
+    const media = message[type];
+    return [{
+      type,
+      id: media.id || null,
+      mimeType: media.mime_type || null,
+      sha256: media.sha256 || null,
+      caption: media.caption || null,
+      filename: media.filename || null,
+    }];
+  }
+  if (type === 'location' && message.location) {
+    return [{ type, location: message.location }];
+  }
+  if (type === 'contacts' && Array.isArray(message.contacts)) {
+    return [{ type, contacts: message.contacts }];
+  }
+  return [];
+}
+
+export function flattenMetaWhatsAppMessages(payload) {
+  if (payload?.object !== 'whatsapp_business_account') return [];
+  const events = [];
+  for (const entry of payload.entry || []) {
+    for (const change of entry.changes || []) {
+      if (change?.field !== 'messages') continue;
+      const value = change.value || {};
+      const metadata = value.metadata || {};
+      const phoneNumberId = metadata.phone_number_id || '';
+      const displayPhoneNumber = metadata.display_phone_number || '';
+      const contacts = Array.isArray(value.contacts) ? value.contacts : [];
+      for (const message of value.messages || []) {
+        const waId = message.from || contactForWaId(contacts, message.from)?.wa_id || '';
+        const contact = contactForWaId(contacts, waId);
+        const messageType = String(message.type || '').trim().toLowerCase() || 'unknown';
+        events.push({
+          entryId: entry.id || '',
+          wabaId: entry.id || '',
+          phoneNumberId,
+          displayPhoneNumber,
+          waId,
+          from: message.from || '',
+          messageId: message.id || '',
+          messageType,
+          text: normalizeWhatsAppMessageText(message),
+          attachments: normalizeWhatsAppAttachments(message),
+          timestamp: message.timestamp || null,
+          contactProfileName: contact?.profile?.name || '',
+          raw: { entry, change, message, contact },
+        });
+      }
     }
   }
   return events;

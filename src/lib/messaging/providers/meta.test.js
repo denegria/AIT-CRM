@@ -6,10 +6,13 @@ import {
   createMetaProviderConfig,
   fetchMetaLeadDetails,
   fetchMetaMessengerProfile,
+  flattenMetaWhatsAppMessages,
   parseMetaPageAccessTokenMap,
   parseMetaPageBusinessUnitMap,
+  parseMetaWhatsAppBusinessUnitMap,
   resolveMetaPageAccessToken,
   resolveMetaPageBusinessUnitMapping,
+  resolveMetaWhatsAppBusinessUnitMapping,
   validateMetaAppSecretSignature,
   verifyMetaWebhookChallenge,
 } from './meta.js';
@@ -46,15 +49,35 @@ test('verifies Meta challenge tokens using provider config', () => {
   assert.equal(verifyMetaWebhookChallenge({ mode: 'subscribe', verifyToken: 'wrong', config }).code, 'VERIFY_TOKEN_MISMATCH');
 });
 
+test('verifies WhatsApp challenge tokens using provider config', () => {
+  const config = createMetaProviderConfig({
+    whatsappVerifyToken: 'whatsapp-token',
+    metaVerifyToken: 'meta-token',
+  });
+
+  assert.deepEqual(
+    verifyMetaWebhookChallenge({
+      mode: 'subscribe',
+      verifyToken: 'whatsapp-token',
+      challenge: 'whatsapp-challenge',
+      config,
+    }),
+    { ok: true, challenge: 'whatsapp-challenge' },
+  );
+  assert.equal(verifyMetaWebhookChallenge({ mode: 'subscribe', verifyToken: 'meta-token', config }).code, 'VERIFY_TOKEN_MISMATCH');
+});
+
 test('parses page token and business-unit maps with default token fallback', () => {
   const config = createMetaProviderConfig({
     defaultPageAccessToken: 'default-token',
     pageAccessTokenMapRaw: JSON.stringify({ 'page-1': 'mapped-token' }),
     pageBusinessUnitMapRaw: JSON.stringify({ 'page-1': 'Main Signs' }),
+    whatsappBusinessUnitMapRaw: JSON.stringify({ 'phone-number-1': 'WhatsApp Signs' }),
   });
 
   assert.deepEqual(parseMetaPageAccessTokenMap('not-json'), {});
   assert.deepEqual(parseMetaPageBusinessUnitMap('[]'), {});
+  assert.deepEqual(parseMetaWhatsAppBusinessUnitMap('null'), {});
   assert.deepEqual(resolveMetaPageAccessToken('page-1', config), {
     ok: true,
     accessToken: 'mapped-token',
@@ -75,6 +98,67 @@ test('parses page token and business-unit maps with default token fallback', () 
     businessUnit: null,
     source: null,
   });
+  assert.deepEqual(resolveMetaWhatsAppBusinessUnitMapping('phone-number-1', '', config), {
+    ok: true,
+    businessUnit: 'WhatsApp Signs',
+    source: 'whatsapp_map',
+  });
+  assert.deepEqual(resolveMetaWhatsAppBusinessUnitMapping('phone-number-2', '+15551234567', config), {
+    ok: false,
+    businessUnit: null,
+    source: null,
+  });
+});
+
+test('flattens WhatsApp Cloud API inbound message fixtures', () => {
+  const payload = {
+    object: 'whatsapp_business_account',
+    entry: [
+      {
+        id: 'waba-1',
+        changes: [
+          {
+            field: 'messages',
+            value: {
+              messaging_product: 'whatsapp',
+              metadata: {
+                display_phone_number: '+1 555 111 2222',
+                phone_number_id: 'phone-number-1',
+              },
+              contacts: [
+                {
+                  profile: { name: 'Ada Signs' },
+                  wa_id: '15550001111',
+                },
+              ],
+              messages: [
+                {
+                  from: '15550001111',
+                  id: 'wamid-1',
+                  timestamp: '1779275460',
+                  type: 'text',
+                  text: { body: 'Need a storefront sign' },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    ],
+  };
+
+  assert.deepEqual(flattenMetaWhatsAppMessages({ object: 'page', entry: [] }), []);
+  const events = flattenMetaWhatsAppMessages(payload);
+  assert.equal(events.length, 1);
+  assert.equal(events[0].entryId, 'waba-1');
+  assert.equal(events[0].phoneNumberId, 'phone-number-1');
+  assert.equal(events[0].displayPhoneNumber, '+1 555 111 2222');
+  assert.equal(events[0].waId, '15550001111');
+  assert.equal(events[0].messageId, 'wamid-1');
+  assert.equal(events[0].messageType, 'text');
+  assert.equal(events[0].text, 'Need a storefront sign');
+  assert.equal(events[0].contactProfileName, 'Ada Signs');
+  assert.equal(events[0].raw.message.id, 'wamid-1');
 });
 
 test('returns structured missing-token errors before calling Graph', async () => {
