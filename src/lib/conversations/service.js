@@ -376,9 +376,10 @@ export function whatsappConversationMessageInput({
   });
 }
 
-export async function recordConversationMessage(client, input) {
+export async function recordConversationMessage(client, input, options = {}) {
   const message = normalizeConversationMessageInput(input);
-  await client.query('begin');
+  const useTransaction = options.useTransaction !== false;
+  if (useTransaction) await client.query('begin');
   try {
     const conversation = await client.query(
       `
@@ -495,7 +496,7 @@ export async function recordConversationMessage(client, input) {
       ],
     );
 
-    await client.query('commit');
+    if (useTransaction) await client.query('commit');
     return {
       conversationId,
       messageId: inserted.rows[0]?.id || null,
@@ -504,7 +505,7 @@ export async function recordConversationMessage(client, input) {
       conversationKey: conversationIdentityKey(message),
     };
   } catch (error) {
-    await client.query('rollback');
+    if (useTransaction) await client.query('rollback');
     throw error;
   }
 }

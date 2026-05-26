@@ -6,6 +6,10 @@ import {
   recordInboundLeadAssignmentActivity,
   resolveDefaultInboundLeadOwnerUserId,
 } from '../crm/assignment.js';
+import {
+  messengerConversationMessageInput,
+  recordConversationMessage,
+} from '../conversations/service.js';
 
 export const MESSENGER_INBOUND_BATCH_SOURCE_NAME = 'Facebook Messenger';
 export const MESSENGER_INBOUND_BATCH_SOURCE_TYPE = 'facebook_messenger';
@@ -117,38 +121,51 @@ async function resolveBusinessUnitId(client, organizationId, pageId, metaConfig)
   return result.rows[0]?.id || null;
 }
 
-async function hasMessengerMessageId(client, messageId, pageId) {
+async function hasMessengerMessageId(client, organizationId, businessUnitId, messageId, pageId) {
   if (!messageId) return false;
   const result = await client.query(
     `
       select 1
-      from import_normalized_records
-      where record_type = 'lead'
-        and coalesce(proposed_lead_json->>'message_id', '') = $1
-        and coalesce(proposed_lead_json->>'page_id', '') = $2
+      from import_normalized_records nr
+      join import_batches ib on ib.id = nr.import_batch_id
+      where ib.organization_id = $1
+        and nr.record_type = 'lead'
+        and coalesce(nr.proposed_lead_json->>'message_id', '') = $2
+        and coalesce(nr.proposed_lead_json->>'page_id', '') = $3
+        and ($4 = '' or coalesce(nr.proposed_lead_json->>'business_unit_id', '') = $4)
       limit 1
     `,
-    [messageId, pageId || ''],
+    [organizationId, messageId, pageId || '', businessUnitId || ''],
   );
   return Boolean(result.rows.length);
 }
 
-async function findExistingMessengerLead(client, senderId, pageId) {
+async function findExistingMessengerLead(client, organizationId, businessUnitId, senderId, pageId) {
   if (!senderId) return null;
   const result = await client.query(
     `
-      select proposed_lead_json
-      from import_normalized_records
-      where record_type = 'lead'
-        and coalesce(proposed_lead_json->>'messenger_sender_id', '') = $1
-        and coalesce(proposed_lead_json->>'page_id', '') = $2
-        and proposed_lead_json ? 'lead_id'
-      order by created_at asc
+      select l.id::text as lead_id, l.contact_id::text as contact_id
+      from import_normalized_records nr
+      join import_batches ib on ib.id = nr.import_batch_id
+      join leads l
+        on l.id::text = nullif(nr.proposed_lead_json->>'lead_id', '')
+        and l.organization_id = ib.organization_id
+        and ($4 = '' or l.business_unit_id::text = $4)
+      left join contacts c
+        on c.id = l.contact_id
+        and c.organization_id = ib.organization_id
+        and ($4 = '' or c.primary_business_unit_id::text = $4)
+      where ib.organization_id = $1
+        and nr.record_type = 'lead'
+        and coalesce(nr.proposed_lead_json->>'messenger_sender_id', '') = $2
+        and coalesce(nr.proposed_lead_json->>'page_id', '') = $3
+        and (l.contact_id is null or c.id is not null)
+      order by nr.created_at asc
       limit 1
     `,
-    [senderId, pageId || ''],
+    [organizationId, senderId, pageId || '', businessUnitId || ''],
   );
-  const lead = result.rows[0]?.proposed_lead_json || null;
+  const lead = result.rows[0] || null;
   if (!lead?.lead_id) return null;
   return {
     contactId: lead.contact_id || null,
@@ -294,7 +311,8 @@ export async function persistMessengerInboundEvent(
       skippedReason: classification.reason,
     });
   }
-  if (event.messageId && await hasMessengerMessageId(client, event.messageId, event.pageId)) {
+  const businessUnitId = await resolveBusinessUnitId(client, organizationId, event.pageId, metaConfig);
+  if (event.messageId && await hasMessengerMessageId(client, organizationId, businessUnitId, event.messageId, event.pageId)) {
     return messengerEventResult(event, {
       inserted: false,
       promoted: false,
@@ -309,8 +327,7 @@ export async function persistMessengerInboundEvent(
 
   const profileFetch = await fetchMessengerProfile({ senderId: event.senderId, pageId: event.pageId, config: metaConfig });
   const profile = profileFetch.ok ? profileFetch.profile : null;
-  const businessUnitId = await resolveBusinessUnitId(client, organizationId, event.pageId, metaConfig);
-  const existing = await findExistingMessengerLead(client, event.senderId, event.pageId);
+  const existing = await findExistingMessengerLead(client, organizationId, businessUnitId, event.senderId, event.pageId);
 
   const rawValues = {
     source: 'facebook_messenger',
@@ -365,6 +382,23 @@ export async function persistMessengerInboundEvent(
   if (crmWrite.leadId) {
     await logMessengerActivity(client, organizationId, businessUnitId, event, crmWrite, rowNumber);
   }
+
+  const conversationWrite = await recordConversationMessage(
+    client,
+    messengerConversationMessageInput({
+      organizationId,
+      businessUnitId,
+      contactId: crmWrite.contactId,
+      leadId: crmWrite.leadId,
+      pageId: event.pageId,
+      senderId: event.senderId,
+      messageId: event.messageId,
+      text: event.text || event.postbackPayload || (Array.isArray(event.attachments) && event.attachments.length ? '[Messenger attachment]' : null),
+      timestamp: event.timestamp,
+      raw: event.raw || {},
+    }),
+    { useTransaction: false },
+  );
 
   const proposedContact = {
     name: messengerInboundDisplayName(profile, event.senderId),
@@ -451,6 +485,11 @@ export async function persistMessengerInboundEvent(
     normalizedRecordId: normalizedId,
     contactId: crmWrite.contactId,
     leadId: crmWrite.leadId,
+    conversationId: conversationWrite.conversationId,
+    conversationMessageId: conversationWrite.messageId,
+    conversationMessageInserted: conversationWrite.inserted,
+    conversationIdempotencyKey: conversationWrite.idempotencyKey,
+    providerConversationKey: conversationWrite.conversationKey,
     existingLead: Boolean(existing),
   });
 }
