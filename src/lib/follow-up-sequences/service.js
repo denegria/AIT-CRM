@@ -62,6 +62,18 @@ function templateMatchesChannel(template, channel) {
   return template?.channel === channel || template?.channel === MESSAGE_TEMPLATE_CHANNELS.ALL;
 }
 
+async function withTransaction(client, handler) {
+  await client.query('begin');
+  try {
+    const result = await handler();
+    await client.query('commit');
+    return result;
+  } catch (error) {
+    await client.query('rollback');
+    throw error;
+  }
+}
+
 function quietHoursWindow(settingsJson = {}) {
   const quietHours = settingsJson.quietHours && typeof settingsJson.quietHours === 'object'
     ? settingsJson.quietHours
@@ -316,7 +328,7 @@ function mapDueRow(row) {
       position: row.step_position,
       delay_minutes: row.delay_minutes,
       channel: row.step_channel,
-      template_id: row.template_id,
+      template_id: row.step_template_id,
       action_type: row.action_type,
       task_title: row.task_title,
       task_description: row.task_description,
@@ -375,7 +387,7 @@ export async function listDueFollowUpSteps(client, {
         st.position as step_position,
         st.delay_minutes,
         st.channel as step_channel,
-        st.template_id,
+        st.template_id as step_template_id,
         st.action_type,
         st.task_title,
         st.task_description,
@@ -385,6 +397,7 @@ export async function listDueFollowUpSteps(client, {
         c.is_do_not_call,
         c.is_wrong_number,
         mt.channel as template_channel,
+        mt.id as template_id,
         mt.purpose as template_purpose,
         mt.display_name as template_display_name,
         mt.body_text as template_body_text,
@@ -397,8 +410,14 @@ export async function listDueFollowUpSteps(client, {
       join follow_up_sequences s on s.id = e.sequence_id and s.organization_id = e.organization_id
       join follow_up_sequence_steps st on st.sequence_id = s.id and st.position = e.next_step_position
       join contacts c on c.id = e.contact_id and c.organization_id = e.organization_id
-      left join message_templates mt on mt.id = st.template_id and mt.organization_id = e.organization_id
-      left join conversation_messages cm on cm.organization_id = e.organization_id and cm.contact_id = e.contact_id
+      left join message_templates mt
+        on mt.id = st.template_id
+       and mt.organization_id = e.organization_id
+       and (mt.business_unit_id is null or mt.business_unit_id = e.business_unit_id)
+      left join conversation_messages cm
+        on cm.organization_id = e.organization_id
+       and cm.business_unit_id = e.business_unit_id
+       and cm.contact_id = e.contact_id
       where e.organization_id = $1
         and e.status = 'active'
         and e.next_step_due_at <= $2
@@ -621,23 +640,26 @@ export async function executeDueFollowUpSteps(client, {
         continue;
       }
 
-      const run = await createRun(client, {
-        due,
-        idempotencyKey,
-        status: FOLLOW_UP_STEP_RUN_STATUSES.BLOCKED,
-        blockedReason: codes.join(','),
-        now,
+      const result = await withTransaction(client, async () => {
+        const run = await createRun(client, {
+          due,
+          idempotencyKey,
+          status: FOLLOW_UP_STEP_RUN_STATUSES.BLOCKED,
+          blockedReason: codes.join(','),
+          now,
+        });
+        if (run && (codes.includes(FOLLOW_UP_BLOCK_CODES.CONTACT_BLOCKED) || codes.includes(FOLLOW_UP_BLOCK_CODES.MAX_TOUCHES_REACHED))) {
+          await stopEnrollment(client, { due, reason: codes.join(',') });
+        }
+        return {
+          enrollmentId: due.enrollment.id,
+          runId: run?.id || null,
+          blocked: true,
+          duplicate: !run,
+          reasons: eligibility.reasons,
+        };
       });
-      if (codes.includes(FOLLOW_UP_BLOCK_CODES.CONTACT_BLOCKED) || codes.includes(FOLLOW_UP_BLOCK_CODES.MAX_TOUCHES_REACHED)) {
-        await stopEnrollment(client, { due, reason: codes.join(',') });
-      }
-      results.push({
-        enrollmentId: due.enrollment.id,
-        runId: run?.id || null,
-        blocked: true,
-        duplicate: !run,
-        reasons: eligibility.reasons,
-      });
+      results.push(result);
       continue;
     }
 
@@ -649,39 +671,87 @@ export async function executeDueFollowUpSteps(client, {
       template: due.template,
       now,
     });
-    const run = await createRun(client, {
-      due,
-      idempotencyKey,
-      status: FOLLOW_UP_STEP_RUN_STATUSES.CREATED,
-      draftMessageJson,
-      now,
-    });
+    const result = await withTransaction(client, async () => {
+      const run = await createRun(client, {
+        due,
+        idempotencyKey,
+        status: FOLLOW_UP_STEP_RUN_STATUSES.CREATED,
+        draftMessageJson,
+        now,
+      });
 
-    if (!run) {
-      results.push({ enrollmentId: due.enrollment.id, duplicate: true });
-      continue;
-    }
+      if (!run) {
+        return { enrollmentId: due.enrollment.id, duplicate: true };
+      }
 
-    let taskId = null;
-    if ([FOLLOW_UP_STEP_ACTIONS.TASK, FOLLOW_UP_STEP_ACTIONS.TASK_AND_DRAFT].includes(due.step.action_type)) {
-      taskId = await createReviewTask(client, { due, runId: run.id, draftMessageJson, now });
-      await updateRunTask(client, {
+      let taskId = null;
+      if ([FOLLOW_UP_STEP_ACTIONS.TASK, FOLLOW_UP_STEP_ACTIONS.TASK_AND_DRAFT].includes(due.step.action_type)) {
+        taskId = await createReviewTask(client, { due, runId: run.id, draftMessageJson, now });
+        await updateRunTask(client, {
+          runId: run.id,
+          taskId,
+          organizationId: due.enrollment.organization_id,
+        });
+      }
+      const advance = await advanceEnrollment(client, { due, now });
+      return {
+        enrollmentId: due.enrollment.id,
         runId: run.id,
         taskId,
-        organizationId: due.enrollment.organization_id,
-      });
-    }
-    const advance = await advanceEnrollment(client, { due, now });
-    results.push({
-      enrollmentId: due.enrollment.id,
-      runId: run.id,
-      taskId,
-      draftCreated: Boolean(draftMessageJson.templateId),
-      completed: advance.completed,
+        draftCreated: Boolean(draftMessageJson.templateId),
+        completed: advance.completed,
+      };
     });
+    results.push(result);
   }
 
   return { processed: results.length, results };
+}
+
+async function resolveEnrollmentOwnerUserId(client, {
+  organizationId,
+  businessUnitId,
+  ownerUserId,
+  actorUserId = null,
+}) {
+  const requestedOwnerId = ownerUserId || actorUserId || null;
+  if (!requestedOwnerId) return null;
+
+  const result = await client.query(
+    `
+      select u.id
+      from users u
+      where u.id = $1
+        and u.organization_id = $2
+        and u.is_active = true
+        and (
+          exists (
+            select 1
+            from business_unit_memberships bum
+            where bum.user_id = u.id
+              and bum.business_unit_id = $3
+          )
+          or exists (
+            select 1
+            from user_roles ur
+            join role_permissions rp on rp.role_id = ur.role_id
+            join permissions p on p.id = rp.permission_id
+            where ur.user_id = u.id
+              and p.key = 'business_units:all'
+          )
+        )
+      limit 1
+    `,
+    [requestedOwnerId, organizationId, businessUnitId],
+  );
+
+  if (!result.rows[0]) {
+    const error = new Error('Sequence owner must be an active organization user with access to the enrollment business unit.');
+    error.status = 403;
+    throw error;
+  }
+
+  return result.rows[0].id;
 }
 
 export async function enrollContactInFollowUpSequence(client, {
@@ -695,6 +765,12 @@ export async function enrollContactInFollowUpSequence(client, {
   now = new Date(),
 }) {
   const draft = normalizeFollowUpEnrollmentDraft(values, { now, sequence, firstStep });
+  const ownerUserId = await resolveEnrollmentOwnerUserId(client, {
+    organizationId,
+    businessUnitId,
+    ownerUserId: draft.ownerUserId || actorUserId || null,
+    actorUserId,
+  });
   const result = await client.query(
     `
       insert into follow_up_sequence_enrollments (
@@ -714,7 +790,9 @@ export async function enrollContactInFollowUpSequence(client, {
         metadata_json
       )
       values ($1,$2,$3,$4,$5,'active',$6,$7,$8,$9,$10,$11,$12,$13)
-      returning id, next_step_due_at
+      on conflict (organization_id, sequence_id, contact_id) where status = 'active'
+      do update set updated_at = follow_up_sequence_enrollments.updated_at
+      returning id, next_step_due_at, (xmax = 0) as inserted
     `,
     [
       organizationId,
@@ -723,7 +801,7 @@ export async function enrollContactInFollowUpSequence(client, {
       contactId,
       draft.leadId,
       draft.channel,
-      draft.ownerUserId || actorUserId || null,
+      ownerUserId,
       actorUserId || null,
       draft.triggerType,
       draft.nextStepPosition,

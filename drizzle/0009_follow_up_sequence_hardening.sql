@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "follow_up_sequence_enrollments_active_contact_sequence_idx" ON "follow_up_sequence_enrollments" USING btree ("organization_id","sequence_id","contact_id") WHERE "follow_up_sequence_enrollments"."status" = 'active';

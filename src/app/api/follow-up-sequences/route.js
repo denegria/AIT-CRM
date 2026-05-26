@@ -237,8 +237,9 @@ export async function POST(request) {
         enrollment: {
           id: enrollment.id,
           nextStepDueAt: enrollment.next_step_due_at?.toISOString?.() || enrollment.next_step_due_at || null,
+          existing: enrollment.inserted === false,
         },
-      }, { status: 201 });
+      }, { status: enrollment.inserted === false ? 200 : 201 });
     });
   } catch (err) {
     return crmErrorResponse(err);

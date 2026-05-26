@@ -1,4 +1,7 @@
 import {
+  sql,
+} from 'drizzle-orm';
+import {
   bigint,
   boolean,
   date,
@@ -527,6 +530,9 @@ export const followUpSequenceEnrollments = pgTable('follow_up_sequence_enrollmen
   ),
   contactStatusIdx: index('follow_up_sequence_enrollments_contact_status_idx').on(table.contactId, table.status),
   businessUnitStatusIdx: index('follow_up_sequence_enrollments_business_unit_status_idx').on(table.businessUnitId, table.status),
+  activeContactSequenceIdx: uniqueIndex('follow_up_sequence_enrollments_active_contact_sequence_idx')
+    .on(table.organizationId, table.sequenceId, table.contactId)
+    .where(sql`${table.status} = 'active'`),
 }));
 
 export const followUpSequenceStepRuns = pgTable('follow_up_sequence_step_runs', {

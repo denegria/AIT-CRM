@@ -10,7 +10,9 @@ import {
   buildFollowUpDraftMessage,
   evaluateFollowUpStepEligibility,
   executeDueFollowUpSteps,
+  enrollContactInFollowUpSequence,
   isWithinFollowUpQuietHours,
+  listDueFollowUpSteps,
   normalizeFollowUpEnrollmentDraft,
   normalizeFollowUpSequenceDraft,
   normalizeFollowUpStepDraft,
@@ -113,6 +115,7 @@ function dueRow(overrides = {}) {
     step_position: 1,
     delay_minutes: 30,
     step_channel: 'messenger',
+    step_template_id: 'template-1',
     template_id: 'template-1',
     action_type: 'task_and_draft',
     task_title: 'Review lead follow-up',
@@ -139,7 +142,7 @@ function normalizeSql(sql) {
   return String(sql).replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
-function createExecutionClient({ rows = [dueRow()], duplicateRun = false, hasNextStep = false } = {}) {
+function createExecutionClient({ rows = [dueRow()], duplicateRun = false, hasNextStep = false, failTaskInsert = false } = {}) {
   const calls = [];
   return {
     calls,
@@ -148,6 +151,9 @@ function createExecutionClient({ rows = [dueRow()], duplicateRun = false, hasNex
         const normalized = normalizeSql(sql);
         calls.push({ sql: normalized, params });
 
+        if (['begin', 'commit', 'rollback'].includes(normalized)) {
+          return { rows: [] };
+        }
         if (normalized.startsWith('select e.id as enrollment_id')) {
           return { rows };
         }
@@ -155,6 +161,7 @@ function createExecutionClient({ rows = [dueRow()], duplicateRun = false, hasNex
           return { rows: duplicateRun ? [] : [{ id: 'run-1' }] };
         }
         if (normalized.startsWith('insert into tasks')) {
+          if (failTaskInsert) throw new Error('task insert failed');
           return { rows: [{ id: 'task-1' }] };
         }
         if (normalized.startsWith('update follow_up_sequence_step_runs')) {
@@ -165,6 +172,34 @@ function createExecutionClient({ rows = [dueRow()], duplicateRun = false, hasNex
         }
         if (normalized.startsWith('update follow_up_sequence_enrollments')) {
           return { rows: [] };
+        }
+
+        throw new Error('Unexpected query: ' + normalized);
+      },
+    },
+  };
+}
+
+function createEnrollmentClient({ ownerHasAccess = true, inserted = true } = {}) {
+  const calls = [];
+  return {
+    calls,
+    client: {
+      async query(sql, params = []) {
+        const normalized = normalizeSql(sql);
+        calls.push({ sql: normalized, params });
+
+        if (normalized.startsWith('select u.id from users u')) {
+          return { rows: ownerHasAccess ? [{ id: params[0] }] : [] };
+        }
+        if (normalized.startsWith('insert into follow_up_sequence_enrollments')) {
+          return {
+            rows: [{
+              id: inserted ? 'enrollment-new' : 'enrollment-existing',
+              next_step_due_at: NOW,
+              inserted,
+            }],
+          };
         }
 
         throw new Error('Unexpected query: ' + normalized);
@@ -274,6 +309,10 @@ test('executes due steps idempotently by creating one review task and draft reco
   assert.equal(result.results[0].taskId, 'task-1');
   assert.equal(result.results[0].draftCreated, true);
   assert.equal(calls.some((call) => call.sql.startsWith('insert into tasks')), true);
+  assert.deepEqual(
+    calls.filter((call) => ['begin', 'commit'].includes(call.sql)).map((call) => call.sql),
+    ['begin', 'commit'],
+  );
 
   const runInsert = calls.find((call) => call.sql.startsWith('insert into follow_up_sequence_step_runs'));
   assert.equal(runInsert.params[10], 'enrollment-1:step-1:2026-05-26T15:00:00.000Z');
@@ -289,6 +328,29 @@ test('does not create duplicate tasks when a due step was already recorded', asy
 
   assert.equal(result.results[0].duplicate, true);
   assert.equal(calls.some((call) => call.sql.startsWith('insert into tasks')), false);
+  assert.deepEqual(
+    calls.filter((call) => ['begin', 'commit'].includes(call.sql)).map((call) => call.sql),
+    ['begin', 'commit'],
+  );
+});
+
+test('rolls back run creation when due task creation fails so retry can execute the step', async () => {
+  const failed = createExecutionClient({ failTaskInsert: true });
+  await assert.rejects(
+    () => executeDueFollowUpSteps(failed.client, { organizationId: 'org-1', now: NOW }),
+    /task insert failed/,
+  );
+
+  assert.equal(failed.calls.some((call) => call.sql.startsWith('insert into follow_up_sequence_step_runs')), true);
+  assert.equal(failed.calls.some((call) => call.sql === 'rollback'), true);
+  assert.equal(failed.calls.some((call) => call.sql === 'commit'), false);
+
+  const retried = createExecutionClient();
+  const result = await executeDueFollowUpSteps(retried.client, { organizationId: 'org-1', now: NOW });
+
+  assert.equal(result.results[0].runId, 'run-1');
+  assert.equal(result.results[0].taskId, 'task-1');
+  assert.equal(retried.calls.some((call) => call.sql.startsWith('insert into tasks')), true);
 });
 
 test('stops enrollment without task creation when contact is blocked', async () => {
@@ -306,5 +368,96 @@ test('stops enrollment without task creation when contact is blocked', async () 
   assert.equal(
     calls.some((call) => call.sql.includes("set status = 'stopped'")),
     true,
+  );
+});
+
+test('due lookup scopes prior inbound evidence and templates to the enrollment business unit', async () => {
+  const { client, calls } = createExecutionClient();
+  await listDueFollowUpSteps(client, {
+    organizationId: 'org-1',
+    businessUnitIds: ['bu-1'],
+    now: NOW,
+  });
+
+  const dueSelect = calls.find((call) => call.sql.startsWith('select e.id as enrollment_id'));
+  assert.equal(dueSelect.sql.includes('cm.business_unit_id = e.business_unit_id'), true);
+  assert.equal(dueSelect.sql.includes('(mt.business_unit_id is null or mt.business_unit_id = e.business_unit_id)'), true);
+});
+
+test('blocks a BU-scoped due step when another BU template is not joined', async () => {
+  const { client, calls } = createExecutionClient({
+    rows: [dueRow({
+      template_id: null,
+      template_channel: null,
+      template_purpose: null,
+      template_display_name: null,
+      template_body_text: null,
+      template_status: null,
+      template_provider_status: null,
+      template_is_enabled: null,
+      template_metadata_json: null,
+    })],
+  });
+  const result = await executeDueFollowUpSteps(client, {
+    organizationId: 'org-1',
+    businessUnitIds: ['bu-1'],
+    now: NOW,
+  });
+
+  assert.equal(result.results[0].blocked, true);
+  assert.equal(result.results[0].reasons[0].code, FOLLOW_UP_BLOCK_CODES.TEMPLATE_MISSING);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into tasks')), false);
+});
+
+test('blocks a BU-scoped due step when same-BU prior inbound evidence is unavailable', async () => {
+  const { client, calls } = createExecutionClient({
+    rows: [dueRow({ last_inbound_at: null })],
+  });
+  const result = await executeDueFollowUpSteps(client, {
+    organizationId: 'org-1',
+    businessUnitIds: ['bu-1'],
+    now: NOW,
+  });
+
+  assert.equal(result.results[0].blocked, true);
+  assert.equal(result.results[0].reasons[0].code, FOLLOW_UP_BLOCK_CODES.PRIOR_INBOUND_REQUIRED);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into tasks')), false);
+});
+
+test('idempotently returns an existing active contact sequence enrollment', async () => {
+  const { client, calls } = createEnrollmentClient({ inserted: false });
+  const result = await enrollContactInFollowUpSequence(client, {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-1',
+    sequence: { id: 'sequence-1', default_channel: 'messenger', max_touches: 3 },
+    firstStep: { delay_minutes: 0 },
+    contactId: 'contact-1',
+    actorUserId: 'user-1',
+    values: { ownerUserId: 'user-1' },
+    now: NOW,
+  });
+
+  const insert = calls.find((call) => call.sql.startsWith('insert into follow_up_sequence_enrollments'));
+  assert.equal(result.id, 'enrollment-existing');
+  assert.equal(result.inserted, false);
+  assert.equal(insert.sql.includes("on conflict (organization_id, sequence_id, contact_id) where status = 'active'"), true);
+  assert.equal(insert.sql.includes('(xmax = 0) as inserted'), true);
+});
+
+test('rejects an enrollment owner without access to the enrollment business unit', async () => {
+  const { client } = createEnrollmentClient({ ownerHasAccess: false });
+
+  await assert.rejects(
+    () => enrollContactInFollowUpSequence(client, {
+      organizationId: 'org-1',
+      businessUnitId: 'bu-1',
+      sequence: { id: 'sequence-1', default_channel: 'messenger', max_touches: 3 },
+      firstStep: { delay_minutes: 0 },
+      contactId: 'contact-1',
+      actorUserId: 'actor-1',
+      values: { ownerUserId: 'user-bu-2' },
+      now: NOW,
+    }),
+    /owner must be an active organization user with access/,
   );
 });

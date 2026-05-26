@@ -64,6 +64,13 @@
       "when": 1779836227835,
       "tag": "0008_follow_up_sequences",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1779837205645,
+      "tag": "0009_follow_up_sequence_hardening",
+      "breakpoints": true
     }
   ]
 }
