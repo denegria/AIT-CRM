@@ -378,9 +378,58 @@ export function whatsappConversationMessageInput({
   });
 }
 
+export function manualOutboundConversationMessageInput({
+  organizationId,
+  businessUnitId = null,
+  contactId = null,
+  leadId = null,
+  channelId = null,
+  channel,
+  providerAccountId,
+  providerThreadId,
+  externalParticipantId,
+  senderIdentity,
+  recipientIdentity,
+  text = null,
+  requestId,
+  raw = {},
+  occurredAt = new Date(),
+}) {
+  const normalizedChannel = cleanText(channel).toLowerCase();
+  const idempotencyKey = [
+    normalizeKeyPart(CONVERSATION_PROVIDERS.META),
+    normalizeKeyPart(normalizedChannel),
+    normalizeKeyPart(providerAccountId),
+    'manual',
+    normalizeKeyPart(requestId),
+  ].join(':');
+
+  return normalizeConversationMessageInput({
+    organizationId,
+    businessUnitId,
+    contactId,
+    leadId,
+    channelId,
+    provider: CONVERSATION_PROVIDERS.META,
+    channel: normalizedChannel,
+    direction: MESSAGE_DIRECTIONS.OUTBOUND,
+    deliveryStatus: MESSAGE_DELIVERY_STATUSES.PENDING,
+    providerAccountId,
+    providerThreadId,
+    externalParticipantId,
+    idempotencyKey,
+    senderIdentity,
+    recipientIdentity,
+    textBody: text,
+    rawPayloadJson: raw,
+    occurredAt,
+  });
+}
+
 export async function recordConversationMessage(client, input, options = {}) {
   const message = normalizeConversationMessageInput(input);
   const useTransaction = options.useTransaction !== false;
+  const preserveExistingOnConflict = options.preserveExistingOnConflict === true;
   if (useTransaction) await client.query('begin');
   try {
     const conversation = await client.query(
@@ -467,12 +516,18 @@ export async function recordConversationMessage(client, input, options = {}) {
         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17::jsonb, $18, $19, $20)
         on conflict (organization_id, provider, channel, idempotency_key)
         do update set
-          delivery_status = excluded.delivery_status,
-          raw_payload_json = excluded.raw_payload_json,
-          error_code = excluded.error_code,
-          error_message = excluded.error_message,
+          delivery_status = case when $21::boolean then conversation_messages.delivery_status else excluded.delivery_status end,
+          raw_payload_json = case when $21::boolean then conversation_messages.raw_payload_json else excluded.raw_payload_json end,
+          error_code = case when $21::boolean then conversation_messages.error_code else excluded.error_code end,
+          error_message = case when $21::boolean then conversation_messages.error_message else excluded.error_message end,
           updated_at = now()
-        returning id, (xmax = 0) as inserted
+        returning
+          id,
+          (xmax = 0) as inserted,
+          delivery_status,
+          external_message_id,
+          error_code,
+          error_message
       `,
       [
         conversationId,
@@ -495,6 +550,7 @@ export async function recordConversationMessage(client, input, options = {}) {
         message.errorCode,
         message.errorMessage,
         message.occurredAt,
+        preserveExistingOnConflict,
       ],
     );
 
@@ -505,11 +561,58 @@ export async function recordConversationMessage(client, input, options = {}) {
       inserted: Boolean(inserted.rows[0]?.inserted),
       idempotencyKey: message.idempotencyKey,
       conversationKey: conversationIdentityKey(message),
+      deliveryStatus: inserted.rows[0]?.delivery_status || message.deliveryStatus,
+      externalMessageId: inserted.rows[0]?.external_message_id || null,
+      errorCode: inserted.rows[0]?.error_code || null,
+      errorMessage: inserted.rows[0]?.error_message || null,
     };
   } catch (error) {
     if (useTransaction) await client.query('rollback');
     throw error;
   }
+}
+
+export async function updateConversationMessageDeliveryStatus(client, {
+  organizationId,
+  messageId,
+  deliveryStatus,
+  externalMessageId = null,
+  rawPayloadJson = null,
+  errorCode = null,
+  errorMessage = null,
+}) {
+  const status = cleanText(deliveryStatus).toLowerCase();
+  assertRequired(organizationId, 'organizationId');
+  assertRequired(messageId, 'messageId');
+  if (!isSupportedMessageStatus(status)) {
+    throw new Error(`Unsupported message delivery status: ${deliveryStatus || ''}`);
+  }
+
+  const result = await client.query(
+    `
+      update conversation_messages
+      set
+        delivery_status = $3,
+        external_message_id = coalesce($4, external_message_id),
+        raw_payload_json = coalesce($5::jsonb, raw_payload_json),
+        error_code = $6,
+        error_message = $7,
+        updated_at = now()
+      where organization_id = $1 and id = $2
+      returning id, delivery_status, external_message_id, error_code, error_message
+    `,
+    [
+      cleanText(organizationId),
+      cleanText(messageId),
+      status,
+      cleanNullableText(externalMessageId),
+      rawPayloadJson && typeof rawPayloadJson === 'object' ? JSON.stringify(rawPayloadJson) : null,
+      cleanNullableText(errorCode),
+      cleanNullableText(errorMessage),
+    ],
+  );
+
+  return result.rows[0] || null;
 }
 
 export async function listContactConversationMessages({

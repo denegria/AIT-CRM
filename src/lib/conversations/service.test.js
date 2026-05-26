@@ -10,10 +10,12 @@ import {
   filterConversationRowsForBusinessUnit,
   formatConversationMessageRow,
   formatConversationMessages,
+  manualOutboundConversationMessageInput,
   messageIdempotencyKey,
   messengerConversationMessageInput,
   normalizeConversationMessageInput,
   recordConversationMessage,
+  updateConversationMessageDeliveryStatus,
   whatsappConversationMessageInput,
 } from './service.js';
 
@@ -179,6 +181,70 @@ test('records conversation messages with provider-neutral idempotency', async ()
   assert.equal(messageInsert.params[8], 'received');
   assert.equal(messageInsert.params[12], 'meta:messenger:page-1:mid-1');
   assert.equal(JSON.parse(messageInsert.params[16]).source, 'fixture');
+});
+
+test('normalizes manual outbound sends as pending audit records', () => {
+  const message = manualOutboundConversationMessageInput({
+    organizationId: 'org-1',
+    businessUnitId: 'bu-1',
+    contactId: 'contact-1',
+    leadId: 'lead-1',
+    channelId: 'channel-1',
+    channel: 'whatsapp',
+    providerAccountId: 'phone-number-1',
+    providerThreadId: '15551234567',
+    externalParticipantId: '15551234567',
+    senderIdentity: 'phone-number-1',
+    recipientIdentity: '15551234567',
+    text: 'Manual follow-up',
+    requestId: 'request-1',
+    raw: { source: 'manual_outbound' },
+  });
+
+  assert.equal(message.direction, MESSAGE_DIRECTIONS.OUTBOUND);
+  assert.equal(message.deliveryStatus, MESSAGE_DELIVERY_STATUSES.PENDING);
+  assert.equal(message.idempotencyKey, 'meta:whatsapp:phone-number-1:manual:request-1');
+  assert.equal(message.senderIdentity, 'phone-number-1');
+  assert.equal(message.recipientIdentity, '15551234567');
+});
+
+test('updates outbound delivery audit state with provider ids and errors', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, params = []) {
+      calls.push({ sql: normalizeSql(sql), params });
+      return {
+        rows: [{
+          id: 'message-1',
+          delivery_status: params[2],
+          external_message_id: params[3],
+          error_code: params[5],
+          error_message: params[6],
+        }],
+      };
+    },
+  };
+
+  const sent = await updateConversationMessageDeliveryStatus(client, {
+    organizationId: 'org-1',
+    messageId: 'message-1',
+    deliveryStatus: 'sent',
+    externalMessageId: 'provider-message-1',
+    rawPayloadJson: { ok: true },
+  });
+  const failed = await updateConversationMessageDeliveryStatus(client, {
+    organizationId: 'org-1',
+    messageId: 'message-1',
+    deliveryStatus: 'failed',
+    errorCode: 'GRAPH_RESPONSE_ERROR',
+    errorMessage: 'Rejected by provider',
+  });
+
+  assert.equal(sent.delivery_status, 'sent');
+  assert.equal(sent.external_message_id, 'provider-message-1');
+  assert.equal(failed.delivery_status, 'failed');
+  assert.equal(failed.error_code, 'GRAPH_RESPONSE_ERROR');
+  assert.equal(calls[0].params[4], JSON.stringify({ ok: true }));
 });
 
 test('duplicate provider events update the existing message instead of creating a second row', async () => {

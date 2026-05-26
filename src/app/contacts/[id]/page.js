@@ -23,6 +23,10 @@ const TIMELINE_FILTERS = [
   { value: 'activity', label: 'Activity' },
 ];
 
+function newManualSendRequestId() {
+  return crypto.randomUUID();
+}
+
 function noteTimelineItem(note) {
   return {
     id: `note:${note.id || note.date || note.text}`,
@@ -83,7 +87,18 @@ export default function ContactDetailPage() {
   const [timelineFilter, setTimelineFilter] = useState('all');
   const [serverTimeline, setServerTimeline] = useState({ contactId: '', reloadKey: -1, items: null, error: false });
   const [timelineReloadKey, setTimelineReloadKey] = useState(0);
-  const [serverConversations, setServerConversations] = useState({ contactId: '', items: null, error: false });
+  const [serverConversations, setServerConversations] = useState({ contactId: '', reloadKey: -1, items: null, error: false });
+  const [conversationReloadKey, setConversationReloadKey] = useState(0);
+  const [messageTemplates, setMessageTemplates] = useState([]);
+  const [manualSend, setManualSend] = useState({
+    channel: 'messenger',
+    templateId: '',
+    textBody: '',
+    requestId: newManualSendRequestId(),
+    sending: false,
+    blockedReasons: [],
+    error: '',
+  });
   const [noteInput, setNoteInput] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
@@ -112,7 +127,7 @@ export default function ContactDetailPage() {
     if (timelineFilter === 'all') return timelineSource;
     return timelineSource.filter((item) => item.type === timelineFilter);
   }, [timelineFilter, timelineSource]);
-  const hasMatchingServerConversations = serverConversations.contactId === contact?.id;
+  const hasMatchingServerConversations = serverConversations.contactId === contact?.id && serverConversations.reloadKey === conversationReloadKey;
   const conversationMessages = hasMatchingServerConversations && serverConversations.items ? serverConversations.items : [];
   const conversationStatus = dataSource === 'postgres' && contact?.id && !hasMatchingServerConversations
     ? 'loading'
@@ -158,6 +173,7 @@ export default function ContactDetailPage() {
     if (!contact?.id || dataSource !== 'postgres') return undefined;
     let cancelled = false;
     const requestContactId = contact.id;
+    const requestReloadKey = conversationReloadKey;
     fetch(`/api/contacts/${contact.id}/conversations`, { cache: 'no-store' })
       .then(async (response) => {
         const payload = await response.json().catch(() => ({}));
@@ -165,6 +181,7 @@ export default function ContactDetailPage() {
         if (!cancelled) {
           setServerConversations({
             contactId: requestContactId,
+            reloadKey: requestReloadKey,
             items: Array.isArray(payload.messages) ? payload.messages : [],
             error: false,
           });
@@ -175,6 +192,7 @@ export default function ContactDetailPage() {
         if (!cancelled) {
           setServerConversations({
             contactId: requestContactId,
+            reloadKey: requestReloadKey,
             items: null,
             error: true,
           });
@@ -183,7 +201,31 @@ export default function ContactDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [contact?.id, dataSource]);
+  }, [contact?.id, dataSource, conversationReloadKey]);
+
+  useEffect(() => {
+    if (!access.canWriteCrm || dataSource !== 'postgres') return undefined;
+    let cancelled = false;
+    fetch('/api/message-templates?purpose=manual_follow_up&status=active', { cache: 'no-store' })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Template load failed.');
+        if (!cancelled) {
+          setMessageTemplates(Array.isArray(payload.templates) ? payload.templates.filter((template) => template.isEnabled) : []);
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+        if (!cancelled) setMessageTemplates([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [access.canWriteCrm, dataSource]);
+
+  const channelTemplates = useMemo(() => messageTemplates.filter((template) => (
+    template.channel === manualSend.channel || template.channel === 'all'
+  )), [messageTemplates, manualSend.channel]);
 
   // For Edit Modal
   const [editForm, setEditForm] = useState(null);
@@ -227,6 +269,53 @@ export default function ContactDetailPage() {
       })
       .catch((error) => {
         toast(error.message || 'Note save failed', 'error');
+      });
+  };
+
+  const submitManualSend = () => {
+    if (!access.canWriteCrm || !contact?.id || manualSend.sending) return;
+    const requestId = manualSend.requestId || newManualSendRequestId();
+    setManualSend((current) => ({ ...current, sending: true, blockedReasons: [], error: '' }));
+    fetch(`/api/contacts/${contact.id}/conversations`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        channel: manualSend.channel,
+        templateId: manualSend.templateId || null,
+        textBody: manualSend.textBody,
+        requestId,
+      }),
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const error = new Error(payload.error || 'Manual send blocked.');
+          error.payload = payload;
+          throw error;
+        }
+        setManualSend((current) => ({
+          ...current,
+          sending: false,
+          requestId: newManualSendRequestId(),
+          textBody: '',
+          blockedReasons: [],
+          error: payload.audit?.ok === false
+            ? (payload.audit.message || 'Message sent, but the audit update needs review.')
+            : '',
+        }));
+        setConversationReloadKey((key) => key + 1);
+        setTimelineReloadKey((key) => key + 1);
+        toast(payload.audit?.ok === false ? 'Message sent, audit needs review' : 'Message sent', payload.audit?.ok === false ? 'error' : 'success');
+      })
+      .catch((error) => {
+        const blockedReasons = Array.isArray(error.payload?.reasons) ? error.payload.reasons : [];
+        setManualSend((current) => ({
+          ...current,
+          sending: false,
+          blockedReasons,
+          error: blockedReasons.length ? '' : (error.message || 'Manual send failed'),
+        }));
+        toast(blockedReasons[0]?.message || error.message || 'Manual send failed', 'error');
       });
   };
 
@@ -373,6 +462,88 @@ export default function ContactDetailPage() {
                   {conversationStatus === 'loading' && <div className={s.timelineStatus}>Syncing</div>}
                   {conversationStatus === 'error' && <div className={s.timelineStatus}>Conversation sync unavailable</div>}
                 </div>
+
+                {access.canWriteCrm && dataSource === 'postgres' && (
+                  <div className={s.manualSendBox}>
+                    <div className={s.manualSendControls}>
+                      <label className={s.manualSendField}>
+                        <span>Channel</span>
+                        <select
+                          className="input select"
+                          value={manualSend.channel}
+                          onChange={(event) => setManualSend((current) => ({
+                            ...current,
+                            channel: event.target.value,
+                            templateId: '',
+                            requestId: newManualSendRequestId(),
+                            blockedReasons: [],
+                            error: '',
+                          }))}
+                          disabled={manualSend.sending}
+                        >
+                          <option value="messenger">Messenger</option>
+                          <option value="whatsapp">WhatsApp</option>
+                        </select>
+                      </label>
+                      <label className={s.manualSendField}>
+                        <span>Template</span>
+                        <select
+                          className="input select"
+                          value={manualSend.templateId}
+                          onChange={(event) => setManualSend((current) => ({
+                            ...current,
+                            templateId: event.target.value,
+                            textBody: event.target.value ? '' : current.textBody,
+                            requestId: newManualSendRequestId(),
+                            blockedReasons: [],
+                            error: '',
+                          }))}
+                          disabled={manualSend.sending}
+                        >
+                          <option value="">No template</option>
+                          {channelTemplates.map((template) => (
+                            <option key={template.id} value={template.id}>{template.displayName}</option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                    <textarea
+                      className={s.manualSendText}
+                      placeholder={manualSend.templateId ? 'Template body will be used' : 'Type a manual reply...'}
+                      value={manualSend.textBody}
+                      onChange={(event) => setManualSend((current) => ({
+                        ...current,
+                        textBody: event.target.value,
+                        requestId: newManualSendRequestId(),
+                        blockedReasons: [],
+                        error: '',
+                      }))}
+                      disabled={manualSend.sending || Boolean(manualSend.templateId)}
+                    />
+                    {(manualSend.blockedReasons.length > 0 || manualSend.error) && (
+                      <div className={s.manualSendBlocked}>
+                        <AlertCircle size={15} />
+                        <div>
+                          {manualSend.blockedReasons.length > 0
+                            ? manualSend.blockedReasons.map((reason) => (
+                              <div key={reason.code}>{reason.message}</div>
+                            ))
+                            : <div>{manualSend.error}</div>}
+                        </div>
+                      </div>
+                    )}
+                    <div className={s.manualSendFooter}>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        type="button"
+                        onClick={submitManualSend}
+                        disabled={manualSend.sending || (!manualSend.textBody.trim() && !manualSend.templateId)}
+                      >
+                        <Send size={14} /> {manualSend.sending ? 'Sending' : 'Send'}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className={s.conversationList}>
                   {conversationMessages.map((message) => (

@@ -10,8 +10,11 @@ export const META_PAGE_ACCESS_TOKEN_ENV = 'META_PAGE_ACCESS_TOKEN';
 export const META_PAGE_ACCESS_TOKEN_MAP_ENV = 'META_PAGE_ACCESS_TOKEN_MAP';
 export const META_PAGE_BUSINESS_UNIT_MAP_ENV = 'META_PAGE_BUSINESS_UNIT_MAP';
 export const META_WHATSAPP_BUSINESS_UNIT_MAP_ENV = 'META_WHATSAPP_BUSINESS_UNIT_MAP';
+export const META_WHATSAPP_ACCESS_TOKEN_ENV = 'META_WHATSAPP_ACCESS_TOKEN';
+export const META_WHATSAPP_ACCESS_TOKEN_MAP_ENV = 'META_WHATSAPP_ACCESS_TOKEN_MAP';
 export const META_GRAPH_API_VERSION = 'v24.0';
 export const META_PAGE_ACCESS_TOKEN_MISSING_REASON = `${META_PAGE_ACCESS_TOKEN_ENV} or ${META_PAGE_ACCESS_TOKEN_MAP_ENV} missing`;
+export const META_WHATSAPP_ACCESS_TOKEN_MISSING_REASON = `${META_WHATSAPP_ACCESS_TOKEN_ENV} or ${META_WHATSAPP_ACCESS_TOKEN_MAP_ENV} missing`;
 
 export function parseMetaObjectMap(raw) {
   if (!raw) return {};
@@ -35,6 +38,10 @@ export function parseMetaWhatsAppBusinessUnitMap(raw) {
   return parseMetaObjectMap(raw);
 }
 
+export function parseMetaWhatsAppAccessTokenMap(raw) {
+  return parseMetaObjectMap(raw);
+}
+
 export function createMetaProviderConfig({
   facebookVerifyToken = '',
   whatsappVerifyToken = '',
@@ -44,6 +51,8 @@ export function createMetaProviderConfig({
   pageAccessTokenMapRaw = '',
   pageBusinessUnitMapRaw = '',
   whatsappBusinessUnitMapRaw = '',
+  defaultWhatsAppAccessToken = '',
+  whatsappAccessTokenMapRaw = '',
   graphApiVersion = META_GRAPH_API_VERSION,
 } = {}) {
   return {
@@ -53,6 +62,8 @@ export function createMetaProviderConfig({
     pageAccessTokenMap: parseMetaPageAccessTokenMap(pageAccessTokenMapRaw),
     pageBusinessUnitMap: parseMetaPageBusinessUnitMap(pageBusinessUnitMapRaw),
     whatsappBusinessUnitMap: parseMetaWhatsAppBusinessUnitMap(whatsappBusinessUnitMapRaw),
+    defaultWhatsAppAccessToken: defaultWhatsAppAccessToken || '',
+    whatsappAccessTokenMap: parseMetaWhatsAppAccessTokenMap(whatsappAccessTokenMapRaw),
     graphApiVersion: graphApiVersion || META_GRAPH_API_VERSION,
   };
 }
@@ -118,6 +129,23 @@ export function resolveMetaPageAccessToken(pageId, config = {}) {
   };
 }
 
+export function resolveMetaWhatsAppAccessToken(phoneNumberId, config = {}) {
+  const mapped = config.whatsappAccessTokenMap?.[phoneNumberId];
+  const accessToken = mapped || config.defaultWhatsAppAccessToken || '';
+  if (!accessToken) {
+    return {
+      ok: false,
+      code: 'WHATSAPP_ACCESS_TOKEN_MISSING',
+      reason: META_WHATSAPP_ACCESS_TOKEN_MISSING_REASON,
+    };
+  }
+  return {
+    ok: true,
+    accessToken,
+    source: mapped ? 'whatsapp_map' : 'default',
+  };
+}
+
 export function resolveMetaPageBusinessUnitMapping(pageId, config = {}) {
   const mapped = config.pageBusinessUnitMap?.[pageId];
   return {
@@ -144,8 +172,52 @@ function graphUrl({ id, fields, accessToken, graphApiVersion }) {
   return url;
 }
 
+function graphEdgeUrl({ id, edge, accessToken, graphApiVersion }) {
+  const url = new URL(`https://graph.facebook.com/${graphApiVersion || META_GRAPH_API_VERSION}/${encodeURIComponent(id)}/${edge}`);
+  url.searchParams.set('access_token', accessToken);
+  return url;
+}
+
 async function readGraphJson(response) {
   return response.json().catch(() => ({}));
+}
+
+function graphSendError(body, status) {
+  return {
+    ok: false,
+    code: 'GRAPH_RESPONSE_ERROR',
+    reason: body?.error?.message || `Graph API returned ${status}`,
+    graphStatus: status,
+    graphError: body?.error || null,
+  };
+}
+
+function graphNetworkError(error) {
+  return {
+    ok: false,
+    code: 'GRAPH_NETWORK_ERROR',
+    reason: 'Meta Graph request failed.',
+    graphStatus: null,
+    graphError: { message: error?.message || 'Unknown network error' },
+  };
+}
+
+async function postMetaJson({ url, body, fetchImpl }) {
+  let response;
+  try {
+    response = await fetchImpl(url, {
+      method: 'POST',
+      cache: 'no-store',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+  } catch (error) {
+    return graphNetworkError(error);
+  }
+
+  const payload = await readGraphJson(response);
+  if (!response.ok) return graphSendError(payload, response.status);
+  return { ok: true, body: payload };
 }
 
 export async function fetchMetaLeadDetails({
@@ -191,6 +263,131 @@ export async function fetchMetaLeadDetails({
   }
 
   return { ok: true, lead: body };
+}
+
+export async function sendMetaMessengerTextMessage({
+  pageId = '',
+  recipientId = '',
+  text = '',
+  config = {},
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const tokenResult = resolveMetaPageAccessToken(pageId, config);
+  if (!pageId || !recipientId || !String(text || '').trim() || !tokenResult.ok) {
+    return {
+      ok: false,
+      code: tokenResult.code || 'MESSENGER_SEND_INPUT_MISSING',
+      reason: tokenResult.reason || 'Messenger page id, recipient id, and text are required.',
+    };
+  }
+
+  const url = graphEdgeUrl({
+    id: pageId,
+    edge: 'messages',
+    accessToken: tokenResult.accessToken,
+    graphApiVersion: config.graphApiVersion,
+  });
+  const result = await postMetaJson({
+    url,
+    fetchImpl,
+    body: {
+      recipient: { id: recipientId },
+      messaging_type: 'RESPONSE',
+      message: { text: String(text).trim() },
+    },
+  });
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    providerMessageId: result.body?.message_id || result.body?.recipient_id || null,
+    providerResponse: result.body || {},
+  };
+}
+
+export async function sendMetaWhatsAppTextMessage({
+  phoneNumberId = '',
+  recipientWaId = '',
+  text = '',
+  config = {},
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const tokenResult = resolveMetaWhatsAppAccessToken(phoneNumberId, config);
+  if (!phoneNumberId || !recipientWaId || !String(text || '').trim() || !tokenResult.ok) {
+    return {
+      ok: false,
+      code: tokenResult.code || 'WHATSAPP_SEND_INPUT_MISSING',
+      reason: tokenResult.reason || 'WhatsApp phone number id, recipient wa_id, and text are required.',
+    };
+  }
+
+  const url = graphEdgeUrl({
+    id: phoneNumberId,
+    edge: 'messages',
+    accessToken: tokenResult.accessToken,
+    graphApiVersion: config.graphApiVersion,
+  });
+  const result = await postMetaJson({
+    url,
+    fetchImpl,
+    body: {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: recipientWaId,
+      type: 'text',
+      text: { preview_url: false, body: String(text).trim() },
+    },
+  });
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    providerMessageId: result.body?.messages?.[0]?.id || null,
+    providerResponse: result.body || {},
+  };
+}
+
+export async function sendMetaWhatsAppTemplateMessage({
+  phoneNumberId = '',
+  recipientWaId = '',
+  templateName = '',
+  languageCode = 'en_US',
+  config = {},
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const tokenResult = resolveMetaWhatsAppAccessToken(phoneNumberId, config);
+  if (!phoneNumberId || !recipientWaId || !String(templateName || '').trim() || !tokenResult.ok) {
+    return {
+      ok: false,
+      code: tokenResult.code || 'WHATSAPP_TEMPLATE_SEND_INPUT_MISSING',
+      reason: tokenResult.reason || 'WhatsApp phone number id, recipient wa_id, and approved template name are required.',
+    };
+  }
+
+  const url = graphEdgeUrl({
+    id: phoneNumberId,
+    edge: 'messages',
+    accessToken: tokenResult.accessToken,
+    graphApiVersion: config.graphApiVersion,
+  });
+  const result = await postMetaJson({
+    url,
+    fetchImpl,
+    body: {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: recipientWaId,
+      type: 'template',
+      template: {
+        name: String(templateName).trim(),
+        language: { code: String(languageCode || 'en_US').trim() || 'en_US' },
+      },
+    },
+  });
+  if (!result.ok) return result;
+  return {
+    ok: true,
+    providerMessageId: result.body?.messages?.[0]?.id || null,
+    providerResponse: result.body || {},
+  };
 }
 
 export async function fetchMetaMessengerProfile({

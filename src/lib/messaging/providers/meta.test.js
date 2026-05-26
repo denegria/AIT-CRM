@@ -3,16 +3,22 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'crypto';
 import {
   META_PAGE_ACCESS_TOKEN_MISSING_REASON,
+  META_WHATSAPP_ACCESS_TOKEN_MISSING_REASON,
   createMetaProviderConfig,
   fetchMetaLeadDetails,
   fetchMetaMessengerProfile,
   flattenMetaWhatsAppMessages,
   parseMetaPageAccessTokenMap,
+  parseMetaWhatsAppAccessTokenMap,
   parseMetaPageBusinessUnitMap,
   parseMetaWhatsAppBusinessUnitMap,
   resolveMetaPageAccessToken,
+  resolveMetaWhatsAppAccessToken,
   resolveMetaPageBusinessUnitMapping,
   resolveMetaWhatsAppBusinessUnitMapping,
+  sendMetaMessengerTextMessage,
+  sendMetaWhatsAppTemplateMessage,
+  sendMetaWhatsAppTextMessage,
   validateMetaAppSecretSignature,
   verifyMetaWebhookChallenge,
 } from './meta.js';
@@ -73,9 +79,12 @@ test('parses page token and business-unit maps with default token fallback', () 
     pageAccessTokenMapRaw: JSON.stringify({ 'page-1': 'mapped-token' }),
     pageBusinessUnitMapRaw: JSON.stringify({ 'page-1': 'Main Signs' }),
     whatsappBusinessUnitMapRaw: JSON.stringify({ 'phone-number-1': 'WhatsApp Signs' }),
+    defaultWhatsAppAccessToken: 'default-wa-token',
+    whatsappAccessTokenMapRaw: JSON.stringify({ 'phone-number-1': 'mapped-wa-token' }),
   });
 
   assert.deepEqual(parseMetaPageAccessTokenMap('not-json'), {});
+  assert.deepEqual(parseMetaWhatsAppAccessTokenMap('{bad'), {});
   assert.deepEqual(parseMetaPageBusinessUnitMap('[]'), {});
   assert.deepEqual(parseMetaWhatsAppBusinessUnitMap('null'), {});
   assert.deepEqual(resolveMetaPageAccessToken('page-1', config), {
@@ -107,6 +116,21 @@ test('parses page token and business-unit maps with default token fallback', () 
     ok: false,
     businessUnit: null,
     source: null,
+  });
+  assert.deepEqual(resolveMetaWhatsAppAccessToken('phone-number-1', config), {
+    ok: true,
+    accessToken: 'mapped-wa-token',
+    source: 'whatsapp_map',
+  });
+  assert.deepEqual(resolveMetaWhatsAppAccessToken('phone-number-2', config), {
+    ok: true,
+    accessToken: 'default-wa-token',
+    source: 'default',
+  });
+  assert.deepEqual(resolveMetaWhatsAppAccessToken('phone-number-2', createMetaProviderConfig()), {
+    ok: false,
+    code: 'WHATSAPP_ACCESS_TOKEN_MISSING',
+    reason: META_WHATSAPP_ACCESS_TOKEN_MISSING_REASON,
   });
 });
 
@@ -279,4 +303,99 @@ test('returns structured errors for Graph network failures', async () => {
     graphStatus: null,
     graphError: { message: 'socket closed' },
   });
+});
+
+test('sends Messenger text messages with explicit parameters and mocked fetch', async () => {
+  const calls = [];
+  const result = await sendMetaMessengerTextMessage({
+    pageId: 'page-1',
+    recipientId: 'sender-1',
+    text: 'Thanks for reaching out',
+    config: createMetaProviderConfig({ defaultPageAccessToken: 'page-token' }),
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return {
+        ok: true,
+        async json() {
+          return { recipient_id: 'sender-1', message_id: 'mid-out-1' };
+        },
+      };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.providerMessageId, 'mid-out-1');
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url.pathname, '/v24.0/page-1/messages');
+  assert.equal(calls[0].url.searchParams.get('access_token'), 'page-token');
+  assert.equal(calls[0].options.method, 'POST');
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    recipient: { id: 'sender-1' },
+    messaging_type: 'RESPONSE',
+    message: { text: 'Thanks for reaching out' },
+  });
+});
+
+test('sends WhatsApp text and template messages with mocked fetch', async () => {
+  const calls = [];
+  const config = createMetaProviderConfig({
+    defaultWhatsAppAccessToken: 'wa-token',
+  });
+  const textResult = await sendMetaWhatsAppTextMessage({
+    phoneNumberId: 'phone-number-1',
+    recipientWaId: '15550001111',
+    text: 'Manual follow-up',
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return {
+        ok: true,
+        async json() {
+          return { messages: [{ id: 'wamid.out.1' }] };
+        },
+      };
+    },
+  });
+  const templateResult = await sendMetaWhatsAppTemplateMessage({
+    phoneNumberId: 'phone-number-1',
+    recipientWaId: '15550001111',
+    templateName: 'manual_follow_up',
+    languageCode: 'en_US',
+    config,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      return {
+        ok: true,
+        async json() {
+          return { messages: [{ id: 'wamid.template.1' }] };
+        },
+      };
+    },
+  });
+
+  assert.equal(textResult.providerMessageId, 'wamid.out.1');
+  assert.equal(templateResult.providerMessageId, 'wamid.template.1');
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].url.pathname, '/v24.0/phone-number-1/messages');
+  assert.equal(calls[0].url.searchParams.get('access_token'), 'wa-token');
+  assert.equal(JSON.parse(calls[0].options.body).type, 'text');
+  assert.equal(JSON.parse(calls[1].options.body).template.name, 'manual_follow_up');
+});
+
+test('outbound sends fail closed before mocked fetch when tokens are missing', async () => {
+  let called = false;
+  const result = await sendMetaWhatsAppTextMessage({
+    phoneNumberId: 'phone-number-1',
+    recipientWaId: '15550001111',
+    text: 'Manual follow-up',
+    config: createMetaProviderConfig(),
+    fetchImpl: async () => {
+      called = true;
+      throw new Error('should not call fetch without token');
+    },
+  });
+
+  assert.equal(called, false);
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'WHATSAPP_ACCESS_TOKEN_MISSING');
 });
