@@ -978,33 +978,34 @@ Linear metadata:
 - Owner lane: Builder plus Sentry/Titan review
 - Dependencies: V2-001, V2-002, V2-011, V2-015, V2-016
 
-Objective: automate scheduled follow-up from CRM events.
+Objective: create controlled scheduled follow-up assistance from CRM events.
 
 Scope:
 
-- Add sequence definitions, steps, enrollments, and scheduler job.
-- Initial triggers: new lead, no response after X hours, proposal sent, stale opportunity.
-- Start with human approval required for outbound sends unless explicitly disabled per business unit.
+- Add sequence definitions, steps, enrollments, and idempotent due-step processing.
+- Initial triggers can represent new lead and no-response cases, but the MVP prioritizes operator-controlled enrollment.
+- Due steps create review tasks and draft message metadata first. Live auto-send remains disabled by default and out of scope for this slice.
+- Support WhatsApp and Messenger through the existing template/settings/manual-outbound policy concepts.
 
 Action/service boundary:
 
 - Enrollment/actions own trigger eligibility, owner routing, opt-out/stop conditions, approval requirement, and user-facing state.
-- Automation service owns sequence step scheduling, due step lookup, idempotent execution, and structured run results.
-- Sending still flows through the guarded manual/outbound send action or a policy-equivalent send action.
+- Follow-up sequence services own sequence step scheduling, due step lookup, idempotent execution, draft construction, and structured run results.
+- Sending still flows through the guarded manual/outbound send action or a future policy-equivalent send action.
 - Do not bypass consent or quiet-hour rules for automation.
 
 Acceptance:
 
-- New eligible leads can enroll in a sequence.
-- Steps create tasks and/or draft messages at the right due time.
-- Completed/replied/opted-out contacts stop or pause the sequence.
+- Permitted operators can enroll contacts in an active sequence.
+- Steps create tasks and/or draft messages at the right due time without dispatching live sends.
+- Do-not-call/wrong-number contacts stop or pause the sequence before any task/draft is created.
 - Job runs are idempotent.
 
 Validation:
 
-- Time-based scheduler tests.
-- Opt-out/reply/owner-routing tests.
-- Cron smoke in staging/preview.
+- Time-based scheduler/idempotency tests.
+- Opt-out/stop, owner/business-unit scope, channel/template, quiet-hour, and provider-window tests.
+- Sentry/Titan review before promotion; no live Meta/client-number testing in this slice.
 
 ### V2-018: Agent Triage And Draft Replies
 

@@ -57,6 +57,13 @@
       "when": 1779819900000,
       "tag": "0007_message_template_registry",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1779836227835,
+      "tag": "0008_follow_up_sequences",
+      "breakpoints": true
     }
   ]
 }
