@@ -370,6 +370,164 @@
   text-align: center;
 }
 
+.conversationView {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.conversationToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.conversationTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+.conversationTitle svg {
+  color: var(--accent);
+}
+.conversationList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.conversationMessage {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 12px;
+  align-items: flex-start;
+}
+.conversationMessage.inbound .conversationBody {
+  border-color: color-mix(in srgb, var(--accent) 14%, var(--border-subtle));
+}
+.conversationMessage.outbound {
+  grid-template-columns: minmax(0, 1fr) 34px;
+}
+.conversationMessage.outbound .conversationIcon {
+  grid-column: 2;
+  grid-row: 1;
+}
+.conversationMessage.outbound .conversationBody {
+  grid-column: 1;
+  grid-row: 1;
+  border-color: color-mix(in srgb, var(--success) 22%, var(--border-subtle));
+  background: color-mix(in srgb, var(--success-muted) 42%, var(--bg-secondary));
+}
+.conversationIcon {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--accent);
+  background: var(--accent-muted);
+  border: 1px solid color-mix(in srgb, var(--accent) 26%, var(--border-subtle));
+}
+.conversationMessage.outbound .conversationIcon {
+  color: var(--success);
+  background: var(--success-muted);
+  border-color: color-mix(in srgb, var(--success) 26%, var(--border-subtle));
+}
+.conversationBody {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-secondary) 76%, var(--bg-tertiary));
+  box-shadow: var(--shadow-sm);
+}
+.conversationMeta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.conversationBadges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.providerBadge,
+.channelBadge,
+.directionBadge,
+.statusBadge {
+  max-width: 100%;
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  line-height: 1.1;
+  font-weight: 800;
+  text-transform: uppercase;
+  overflow-wrap: anywhere;
+}
+.providerBadge {
+  color: var(--accent);
+  background: var(--accent-muted);
+}
+.channelBadge {
+  color: var(--text-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
+}
+.directionBadge {
+  color: var(--info);
+  background: var(--info-muted);
+}
+.statusBadge {
+  color: var(--success);
+  background: var(--success-muted);
+}
+.statusBadge.failed {
+  color: var(--danger);
+  background: var(--danger-muted);
+}
+.conversationDate {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1.35;
+  text-align: right;
+  white-space: nowrap;
+}
+.conversationText {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+.mutedText {
+  color: var(--text-muted);
+  font-style: italic;
+}
+.conversationDetails {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+.conversationDetails span {
+  max-width: 100%;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
 .recordsList {
   display: flex;
   flex-direction: column;
@@ -459,6 +617,28 @@
   }
   .timelineDate {
     white-space: normal;
+  }
+  .conversationToolbar,
+  .conversationMeta {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .conversationDate {
+    text-align: left;
+    white-space: normal;
+  }
+  .conversationMessage,
+  .conversationMessage.outbound {
+    grid-template-columns: 30px minmax(0, 1fr);
+  }
+  .conversationMessage.outbound .conversationIcon,
+  .conversationMessage.outbound .conversationBody {
+    grid-column: auto;
+    grid-row: auto;
+  }
+  .conversationIcon {
+    width: 30px;
+    height: 30px;
   }
   .recordCard {
     align-items: flex-start;

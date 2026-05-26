@@ -7,6 +7,9 @@ import {
 } from './constants.js';
 import {
   conversationIdentityKey,
+  filterConversationRowsForBusinessUnit,
+  formatConversationMessageRow,
+  formatConversationMessages,
   messageIdempotencyKey,
   messengerConversationMessageInput,
   normalizeConversationMessageInput,
@@ -192,4 +195,122 @@ test('duplicate provider events update the existing message instead of creating 
   assert.equal(result.messageId, 'message-1');
   assert.equal(result.inserted, false);
   assert.equal(result.idempotencyKey, 'meta:whatsapp:phone-number-1:wamid-1');
+});
+
+test('formats conversation messages with provider-neutral linked context', () => {
+  const payload = formatConversationMessageRow({
+    message: {
+      id: 'message-1',
+      conversationId: 'conversation-1',
+      businessUnitId: 'bu-1',
+      contactId: 'contact-1',
+      leadId: 'lead-1',
+      provider: 'meta',
+      channel: 'messenger',
+      direction: 'inbound',
+      deliveryStatus: 'received',
+      providerAccountId: 'page-1',
+      providerThreadId: 'sender-1',
+      externalMessageId: 'mid-1',
+      senderIdentity: 'sender-1',
+      recipientIdentity: 'page-1',
+      textBody: 'Can I get a channel letter quote?',
+      occurredAt: new Date('2026-05-26T10:30:00.000Z'),
+    },
+    conversation: {
+      id: 'conversation-1',
+      status: 'open',
+      providerThreadId: 'sender-1',
+      externalParticipantId: 'sender-1',
+      lastMessageAt: new Date('2026-05-26T10:30:00.000Z'),
+    },
+    channelConfig: {
+      id: 'channel-1',
+      label: 'AIT Signs Page',
+      providerAccountId: 'page-1',
+      isActive: true,
+    },
+    contact: {
+      id: 'contact-1',
+      name: 'Ada Lovelace',
+      email: 'ada@example.com',
+      phone: '555-0100',
+    },
+    lead: {
+      id: 'lead-1',
+      status: 'Qualified',
+      sourceName: 'Messenger',
+      sourceType: 'facebook_messenger',
+    },
+    businessUnit: {
+      id: 'bu-1',
+      name: 'AIT Signs',
+      label: 'Division',
+      color: '#2563eb',
+    },
+  });
+
+  assert.equal(payload.providerLabel, 'Meta');
+  assert.equal(payload.channelLabel, 'Messenger');
+  assert.equal(payload.directionLabel, 'Inbound');
+  assert.equal(payload.deliveryStatusLabel, 'Received');
+  assert.equal(payload.timestamp, '2026-05-26T10:30:00.000Z');
+  assert.equal(payload.text, 'Can I get a channel letter quote?');
+  assert.equal(payload.identities.sender, 'sender-1');
+  assert.equal(payload.conversation.statusLabel, 'Open');
+  assert.equal(payload.channelConfig.label, 'AIT Signs Page');
+  assert.equal(payload.contact.name, 'Ada Lovelace');
+  assert.equal(payload.lead.sourceName, 'Messenger');
+  assert.equal(payload.businessUnit.name, 'AIT Signs');
+});
+
+test('filters and orders conversation rows for business-unit scoped reads', () => {
+  const rows = [
+    {
+      message: {
+        id: 'older-hidden',
+        businessUnitId: 'bu-hidden',
+        provider: 'meta',
+        channel: 'messenger',
+        direction: 'inbound',
+        deliveryStatus: 'received',
+        occurredAt: new Date('2026-05-26T09:00:00.000Z'),
+      },
+    },
+    {
+      message: {
+        id: 'newer-visible',
+        businessUnitId: 'bu-1',
+        provider: 'meta',
+        channel: 'whatsapp',
+        direction: 'outbound',
+        deliveryStatus: 'sent',
+        occurredAt: new Date('2026-05-26T11:00:00.000Z'),
+      },
+    },
+    {
+      message: {
+        id: 'unassigned-visible',
+        businessUnitId: null,
+        provider: 'meta',
+        channel: 'messenger',
+        direction: 'inbound',
+        deliveryStatus: 'received',
+        occurredAt: new Date('2026-05-26T10:00:00.000Z'),
+      },
+    },
+  ];
+
+  assert.deepEqual(
+    filterConversationRowsForBusinessUnit(rows, ['bu-1']).map((row) => row.message.id),
+    ['newer-visible', 'unassigned-visible'],
+  );
+  assert.deepEqual(
+    formatConversationMessages(rows, { businessUnitIds: ['bu-1'] }).map((message) => message.id),
+    ['newer-visible', 'unassigned-visible'],
+  );
+  assert.deepEqual(
+    filterConversationRowsForBusinessUnit(rows, []).map((row) => row.message.id),
+    ['unassigned-visible'],
+  );
 });

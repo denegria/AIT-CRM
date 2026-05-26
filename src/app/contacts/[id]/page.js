@@ -8,7 +8,8 @@ import s from './ContactDetail.module.css';
 import { 
   AlertCircle, ArrowLeft, Mail, Phone, MapPin, Calendar, 
   Plus, FileText, ClipboardList, 
-  MessageSquare, Edit3, Tag, Activity, CheckSquare, MessageCircle
+  MessageSquare, Edit3, Tag, Activity, CheckSquare, MessageCircle,
+  Inbox, Send
 } from 'lucide-react';
 import { PIPELINE_STATUSES } from '@/lib/sales-workflow';
 
@@ -58,6 +59,21 @@ function timelineIcon(type) {
   return <Activity size={16} />;
 }
 
+function conversationDateLabel(message) {
+  return dateLabel({ timestamp: message.timestamp || message.createdAt });
+}
+
+function conversationSourceLabel(message) {
+  return message.channelConfig?.label || `${message.providerLabel || 'Provider'} ${message.channelLabel || 'Channel'}`;
+}
+
+function messageIdentityLabel(message) {
+  if (message.direction === 'outbound') {
+    return message.identities?.recipient ? `To ${message.identities.recipient}` : '';
+  }
+  return message.identities?.sender ? `From ${message.identities.sender}` : '';
+}
+
 export default function ContactDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -67,6 +83,7 @@ export default function ContactDetailPage() {
   const [timelineFilter, setTimelineFilter] = useState('all');
   const [serverTimeline, setServerTimeline] = useState({ contactId: '', reloadKey: -1, items: null, error: false });
   const [timelineReloadKey, setTimelineReloadKey] = useState(0);
+  const [serverConversations, setServerConversations] = useState({ contactId: '', items: null, error: false });
   const [noteInput, setNoteInput] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
@@ -95,6 +112,13 @@ export default function ContactDetailPage() {
     if (timelineFilter === 'all') return timelineSource;
     return timelineSource.filter((item) => item.type === timelineFilter);
   }, [timelineFilter, timelineSource]);
+  const hasMatchingServerConversations = serverConversations.contactId === contact?.id;
+  const conversationMessages = hasMatchingServerConversations && serverConversations.items ? serverConversations.items : [];
+  const conversationStatus = dataSource === 'postgres' && contact?.id && !hasMatchingServerConversations
+    ? 'loading'
+    : hasMatchingServerConversations && serverConversations.error
+      ? 'error'
+      : 'idle';
 
   useEffect(() => {
     if (!contact?.id || dataSource !== 'postgres') return undefined;
@@ -129,6 +153,37 @@ export default function ContactDetailPage() {
       cancelled = true;
     };
   }, [contact?.id, dataSource, timelineReloadKey]);
+
+  useEffect(() => {
+    if (!contact?.id || dataSource !== 'postgres') return undefined;
+    let cancelled = false;
+    const requestContactId = contact.id;
+    fetch(`/api/contacts/${contact.id}/conversations`, { cache: 'no-store' })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Conversation load failed.');
+        if (!cancelled) {
+          setServerConversations({
+            contactId: requestContactId,
+            items: Array.isArray(payload.messages) ? payload.messages : [],
+            error: false,
+          });
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+        if (!cancelled) {
+          setServerConversations({
+            contactId: requestContactId,
+            items: null,
+            error: true,
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [contact?.id, dataSource]);
 
   // For Edit Modal
   const [editForm, setEditForm] = useState(null);
@@ -237,6 +292,7 @@ export default function ContactDetailPage() {
         <div className={s.contentSection}>
           <div className={s.contentTabs}>
             <button className={`${s.contentTab} ${activeTab === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')}>Timeline</button>
+            <button className={`${s.contentTab} ${activeTab === 'conversations' ? s.active : ''}`} onClick={() => setActiveTab('conversations')}>Conversations ({conversationMessages.length})</button>
             <button className={`${s.contentTab} ${activeTab === 'workorders' ? s.active : ''}`} onClick={() => setActiveTab('workorders')}>Work Orders ({contactWorkOrders.length})</button>
             <button className={`${s.contentTab} ${activeTab === 'financials' ? s.active : ''}`} onClick={() => setActiveTab('financials')}>Financials ({contactFinancials.length})</button>
           </div>
@@ -302,6 +358,62 @@ export default function ContactDetailPage() {
                   ))}
                   {timeline.length === 0 && (
                     <div className={s.timelineEmpty}>No activity recorded yet.</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'conversations' && (
+              <div className={s.conversationView}>
+                <div className={s.conversationToolbar}>
+                  <div className={s.conversationTitle}>
+                    <MessageCircle size={17} />
+                    <span>{conversationMessages.length} messages</span>
+                  </div>
+                  {conversationStatus === 'loading' && <div className={s.timelineStatus}>Syncing</div>}
+                  {conversationStatus === 'error' && <div className={s.timelineStatus}>Conversation sync unavailable</div>}
+                </div>
+
+                <div className={s.conversationList}>
+                  {conversationMessages.map((message) => (
+                    <div
+                      key={message.id}
+                      className={`${s.conversationMessage} ${message.direction === 'outbound' ? s.outbound : s.inbound}`}
+                    >
+                      <div className={s.conversationIcon}>
+                        {message.direction === 'outbound' ? <Send size={15} /> : <Inbox size={15} />}
+                      </div>
+                      <div className={s.conversationBody}>
+                        <div className={s.conversationMeta}>
+                          <div className={s.conversationBadges}>
+                            <span className={s.providerBadge}>{message.providerLabel}</span>
+                            <span className={s.channelBadge}>{message.channelLabel}</span>
+                            <span className={s.directionBadge}>{message.directionLabel}</span>
+                            <span className={`${s.statusBadge} ${message.deliveryStatus === 'failed' ? s.failed : ''}`}>
+                              {message.deliveryStatusLabel}
+                            </span>
+                          </div>
+                          <span className={s.conversationDate}>{conversationDateLabel(message)}</span>
+                        </div>
+                        <div className={s.conversationText}>
+                          {message.text || <span className={s.mutedText}>No message body captured.</span>}
+                        </div>
+                        <div className={s.conversationDetails}>
+                          <span>{conversationSourceLabel(message)}</span>
+                          {messageIdentityLabel(message) && <span>{messageIdentityLabel(message)}</span>}
+                          {message.businessUnit?.name && <span>{message.businessUnit.name}</span>}
+                          {message.contact?.name && <span>Contact: {message.contact.name}</span>}
+                          {message.lead?.status && <span>Lead: {message.lead.status}</span>}
+                          {message.conversation?.statusLabel && <span>Conversation: {message.conversation.statusLabel}</span>}
+                          {message.identities?.thread && <span>Thread: {message.identities.thread}</span>}
+                          {message.externalMessageId && <span>Message: {message.externalMessageId}</span>}
+                          {message.error?.message && <span>{message.error.message}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {conversationMessages.length === 0 && (
+                    <div className={s.timelineEmpty}>No conversation messages recorded yet.</div>
                   )}
                 </div>
               </div>
