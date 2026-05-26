@@ -16,6 +16,7 @@
     "test:lifecycle": "node --test src/lib/crm/lifecycle.test.js",
     "test:tasks": "node --test src/lib/tasks/*.test.js",
     "test:timeline": "node --test src/lib/timeline/*.test.js",
+    "test:conversations": "node --test src/lib/conversations/*.test.js",
     "test:website-leads": "node --test src/lib/ingestion/website-leads.test.js",
     "profile:ait-signs": "python3 scripts/profile-ait-signs.py",
     "import:ait-signs-staging": "python3 scripts/build-ait-signs-import-staging.py",

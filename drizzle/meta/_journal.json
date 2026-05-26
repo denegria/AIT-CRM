@@ -43,6 +43,13 @@
       "when": 1779641940090,
       "tag": "0005_lead_status_history",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1779762295122,
+      "tag": "0006_conversation_schema",
+      "breakpoints": true
     }
   ]
 }
