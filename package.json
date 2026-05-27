@@ -17,6 +17,7 @@
     "test:lifecycle": "node --test src/lib/crm/lifecycle.test.js",
     "test:tasks": "node --test src/lib/tasks/*.test.js",
     "test:follow-up-sequences": "node --test src/lib/follow-up-sequences/*.test.js",
+    "test:comms-observability": "node --test src/lib/comms-observability/*.test.js",
     "test:timeline": "node --test src/lib/timeline/*.test.js",
     "test:conversations": "node --test src/lib/conversations/*.test.js",
     "test:message-templates": "node --test src/lib/message-templates/*.test.js",

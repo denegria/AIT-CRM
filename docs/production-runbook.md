@@ -62,6 +62,12 @@ Each Facebook Page is connected separately in Meta.
 
 Do not replace the existing Page token unless the new token covers every Page currently in production.
 
+## Comms Observability
+
+Use `/comms-ops` for Messenger/WhatsApp operational checks before provider or client-number testing. It reports provider readiness, inbound idempotency metadata, manual outbound audit outcomes, template/settings blockers, and follow-up sequence run state without exposing secrets or full message bodies.
+
+Detailed procedures live in `docs/comms-observability-runbook.md`.
+
 ## Website Lead Ingestion
 
 Use `/api/webhooks/website-leads` for non-Meta website forms.

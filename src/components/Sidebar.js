@@ -6,7 +6,7 @@ import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import s from './Sidebar.module.css';
 
-import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, Database, LogOut, Building2, ListTodo } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, Database, LogOut, Building2, ListTodo, RadioTower } from 'lucide-react';
 
 const nav = [
   { href: '/', label: 'Dashboard', Icon: LayoutDashboard },
@@ -16,6 +16,7 @@ const nav = [
   { href: '/work-orders', label: 'Work Orders', Icon: ClipboardList },
   { href: '/financials', label: 'Financials', Icon: DollarSign },
   { href: '/reports', label: 'Reports', Icon: BarChart3 },
+  { href: '/comms-ops', label: 'Comms Ops', Icon: RadioTower },
   { href: '/settings', label: 'Settings', Icon: Settings },
 ];
 
@@ -74,6 +75,7 @@ export default function Sidebar() {
         <div className={s.navLabel}>Menu</div>
         {nav.map(({ href, label, Icon }) => {
           if (href === '/settings' && !access.canReadSettings) return null;
+          if (href === '/comms-ops' && !access.canReadSettings) return null;
           if (href === '/import-review' && !access.canReadImportReview) return null;
           if ((href === '/reports' || href === '/financials') && role !== 'admin') return null;
           return (

@@ -1007,6 +1007,42 @@ Validation:
 - Opt-out/stop, owner/business-unit scope, channel/template, quiet-hour, and provider-window tests.
 - Sentry/Titan review before promotion; no live Meta/client-number testing in this slice.
 
+### V2-017B: Comms Observability And Runbook
+
+Linear metadata:
+
+- Title: [AIT CRM V2.1] Comms observability and runbook
+- Priority: High
+- Labels: Improvement, Needs Full Model, Complexity: Standard
+- Owner lane: Senior Builder plus Sentry/Titan review
+- Dependencies: V2-012, V2-015, V2-016, V2-017
+
+Objective: give operators/admins a redacted operational view of Messenger, WhatsApp, templates/settings, manual sends, and follow-up sequence runs before agent triage is added.
+
+Scope:
+
+- Add a settings-gated `/comms-ops` surface and `/api/comms/observability` API.
+- Report inbound health, redacted idempotency metadata, manual outbound pending/sent/failed/audit outcomes, provider config readiness, template/settings readiness, follow-up sequence enrollment/run/task/draft outcomes, and common blocked reasons.
+- Add a runbook for webhook health, message/template readiness, sequence state, migration status, and safe no-live-provider/no-client-number procedures.
+
+Action/service boundary:
+
+- Routes own auth/RBAC/org/BU visibility and response policy.
+- Comms observability services own reusable redacted diagnostics and event summaries.
+- Provider adapters must not leak request/session globals or raw secret values.
+
+Acceptance:
+
+- Admin/settings users can inspect comms health without seeing tokens, webhook secrets, full message bodies, or raw provider payloads.
+- Operators can identify DNC/wrong-number, quiet-hours, prior-inbound/window, BU/owner scope, template approval/enabled, provider config, and sequence-run blockers.
+- The slice does not add AI triage, live sends, auto-send behavior, broad social listening, or new provider integrations.
+
+Validation:
+
+- Service tests for provider readiness redaction, blocked-reason summaries, and scoped snapshot shape.
+- Conversation/template/follow-up/task regression tests.
+- Lint and production build.
+
 ### V2-018: Agent Triage And Draft Replies
 
 Linear metadata:
