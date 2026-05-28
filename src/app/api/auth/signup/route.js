@@ -95,21 +95,7 @@ export async function POST(request) {
         if (existing.organizationId !== organizationId) {
           throw new Error('This email already belongs to another organization.');
         }
-
-        const existingRoles = await tx
-          .select({ key: roles.key })
-          .from(userRoles)
-          .innerJoin(roles, eq(userRoles.roleId, roles.id))
-          .where(eq(userRoles.userId, userId));
-
-        if (existingRoles.some((row) => row.key === 'admin')) {
-          throw new Error('This account already exists. Please sign in instead.');
-        }
-
-        await tx
-          .update(users)
-          .set({ name, isActive: true, updatedAt: new Date() })
-          .where(eq(users.id, userId));
+        throw new Error('This account already exists. Please sign in instead.');
       } else {
         const [insertedUser] = await tx
           .insert(users)
@@ -135,15 +121,8 @@ export async function POST(request) {
           passwordSalt: passwordData.salt,
           passwordIterations: passwordData.iterations,
         })
-        .onConflictDoUpdate({
+        .onConflictDoNothing({
           target: userPasswordCredentials.email,
-          set: {
-            userId,
-            passwordHash: passwordData.hash,
-            passwordSalt: passwordData.salt,
-            passwordIterations: passwordData.iterations,
-            updatedAt: new Date(),
-          },
         });
 
       await tx
