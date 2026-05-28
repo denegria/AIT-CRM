@@ -301,9 +301,12 @@ export async function persistFacebookLeadAdsEvent(
     };
   }
 
-  const crmWrite = fetched.ok
-    ? await upsertContactAndLead(client, organizationId, businessUnitId, event, details, sourceRowId, rowNumber)
-    : { contactId: null, leadId: null, reason: fetched.reason };
+  const crmWrite = {
+    contactId: null,
+    leadId: null,
+    assignedUserId: null,
+    reason: fetched.ok ? 'Awaiting import review approval before CRM promotion.' : fetched.reason,
+  };
 
   const proposedContact = {
     name: details.name,
@@ -331,7 +334,7 @@ export async function persistFacebookLeadAdsEvent(
     lead_id: crmWrite.leadId,
     assigned_user_id: crmWrite.assignedUserId || null,
     notes: fetched.ok
-      ? 'Webhook captured, Graph fields fetched, and CRM lead created.'
+      ? 'Webhook captured and Graph fields fetched. Awaiting import review.'
       : `Webhook captured, but Graph field fetch failed: ${fetched.reason}`,
   };
 
@@ -362,11 +365,11 @@ export async function persistFacebookLeadAdsEvent(
     [
       batchId,
       sourceRowId,
-      fetched.ok && crmWrite.leadId
-        ? 'Facebook lead captured and promoted to CRM contact/lead.'
+      fetched.ok
+        ? 'Facebook lead captured with Graph fields and queued for import review.'
         : `Facebook lead captured but needs review: ${crmWrite.reason || fetched.reason || 'unknown reason'}.`,
       JSON.stringify({
-        action: fetched.ok && crmWrite.leadId ? 'verify_facebook_lead' : 'review_facebook_lead',
+        action: fetched.ok ? 'fetch_graph_lead_fields' : 'review_facebook_lead',
         normalizedRecordId: normalizedId || null,
         contactId: crmWrite.contactId,
         leadId: crmWrite.leadId,
