@@ -14,6 +14,7 @@ import { userPasswordCredentials } from '@/db/schema.js';
 const LOGIN_ATTEMPT_LIMIT = 5;
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_LOCKOUT_MS = 15 * 60 * 1000;
+const LOGIN_ATTEMPT_MAX_KEYS = 1000;
 const LOGIN_ATTEMPT_STATE_KEY = '__aitCrmLoginAttemptState';
 
 function loginAttemptState() {
@@ -21,23 +22,41 @@ function loginAttemptState() {
   return globalThis[LOGIN_ATTEMPT_STATE_KEY];
 }
 
-function clientIp(request) {
-  const forwardedFor = request.headers.get('x-forwarded-for') || '';
-  return forwardedFor.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown';
+function loginAttemptKey(email) {
+  return email;
 }
 
-function loginAttemptKey(request, email) {
-  return `${email}:${clientIp(request)}`;
+function evictOldestUnlockedAttempts(attempts, now, targetSize) {
+  const sortedByOldest = [...attempts.entries()]
+    .filter(([, attempt]) => (attempt.lockedUntil || 0) <= now)
+    .sort((a, b) => a[1].firstAttemptAt - b[1].firstAttemptAt);
+
+  for (const [key] of sortedByOldest) {
+    if (attempts.size <= targetSize) break;
+    attempts.delete(key);
+  }
 }
 
 function pruneLoginAttempts(now = Date.now()) {
   const attempts = loginAttemptState();
-  if (attempts.size < 1000) return;
   for (const [key, attempt] of attempts.entries()) {
     if ((attempt.lockedUntil || 0) <= now && now - attempt.firstAttemptAt > LOGIN_WINDOW_MS) {
       attempts.delete(key);
     }
   }
+
+  if (attempts.size <= LOGIN_ATTEMPT_MAX_KEYS) return;
+
+  evictOldestUnlockedAttempts(attempts, now, LOGIN_ATTEMPT_MAX_KEYS);
+}
+
+function reserveLoginAttemptSlot(key, now = Date.now()) {
+  const attempts = loginAttemptState();
+  pruneLoginAttempts(now);
+  if (attempts.has(key) || attempts.size < LOGIN_ATTEMPT_MAX_KEYS) return true;
+
+  evictOldestUnlockedAttempts(attempts, now, LOGIN_ATTEMPT_MAX_KEYS - 1);
+  return attempts.size < LOGIN_ATTEMPT_MAX_KEYS;
 }
 
 function currentLoginBlock(key, now = Date.now()) {
@@ -53,7 +72,9 @@ function currentLoginBlock(key, now = Date.now()) {
 }
 
 function recordLoginFailure(key, now = Date.now()) {
-  pruneLoginAttempts(now);
+  if (!reserveLoginAttemptSlot(key, now)) {
+    return now + LOGIN_LOCKOUT_MS;
+  }
   const attempts = loginAttemptState();
   const existing = attempts.get(key);
   const attempt = existing && now - existing.firstAttemptAt <= LOGIN_WINDOW_MS
@@ -96,7 +117,7 @@ export async function POST(request) {
     return NextResponse.json({ error: 'Email and password are required.' }, { status: 400 });
   }
 
-  const attemptKey = loginAttemptKey(request, email);
+  const attemptKey = loginAttemptKey(email);
   const activeBlock = currentLoginBlock(attemptKey);
   if (activeBlock) {
     return rateLimitResponse(activeBlock);
