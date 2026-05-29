@@ -26,6 +26,17 @@ function loginAttemptKey(email) {
   return email;
 }
 
+function evictOldestUnlockedAttempts(attempts, now, targetSize) {
+  const sortedByOldest = [...attempts.entries()]
+    .filter(([, attempt]) => (attempt.lockedUntil || 0) <= now)
+    .sort((a, b) => a[1].firstAttemptAt - b[1].firstAttemptAt);
+
+  for (const [key] of sortedByOldest) {
+    if (attempts.size <= targetSize) break;
+    attempts.delete(key);
+  }
+}
+
 function pruneLoginAttempts(now = Date.now()) {
   const attempts = loginAttemptState();
   for (const [key, attempt] of attempts.entries()) {
@@ -36,12 +47,16 @@ function pruneLoginAttempts(now = Date.now()) {
 
   if (attempts.size <= LOGIN_ATTEMPT_MAX_KEYS) return;
 
-  const sortedByOldest = [...attempts.entries()]
-    .sort((a, b) => a[1].firstAttemptAt - b[1].firstAttemptAt);
-  const overflow = attempts.size - LOGIN_ATTEMPT_MAX_KEYS;
-  for (let i = 0; i < overflow; i += 1) {
-    attempts.delete(sortedByOldest[i][0]);
-  }
+  evictOldestUnlockedAttempts(attempts, now, LOGIN_ATTEMPT_MAX_KEYS);
+}
+
+function reserveLoginAttemptSlot(key, now = Date.now()) {
+  const attempts = loginAttemptState();
+  pruneLoginAttempts(now);
+  if (attempts.has(key) || attempts.size < LOGIN_ATTEMPT_MAX_KEYS) return true;
+
+  evictOldestUnlockedAttempts(attempts, now, LOGIN_ATTEMPT_MAX_KEYS - 1);
+  return attempts.size < LOGIN_ATTEMPT_MAX_KEYS;
 }
 
 function currentLoginBlock(key, now = Date.now()) {
@@ -57,7 +72,9 @@ function currentLoginBlock(key, now = Date.now()) {
 }
 
 function recordLoginFailure(key, now = Date.now()) {
-  pruneLoginAttempts(now);
+  if (!reserveLoginAttemptSlot(key, now)) {
+    return now + LOGIN_LOCKOUT_MS;
+  }
   const attempts = loginAttemptState();
   const existing = attempts.get(key);
   const attempt = existing && now - existing.firstAttemptAt <= LOGIN_WINDOW_MS
