@@ -195,7 +195,7 @@ test('skips duplicate leadgen events without fetching Graph or writing audit row
   assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), false);
 });
 
-test('ingests successful leadgen events into CRM and import review audit tables', async () => {
+test('queues successful leadgen events for import review without CRM writes', async () => {
   const { client, calls } = createServiceClient();
   const graphLead = graphLeadFixture();
 
@@ -214,7 +214,7 @@ test('ingests successful leadgen events into CRM and import review audit tables'
 
   assert.equal(result.received, 1);
   assert.equal(result.inserted, 1);
-  assert.equal(result.promoted, 1);
+  assert.equal(result.promoted, 0);
   assert.equal(result.graphFetched, 1);
   assert.equal(result.skipped, 0);
   assert.deepEqual(result.eventResults[0], {
@@ -222,15 +222,15 @@ test('ingests successful leadgen events into CRM and import review audit tables'
     leadgenId: 'leadgen-1',
     pageId: 'page-1',
     inserted: true,
-    promoted: true,
+    promoted: false,
     graphFetched: true,
     businessUnitId: 'bu-1',
     sourceRowId: 'source-row-5',
     normalizedRecordId: 'normalized-5',
-    contactId: 'contact-1',
-    leadId: 'lead-1',
+    contactId: null,
+    leadId: null,
     graphFetchReason: null,
-    review: false,
+    review: true,
   });
 
   const sourceRowInsert = calls.find((call) => call.sql.startsWith('insert into import_source_rows'));
@@ -243,49 +243,28 @@ test('ingests successful leadgen events into CRM and import review audit tables'
   assert.equal(rawValues.graph_fetch, 'ok');
   assert.deepEqual(rawValues.field_data, graphLead.field_data);
 
-  const contactInsert = calls.find((call) => call.sql.startsWith('insert into contacts'));
-  assert.deepEqual(contactInsert.params, [
-    'org-1',
-    'bu-1',
-    'Ada Lovelace',
-    'Analytical Signs',
-    '555-0100',
-    'ada@example.com',
-    '123 Loop St',
-  ]);
-
-  const leadInsert = calls.find((call) => call.sql.startsWith('insert into leads'));
-  assert.deepEqual(leadInsert.params, [
-    'org-1',
-    'bu-1',
-    'contact-1',
-    'Facebook leadgen_id=leadgen-1 source_row_id=source-row-5',
-    'user-owner-1',
-  ]);
-
-  const activityInsert = calls.find((call) => call.sql.startsWith('insert into activity_events'));
-  assert.equal(activityInsert.params[4], 'Facebook lead captured from form form-1.');
-  assert.equal(activityInsert.params[5], FACEBOOK_LEAD_ADS_SOURCE_SHEET);
-  assert.equal(activityInsert.params[6], 5);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into activity_events')), false);
 
   const normalizedInsert = calls.find((call) => call.sql.startsWith('insert into import_normalized_records'));
   const proposedContact = JSON.parse(normalizedInsert.params[2]);
   const proposedLead = JSON.parse(normalizedInsert.params[3]);
-  assert.equal(proposedContact.contact_id, 'contact-1');
+  assert.equal(proposedContact.contact_id, null);
   assert.equal(proposedLead.source_type, 'facebook_webhook');
-  assert.equal(proposedLead.lead_id, 'lead-1');
-  assert.equal(proposedLead.assigned_user_id, 'user-owner-1');
-  assert.equal(proposedLead.notes, 'Webhook captured, Graph fields fetched, and CRM lead created.');
+  assert.equal(proposedLead.lead_id, null);
+  assert.equal(proposedLead.assigned_user_id, null);
+  assert.equal(proposedLead.notes, 'Webhook captured and Graph fields fetched. Awaiting import review.');
   assert.equal(normalizedInsert.params[4], 0.85);
-  assert.equal(normalizedInsert.params[5], 'promoted');
+  assert.equal(normalizedInsert.params[5], 'needs_review');
 
   const reviewInsert = calls.find((call) => call.sql.startsWith('insert into import_review_items'));
-  assert.equal(reviewInsert.params[2], 'Facebook lead captured and promoted to CRM contact/lead.');
+  assert.equal(reviewInsert.params[2], 'Facebook lead captured with Graph fields and queued for import review.');
   assert.deepEqual(JSON.parse(reviewInsert.params[3]), {
-    action: 'verify_facebook_lead',
+    action: 'fetch_graph_lead_fields',
     normalizedRecordId: 'normalized-5',
-    contactId: 'contact-1',
-    leadId: 'lead-1',
+    contactId: null,
+    leadId: null,
   });
 });
 
