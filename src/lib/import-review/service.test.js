@@ -20,6 +20,10 @@ function createClient() {
           return { rows: [] };
         }
 
+        if (normalized.startsWith('select id from import_batches where id = $1 and organization_id = $2')) {
+          return { rows: params[1] === 'org-1' ? [{ id: params[0] }] : [] };
+        }
+
         if (normalized.startsWith('select nr.id, nr.source_row_id')) {
           return {
             rows: [{
@@ -141,4 +145,45 @@ test('approving staged Facebook leads promotes them into CRM records', async () 
   ));
   assert.equal(JSON.parse(promotionUpdate.params[2]).contact_id, 'contact-1');
   assert.equal(JSON.parse(promotionUpdate.params[3]).lead_id, 'lead-1');
+});
+
+
+test('organization-scoped approvals constrain batch and staged record lookups', async () => {
+  const { client, calls } = createClient();
+
+  await updateImportReviewStatus(client, {
+    batchId: 'batch-1',
+    status: 'approved',
+    recordIds: ['record-1'],
+    organizationId: 'org-1',
+  });
+
+  const scopedBatch = calls.find((call) => (
+    call.sql.startsWith('select id from import_batches where id = $1 and organization_id = $2')
+  ));
+  assert.deepEqual(scopedBatch.params, ['batch-1', 'org-1']);
+
+  const scopedRecordLookup = calls.find((call) => (
+    call.sql.startsWith('select nr.id, nr.source_row_id')
+  ));
+  assert.match(scopedRecordLookup.sql, /ib\.organization_id = \$3/);
+  assert.deepEqual(scopedRecordLookup.params, ['batch-1', ['record-1'], 'org-1']);
+});
+
+test('organization-scoped approvals reject batches outside the caller organization', async () => {
+  const { client, calls } = createClient();
+
+  await assert.rejects(
+    updateImportReviewStatus(client, {
+      batchId: 'batch-1',
+      status: 'approved',
+      recordIds: ['record-1'],
+      organizationId: 'org-2',
+    }),
+    /No import batch found\./,
+  );
+
+  assert.equal(calls.some((call) => call.sql === 'begin'), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false);
 });

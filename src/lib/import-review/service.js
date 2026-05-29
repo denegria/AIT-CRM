@@ -23,35 +23,61 @@ export function normalizeImportReviewText(value, fallback = 'all') {
   return String(value);
 }
 
-export async function resolveImportReviewBatchId(client, batchId) {
-  if (batchId) return batchId;
+export async function resolveImportReviewBatchId(client, batchId, { organizationId = null } = {}) {
+  if (batchId) {
+    if (!organizationId) return batchId;
+
+    const scopedBatch = await client.query(
+      'select id from import_batches where id = $1 and organization_id = $2 limit 1',
+      [batchId, organizationId],
+    );
+    const resolved = scopedBatch.rows[0]?.id;
+    if (!resolved) throw new Error('No import batch found.');
+    return resolved;
+  }
+
+  const organizationClause = organizationId ? 'and ib.organization_id = $3 ' : '';
+  const batchParams = organizationId
+    ? [OPERATOR_REVIEW_SOURCE_TYPES, REVIEWABLE_RECORD_STATUSES, organizationId]
+    : [OPERATOR_REVIEW_SOURCE_TYPES, REVIEWABLE_RECORD_STATUSES];
 
   const preferredPending = await client.query(
     'select ib.id ' +
     'from import_batches ib ' +
     'where ib.source_type = any($1::text[]) ' +
     'and exists (select 1 from import_normalized_records nr where nr.import_batch_id = ib.id and nr.status = any($2::text[])) ' +
+    organizationClause +
     'order by ib.created_at desc limit 1',
-    [OPERATOR_REVIEW_SOURCE_TYPES, REVIEWABLE_RECORD_STATUSES],
+    batchParams,
   );
   if (preferredPending.rows[0]?.id) return preferredPending.rows[0].id;
 
+  const pendingParams = organizationId ? [REVIEWABLE_RECORD_STATUSES, organizationId] : [REVIEWABLE_RECORD_STATUSES];
   const anyPending = await client.query(
     'select ib.id ' +
     'from import_batches ib ' +
     'where exists (select 1 from import_normalized_records nr where nr.import_batch_id = ib.id and nr.status = any($1::text[])) ' +
+    (organizationId ? 'and ib.organization_id = $2 ' : '') +
     'order by ib.created_at desc limit 1',
-    [REVIEWABLE_RECORD_STATUSES],
+    pendingParams,
   );
   if (anyPending.rows[0]?.id) return anyPending.rows[0].id;
 
+  const fallbackParams = organizationId ? [OPERATOR_REVIEW_SOURCE_TYPES, organizationId] : [OPERATOR_REVIEW_SOURCE_TYPES];
   const preferredFallback = await client.query(
-    'select id from import_batches where source_type = any($1::text[]) order by created_at desc limit 1',
-    [OPERATOR_REVIEW_SOURCE_TYPES],
+    'select id from import_batches where source_type = any($1::text[]) ' +
+    (organizationId ? 'and organization_id = $2 ' : '') +
+    'order by created_at desc limit 1',
+    fallbackParams,
   );
   if (preferredFallback.rows[0]?.id) return preferredFallback.rows[0].id;
 
-  const fallback = await client.query('select id from import_batches order by created_at desc limit 1');
+  const fallback = await client.query(
+    'select id from import_batches ' +
+    (organizationId ? 'where organization_id = $1 ' : '') +
+    'order by created_at desc limit 1',
+    organizationId ? [organizationId] : [],
+  );
   const resolved = fallback.rows[0]?.id;
   if (!resolved) {
     throw new Error('No import batch found.');
@@ -220,16 +246,23 @@ export async function loadImportReviewRows(client, batchId, { status = 'all', ty
   }));
 }
 
-export async function updateImportReviewStatus(client, { batchId, status, recordIds = [], rowSelector = null, reason = null }) {
+export async function updateImportReviewStatus(client, {
+  batchId,
+  status,
+  recordIds = [],
+  rowSelector = null,
+  reason = null,
+  organizationId = null,
+}) {
   if (!VALID_IMPORT_REVIEW_STATUSES.has(status)) {
     throw new Error('Invalid review status.');
   }
 
-  const resolvedBatchId = await resolveImportReviewBatchId(client, batchId);
+  const resolvedBatchId = await resolveImportReviewBatchId(client, batchId, { organizationId });
 
   await client.query('begin');
   try {
-    const records = await findRecordsForStatusUpdate(client, resolvedBatchId, { recordIds, rowSelector });
+    const records = await findRecordsForStatusUpdate(client, resolvedBatchId, { recordIds, rowSelector, organizationId });
     if (!records.length) {
       await client.query('commit');
       return {
@@ -391,8 +424,9 @@ async function loadReviewItemsBySourceRow(client, batchId, sourceRowIds) {
   return reviewBySourceRow;
 }
 
-async function findRecordsForStatusUpdate(client, batchId, { recordIds, rowSelector }) {
+async function findRecordsForStatusUpdate(client, batchId, { recordIds, rowSelector, organizationId = null }) {
   if (recordIds.length) {
+    const params = organizationId ? [batchId, recordIds, organizationId] : [batchId, recordIds];
     const result = await client.query(
       `
         select
@@ -408,13 +442,17 @@ async function findRecordsForStatusUpdate(client, batchId, { recordIds, rowSelec
         join import_source_rows sr on sr.id = nr.source_row_id
         where nr.import_batch_id = $1
           and nr.id = any($2::uuid[])
+          ${organizationId ? 'and ib.organization_id = $3' : ''}
       `,
-      [batchId, recordIds],
+      params,
     );
     return result.rows;
   }
 
   if (rowSelector?.sheet && Number.isInteger(rowSelector.rowNumber)) {
+    const params = organizationId
+      ? [batchId, rowSelector.sheet, rowSelector.rowNumber, organizationId]
+      : [batchId, rowSelector.sheet, rowSelector.rowNumber];
     const result = await client.query(
       `
         select
@@ -431,9 +469,10 @@ async function findRecordsForStatusUpdate(client, batchId, { recordIds, rowSelec
         where nr.import_batch_id = $1
           and sr.source_sheet = $2
           and sr.source_row_number = $3
+          ${organizationId ? 'and ib.organization_id = $4' : ''}
         order by nr.record_type asc, nr.id asc
       `,
-      [batchId, rowSelector.sheet, rowSelector.rowNumber],
+      params,
     );
     return result.rows;
   }
