@@ -35,32 +35,47 @@ async function withClient(handler) {
 async function requireImportReviewAdmin(request, permission) {
   if (isAuthEnabled()) {
     const session = await getRequestSession(request);
-    if (hasPermission(session, permission)) return null;
+    if (hasPermission(session, permission)) {
+      return {
+        error: null,
+        organizationId: session.user.organizationId,
+      };
+    }
   }
 
-  if (hasConfiguredAdminToken() && isImportReviewAdmin(request)) return null;
+  if (hasConfiguredAdminToken() && isImportReviewAdmin(request)) {
+    return { error: null, organizationId: null };
+  }
 
   if (!hasConfiguredAdminToken() && !isAuthEnabled()) {
-    return NextResponse.json(
-      { error: `${ADMIN_TOKEN_ENV} or real auth/RBAC is required before import review can be accessed.` },
-      { status: 503 },
-    );
+    return {
+      error: NextResponse.json(
+        { error: `${ADMIN_TOKEN_ENV} or real auth/RBAC is required before import review can be accessed.` },
+        { status: 503 },
+      ),
+      organizationId: null,
+    };
   }
 
-  return NextResponse.json(
-    { error: 'Admin unlock or import-review permission required.' },
-    { status: 401 },
-  );
+  return {
+    error: NextResponse.json(
+      { error: 'Admin unlock or import-review permission required.' },
+      { status: 401 },
+    ),
+    organizationId: null,
+  };
 }
 
 export async function GET(request) {
-  const authError = await requireImportReviewAdmin(request, PERMISSIONS.IMPORT_REVIEW_READ);
-  if (authError) return authError;
+  const auth = await requireImportReviewAdmin(request, PERMISSIONS.IMPORT_REVIEW_READ);
+  if (auth.error) return auth.error;
 
   try {
     return await withClient(async (client) => {
       const url = new URL(request.url);
-      const batchId = await resolveImportReviewBatchId(client, url.searchParams.get('batchId'));
+      const batchId = await resolveImportReviewBatchId(client, url.searchParams.get('batchId'), {
+        organizationId: auth.organizationId,
+      });
       const batch = await loadImportReviewBatch(client, batchId);
       const summary = await loadImportReviewSummary(client, batchId);
       const rows = await loadImportReviewRows(client, batchId, {
@@ -85,8 +100,8 @@ export async function GET(request) {
 }
 
 export async function PATCH(request) {
-  const authError = await requireImportReviewAdmin(request, PERMISSIONS.IMPORT_REVIEW_WRITE);
-  if (authError) return authError;
+  const auth = await requireImportReviewAdmin(request, PERMISSIONS.IMPORT_REVIEW_WRITE);
+  if (auth.error) return auth.error;
 
   try {
     return await withClient(async (client) => {
@@ -119,6 +134,7 @@ export async function PATCH(request) {
         batchId,
         status,
         recordIds,
+        organizationId: auth.organizationId,
       });
 
       if (!result.updatedIds.length) {
