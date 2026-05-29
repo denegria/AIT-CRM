@@ -243,6 +243,27 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
   return { contactId, leadId, assignedUserId, reason: null };
 }
 
+export async function promoteFacebookLeadProposalToCrm(
+  client,
+  organizationId,
+  { proposedContact = {}, proposedLead = {}, sourceRowId = null, rowNumber = null } = {},
+) {
+  const businessUnitId = proposedLead.business_unit_id || proposedContact.business_unit_id || null;
+  const details = {
+    name: proposedContact.name || proposedLead.email || proposedLead.phone || 'Facebook Lead',
+    company: proposedContact.company_name || proposedContact.company || '',
+    phone: proposedContact.phone || '',
+    email: proposedContact.email || '',
+    address: proposedContact.address || '',
+  };
+  const event = {
+    leadgenId: proposedLead.leadgen_id || '',
+    formId: proposedLead.form_id || '',
+  };
+
+  return upsertContactAndLead(client, organizationId, businessUnitId, event, details, sourceRowId, rowNumber);
+}
+
 export async function persistFacebookLeadAdsEvent(
   client,
   { organizationId, batchId, rowNumber, event, metaConfig, fetchLeadDetails = fetchMetaLeadDetails },

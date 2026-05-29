@@ -1,3 +1,5 @@
+import { promoteFacebookLeadProposalToCrm } from '../ingestion/facebook-lead-ads.js';
+
 export const DEFAULT_IMPORT_REVIEW_LIMIT = 120;
 export const VALID_IMPORT_REVIEW_STATUSES = new Set(['approved', 'rejected', 'pending', 'needs_review']);
 
@@ -278,6 +280,11 @@ export async function updateImportReviewStatus(client, { batchId, status, record
       updatedReviewItems = reviewResult.rowCount;
     }
 
+    let promotedRecords = [];
+    if (status === 'approved') {
+      promotedRecords = await promoteApprovedFacebookLeadRecords(client, resolvedBatchId, records);
+    }
+
     await client.query('commit');
 
     return {
@@ -287,11 +294,71 @@ export async function updateImportReviewStatus(client, { batchId, status, record
       updatedRecords: updateResult.rows,
       sourceRowIds,
       updatedReviewItems,
+      promotedRecords,
     };
   } catch (error) {
     await client.query('rollback');
     throw error;
   }
+}
+
+function isPendingFacebookLeadRecord(record) {
+  const proposedLead = record.proposed_lead_json || {};
+  return record.record_type === 'lead'
+    && proposedLead.source_type === 'facebook_webhook'
+    && proposedLead.lead_id === null;
+}
+
+async function promoteApprovedFacebookLeadRecords(client, batchId, records) {
+  const promotedRecords = [];
+  const facebookLeadRecords = records.filter(isPendingFacebookLeadRecord);
+
+  for (const record of facebookLeadRecords) {
+    const crmWrite = await promoteFacebookLeadProposalToCrm(client, record.organization_id, {
+      proposedContact: record.proposed_contact_json || {},
+      proposedLead: record.proposed_lead_json || {},
+      sourceRowId: record.source_row_id,
+      rowNumber: record.source_row_number,
+    });
+
+    if (!crmWrite.leadId) {
+      throw new Error(`Facebook lead ${record.id} could not be promoted: ${crmWrite.reason || 'unknown reason'}.`);
+    }
+
+    const nextContact = {
+      ...(record.proposed_contact_json || {}),
+      contact_id: crmWrite.contactId,
+    };
+    const nextLead = {
+      ...(record.proposed_lead_json || {}),
+      contact_id: crmWrite.contactId,
+      lead_id: crmWrite.leadId,
+      assigned_user_id: crmWrite.assignedUserId || null,
+      notes: 'Import review approved and promoted to CRM lead.',
+    };
+
+    await client.query(
+      `
+        update import_normalized_records
+        set
+          proposed_contact_json = $3::jsonb,
+          proposed_lead_json = $4::jsonb,
+          status = 'promoted'
+        where import_batch_id = $1
+          and id = $2
+      `,
+      [batchId, record.id, JSON.stringify(nextContact), JSON.stringify(nextLead)],
+    );
+
+    promotedRecords.push({
+      id: record.id,
+      sourceRowId: record.source_row_id,
+      contactId: crmWrite.contactId,
+      leadId: crmWrite.leadId,
+    });
+  }
+
+  return promotedRecords;
 }
 
 async function loadReviewItemsBySourceRow(client, batchId, sourceRowIds) {
@@ -328,10 +395,19 @@ async function findRecordsForStatusUpdate(client, batchId, { recordIds, rowSelec
   if (recordIds.length) {
     const result = await client.query(
       `
-        select id, source_row_id
-        from import_normalized_records
-        where import_batch_id = $1
-          and id = any($2::uuid[])
+        select
+          nr.id,
+          nr.source_row_id,
+          sr.source_row_number,
+          ib.organization_id,
+          nr.record_type,
+          nr.proposed_contact_json,
+          nr.proposed_lead_json
+        from import_normalized_records nr
+        join import_batches ib on ib.id = nr.import_batch_id
+        join import_source_rows sr on sr.id = nr.source_row_id
+        where nr.import_batch_id = $1
+          and nr.id = any($2::uuid[])
       `,
       [batchId, recordIds],
     );
@@ -341,8 +417,16 @@ async function findRecordsForStatusUpdate(client, batchId, { recordIds, rowSelec
   if (rowSelector?.sheet && Number.isInteger(rowSelector.rowNumber)) {
     const result = await client.query(
       `
-        select nr.id, nr.source_row_id
+        select
+          nr.id,
+          nr.source_row_id,
+          sr.source_row_number,
+          ib.organization_id,
+          nr.record_type,
+          nr.proposed_contact_json,
+          nr.proposed_lead_json
         from import_normalized_records nr
+        join import_batches ib on ib.id = nr.import_batch_id
         join import_source_rows sr on sr.id = nr.source_row_id
         where nr.import_batch_id = $1
           and sr.source_sheet = $2
