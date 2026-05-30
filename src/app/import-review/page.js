@@ -118,7 +118,9 @@ function badgeClassForStatus(status) {
 
 function formatConfidence(value) {
   if (value === null || value === undefined || Number.isNaN(Number(value))) return '—';
-  return `${Math.round(Number(value))}%`;
+  const numeric = Number(value);
+  const percent = numeric <= 1 ? numeric * 100 : numeric;
+  return `${Math.round(percent)}%`;
 }
 
 function summarizeJson(value) {
