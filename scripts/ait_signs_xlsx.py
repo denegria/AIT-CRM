@@ -466,6 +466,7 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
                     "reviewStatus": "pending",
                     "proposedResolutionJson": {
                         "workbookPath": str(workbook_file),
+                        "businessUnit": "AIT Signs",
                         "sourceType": source_type_for_sheet(row["sheet"]),
                         "rowKind": row["kind"],
                         "confidence": row["confidence"],

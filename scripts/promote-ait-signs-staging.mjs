@@ -79,26 +79,45 @@ function statusForRecord(record, proposal) {
 
 async function getLatestBatchId(client) {
   const result = await client.query(
-    'select id from import_batches order by created_at desc limit 1',
+    `
+      select ib.id
+      from import_batches ib
+      join business_units bu on bu.id = ib.business_unit_id
+      where bu.name = $1
+        and ib.source_type = 'xlsx'
+      order by ib.created_at desc
+      limit 1
+    `,
+    [BUSINESS_UNIT_NAME],
   );
   return result.rows[0]?.id || null;
 }
 
-async function getAitContext(client) {
-  const org = await client.query(
-    "select id from organizations where slug = 'ait' order by created_at asc limit 1",
+async function getAitContext(client, batchId) {
+  const batch = await client.query(
+    `
+      select
+        ib.organization_id,
+        ib.business_unit_id,
+        bu.name as business_unit_name
+      from import_batches ib
+      left join business_units bu on bu.id = ib.business_unit_id
+      where ib.id = $1
+      limit 1
+    `,
+    [batchId],
   );
-  if (!org.rowCount) throw new Error('Missing AIT organization. Load staging first.');
-
-  const unit = await client.query(
-    'select id from business_units where organization_id = $1 and name = $2 limit 1',
-    [org.rows[0].id, BUSINESS_UNIT_NAME],
-  );
-  if (!unit.rowCount) throw new Error(`Missing ${BUSINESS_UNIT_NAME} business unit. Load staging first.`);
+  if (!batch.rowCount) throw new Error('No import batch found.');
+  if (!batch.rows[0].business_unit_id) {
+    throw new Error(`Import batch ${batchId} is missing a business unit. Reload staging before promotion.`);
+  }
+  if (batch.rows[0].business_unit_name !== BUSINESS_UNIT_NAME) {
+    throw new Error(`Import batch ${batchId} targets ${batch.rows[0].business_unit_name || 'unknown'}, not ${BUSINESS_UNIT_NAME}.`);
+  }
 
   return {
-    organizationId: org.rows[0].id,
-    businessUnitId: unit.rows[0].id,
+    organizationId: batch.rows[0].organization_id,
+    businessUnitId: batch.rows[0].business_unit_id,
   };
 }
 
@@ -138,8 +157,16 @@ async function findOrCreateContact(client, context, proposal, sourceLabel, dryRu
 
   if (phone) {
     const existing = await client.query(
-      'select id from contacts where organization_id = $1 and phone = $2 order by created_at asc limit 1',
-      [context.organizationId, phone],
+      `
+        select id
+        from contacts
+        where organization_id = $1
+          and phone = $2
+          and primary_business_unit_id = $3
+        order by created_at asc
+        limit 1
+      `,
+      [context.organizationId, phone, context.businessUnitId],
     );
     if (existing.rowCount) return existing.rows[0].id;
   }
@@ -316,7 +343,7 @@ async function main() {
     const batchId = options.batchId || await getLatestBatchId(client);
     if (!batchId) throw new Error('No import batch found.');
 
-    const context = await getAitContext(client);
+    const context = await getAitContext(client, batchId);
     const records = await getApprovedRecords(client, batchId, options.limit);
 
     if (options.dryRun) {

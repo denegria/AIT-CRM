@@ -6,6 +6,7 @@ import process from 'node:process';
 import { Client } from 'pg';
 
 const DEFAULT_ARTIFACT = 'docs/ait-signs-import-staging.json';
+const TARGET_BUSINESS_UNIT = 'AIT Signs';
 const BUSINESS_UNITS = [
   { name: 'AIT Signs', label: 'Divisions', color: '#4a7aff' },
   { name: 'AIT USA Institute', label: 'Divisions', color: '#22c55e' },
@@ -58,6 +59,10 @@ function countBy(items, key) {
 
 function validateArtifact(payload) {
   const errors = [];
+  if (payload.businessUnit !== TARGET_BUSINESS_UNIT) {
+    errors.push(`artifact businessUnit must be ${TARGET_BUSINESS_UNIT}; received ${payload.businessUnit || 'missing'}`);
+  }
+
   const sourceKeys = new Set(
     payload.sourceRows.map((row) => sourceRowKey(row.sourceSheet, row.sourceRowNumber)),
   );
@@ -67,12 +72,26 @@ function validateArtifact(payload) {
     if (!sourceKeys.has(key)) {
       errors.push(`normalized record references missing source row ${key}`);
     }
+    const proposal = record.proposedContactJson ||
+      record.proposedLeadJson ||
+      record.proposedEstimateJson ||
+      record.proposedWorkOrderJson ||
+      record.proposedPaymentJson ||
+      record.proposedNoteJson ||
+      {};
+    if (proposal.businessUnit !== TARGET_BUSINESS_UNIT) {
+      errors.push(`normalized record ${key} must target ${TARGET_BUSINESS_UNIT}; received ${proposal.businessUnit || 'missing'}`);
+    }
   }
 
   for (const item of payload.reviewItems) {
     const key = sourceRowKey(item.sourceSheet, item.sourceRowNumber);
     if (!sourceKeys.has(key)) {
       errors.push(`review item references missing source row ${key}`);
+    }
+    const resolutionBusinessUnit = item.proposedResolutionJson?.businessUnit;
+    if (resolutionBusinessUnit && resolutionBusinessUnit !== TARGET_BUSINESS_UNIT) {
+      errors.push(`review item ${key} must target ${TARGET_BUSINESS_UNIT}; received ${resolutionBusinessUnit}`);
     }
   }
 
@@ -103,23 +122,30 @@ async function getOrganizationId(client) {
 }
 
 async function ensureBusinessUnits(client, organizationId) {
+  const ids = new Map();
   for (const unit of BUSINESS_UNITS) {
     const existing = await client.query(
       'select id from business_units where organization_id = $1 and name = $2 limit 1',
       [organizationId, unit.name],
     );
-    if (existing.rowCount) continue;
-    await client.query(
+    if (existing.rowCount) {
+      ids.set(unit.name, existing.rows[0].id);
+      continue;
+    }
+    const inserted = await client.query(
       `
         insert into business_units (organization_id, name, label, color, is_active)
         values ($1, $2, $3, $4, true)
+        returning id
       `,
       [organizationId, unit.name, unit.label, unit.color],
     );
+    ids.set(unit.name, inserted.rows[0].id);
   }
+  return ids;
 }
 
-async function createBatch(client, payload, organizationId, replace) {
+async function createBatch(client, payload, organizationId, businessUnitId, replace) {
   const existing = await client.query(
     `
       select id
@@ -127,9 +153,10 @@ async function createBatch(client, payload, organizationId, replace) {
       where source_name = $1
         and source_type = $2
         and file_hash = $3
+        and business_unit_id = $4
       limit 1
     `,
-    [payload.sourceName, payload.sourceType, payload.workbookFileHash],
+    [payload.sourceName, payload.sourceType, payload.workbookFileHash, businessUnitId],
   );
 
   if (existing.rowCount && !replace) {
@@ -147,6 +174,7 @@ async function createBatch(client, payload, organizationId, replace) {
     `
       insert into import_batches (
         organization_id,
+        business_unit_id,
         source_name,
         source_type,
         file_name,
@@ -154,11 +182,12 @@ async function createBatch(client, payload, organizationId, replace) {
         sheet_name,
         status
       )
-      values ($1, $2, $3, $4, $5, null, 'staged')
+      values ($1, $2, $3, $4, $5, $6, null, 'staged')
       returning id
     `,
     [
       organizationId,
+      businessUnitId,
       payload.sourceName,
       payload.sourceType,
       path.basename(payload.workbookPath),
@@ -280,8 +309,10 @@ async function loadStaging(payload, replace) {
   try {
     await client.query('begin');
     const organizationId = await getOrganizationId(client);
-    await ensureBusinessUnits(client, organizationId);
-    const batchId = await createBatch(client, payload, organizationId, replace);
+    const businessUnitIds = await ensureBusinessUnits(client, organizationId);
+    const businessUnitId = businessUnitIds.get(TARGET_BUSINESS_UNIT);
+    if (!businessUnitId) throw new Error(`Missing ${TARGET_BUSINESS_UNIT} business unit.`);
+    const batchId = await createBatch(client, payload, organizationId, businessUnitId, replace);
     const sourceRowIds = await insertSourceRows(client, batchId, payload.sourceRows);
     await insertNormalizedRecords(client, batchId, sourceRowIds, payload.normalizedRecords);
     await insertReviewItems(client, batchId, sourceRowIds, payload.reviewItems);
