@@ -211,6 +211,7 @@ async function getRecordsForPromotion(client, batchId, options) {
     `
       select
         nr.id,
+        nr.source_row_id,
         nr.record_type,
         nr.proposed_contact_json,
         nr.proposed_lead_json,
@@ -483,6 +484,52 @@ async function promoteRecord(client, context, record, dryRun) {
   return { recordType: record.record_type, contactId, status, sheet: record.source_sheet, row: sourceRow, amount };
 }
 
+async function finalizePromotionMetadata(client, batchId, records) {
+  const sourceRowIds = [...new Set(records.map((record) => record.source_row_id).filter(Boolean))];
+  let updatedReviewItems = 0;
+  if (sourceRowIds.length) {
+    const reviewResult = await client.query(
+      `
+        update import_review_items
+        set
+          review_status = 'imported',
+          reviewed_at = now(),
+          proposed_resolution_json = coalesce(proposed_resolution_json, '{}'::jsonb)
+            || $3::jsonb
+        where import_batch_id = $1
+          and source_row_id = any($2::uuid[])
+      `,
+      [
+        batchId,
+        sourceRowIds,
+        JSON.stringify({ operatorReason: 'Promoted to CRM records' }),
+      ],
+    );
+    updatedReviewItems = reviewResult.rowCount || 0;
+  }
+
+  const remainingResult = await client.query(
+    `
+      select count(*)::int as count
+      from import_normalized_records
+      where import_batch_id = $1
+        and status <> 'imported'
+    `,
+    [batchId],
+  );
+  const remainingRecords = remainingResult.rows[0]?.count || 0;
+  let finalizedBatch = false;
+  if (remainingRecords === 0) {
+    await client.query(
+      "update import_batches set status = 'imported' where id = $1",
+      [batchId],
+    );
+    finalizedBatch = true;
+  }
+
+  return { updatedReviewItems, remainingRecords, finalizedBatch };
+}
+
 function summarize(results) {
   const byType = {};
   const byTypeStatus = {};
@@ -532,8 +579,9 @@ async function main() {
     for (const record of records) {
       results.push(await promoteRecord(client, context, record, false));
     }
+    const metadata = await finalizePromotionMetadata(client, batchId, records);
     await client.query('commit');
-    console.log(JSON.stringify({ batchId, approvedNow, promotedRecords: results.length, summary: summarize(results) }, null, 2));
+    console.log(JSON.stringify({ batchId, approvedNow, promotedRecords: results.length, summary: summarize(results), metadata }, null, 2));
   } catch (error) {
     try { await client.query('rollback'); } catch {}
     throw error;
