@@ -90,8 +90,8 @@ function validateArtifact(payload) {
       errors.push(`review item references missing source row ${key}`);
     }
     const resolutionBusinessUnit = item.proposedResolutionJson?.businessUnit;
-    if (resolutionBusinessUnit && resolutionBusinessUnit !== TARGET_BUSINESS_UNIT) {
-      errors.push(`review item ${key} must target ${TARGET_BUSINESS_UNIT}; received ${resolutionBusinessUnit}`);
+    if (resolutionBusinessUnit !== TARGET_BUSINESS_UNIT) {
+      errors.push(`review item ${key} must target ${TARGET_BUSINESS_UNIT}; received ${resolutionBusinessUnit || 'missing'}`);
     }
   }
 

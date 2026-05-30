@@ -99,6 +99,7 @@ async function getAitContext(client, batchId) {
       select
         ib.organization_id,
         ib.business_unit_id,
+        ib.source_type,
         bu.name as business_unit_name
       from import_batches ib
       left join business_units bu on bu.id = ib.business_unit_id
@@ -108,6 +109,9 @@ async function getAitContext(client, batchId) {
     [batchId],
   );
   if (!batch.rowCount) throw new Error('No import batch found.');
+  if (batch.rows[0].source_type !== 'xlsx') {
+    throw new Error(`Import batch ${batchId} is ${batch.rows[0].source_type || 'unknown'}, not an AIT Signs XLSX batch.`);
+  }
   if (!batch.rows[0].business_unit_id) {
     throw new Error(`Import batch ${batchId} is missing a business unit. Reload staging before promotion.`);
   }
@@ -192,6 +196,9 @@ async function findOrCreateContact(client, context, proposal, sourceLabel, dryRu
 
 async function promoteRecord(client, context, record, dryRun) {
   const proposal = proposalFor(record);
+  if (proposal.businessUnit !== BUSINESS_UNIT_NAME) {
+    throw new Error(`Record ${record.id} targets ${proposal.businessUnit || 'unknown'}, not ${BUSINESS_UNIT_NAME}.`);
+  }
   const sourceLabel = proposal.sourceType || 'ait_signs_import';
   const contactId = await findOrCreateContact(client, context, proposal, sourceLabel, dryRun);
   const status = statusForRecord(record, proposal);
