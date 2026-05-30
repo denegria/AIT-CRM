@@ -123,6 +123,13 @@ function statusForRecord(record, proposal) {
 
 function crmStatusFor(record, proposal) {
   const hint = statusForRecord(record, proposal);
+  if (record.record_type === 'lead') {
+    if (hint === 'converted_to_work_order') return 'Won';
+    if (hint === 'not_interested' || hint === 'invalid_contact' || hint === 'lost') return 'Lost';
+    if (hint === 'contacted' || hint === 'follow_up') return 'Contacted';
+    if (hint === 'qualified') return 'Qualified';
+    return 'New Lead';
+  }
   if (record.record_type === 'work_order') {
     if (hint === 'delivered_paid') return 'Completed';
     if (hint === 'pending_collection') return 'Completed';
