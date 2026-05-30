@@ -576,6 +576,7 @@ export const files = pgTable('files', {
 export const importBatches = pgTable('import_batches', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').references(() => businessUnits.id, { onDelete: 'set null' }),
   sourceName: text('source_name').notNull(),
   sourceType: text('source_type').notNull(),
   fileName: text('file_name').notNull(),
@@ -584,7 +585,9 @@ export const importBatches = pgTable('import_batches', {
   status: text('status').notNull(),
   createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
   createdAt,
-});
+}, (table) => ({
+  businessUnitIdx: index('import_batches_business_unit_idx').on(table.businessUnitId),
+}));
 
 export const importSourceRows = pgTable('import_source_rows', {
   id: uuid('id').primaryKey().defaultRandom(),

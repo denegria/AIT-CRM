@@ -192,6 +192,7 @@ create table files (
 create table import_batches (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references organizations(id) on delete cascade,
+  business_unit_id uuid references business_units(id) on delete set null,
   source_name text not null,
   source_type text not null,
   file_name text not null,
