@@ -8,19 +8,38 @@ const BUSINESS_UNIT_NAME = 'AIT Signs';
 function parseArgs(argv) {
   const options = {
     dryRun: false,
+    approvePending: false,
     batchId: null,
     limit: null,
+    recordType: null,
+    sheet: null,
+    statusHint: null,
+    excludeStatusHints: [],
   };
 
   for (let i = 2; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--dry-run') {
       options.dryRun = true;
+    } else if (arg === '--approve-pending') {
+      options.approvePending = true;
     } else if (arg === '--batch-id') {
       options.batchId = argv[i + 1];
       i += 1;
     } else if (arg === '--limit') {
       options.limit = Number(argv[i + 1]);
+      i += 1;
+    } else if (arg === '--record-type') {
+      options.recordType = argv[i + 1];
+      i += 1;
+    } else if (arg === '--sheet') {
+      options.sheet = argv[i + 1];
+      i += 1;
+    } else if (arg === '--status-hint') {
+      options.statusHint = argv[i + 1];
+      i += 1;
+    } else if (arg === '--exclude-status-hint') {
+      options.excludeStatusHints.push(argv[i + 1]);
       i += 1;
     } else {
       throw new Error(`Unknown option: ${arg}`);
@@ -69,12 +88,55 @@ function amountFromProposal(proposal) {
   return Number.isFinite(value) ? value : null;
 }
 
+function nullableAmount(value) {
+  const parsed = Number(String(value || '').replace(/,/g, ''));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function compactParts(parts) {
+  return parts.map(cleanText).filter(Boolean).join(' · ');
+}
+
+function sourceRowNumber(record) {
+  return Number(record.source_row_number || proposalFor(record).sourceRowNumber || 0) || null;
+}
+
+function statusHintFor(record) {
+  return cleanText(proposalFor(record).statusHint || statusForRecord(record, proposalFor(record)));
+}
+
+function workOrderNumberFor(record, sourceRow) {
+  if (!sourceRow) return null;
+  const sheet = String(record.source_sheet || '').toLowerCase();
+  if (sheet.includes('termin') || sheet.includes('pagad')) return `AIT-WO-ARCH-${sourceRow}`;
+  if (sheet.includes('15 signs')) return `AIT-WO-ACT-${sourceRow}`;
+  return `AIT-WO-${sourceRow}`;
+}
+
 function statusForRecord(record, proposal) {
   if (record.record_type === 'lead') return proposal.statusHint || 'new';
   if (record.record_type === 'estimate') return proposal.estimateStage || proposal.statusHint || 'estimate_review';
   if (record.record_type === 'work_order') return proposal.workOrderStage || proposal.statusHint || 'in_production';
   if (record.record_type === 'payment_snapshot') return proposal.paymentStage || proposal.statusHint || 'payment_snapshot';
   return proposal.noteStage || 'staged_note';
+}
+
+function crmStatusFor(record, proposal) {
+  const hint = statusForRecord(record, proposal);
+  if (record.record_type === 'work_order') {
+    if (hint === 'delivered_paid') return 'Completed';
+    if (hint === 'pending_collection') return 'Completed';
+    if (hint === 'ready_to_deliver') return 'In Progress';
+    if (hint === 'not_started') return 'Pending';
+    if (hint === 'canceled' || hint === 'lost') return 'Canceled';
+    return 'In Progress';
+  }
+  if (record.record_type === 'estimate') {
+    if (hint === 'lost' || hint === 'not_approved') return 'Rejected';
+    if (hint === 'converted_to_work_order') return 'Approved';
+    return 'Pending';
+  }
+  return hint;
 }
 
 async function getLatestBatchId(client) {
@@ -125,9 +187,19 @@ async function getAitContext(client, batchId) {
   };
 }
 
-async function getApprovedRecords(client, batchId, limit) {
+async function getRecordsForPromotion(client, batchId, options) {
   const params = [batchId];
-  const limitSql = limit ? `limit $${params.push(limit)}` : '';
+  const clauses = ['nr.import_batch_id = $1'];
+  clauses.push(options.approvePending ? "nr.status in ('approved', 'pending')" : "nr.status = 'approved'");
+  if (options.recordType) {
+    params.push(options.recordType);
+    clauses.push(`nr.record_type = $${params.length}`);
+  }
+  if (options.sheet) {
+    params.push(options.sheet);
+    clauses.push(`sr.source_sheet = $${params.length}`);
+  }
+  const limitSql = options.limit ? `limit $${params.push(options.limit)}` : '';
   const result = await client.query(
     `
       select
@@ -140,24 +212,31 @@ async function getApprovedRecords(client, batchId, limit) {
         nr.proposed_payment_json,
         nr.proposed_note_json,
         nr.confidence_score,
+        nr.status as import_status,
         sr.source_sheet,
         sr.source_row_number,
         sr.raw_text
       from import_normalized_records nr
       join import_source_rows sr on sr.id = nr.source_row_id
-      where nr.import_batch_id = $1
-        and nr.status = 'approved'
+      where ${clauses.join(' and ')}
       order by sr.source_sheet, sr.source_row_number
       ${limitSql}
     `,
     params,
   );
-  return result.rows;
+  return result.rows.filter((record) => {
+    const hint = statusHintFor(record);
+    if (options.statusHint && hint !== options.statusHint) return false;
+    if (options.excludeStatusHints.includes(hint)) return false;
+    return true;
+  });
 }
 
 async function findOrCreateContact(client, context, proposal, sourceLabel, dryRun) {
   const phone = normalizePhone(proposal.phoneHint);
-  const name = contactNameFromProposal(proposal);
+  const companyName = cleanText(proposal.customerName || proposal.contactHint);
+  const personName = cleanText(proposal.contactName);
+  const name = (personName || companyName || contactNameFromProposal(proposal)).slice(0, 160);
 
   if (phone) {
     const existing = await client.query(
@@ -183,15 +262,32 @@ async function findOrCreateContact(client, context, proposal, sourceLabel, dryRu
         organization_id,
         primary_business_unit_id,
         name,
+        company_name,
         phone,
         source_label
       )
-      values ($1, $2, $3, $4, $5)
+      values ($1, $2, $3, $4, $5, $6)
       returning id
     `,
-    [context.organizationId, context.businessUnitId, name, phone, sourceLabel],
+    [context.organizationId, context.businessUnitId, name, companyName || null, phone, sourceLabel],
   );
   return result.rows[0].id;
+}
+
+async function approvePendingRecords(client, batchId, records) {
+  const pendingIds = records.filter((record) => record.import_status === 'pending').map((record) => record.id);
+  if (!pendingIds.length) return 0;
+  const result = await client.query(
+    `
+      update import_normalized_records
+      set status = 'approved'
+      where import_batch_id = $1
+        and id = any($2::uuid[])
+        and status = 'pending'
+    `,
+    [batchId, pendingIds],
+  );
+  return result.rowCount || 0;
 }
 
 async function promoteRecord(client, context, record, dryRun) {
@@ -201,11 +297,13 @@ async function promoteRecord(client, context, record, dryRun) {
   }
   const sourceLabel = proposal.sourceType || 'ait_signs_import';
   const contactId = await findOrCreateContact(client, context, proposal, sourceLabel, dryRun);
-  const status = statusForRecord(record, proposal);
+  const status = crmStatusFor(record, proposal);
   const amount = amountFromProposal(proposal);
+  const sourceRow = sourceRowNumber(record);
+  const importRef = compactParts([record.source_sheet, sourceRow ? `row ${sourceRow}` : '', proposal.statusHint]);
 
   if (dryRun) {
-    return { recordType: record.record_type, contactId, status };
+    return { recordType: record.record_type, contactId, status, sheet: record.source_sheet, row: sourceRow, amount };
   }
 
   if (record.record_type === 'lead') {
@@ -233,55 +331,100 @@ async function promoteRecord(client, context, record, dryRun) {
         proposal.leadStage || status,
         proposal.originalText || null,
       ],
-    );
+      );
   } else if (record.record_type === 'estimate') {
-    await client.query(
+    const result = await client.query(
       `
         insert into estimates (
           organization_id,
           business_unit_id,
           contact_id,
+          estimate_number,
           status,
+          subtotal,
+          tax,
+          advance_paid,
+          balance_due,
           total
         )
-        values ($1, $2, $3, $4, $5)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        returning id
       `,
-      [context.organizationId, context.businessUnitId, contactId, status, amount],
+      [
+        context.organizationId,
+        context.businessUnitId,
+        contactId,
+        sourceRow ? `AIT-EST-${sourceRow}` : null,
+        status,
+        nullableAmount(proposal.netAmountHint),
+        nullableAmount(proposal.taxAmountHint),
+        nullableAmount(proposal.advanceAmountHint),
+        nullableAmount(proposal.balanceAmountHint),
+        amount,
+      ],
     );
+    record.promoted_estimate_id = result.rows[0]?.id || null;
   } else if (record.record_type === 'work_order') {
-    await client.query(
+    const title = cleanText(proposal.workDescription || proposal.customerName || proposal.contactHint || `AIT Signs work order ${sourceRow || record.id}`).slice(0, 220);
+    const description = compactParts([
+      proposal.workDescription,
+      proposal.observationText,
+      proposal.originalText,
+      importRef ? `Import: ${importRef}` : '',
+    ]);
+    const result = await client.query(
       `
         insert into work_orders (
           organization_id,
           business_unit_id,
           contact_id,
+          work_order_number,
+          title,
           status,
-          priority
+          priority,
+          description,
+          estimated_cost
         )
-        values ($1, $2, $3, $4, $5)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        returning id
       `,
-      [context.organizationId, context.businessUnitId, contactId, status, 'Medium'],
+      [
+        context.organizationId,
+        context.businessUnitId,
+        contactId,
+        workOrderNumberFor(record, sourceRow),
+        title,
+        status,
+        'Medium',
+        description || null,
+        amount,
+      ],
     );
+    record.promoted_work_order_id = result.rows[0]?.id || null;
   } else if (record.record_type === 'payment_snapshot') {
-    await client.query(
+    const result = await client.query(
       `
         insert into payment_snapshots (
           organization_id,
           business_unit_id,
           amount,
+          balance_after,
           source_sheet,
           source_row
         )
-        values ($1, $2, $3, $4, $5)
+        values ($1, $2, $3, $4, $5, $6)
+        returning id
       `,
       [
         context.organizationId,
         context.businessUnitId,
         amount,
+        nullableAmount(proposal.balanceAmountHint),
         record.source_sheet,
-        record.source_row_number,
+        sourceRow,
       ],
     );
+    record.promoted_payment_snapshot_id = result.rows[0]?.id || null;
   } else {
     await client.query(
       `
@@ -305,10 +448,12 @@ async function promoteRecord(client, context, record, dryRun) {
         contact_id,
         event_type,
         message,
+        estimate_id,
+        work_order_id,
         source_sheet,
         source_row
       )
-      values ($1, $2, $3, $4, $5, $6, $7)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     `,
     [
       context.organizationId,
@@ -316,8 +461,10 @@ async function promoteRecord(client, context, record, dryRun) {
       contactId,
       `import_promoted_${record.record_type}`,
       proposal.originalText || record.raw_text || null,
+      record.promoted_estimate_id || null,
+      record.promoted_work_order_id || null,
       record.source_sheet,
-      record.source_row_number,
+      sourceRow,
     ],
   );
 
@@ -326,15 +473,18 @@ async function promoteRecord(client, context, record, dryRun) {
     [record.id],
   );
 
-  return { recordType: record.record_type, contactId, status };
+  return { recordType: record.record_type, contactId, status, sheet: record.source_sheet, row: sourceRow, amount };
 }
 
 function summarize(results) {
   const byType = {};
+  const byTypeStatus = {};
   for (const result of results) {
     byType[result.recordType] = (byType[result.recordType] || 0) + 1;
+    const key = `${result.recordType}:${result.status}`;
+    byTypeStatus[key] = (byTypeStatus[key] || 0) + 1;
   }
-  return byType;
+  return { byType, byTypeStatus };
 }
 
 async function main() {
@@ -351,24 +501,32 @@ async function main() {
     if (!batchId) throw new Error('No import batch found.');
 
     const context = await getAitContext(client, batchId);
-    const records = await getApprovedRecords(client, batchId, options.limit);
+    const records = await getRecordsForPromotion(client, batchId, options);
 
     if (options.dryRun) {
       const results = [];
       for (const record of records) {
         results.push(await promoteRecord(client, context, record, true));
       }
-      console.log(JSON.stringify({ batchId, dryRun: true, approvedRecords: records.length, byType: summarize(results) }, null, 2));
+      console.log(JSON.stringify({
+        batchId,
+        dryRun: true,
+        approvePending: options.approvePending,
+        selectedRecords: records.length,
+        summary: summarize(results),
+        samples: results.slice(0, 10),
+      }, null, 2));
       return;
     }
 
     await client.query('begin');
+    const approvedNow = options.approvePending ? await approvePendingRecords(client, batchId, records) : 0;
     const results = [];
     for (const record of records) {
       results.push(await promoteRecord(client, context, record, false));
     }
     await client.query('commit');
-    console.log(JSON.stringify({ batchId, promotedRecords: results.length, byType: summarize(results) }, null, 2));
+    console.log(JSON.stringify({ batchId, approvedNow, promotedRecords: results.length, summary: summarize(results) }, null, 2));
   } catch (error) {
     try { await client.query('rollback'); } catch {}
     throw error;
