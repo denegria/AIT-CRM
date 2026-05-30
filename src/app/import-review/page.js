@@ -16,17 +16,83 @@ const STATUS_OPTIONS = [
 
 const TYPE_LABELS = {
   all: 'All record types',
-  record_candidate: 'Record candidate',
-  financial_line: 'Financial line',
-  blank: 'Blank / spacer',
-  misc_text: 'Misc text',
-  section_header: 'Section header',
-  header: 'Header',
+  lead: 'Lead',
+  estimate: 'Estimate',
+  work_order: 'Work order',
+  payment_snapshot: 'Payment',
   note: 'Note',
 };
 
 function labelForType(value) {
   return TYPE_LABELS[value] || value.replace(/_/g, ' ');
+}
+
+function proposalForRow(row) {
+  if (row?.record_type === 'lead') return row.proposed_lead_json || {};
+  if (row?.record_type === 'estimate') return row.proposed_estimate_json || {};
+  if (row?.record_type === 'work_order') return row.proposed_work_order_json || {};
+  if (row?.record_type === 'payment_snapshot') return row.proposed_payment_json || {};
+  if (row?.record_type === 'note') return row.proposed_note_json || {};
+  return (
+    row?.proposed_lead_json ||
+    row?.proposed_estimate_json ||
+    row?.proposed_work_order_json ||
+    row?.proposed_payment_json ||
+    row?.proposed_note_json ||
+    row?.proposed_contact_json ||
+    {}
+  );
+}
+
+function sheetContextForRow(row) {
+  const sourceSheet = String(row?.source_sheet || '').toLowerCase();
+  const proposal = proposalForRow(row);
+  const sourceType = proposal.sourceType;
+
+  if (sourceSheet.includes('interes') || sourceType === 'lead') {
+    return {
+      label: 'Prospects',
+      detail: 'Interested leads only. Not estimates or work orders yet.',
+    };
+  }
+  if (sourceSheet.includes('estim') || sourceType === 'estimate') {
+    return {
+      label: 'Estimates',
+      detail: 'Proposal sheet. Totals and balances are estimate fields unless explicit payment columns are filled.',
+    };
+  }
+  if (sourceSheet.includes('termin') || sourceSheet.includes('pagad') || sourceType === 'archive') {
+    return {
+      label: 'Completed / paid work',
+      detail: 'Finished work-order archive. Strongest evidence that a job was completed and paid.',
+    };
+  }
+  if (sourceSheet.includes('work order') || sourceType === 'work_order') {
+    return {
+      label: 'Active work orders',
+      detail: 'Active production work. Payments here are deposits or collections tied to active jobs.',
+    };
+  }
+  return {
+    label: 'Unmapped sheet',
+    detail: 'Needs operator confirmation before promotion.',
+  };
+}
+
+function interpretationForRow(row) {
+  const context = sheetContextForRow(row);
+  const proposal = proposalForRow(row);
+  const recordLabel = labelForType(row?.record_type || 'note');
+  if (row?.record_type === 'payment_snapshot') {
+    if (proposal.paymentSource !== 'explicit_payment_columns') {
+      return `${context.label}: legacy payment label. Verify the source sheet and payment columns before approving.`;
+    }
+    return `${context.label}: explicit payment columns detected. Review this as payment evidence tied to the source row, not as the primary job record.`;
+  }
+  if (proposal.paymentHint) {
+    return `${context.label}: ${recordLabel.toLowerCase()} with explicit payment evidence in the payment columns.`;
+  }
+  return `${context.label}: review as ${recordLabel.toLowerCase()}. ${context.detail}`;
 }
 
 function badgeClassForStatus(status) {
@@ -402,8 +468,8 @@ export default function ImportReviewPage() {
                       onChange={(e) => setSelectedIds(e.target.checked ? rowIds : [])}
                     />
                   </th>
-                  <th>Row</th>
-                  <th>Type</th>
+                  <th>Source</th>
+                  <th>CRM record</th>
                   <th>Status</th>
                   <th>Confidence</th>
                   <th>Preview</th>
@@ -414,6 +480,7 @@ export default function ImportReviewPage() {
                 {rows.map((row) => {
                   const isActive = row.id === activeId;
                   const isSelected = selectedIds.includes(row.id);
+                  const sheetContext = sheetContextForRow(row);
                   return (
                     <tr
                       key={row.id}
@@ -431,11 +498,15 @@ export default function ImportReviewPage() {
                         />
                       </td>
                       <td>
+                        <div className="source-context">{sheetContext.label}</div>
                         <div style={{ fontWeight: 600 }}>{row.source_sheet}</div>
                         <div className="page-subtitle" style={{ margin: 0 }}>Row {row.source_row_number}</div>
                       </td>
                       <td>
                         <span className="badge badge-contacted">{labelForType(row.record_type)}</span>
+                        {proposalForRow(row).paymentHint && row.record_type !== 'payment_snapshot' && (
+                          <span className="badge badge-medium" style={{ marginLeft: 6 }}>Has payment fields</span>
+                        )}
                       </td>
                       <td>
                         <span className={`badge ${badgeClassForStatus(row.status)}`}>{row.status}</span>
@@ -494,6 +565,10 @@ export default function ImportReviewPage() {
                   <div>{activeRow.source_sheet}</div>
                 </div>
                 <div>
+                  <div className="review-meta-label">Source lane</div>
+                  <div>{sheetContextForRow(activeRow).label}</div>
+                </div>
+                <div>
                   <div className="review-meta-label">Row</div>
                   <div>{activeRow.source_row_number}</div>
                 </div>
@@ -512,6 +587,11 @@ export default function ImportReviewPage() {
               </div>
 
               <div className="detail-section">
+                <div className="review-meta-label">Interpretation</div>
+                <div className="review-interpretation">{interpretationForRow(activeRow)}</div>
+              </div>
+
+              <div className="detail-section">
                 <div className="review-meta-label">Raw text</div>
                 <pre className="review-pre">{activeRow.raw_text || 'No raw text captured.'}</pre>
               </div>
@@ -520,12 +600,12 @@ export default function ImportReviewPage() {
                 <div className="review-meta-label">Proposed record</div>
                 <div className="proposal-grid">
                   {[
-                    ['Contact', activeRow.proposed_contact_json],
                     ['Lead', activeRow.proposed_lead_json],
                     ['Estimate', activeRow.proposed_estimate_json],
                     ['Work order', activeRow.proposed_work_order_json],
                     ['Payment', activeRow.proposed_payment_json],
                     ['Note', activeRow.proposed_note_json],
+                    ['Contact', activeRow.proposed_contact_json],
                   ].filter(([, value]) => summarizeJson(value).length > 0).map(([title, value]) => {
                     const entries = summarizeJson(value);
                     return (
@@ -685,6 +765,19 @@ export default function ImportReviewPage() {
           -webkit-box-orient: vertical;
           overflow: hidden;
         }
+        .source-context {
+          display: inline-flex;
+          align-items: center;
+          width: fit-content;
+          max-width: 100%;
+          padding: 2px 7px;
+          margin-bottom: 5px;
+          border-radius: var(--radius-sm);
+          background: var(--bg-tertiary);
+          color: var(--text-secondary);
+          font-size: var(--text-xs);
+          font-weight: 700;
+        }
         .review-row-actions {
           display: flex;
           flex-wrap: wrap;
@@ -720,6 +813,15 @@ export default function ImportReviewPage() {
         }
         .detail-section {
           margin-bottom: 16px;
+        }
+        .review-interpretation {
+          padding: 12px 14px;
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-lg);
+          background: var(--bg-tertiary);
+          color: var(--text-secondary);
+          font-size: var(--text-sm);
+          line-height: 1.5;
         }
         .review-pre {
           margin-top: 8px;

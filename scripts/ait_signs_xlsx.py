@@ -171,6 +171,10 @@ def status_hint_for_sheet(sheet_name: str) -> str:
     return "needs_review"
 
 
+PAYMENT_AMOUNT_COLUMNS = (22, 25, 28, 31)
+PRIMARY_TOTAL_COLUMNS = (19, 17)
+
+
 def extract_first_phone(values: list[str]) -> str | None:
     candidates: list[tuple[int, str]] = []
     for value in values:
@@ -187,18 +191,58 @@ def extract_first_phone(values: list[str]) -> str | None:
     return max(candidates, key=lambda item: item[0])[1]
 
 
+def money_value(value: object) -> str | None:
+    text = normalize_text(value)
+    if not text:
+        return None
+    if EXCEL_SERIAL_RE.match(text.replace(",", "")):
+        return None
+    match = MONEY_RE.search(text)
+    if not match:
+        return None
+    token = match.group(0).replace("$", "").strip().replace(",", "")
+    if not token:
+        return None
+    try:
+        amount = float(token)
+    except ValueError:
+        return None
+    if amount <= 0:
+        return None
+    return token
+
+
 def extract_first_money(values: list[str]) -> str | None:
     for value in values:
-        text = normalize_text(value)
-        if not text:
-            continue
-        match = MONEY_RE.search(text)
-        if match:
-            token = match.group(0).replace("$", "").strip()
-            token = token.replace(",", "")
-            if token:
-                return token
+        token = money_value(value)
+        if token:
+            return token
     return None
+
+
+def cell_at(values: list[str], column_number: int) -> str:
+    index = column_number - 1
+    if index < 0 or index >= len(values):
+        return ""
+    return normalize_text(values[index])
+
+
+def first_money_in_columns(values: list[str], columns: tuple[int, ...]) -> str | None:
+    for column in columns:
+        token = money_value(cell_at(values, column))
+        if token:
+            return token
+    return None
+
+
+def amount_hint_for_row(values: list[str], family: str) -> str | None:
+    if family in {"estimates", "work_orders", "completed_paid"}:
+        return first_money_in_columns(values, PRIMARY_TOTAL_COLUMNS) or extract_first_money(values)
+    return extract_first_money(values)
+
+
+def explicit_payment_hint(values: list[str]) -> str | None:
+    return first_money_in_columns(values, PAYMENT_AMOUNT_COLUMNS)
 
 
 def money_like_count(values: list[str]) -> int:
@@ -313,6 +357,8 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
             source_row["parseStatus"] = "ignored"
         elif is_before_data:
             source_row["parseStatus"] = "ignored" if row["kind"] in {"header", "section_header"} else "needs_review"
+        elif row["kind"] == "financial_line" and sheet_family(row["sheet"]) == "mixed":
+            source_row["parseStatus"] = "needs_review"
         elif row["kind"] in {"record_candidate", "financial_line", "note"}:
             source_row["parseStatus"] = "parsed"
         elif row["kind"] in {"header", "section_header"}:
@@ -329,7 +375,8 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
             family = sheet_family(sheet_name)
             phone = extract_first_phone(row["values"])
             contact_hint = extract_contact_hint(row["values"])
-            money_hint = extract_first_money(row["values"])
+            money_hint = amount_hint_for_row(row["values"], family)
+            payment_hint = explicit_payment_hint(row["values"])
             proposed_base = {
                 "businessUnit": "AIT Signs",
                 "sourceSheet": sheet_name,
@@ -341,15 +388,13 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
                 "contactHint": contact_hint,
                 "phoneHint": phone,
                 "moneyHint": money_hint,
+                "paymentHint": payment_hint,
                 "originalText": row["summary"],
                 "rawValuesJson": row["values"],
             }
             record_type = "note"
             proposed_field = "proposedNoteJson"
-            if row["kind"] == "financial_line":
-                record_type = "payment_snapshot"
-                proposed_field = "proposedPaymentJson"
-            elif row["kind"] == "note":
+            if row["kind"] == "note":
                 record_type = "note"
                 proposed_field = "proposedNoteJson"
             elif family == "lead_intake":
@@ -382,19 +427,33 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
                 normalized_record["proposedWorkOrderJson"] = proposed_base | {
                     "workOrderStage": status_hint_for_sheet(sheet_name),
                 }
-            elif record_type == "payment_snapshot":
-                normalized_record["proposedPaymentJson"] = proposed_base | {
-                    "paymentStage": status_hint_for_sheet(sheet_name),
-                }
             else:
                 normalized_record["proposedNoteJson"] = proposed_base | {
                     "noteStage": status_hint_for_sheet(sheet_name),
                 }
             normalized_records.append(normalized_record)
 
+            if payment_hint and family in {"estimates", "work_orders", "completed_paid"}:
+                normalized_records.append(
+                    {
+                        "sourceSheet": sheet_name,
+                        "sourceRowNumber": row["rowNumber"],
+                        "recordType": "payment_snapshot",
+                        "confidenceScore": min(row["confidence"], 0.74),
+                        "status": "pending",
+                        "proposedPaymentJson": proposed_base
+                        | {
+                            "moneyHint": payment_hint,
+                            "paymentStage": status_hint_for_sheet(sheet_name),
+                            "paymentSource": "explicit_payment_columns",
+                        },
+                    }
+                )
+
         if (
             (is_before_data and row["kind"] not in {"blank", "header", "section_header"})
             or row["kind"] in {"header", "section_header", "misc_text"}
+            or (row["kind"] == "financial_line" and sheet_family(row["sheet"]) == "mixed")
         ) or (
             row["kind"] == "record_candidate" and row["confidence"] < 0.75
         ):
