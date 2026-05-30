@@ -23,60 +23,104 @@ export function normalizeImportReviewText(value, fallback = 'all') {
   return String(value);
 }
 
-export async function resolveImportReviewBatchId(client, batchId, { organizationId = null } = {}) {
+export async function resolveImportReviewBatchId(client, batchId, { organizationId = null, businessUnitId = null } = {}) {
   if (batchId) {
-    if (!organizationId) return batchId;
+    if (!organizationId && !businessUnitId) return batchId;
 
+    const params = [batchId];
+    const clauses = ['id = $1'];
+    if (organizationId) {
+      params.push(organizationId);
+      clauses.push(`organization_id = $${params.length}`);
+    }
+    if (businessUnitId) {
+      params.push(businessUnitId);
+      clauses.push(`business_unit_id = $${params.length}`);
+    }
     const scopedBatch = await client.query(
-      'select id from import_batches where id = $1 and organization_id = $2 limit 1',
-      [batchId, organizationId],
+      `select id from import_batches where ${clauses.join(' and ')} limit 1`,
+      params,
     );
     const resolved = scopedBatch.rows[0]?.id;
     if (!resolved) throw new Error('No import batch found.');
     return resolved;
   }
 
-  const organizationClause = organizationId ? 'and ib.organization_id = $3 ' : '';
-  const batchParams = organizationId
-    ? [OPERATOR_REVIEW_SOURCE_TYPES, REVIEWABLE_RECORD_STATUSES, organizationId]
-    : [OPERATOR_REVIEW_SOURCE_TYPES, REVIEWABLE_RECORD_STATUSES];
+  const batchParams = [OPERATOR_REVIEW_SOURCE_TYPES, REVIEWABLE_RECORD_STATUSES];
+  const scopeClauses = [];
+  if (organizationId) {
+    batchParams.push(organizationId);
+    scopeClauses.push(`and ib.organization_id = $${batchParams.length} `);
+  }
+  if (businessUnitId) {
+    batchParams.push(businessUnitId);
+    scopeClauses.push(`and ib.business_unit_id = $${batchParams.length} `);
+  }
 
   const preferredPending = await client.query(
     'select ib.id ' +
     'from import_batches ib ' +
     'where ib.source_type = any($1::text[]) ' +
     'and exists (select 1 from import_normalized_records nr where nr.import_batch_id = ib.id and nr.status = any($2::text[])) ' +
-    organizationClause +
+    scopeClauses.join('') +
     'order by ib.created_at desc limit 1',
     batchParams,
   );
   if (preferredPending.rows[0]?.id) return preferredPending.rows[0].id;
 
-  const pendingParams = organizationId ? [REVIEWABLE_RECORD_STATUSES, organizationId] : [REVIEWABLE_RECORD_STATUSES];
+  const pendingParams = [REVIEWABLE_RECORD_STATUSES];
+  const pendingScopeClauses = [];
+  if (organizationId) {
+    pendingParams.push(organizationId);
+    pendingScopeClauses.push(`and ib.organization_id = $${pendingParams.length} `);
+  }
+  if (businessUnitId) {
+    pendingParams.push(businessUnitId);
+    pendingScopeClauses.push(`and ib.business_unit_id = $${pendingParams.length} `);
+  }
   const anyPending = await client.query(
     'select ib.id ' +
     'from import_batches ib ' +
     'where exists (select 1 from import_normalized_records nr where nr.import_batch_id = ib.id and nr.status = any($1::text[])) ' +
-    (organizationId ? 'and ib.organization_id = $2 ' : '') +
+    pendingScopeClauses.join('') +
     'order by ib.created_at desc limit 1',
     pendingParams,
   );
   if (anyPending.rows[0]?.id) return anyPending.rows[0].id;
 
-  const fallbackParams = organizationId ? [OPERATOR_REVIEW_SOURCE_TYPES, organizationId] : [OPERATOR_REVIEW_SOURCE_TYPES];
+  const fallbackParams = [OPERATOR_REVIEW_SOURCE_TYPES];
+  const fallbackScopeClauses = [];
+  if (organizationId) {
+    fallbackParams.push(organizationId);
+    fallbackScopeClauses.push(`and organization_id = $${fallbackParams.length} `);
+  }
+  if (businessUnitId) {
+    fallbackParams.push(businessUnitId);
+    fallbackScopeClauses.push(`and business_unit_id = $${fallbackParams.length} `);
+  }
   const preferredFallback = await client.query(
     'select id from import_batches where source_type = any($1::text[]) ' +
-    (organizationId ? 'and organization_id = $2 ' : '') +
+    fallbackScopeClauses.join('') +
     'order by created_at desc limit 1',
     fallbackParams,
   );
   if (preferredFallback.rows[0]?.id) return preferredFallback.rows[0].id;
 
+  const finalParams = [];
+  const finalClauses = [];
+  if (organizationId) {
+    finalParams.push(organizationId);
+    finalClauses.push(`organization_id = $${finalParams.length}`);
+  }
+  if (businessUnitId) {
+    finalParams.push(businessUnitId);
+    finalClauses.push(`business_unit_id = $${finalParams.length}`);
+  }
   const fallback = await client.query(
     'select id from import_batches ' +
-    (organizationId ? 'where organization_id = $1 ' : '') +
+    (finalClauses.length ? `where ${finalClauses.join(' and ')} ` : '') +
     'order by created_at desc limit 1',
-    organizationId ? [organizationId] : [],
+    finalParams,
   );
   const resolved = fallback.rows[0]?.id;
   if (!resolved) {
@@ -85,19 +129,7 @@ export async function resolveImportReviewBatchId(client, batchId, { organization
   return resolved;
 }
 
-export async function loadImportReviewBatch(client, batchId) {
-  const result = await client.query(
-    `
-      select id, source_name, source_type, file_name, file_hash, sheet_name, status, created_at
-      from import_batches
-      where id = $1
-    `,
-    [batchId],
-  );
-
-  const batch = result.rows[0];
-  if (!batch) return null;
-
+function importBatchPayload(batch) {
   return {
     id: batch.id,
     sourceName: batch.source_name,
@@ -106,8 +138,82 @@ export async function loadImportReviewBatch(client, batchId) {
     fileHash: batch.file_hash,
     sheetName: batch.sheet_name,
     status: batch.status,
+    businessUnitId: batch.business_unit_id,
+    businessUnitName: batch.business_unit_name,
     createdAt: batch.created_at,
   };
+}
+
+export async function loadImportReviewBatch(client, batchId) {
+  const result = await client.query(
+    `
+      select
+        ib.id,
+        ib.source_name,
+        ib.source_type,
+        ib.file_name,
+        ib.file_hash,
+        ib.sheet_name,
+        ib.status,
+        ib.business_unit_id,
+        bu.name as business_unit_name,
+        ib.created_at
+      from import_batches ib
+      left join business_units bu on bu.id = ib.business_unit_id
+      where ib.id = $1
+    `,
+    [batchId],
+  );
+
+  const batch = result.rows[0];
+  if (!batch) return null;
+
+  return importBatchPayload(batch);
+}
+
+export async function listImportReviewBatches(client, { organizationId = null, businessUnitId = null } = {}) {
+  const params = [];
+  const clauses = [];
+  if (organizationId) {
+    params.push(organizationId);
+    clauses.push(`ib.organization_id = $${params.length}`);
+  }
+  if (businessUnitId) {
+    params.push(businessUnitId);
+    clauses.push(`ib.business_unit_id = $${params.length}`);
+  }
+
+  const result = await client.query(
+    `
+      select
+        ib.id,
+        ib.source_name,
+        ib.source_type,
+        ib.file_name,
+        ib.file_hash,
+        ib.sheet_name,
+        ib.status,
+        ib.business_unit_id,
+        bu.name as business_unit_name,
+        ib.created_at,
+        count(nr.id)::int as normalized_count,
+        count(nr.id) filter (where nr.status in ('pending', 'needs_review'))::int as reviewable_count
+      from import_batches ib
+      left join business_units bu on bu.id = ib.business_unit_id
+      left join import_normalized_records nr on nr.import_batch_id = ib.id
+      ${clauses.length ? `where ${clauses.join(' and ')}` : ''}
+      group by ib.id, bu.name
+      order by ib.created_at desc
+      limit 50
+    `,
+    params,
+  );
+
+  return result.rows.map((batch) => ({
+    ...importBatchPayload(batch),
+    normalizedCount: Number(batch.normalized_count || 0),
+    reviewableCount: Number(batch.reviewable_count || 0),
+  }));
 }
 
 export async function loadImportReviewSummary(client, batchId) {
@@ -218,6 +324,8 @@ export async function loadImportReviewRows(client, batchId, { status = 'all', ty
         nr.proposed_work_order_json,
         nr.proposed_payment_json,
         nr.proposed_note_json,
+        ib.business_unit_id,
+        bu.name as business_unit_name,
         sr.id as source_row_id,
         sr.source_sheet,
         sr.source_row_number,
@@ -225,6 +333,8 @@ export async function loadImportReviewRows(client, batchId, { status = 'all', ty
         sr.parse_status,
         sr.created_at
       from import_normalized_records nr
+      join import_batches ib on ib.id = nr.import_batch_id
+      left join business_units bu on bu.id = ib.business_unit_id
       join import_source_rows sr on sr.id = nr.source_row_id
       where ${clauses.join(' and ')}
       order by
@@ -262,6 +372,11 @@ export async function updateImportReviewStatus(client, {
 
   await client.query('begin');
   try {
+    const batch = await loadImportReviewBatch(client, resolvedBatchId);
+    if (status === 'approved' && OPERATOR_REVIEW_SOURCE_TYPES.includes(batch?.sourceType) && !batch?.businessUnitId) {
+      throw new Error('Import batch must have a business unit before approval.');
+    }
+
     const records = await findRecordsForStatusUpdate(client, resolvedBatchId, { recordIds, rowSelector, organizationId });
     if (!records.length) {
       await client.query('commit');

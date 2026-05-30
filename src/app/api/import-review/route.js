@@ -5,6 +5,7 @@ import { getRequestSession, hasPermission, isAuthEnabled, PERMISSIONS } from '@/
 import { isUuid } from '@/lib/crm/validation.js';
 import {
   VALID_IMPORT_REVIEW_STATUSES,
+  listImportReviewBatches,
   loadImportReviewBatch,
   loadImportReviewRows,
   loadImportReviewSummary,
@@ -73,11 +74,21 @@ export async function GET(request) {
   try {
     return await withClient(async (client) => {
       const url = new URL(request.url);
+      const businessUnitId = url.searchParams.get('businessUnitId');
+      if (businessUnitId && businessUnitId !== 'all' && !isUuid(businessUnitId)) {
+        return NextResponse.json({ error: 'A valid businessUnitId is required.' }, { status: 400 });
+      }
+
       const batchId = await resolveImportReviewBatchId(client, url.searchParams.get('batchId'), {
         organizationId: auth.organizationId,
+        businessUnitId: businessUnitId && businessUnitId !== 'all' ? businessUnitId : null,
       });
       const batch = await loadImportReviewBatch(client, batchId);
       const summary = await loadImportReviewSummary(client, batchId);
+      const batches = await listImportReviewBatches(client, {
+        organizationId: auth.organizationId,
+        businessUnitId: businessUnitId && businessUnitId !== 'all' ? businessUnitId : null,
+      });
       const rows = await loadImportReviewRows(client, batchId, {
         status: normalizeImportReviewText(url.searchParams.get('status')),
         type: normalizeImportReviewText(url.searchParams.get('type')),
@@ -87,6 +98,7 @@ export async function GET(request) {
 
       return NextResponse.json({
         batch,
+        batches,
         summary,
         rows,
       });

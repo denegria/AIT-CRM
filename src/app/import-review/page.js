@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { Check, Database, Eye, Filter, Lock, RefreshCw, Search, X } from 'lucide-react';
+import { AlertTriangle, Check, Database, Eye, Filter, Lock, RefreshCw, Search, X } from 'lucide-react';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 
@@ -42,6 +42,19 @@ function proposalForRow(row) {
     row?.proposed_contact_json ||
     {}
   );
+}
+
+function businessUnitForRow(row, batch) {
+  const proposal = proposalForRow(row);
+  return row?.business_unit_name || proposal.businessUnit || batch?.businessUnitName || 'Unassigned';
+}
+
+function batchLabel(batch) {
+  if (!batch) return 'Latest matching batch';
+  const source = batch.fileName || batch.sourceName || batch.id;
+  const unit = batch.businessUnitName || 'Unassigned';
+  const count = Number.isFinite(Number(batch.reviewableCount)) ? ` · ${Number(batch.reviewableCount).toLocaleString()} reviewable` : '';
+  return `${unit} · ${source}${count}`;
 }
 
 function sheetContextForRow(row) {
@@ -124,9 +137,9 @@ function formatDate(value) {
 }
 
 export default function ImportReviewPage() {
-  const { loaded, dataSource, access } = useCRM();
+  const { loaded, dataSource, access, businessUnits } = useCRM();
   const { toast } = useToast();
-  const [filters, setFilters] = useState({ status: 'pending', type: 'all', q: '', limit: 120 });
+  const [filters, setFilters] = useState({ status: 'pending', type: 'all', q: '', limit: 120, businessUnitId: 'all', batchId: '' });
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -134,6 +147,7 @@ export default function ImportReviewPage() {
   const [authRequired, setAuthRequired] = useState(false);
   const [adminToken, setAdminToken] = useState('');
   const [batch, setBatch] = useState(null);
+  const [batches, setBatches] = useState([]);
   const [summary, setSummary] = useState(null);
   const [rows, setRows] = useState([]);
   const [selectedIds, setSelectedIds] = useState([]);
@@ -149,6 +163,8 @@ export default function ImportReviewPage() {
         const params = new URLSearchParams();
         params.set('status', filters.status);
         params.set('type', filters.type);
+        if (filters.businessUnitId !== 'all') params.set('businessUnitId', filters.businessUnitId);
+        if (filters.batchId) params.set('batchId', filters.batchId);
         if (filters.q.trim()) params.set('q', filters.q.trim());
         params.set('limit', String(filters.limit));
 
@@ -162,6 +178,7 @@ export default function ImportReviewPage() {
 
         setAuthRequired(false);
         setBatch(payload.batch);
+        setBatches(payload.batches || []);
         setSummary(payload.summary);
         setRows(payload.rows || []);
         setSelectedIds((prev) => prev.filter((id) => (payload.rows || []).some((row) => row.id === id)));
@@ -176,6 +193,7 @@ export default function ImportReviewPage() {
           setRows([]);
           setSummary(null);
           setBatch(null);
+          setBatches([]);
         }
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -197,6 +215,8 @@ export default function ImportReviewPage() {
   const allVisibleSelected = rowIds.length > 0 && rowIds.every((id) => selectedIds.includes(id));
   const selectedCount = selectedIds.filter((id) => rowIds.includes(id)).length;
   const canReview = access.canWriteImportReview;
+  const batchHasBusinessUnit = Boolean(batch?.businessUnitId || batch?.businessUnitName);
+  const canApproveRows = canReview && batchHasBusinessUnit;
 
   async function unlockAdminSession(event) {
     event.preventDefault();
@@ -361,6 +381,16 @@ export default function ImportReviewPage() {
       {summary && (
         <div className="grid-4" style={{ marginBottom: 16 }}>
           <div className="card">
+            <div className="card-title">Target division</div>
+            <div style={{ fontSize: 'var(--text-xl)', fontWeight: 700, marginTop: 8 }}>{batch?.businessUnitName || 'Unassigned'}</div>
+            {!batchHasBusinessUnit && (
+              <div className="business-unit-warning">
+                <AlertTriangle size={14} />
+                Approval disabled until this batch has a division.
+              </div>
+            )}
+          </div>
+          <div className="card">
             <div className="card-title">Source rows</div>
             <div style={{ fontSize: 'var(--text-3xl)', fontWeight: 700 }}>{summary.counts.sourceRows.toLocaleString()}</div>
           </div>
@@ -369,12 +399,9 @@ export default function ImportReviewPage() {
             <div style={{ fontSize: 'var(--text-3xl)', fontWeight: 700 }}>{summary.counts.normalizedRecords.toLocaleString()}</div>
           </div>
           <div className="card">
-            <div className="card-title">Review items</div>
-            <div style={{ fontSize: 'var(--text-3xl)', fontWeight: 700 }}>{summary.counts.reviewItems.toLocaleString()}</div>
-          </div>
-          <div className="card">
-            <div className="card-title">Visible rows</div>
+            <div className="card-title">Visible / review</div>
             <div style={{ fontSize: 'var(--text-3xl)', fontWeight: 700 }}>{rows.length.toLocaleString()}</div>
+            <div className="page-subtitle" style={{ margin: '4px 0 0' }}>{summary.counts.reviewItems.toLocaleString()} review items</div>
           </div>
         </div>
       )}
@@ -391,6 +418,32 @@ export default function ImportReviewPage() {
                 placeholder="Search sheet, raw text, type, or status"
               />
             </div>
+            <select
+              className="input select"
+              value={filters.businessUnitId}
+              onChange={(e) => setFilters((prev) => ({ ...prev, businessUnitId: e.target.value, batchId: '' }))}
+              style={{ width: 190 }}
+            >
+              <option value="all">All divisions</option>
+              {(businessUnits || []).map((unit) => (
+                <option key={unit.id} value={unit.id}>
+                  {unit.name}
+                </option>
+              ))}
+            </select>
+            <select
+              className="input select"
+              value={filters.batchId}
+              onChange={(e) => setFilters((prev) => ({ ...prev, batchId: e.target.value }))}
+              style={{ width: 300 }}
+            >
+              <option value="">Latest matching batch</option>
+              {batches.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {batchLabel(option)}
+                </option>
+              ))}
+            </select>
             <select
               className="input select"
               value={filters.status}
@@ -433,7 +486,7 @@ export default function ImportReviewPage() {
               <Filter size={16} />
               {allVisibleSelected ? 'Clear selection' : 'Select all visible'}
             </button>
-            <button className="btn btn-primary" disabled={!canReview || selectedCount === 0 || saving} onClick={() => updateRows(selectedIds, 'approved')}>
+            <button className="btn btn-primary" disabled={!canApproveRows || selectedCount === 0 || saving} onClick={() => updateRows(selectedIds, 'approved')}>
               <Check size={16} />
               Approve selected ({selectedCount})
             </button>
@@ -504,6 +557,9 @@ export default function ImportReviewPage() {
                       </td>
                       <td>
                         <span className="badge badge-contacted">{labelForType(row.record_type)}</span>
+                        <span className="badge badge-pending" style={{ marginLeft: 6 }}>
+                          {businessUnitForRow(row, batch)}
+                        </span>
                         {proposalForRow(row).paymentHint && row.record_type !== 'payment_snapshot' && (
                           <span className="badge badge-medium" style={{ marginLeft: 6 }}>Has payment fields</span>
                         )}
@@ -523,7 +579,7 @@ export default function ImportReviewPage() {
                             <Eye size={14} />
                             Inspect
                           </button>
-                          <button className="btn btn-sm btn-primary" disabled={!canReview || saving} onClick={() => updateRows([row.id], 'approved')}>
+                          <button className="btn btn-sm btn-primary" disabled={!canApproveRows || saving} onClick={() => updateRows([row.id], 'approved')}>
                             <Check size={14} />
                             Approve
                           </button>
@@ -563,6 +619,10 @@ export default function ImportReviewPage() {
                 <div>
                   <div className="review-meta-label">Sheet</div>
                   <div>{activeRow.source_sheet}</div>
+                </div>
+                <div>
+                  <div className="review-meta-label">Target division</div>
+                  <div>{businessUnitForRow(activeRow, batch)}</div>
                 </div>
                 <div>
                   <div className="review-meta-label">Source lane</div>
@@ -653,7 +713,7 @@ export default function ImportReviewPage() {
               </div>
 
               <div className="review-detail-actions">
-                <button className="btn btn-primary" disabled={!canReview || saving} onClick={() => updateRows([activeRow.id], 'approved')}>
+                <button className="btn btn-primary" disabled={!canApproveRows || saving} onClick={() => updateRows([activeRow.id], 'approved')}>
                   <Check size={16} />
                   Approve row
                 </button>
@@ -709,6 +769,15 @@ export default function ImportReviewPage() {
           gap: 10px;
           flex-wrap: wrap;
           justify-content: flex-end;
+        }
+        .business-unit-warning {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          margin-top: 8px;
+          color: var(--danger);
+          font-size: var(--text-xs);
+          font-weight: 700;
         }
         .review-layout {
           display: grid;

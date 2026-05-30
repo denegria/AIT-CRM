@@ -6,7 +6,7 @@ function normalizeSql(sql) {
   return String(sql).replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
-function createClient() {
+function createClient({ batchSourceType = 'facebook_messenger', batchBusinessUnitId = 'bu-1' } = {}) {
   const calls = [];
 
   return {
@@ -22,6 +22,23 @@ function createClient() {
 
         if (normalized.startsWith('select id from import_batches where id = $1 and organization_id = $2')) {
           return { rows: params[1] === 'org-1' ? [{ id: params[0] }] : [] };
+        }
+
+        if (normalized.startsWith('select ib.id, ib.source_name, ib.source_type')) {
+          return {
+            rows: [{
+              id: params[0],
+              source_name: 'Import Review Test',
+              source_type: batchSourceType,
+              file_name: 'test.xlsx',
+              file_hash: 'hash-1',
+              sheet_name: null,
+              status: 'loaded',
+              business_unit_id: batchBusinessUnitId,
+              business_unit_name: batchBusinessUnitId ? 'AIT Signs' : null,
+              created_at: new Date('2026-05-30T00:00:00.000Z'),
+            }],
+          };
         }
 
         if (normalized.startsWith('select nr.id, nr.source_row_id')) {
@@ -184,6 +201,24 @@ test('organization-scoped approvals reject batches outside the caller organizati
   );
 
   assert.equal(calls.some((call) => call.sql === 'begin'), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false);
+});
+
+test('operator workbook approvals require a business unit on the batch', async () => {
+  const { client, calls } = createClient({ batchSourceType: 'xlsx', batchBusinessUnitId: null });
+
+  await assert.rejects(
+    updateImportReviewStatus(client, {
+      batchId: 'batch-1',
+      status: 'approved',
+      recordIds: ['record-1'],
+    }),
+    /Import batch must have a business unit before approval\./,
+  );
+
+  assert.equal(calls.some((call) => call.sql === 'begin'), true);
+  assert.equal(calls.some((call) => call.sql === 'rollback'), true);
   assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), false);
   assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false);
 });
