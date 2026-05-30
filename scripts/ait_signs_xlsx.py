@@ -171,8 +171,21 @@ def status_hint_for_sheet(sheet_name: str) -> str:
     return "needs_review"
 
 
+COL_CUSTOMER = 5
+COL_CONTACT = 6
+COL_PHONE = 7
+COL_WORK_DESCRIPTION = 10
+COL_STATUS = 12
+COL_OBSERVATION = 13
+COL_DESIGNER = 14
+COL_DELIVERY_DATE = 15
+COL_NET = 17
+COL_TAX = 18
+COL_TOTAL = 19
+COL_ADVANCE = 20
+COL_BALANCE = 21
 PAYMENT_AMOUNT_COLUMNS = (22, 25, 28, 31)
-PRIMARY_TOTAL_COLUMNS = (19, 17)
+PRIMARY_TOTAL_COLUMNS = (COL_TOTAL, COL_NET)
 
 
 def extract_first_phone(values: list[str]) -> str | None:
@@ -212,14 +225,6 @@ def money_value(value: object) -> str | None:
     return token
 
 
-def extract_first_money(values: list[str]) -> str | None:
-    for value in values:
-        token = money_value(value)
-        if token:
-            return token
-    return None
-
-
 def cell_at(values: list[str], column_number: int) -> str:
     index = column_number - 1
     if index < 0 or index >= len(values):
@@ -233,12 +238,6 @@ def first_money_in_columns(values: list[str], columns: tuple[int, ...]) -> str |
         if token:
             return token
     return None
-
-
-def amount_hint_for_row(values: list[str], family: str) -> str | None:
-    if family in {"estimates", "work_orders", "completed_paid"}:
-        return first_money_in_columns(values, PRIMARY_TOTAL_COLUMNS) or extract_first_money(values)
-    return extract_first_money(values)
 
 
 def explicit_payment_hint(values: list[str]) -> str | None:
@@ -303,6 +302,105 @@ def extract_contact_hint(values: list[str]) -> str | None:
         if " " in text or text.isalpha():
             return text
     return None
+
+
+def structured_cell(values: list[str], column_number: int) -> str | None:
+    value = cell_at(values, column_number)
+    return value or None
+
+
+def structured_money(values: list[str], column_number: int) -> str | None:
+    return money_value(cell_at(values, column_number))
+
+
+def amount_hint_for_structured_row(values: list[str], family: str) -> str | None:
+    if family in {"estimates", "work_orders", "completed_paid"}:
+        return first_money_in_columns(values, PRIMARY_TOTAL_COLUMNS)
+    return None
+
+
+def status_hint_for_row(sheet_name: str, values: list[str]) -> str:
+    family = sheet_family(sheet_name)
+    base_status = status_hint_for_sheet(sheet_name)
+    work_text = " ".join(
+        value
+        for value in [
+            cell_at(values, COL_STATUS),
+            cell_at(values, COL_OBSERVATION),
+            cell_at(values, COL_WORK_DESCRIPTION),
+        ]
+        if value
+    ).lower()
+
+    no_interest_markers = (
+        "ya no llamar",
+        "no volver a llamar",
+        "no esta interesado",
+        "no está interesado",
+        "no necesita",
+        "no requiere",
+        "otro lado",
+        "realizo en otro lugar",
+        "realizó en otro lugar",
+    )
+    invalid_contact_markers = (
+        "numero no existe",
+        "número no existe",
+        "numero erroneo",
+        "número erróneo",
+        "erroneo",
+        "erróneo",
+    )
+    converted_markers = (
+        "ya es un work order",
+        "ya tiene el trabajo en proceso",
+        "trabajo en proceso",
+    )
+    estimate_markers = (
+        "ya se envio estimado",
+        "ya se envió estimado",
+        "se envio estimado",
+        "se envió estimado",
+    )
+
+    if any(marker in work_text for marker in invalid_contact_markers):
+        return "invalid_contact"
+    if any(marker in work_text for marker in converted_markers):
+        return "converted_to_work_order"
+    if any(marker in work_text for marker in no_interest_markers):
+        return "not_interested" if family == "lead_intake" else "lost"
+    if family == "lead_intake" and any(marker in work_text for marker in estimate_markers):
+        return "estimate_sent"
+    return base_status
+
+
+def structured_proposal_hints(values: list[str], family: str) -> dict:
+    total_amount = structured_money(values, COL_TOTAL)
+    net_amount = structured_money(values, COL_NET)
+    tax_amount = structured_money(values, COL_TAX)
+    advance_amount = structured_money(values, COL_ADVANCE)
+    balance_amount = structured_money(values, COL_BALANCE)
+    customer = structured_cell(values, COL_CUSTOMER)
+    contact = structured_cell(values, COL_CONTACT)
+    phone = structured_cell(values, COL_PHONE)
+
+    return {
+        "customerName": customer,
+        "contactName": contact,
+        "contactHint": customer or contact or None,
+        "phoneHint": normalize_text(re.sub(r"\D", "", phone)) if phone else None,
+        "workDescription": structured_cell(values, COL_WORK_DESCRIPTION),
+        "statusText": structured_cell(values, COL_STATUS),
+        "observationText": structured_cell(values, COL_OBSERVATION),
+        "designer": structured_cell(values, COL_DESIGNER),
+        "deliveryDateHint": structured_cell(values, COL_DELIVERY_DATE),
+        "netAmountHint": net_amount,
+        "taxAmountHint": tax_amount,
+        "totalAmountHint": total_amount,
+        "advanceAmountHint": advance_amount,
+        "balanceAmountHint": balance_amount,
+        "moneyHint": amount_hint_for_structured_row(values, family),
+    }
 
 
 def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
@@ -373,17 +471,24 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
         if source_row["parseStatus"] == "parsed":
             sheet_name = row["sheet"]
             family = sheet_family(sheet_name)
-            phone = extract_first_phone(row["values"])
-            contact_hint = extract_contact_hint(row["values"])
-            money_hint = amount_hint_for_row(row["values"], family)
+            structured_hints = structured_proposal_hints(row["values"], family)
+            structured_phone = structured_hints.get("phoneHint")
+            if structured_phone and not (7 <= len(str(structured_phone)) <= 15):
+                structured_phone = None
+            phone = structured_phone or extract_first_phone(row["values"])
+            contact_hint = structured_hints.get("contactHint")
+            if not contact_hint and family == "mixed":
+                contact_hint = extract_contact_hint(row["values"])
+            money_hint = structured_hints.get("moneyHint")
             payment_hint = explicit_payment_hint(row["values"])
+            status_hint = status_hint_for_row(sheet_name, row["values"])
             proposed_base = {
                 "businessUnit": "AIT Signs",
                 "sourceSheet": sheet_name,
                 "sourceRowNumber": row["rowNumber"],
                 "rowKind": row["kind"],
                 "sourceType": source_type_for_sheet(sheet_name),
-                "statusHint": status_hint_for_sheet(sheet_name),
+                "statusHint": status_hint,
                 "importConfidence": row["confidence"],
                 "contactHint": contact_hint,
                 "phoneHint": phone,
@@ -391,6 +496,10 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
                 "paymentHint": payment_hint,
                 "originalText": row["summary"],
                 "rawValuesJson": row["values"],
+            } | {
+                key: value
+                for key, value in structured_hints.items()
+                if value is not None and key not in {"contactHint", "phoneHint", "moneyHint"}
             }
             record_type = "note"
             proposed_field = "proposedNoteJson"
@@ -417,19 +526,19 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
             }
             if record_type == "lead":
                 normalized_record["proposedLeadJson"] = proposed_base | {
-                    "leadStage": status_hint_for_sheet(sheet_name),
+                    "leadStage": status_hint,
                 }
             elif record_type == "estimate":
                 normalized_record["proposedEstimateJson"] = proposed_base | {
-                    "estimateStage": status_hint_for_sheet(sheet_name),
+                    "estimateStage": status_hint,
                 }
             elif record_type == "work_order":
                 normalized_record["proposedWorkOrderJson"] = proposed_base | {
-                    "workOrderStage": status_hint_for_sheet(sheet_name),
+                    "workOrderStage": status_hint,
                 }
             else:
                 normalized_record["proposedNoteJson"] = proposed_base | {
-                    "noteStage": status_hint_for_sheet(sheet_name),
+                    "noteStage": status_hint,
                 }
             normalized_records.append(normalized_record)
 
