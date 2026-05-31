@@ -20,6 +20,7 @@ const TYPE_LABELS = {
   estimate: 'Estimate',
   work_order: 'Work order',
   payment_snapshot: 'Payment',
+  activity_event: 'Activity event',
   note: 'Note',
 };
 
@@ -66,6 +67,12 @@ function sheetContextForRow(row) {
     return {
       label: 'Prospects',
       detail: 'Interested leads only. Not estimates or work orders yet.',
+    };
+  }
+  if (sourceType === 'ait_usa_xlsx') {
+    return {
+      label: 'AIT USA follow-up',
+      detail: 'Lead and follow-up history from the AIT USA seguimiento workbook.',
     };
   }
   if (sourceSheet.includes('estim') || sourceType === 'estimate') {
