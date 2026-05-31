@@ -28,6 +28,15 @@ const TIMELINE_TYPE_LABELS = {
   [TIMELINE_TYPES.WORK_ORDER]: 'Work order',
 };
 
+const EVENT_TITLE_OVERRIDES = {
+  'ait_usa.follow_up': 'Imported follow-up',
+  'import.follow_up': 'Imported follow-up',
+  imported_follow_up: 'Imported follow-up',
+  import_promoted_follow_up: 'Imported follow-up',
+  import_promoted_lead: 'Imported lead',
+  import_promoted_note: 'Imported note',
+};
+
 function isoTimestamp(value) {
   if (!value) return '';
   const date = value instanceof Date ? value : new Date(value);
@@ -98,6 +107,9 @@ function sourcePayload(row, fallbackLabel = '') {
 }
 
 function titleCaseEventType(eventType) {
+  const normalized = String(eventType || '').trim().toLowerCase();
+  if (EVENT_TITLE_OVERRIDES[normalized]) return EVENT_TITLE_OVERRIDES[normalized];
+
   return String(eventType || 'activity')
     .replaceAll('.', ' ')
     .replaceAll('_', ' ')

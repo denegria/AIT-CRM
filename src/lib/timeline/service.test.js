@@ -100,6 +100,40 @@ test('buildContactTimeline filters by normalized event type', () => {
   assert.equal(normalizeTimelineType('unsupported'), '');
 });
 
+test('buildContactTimeline preserves imported AIT USA follow-up provenance', () => {
+  const timeline = buildContactTimeline({
+    activityEvents: [{
+      id: 'ait-usa-follow-up-1',
+      contactId: 'contact-usa-1',
+      leadId: 'lead-usa-1',
+      businessUnitId: 'bu-ait-usa',
+      eventType: 'ait_usa.follow_up',
+      message: 'ARIANA 11:52 AM: VOLVER A LLAMAR - HABLARA CON SU ESPOSA PARA VER SI ENTRAN LOS 2 A PRESENCIAL.',
+      sourceSheet: '2025',
+      sourceRow: 12,
+      occurredAt: new Date('2025-06-01T15:52:00.000Z'),
+    }],
+    leads: [{
+      id: 'lead-usa-1',
+      contactId: 'contact-usa-1',
+      businessUnitId: 'bu-ait-usa',
+      sourceType: 'xlsx',
+      sourceName: 'AiTUSA SEGUIMIENTO CENTRAL',
+      status: 'Contacted',
+      createdAt: new Date('2025-06-01T14:00:00.000Z'),
+    }],
+    businessUnits: [{ id: 'bu-ait-usa', name: 'AIT USA', label: 'Divisions' }],
+  });
+
+  const followUp = timeline.find((entry) => entry.eventType === 'ait_usa.follow_up');
+  assert.equal(followUp.type, 'activity');
+  assert.equal(followUp.title, 'Imported follow-up');
+  assert.equal(followUp.text, 'ARIANA 11:52 AM: VOLVER A LLAMAR - HABLARA CON SU ESPOSA PARA VER SI ENTRAN LOS 2 A PRESENCIAL.');
+  assert.deepEqual(followUp.source, { label: '2025', row: 12 });
+  assert.equal(followUp.businessUnit.name, 'AIT USA');
+  assert.deepEqual(followUp.linkedRecords.map((record) => record.type), ['contact', 'lead']);
+});
+
 test('filterTimelineRowsForBusinessUnit preserves unassigned rows and allowed divisions only', () => {
   const scoped = filterTimelineRowsForBusinessUnit([
     { id: 'allowed', businessUnitId: 'bu-1' },
