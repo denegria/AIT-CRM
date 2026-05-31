@@ -17,6 +17,8 @@ __pycache__/
 # local generated AIT import artifacts with client source data
 /docs/ait-signs-import-staging.json
 /docs/ait-signs-import-staging.md
+/docs/ait-usa-import-staging.json
+/docs/ait-usa-import-staging.md
 /docs/ait-signs-staging-preview.json
 /src/lib/ait-signs-seed.js
 
