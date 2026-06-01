@@ -8,6 +8,14 @@ const DEFAULT_SAMPLE_LIMIT = 10;
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const REVIEWABLE_RECORD_STATUSES = ['pending', 'needs_review'];
 
+function isWordSearchTerm(q) {
+  return /^[A-Za-zÀ-ÿ]{3,}$/u.test(String(q || '').trim());
+}
+
+function escapePostgresRegex(value) {
+  return String(value).replace(/[\\.^$*+?()[\]{}|]/g, '\\$&');
+}
+
 export function parseImportReviewLimit(rawLimit, fallback = DEFAULT_IMPORT_REVIEW_LIMIT) {
   const value = Number(rawLimit);
   if (!Number.isFinite(value)) return fallback;
@@ -300,20 +308,24 @@ export async function loadImportReviewRows(client, batchId, { status = 'all', ty
   }
 
   if (q) {
-    params.push(`%${q}%`);
+    const searchFields = [
+      "coalesce(sr.raw_text, '')",
+      "coalesce(sr.source_sheet, '')",
+      "coalesce(nr.record_type, '')",
+      "coalesce(nr.status, '')",
+      "coalesce(nr.proposed_contact_json::text, '')",
+      "coalesce(nr.proposed_lead_json::text, '')",
+      "coalesce(nr.proposed_estimate_json::text, '')",
+      "coalesce(nr.proposed_work_order_json::text, '')",
+      "coalesce(nr.proposed_payment_json::text, '')",
+      "coalesce(nr.proposed_note_json::text, '')",
+    ];
+    const trimmed = q.trim();
+    const isWordSearch = isWordSearchTerm(trimmed);
+    params.push(isWordSearch ? `(^|[^[:alnum:]])${escapePostgresRegex(trimmed)}` : `%${trimmed}%`);
     const placeholder = `$${params.length}`;
-    clauses.push(`(
-      coalesce(sr.raw_text, '') ilike ${placeholder}
-      or coalesce(sr.source_sheet, '') ilike ${placeholder}
-      or coalesce(nr.record_type, '') ilike ${placeholder}
-      or coalesce(nr.status, '') ilike ${placeholder}
-      or coalesce(nr.proposed_contact_json::text, '') ilike ${placeholder}
-      or coalesce(nr.proposed_lead_json::text, '') ilike ${placeholder}
-      or coalesce(nr.proposed_estimate_json::text, '') ilike ${placeholder}
-      or coalesce(nr.proposed_work_order_json::text, '') ilike ${placeholder}
-      or coalesce(nr.proposed_payment_json::text, '') ilike ${placeholder}
-      or coalesce(nr.proposed_note_json::text, '') ilike ${placeholder}
-    )`);
+    const operator = isWordSearch ? '~*' : 'ilike';
+    clauses.push(`(${searchFields.map((field) => `${field} ${operator} ${placeholder}`).join(' or ')})`);
   }
 
   params.push(limit);
