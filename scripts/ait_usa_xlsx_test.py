@@ -38,7 +38,7 @@ def fake_report(rows):
                 "nonEmptyRowCount": 1,
                 "maxCols": 30,
                 "isPrimary": True,
-                "headerRow": 9,
+                "headerRow": 10,
             },
         ],
         "rowInventory": rows,
@@ -102,6 +102,75 @@ class AitUsaParserTest(unittest.TestCase):
         self.assertEqual(leads[0]["proposedLeadJson"]["phoneHint"], "7324308734")
         self.assertEqual(len(events), 1)
         self.assertEqual(payload["counts"]["duplicateActivityEventsSkipped"], 1)
+
+    def test_separator_and_2025_header_rows_are_ignored(self):
+        payload = self.build_payload(
+            [
+                {"sheet": "2023 Y ANTERIORES", "rowNumber": 66, "values": row_values(U="*", Z="*")},
+                {
+                    "sheet": "2025",
+                    "rowNumber": 10,
+                    "values": row_values(D="LLAMAR ?", G="PROSPECTO NAME", I="TELEFONO", Y="MENSAJE"),
+                },
+            ]
+        )
+
+        self.assertEqual(payload["counts"]["normalizedRecords"], 0)
+        self.assertEqual(payload["counts"]["reviewItems"], 0)
+
+    def test_2025_shifted_coupon_rows_create_leads(self):
+        payload = self.build_payload(
+            [
+                {
+                    "sheet": "2025",
+                    "rowNumber": 2168,
+                    "values": row_values(
+                        A="121",
+                        B="EDY CIPRIAN",
+                        D="INTRO",
+                        E="SE LE DIO EL BONO EN LA CALLE DE 35USD",
+                        F="45830",
+                        G="45830",
+                        H="908 404 8077",
+                        K="SE LES ENTREGO BONO PERO NO HAN ASISTIDO",
+                    ),
+                },
+                {
+                    "sheet": "2025",
+                    "rowNumber": 2039,
+                    "values": row_values(
+                        B="PENDIENTE",
+                        C="46146",
+                        E="KARINA BARRERA",
+                        F="510 978 0010",
+                        G="AGOSTO 30",
+                        L="165",
+                        V="46143",
+                        W="LILI",
+                        X="0.4513888888888889",
+                        Y="DICE QUE VA A HACER EL PAGO AHORA",
+                    ),
+                },
+                {
+                    "sheet": "2025",
+                    "rowNumber": 2176,
+                    "values": row_values(E="IMPORTATE PARA COORDINADORES Y VENTAS (FAVOR LEERLO)"),
+                },
+                {
+                    "sheet": "2025",
+                    "rowNumber": 2188,
+                    "values": row_values(G="1.0", H="ZELLE", I="1). POR ZELLE (EL PHONE es 732-379-0593)"),
+                },
+            ]
+        )
+
+        leads = [record for record in payload["normalizedRecords"] if record["recordType"] == "lead"]
+        events = [record for record in payload["normalizedRecords"] if record["recordType"] == "activity_event"]
+
+        self.assertEqual({lead["proposedContactJson"]["phone"] for lead in leads}, {"9084048077", "5109780010"})
+        self.assertEqual({lead["proposedContactJson"]["name"] for lead in leads}, {"EDY CIPRIAN", "KARINA BARRERA"})
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["proposedNoteJson"]["phoneHint"], "5109780010")
 
 
 if __name__ == "__main__":
