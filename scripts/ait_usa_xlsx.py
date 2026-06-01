@@ -504,6 +504,18 @@ def first_text(*values: object) -> str:
     return ""
 
 
+def shifted_name_hint(value: object) -> str:
+    text = normalize_text(value)
+    if not text or normalize_phone(text):
+        return ""
+    lower = normalized_lower(text)
+    if lower in NOISE_MARKERS or lower in OWNER_MARKERS:
+        return ""
+    if re.fullmatch(r"[0-9./:;\- ]+", text):
+        return ""
+    return text
+
+
 def is_separator_only(values: list[str]) -> bool:
     non_empty = [normalize_text(value) for value in values if normalize_text(value)]
     return bool(non_empty) and all(value == "*" for value in non_empty)
@@ -533,11 +545,14 @@ def lead_fields(sheet: str, row_number: int, values: list[str]) -> dict | None:
     default_phone = normalize_phone(cell_at(values, COLS["phone"]))
     if default_phone:
         resolved = phone_resolution(sheet, row_number, default_phone)
+        name = cell_at(values, COLS["name"])
+        if sheet == "2025" and not normalize_text(name):
+            name = shifted_name_hint(cell_at(values, col_to_number("H")))
         return {
             "phone": resolved["phone"],
             "original_phone": default_phone,
             "phone_resolution": resolved["resolution"],
-            "name": cell_at(values, COLS["name"]),
+            "name": name,
             "email": cell_at(values, COLS["email"]),
             "location": cell_at(values, COLS["location"]),
             "service": cell_at(values, COLS["service"]),

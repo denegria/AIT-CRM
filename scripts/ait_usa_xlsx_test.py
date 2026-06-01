@@ -168,6 +168,27 @@ class AitUsaParserTest(unittest.TestCase):
             "wrong_number",
         )
 
+    def test_2025_default_phone_row_uses_shifted_h_name_when_g_is_blank(self):
+        payload = self.build_payload(
+            [
+                {
+                    "sheet": "2025",
+                    "rowNumber": 904,
+                    "values": row_values(F="45949", H="NELLY", I="908 397 2344", Y="LE ENVIE INFORMACION"),
+                },
+            ]
+        )
+
+        leads = [record for record in payload["normalizedRecords"] if record["recordType"] == "lead"]
+
+        self.assertEqual(len(leads), 1)
+        self.assertEqual(leads[0]["proposedContactJson"]["name"], "NELLY")
+        self.assertEqual(leads[0]["proposedLeadJson"]["contactHint"], "NELLY")
+        self.assertNotIn(
+            "phone_only",
+            [flag["code"] for flag in leads[0]["proposedLeadJson"]["leadMetadata"]["qualityFlags"]],
+        )
+
     def test_separator_and_2025_header_rows_are_ignored(self):
         payload = self.build_payload(
             [
