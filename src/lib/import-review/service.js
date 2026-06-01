@@ -7,6 +7,13 @@ const MAX_IMPORT_REVIEW_LIMIT = 250;
 const DEFAULT_SAMPLE_LIMIT = 10;
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const REVIEWABLE_RECORD_STATUSES = ['pending', 'needs_review'];
+const QUALITY_FLAG_FILTERS = {
+  phone_only: ['phone_only'],
+  dead_contact: ['wrong_number', 'disconnected', 'do_not_contact', 'not_current'],
+  old_or_stale: ['stale_or_old_lead'],
+  source_unclear: ['source_unclear'],
+};
+const QUALITY_DISPOSITION_FILTERS = new Set(['ready_for_follow_up', 'needs_review', 'suppress_from_follow_up']);
 
 function isWordSearchTerm(q) {
   return /^[A-Za-zÀ-ÿ]{3,}$/u.test(String(q || '').trim());
@@ -29,6 +36,14 @@ export function parseImportReviewSampleLimit(rawLimit) {
 export function normalizeImportReviewText(value, fallback = 'all') {
   if (value === null || value === undefined || value === '') return fallback;
   return String(value);
+}
+
+export function normalizeQualityFilter(value) {
+  const normalized = normalizeImportReviewText(value, 'all');
+  if (normalized === 'all') return 'all';
+  if (QUALITY_DISPOSITION_FILTERS.has(normalized)) return normalized;
+  if (QUALITY_FLAG_FILTERS[normalized]) return normalized;
+  return 'all';
 }
 
 export async function resolveImportReviewBatchId(client, batchId, { organizationId = null, businessUnitId = null } = {}) {
@@ -232,6 +247,8 @@ export async function loadImportReviewSummary(client, batchId) {
     sourceRowTotal,
     recordTypeCounts,
     reviewTypeCounts,
+    qualityDispositionCounts,
+    qualityFlagCounts,
   ] = await Promise.all([
     client.query(
       'select parse_status as status, count(*)::int as count from import_source_rows where import_batch_id = $1 group by parse_status',
@@ -257,6 +274,30 @@ export async function loadImportReviewSummary(client, batchId) {
       'select review_type, count(*)::int as count from import_review_items where import_batch_id = $1 group by review_type order by count(*)::int desc, review_type asc',
       [batchId],
     ),
+    client.query(
+      `
+        select proposed_lead_json->'leadMetadata'->>'qualityDisposition' as disposition, count(*)::int as count
+        from import_normalized_records
+        where import_batch_id = $1
+          and record_type = 'lead'
+          and proposed_lead_json->'leadMetadata' ? 'qualityDisposition'
+        group by 1
+        order by count(*)::int desc, disposition asc
+      `,
+      [batchId],
+    ),
+    client.query(
+      `
+        select flag->>'code' as flag, count(*)::int as count
+        from import_normalized_records,
+          jsonb_array_elements(coalesce(proposed_lead_json->'leadMetadata'->'qualityFlags', '[]'::jsonb)) as flag
+        where import_batch_id = $1
+          and record_type = 'lead'
+        group by 1
+        order by count(*)::int desc, flag asc
+      `,
+      [batchId],
+    ),
   ]);
 
   return {
@@ -270,6 +311,8 @@ export async function loadImportReviewSummary(client, batchId) {
     recordTypeCounts: recordTypeCounts.rows,
     reviewStatusCounts: reviewStatusCounts.rows,
     reviewTypeCounts: reviewTypeCounts.rows,
+    qualityDispositionCounts: qualityDispositionCounts.rows,
+    qualityFlagCounts: qualityFlagCounts.rows,
   };
 }
 
@@ -293,7 +336,7 @@ export function flattenImportReviewSummary(summary) {
   ].sort((a, b) => a.bucket.localeCompare(b.bucket) || String(a.status).localeCompare(String(b.status)));
 }
 
-export async function loadImportReviewRows(client, batchId, { status = 'all', type = 'all', q = '', limit = DEFAULT_IMPORT_REVIEW_LIMIT } = {}) {
+export async function loadImportReviewRows(client, batchId, { status = 'all', type = 'all', quality = 'all', q = '', limit = DEFAULT_IMPORT_REVIEW_LIMIT } = {}) {
   const params = [batchId];
   const clauses = ['nr.import_batch_id = $1'];
 
@@ -305,6 +348,23 @@ export async function loadImportReviewRows(client, batchId, { status = 'all', ty
   if (type && type !== 'all') {
     params.push(type);
     clauses.push(`nr.record_type = $${params.length}`);
+  }
+
+  if (quality && quality !== 'all') {
+    clauses.push("nr.record_type = 'lead'");
+    if (QUALITY_DISPOSITION_FILTERS.has(quality)) {
+      params.push(quality);
+      clauses.push(`nr.proposed_lead_json->'leadMetadata'->>'qualityDisposition' = $${params.length}`);
+    } else if (QUALITY_FLAG_FILTERS[quality]) {
+      params.push(QUALITY_FLAG_FILTERS[quality]);
+      clauses.push(
+        `exists (
+          select 1
+          from jsonb_array_elements(coalesce(nr.proposed_lead_json->'leadMetadata'->'qualityFlags', '[]'::jsonb)) as quality_flag
+          where quality_flag->>'code' = any($${params.length}::text[])
+        )`,
+      );
+    }
   }
 
   if (q) {

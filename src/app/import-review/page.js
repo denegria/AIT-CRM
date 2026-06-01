@@ -24,6 +24,18 @@ const TYPE_LABELS = {
   note: 'Note',
 };
 
+const QUALITY_OPTIONS = [
+  { value: 'all', label: 'All quality' },
+  { value: 'ready_for_follow_up', label: 'Ready for follow-up' },
+  { value: 'needs_review', label: 'Needs review' },
+  { value: 'suppress_from_follow_up', label: 'Suppress from follow-up' },
+  { value: 'phone_only', label: 'Phone only' },
+  { value: 'dead_contact', label: 'Wrong / dead contact' },
+  { value: 'old_or_stale', label: 'Old / stale' },
+  { value: 'source_unclear', label: 'Source unclear' },
+];
+const QUALITY_DISPOSITION_FILTERS = new Set(['ready_for_follow_up', 'needs_review', 'suppress_from_follow_up']);
+
 function labelForType(value) {
   return TYPE_LABELS[value] || value.replace(/_/g, ' ');
 }
@@ -74,6 +86,29 @@ function qualityLabel(value) {
   if (value === 'suppress_from_follow_up') return 'Suppress';
   if (value === 'needs_review') return 'Review';
   return 'Unscored';
+}
+
+function countByKey(rows = [], keyName, value) {
+  const row = rows.find((item) => item[keyName] === value);
+  return Number(row?.count || 0);
+}
+
+function countFlags(rows = [], values = []) {
+  return rows
+    .filter((item) => values.includes(item.flag))
+    .reduce((sum, item) => sum + Number(item.count || 0), 0);
+}
+
+function qualityCount(summary, value) {
+  if (!summary) return 0;
+  if (QUALITY_DISPOSITION_FILTERS.has(value)) {
+    return countByKey(summary.qualityDispositionCounts || [], 'disposition', value);
+  }
+  if (value === 'phone_only') return countFlags(summary.qualityFlagCounts || [], ['phone_only']);
+  if (value === 'dead_contact') return countFlags(summary.qualityFlagCounts || [], ['wrong_number', 'disconnected', 'do_not_contact', 'not_current']);
+  if (value === 'old_or_stale') return countFlags(summary.qualityFlagCounts || [], ['stale_or_old_lead']);
+  if (value === 'source_unclear') return countFlags(summary.qualityFlagCounts || [], ['source_unclear']);
+  return Number(summary.counts?.normalizedRecords || 0);
 }
 
 function batchLabel(batch) {
@@ -174,7 +209,7 @@ function formatDate(value) {
 export default function ImportReviewPage() {
   const { loaded, dataSource, access, businessUnits } = useCRM();
   const { toast } = useToast();
-  const [filters, setFilters] = useState({ status: 'pending', type: 'all', q: '', limit: 120, businessUnitId: 'all', batchId: '' });
+  const [filters, setFilters] = useState({ status: 'pending', type: 'all', quality: 'all', q: '', limit: 120, businessUnitId: 'all', batchId: '' });
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -198,6 +233,7 @@ export default function ImportReviewPage() {
         const params = new URLSearchParams();
         params.set('status', filters.status);
         params.set('type', filters.type);
+        params.set('quality', filters.quality);
         if (filters.businessUnitId !== 'all') params.set('businessUnitId', filters.businessUnitId);
         if (filters.batchId) params.set('batchId', filters.batchId);
         if (filters.q.trim()) params.set('q', filters.q.trim());
@@ -442,6 +478,34 @@ export default function ImportReviewPage() {
       )}
 
       <div className="card" style={{ marginBottom: 16 }}>
+        {summary && (
+          <div className="quality-filter-strip">
+            {QUALITY_OPTIONS.filter((option) => option.value !== 'all').map((option) => (
+              <button
+                className={`quality-filter-chip ${filters.quality === option.value ? 'quality-filter-chip-active' : ''}`}
+                key={option.value}
+                type="button"
+                onClick={() => setFilters((prev) => ({
+                  ...prev,
+                  quality: option.value,
+                  type: 'lead',
+                }))}
+              >
+                <span>{option.label}</span>
+                <strong>{qualityCount(summary, option.value).toLocaleString()}</strong>
+              </button>
+            ))}
+            {filters.quality !== 'all' && (
+              <button
+                className="quality-filter-chip"
+                type="button"
+                onClick={() => setFilters((prev) => ({ ...prev, quality: 'all' }))}
+              >
+                <span>Clear quality</span>
+              </button>
+            )}
+          </div>
+        )}
         <div className="review-toolbar">
           <div className="review-filters">
             <div className="review-search">
@@ -500,6 +564,18 @@ export default function ImportReviewPage() {
               {Object.entries(TYPE_LABELS).map(([value, label]) => (
                 <option key={value} value={value}>
                   {label}
+                </option>
+              ))}
+            </select>
+            <select
+              className="input select"
+              value={filters.quality}
+              onChange={(e) => setFilters((prev) => ({ ...prev, quality: e.target.value, type: e.target.value === 'all' ? prev.type : 'lead' }))}
+              style={{ width: 220 }}
+            >
+              {QUALITY_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
                 </option>
               ))}
             </select>
@@ -806,6 +882,38 @@ export default function ImportReviewPage() {
           justify-content: space-between;
           gap: 16px;
           flex-wrap: wrap;
+        }
+        .quality-filter-strip {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          flex-wrap: wrap;
+          padding-bottom: 14px;
+          margin-bottom: 14px;
+          border-bottom: 1px solid var(--border-subtle);
+        }
+        .quality-filter-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          min-height: 32px;
+          padding: 5px 9px;
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-md);
+          background: var(--bg-primary);
+          color: var(--text-secondary);
+          font-size: var(--text-xs);
+          font-weight: 700;
+          cursor: pointer;
+        }
+        .quality-filter-chip strong {
+          color: var(--text-primary);
+          font-size: var(--text-sm);
+        }
+        .quality-filter-chip-active {
+          border-color: var(--accent);
+          background: var(--accent-muted);
+          color: var(--accent);
         }
         .review-filters {
           display: flex;
