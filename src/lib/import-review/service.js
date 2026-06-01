@@ -29,6 +29,12 @@ export function parseImportReviewLimit(rawLimit, fallback = DEFAULT_IMPORT_REVIE
   return Math.max(1, Math.min(MAX_IMPORT_REVIEW_LIMIT, Math.floor(value)));
 }
 
+export function parseImportReviewOffset(rawOffset) {
+  const value = Number(rawOffset);
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.floor(value));
+}
+
 export function parseImportReviewSampleLimit(rawLimit) {
   return parseImportReviewLimit(rawLimit, DEFAULT_SAMPLE_LIMIT);
 }
@@ -336,7 +342,7 @@ export function flattenImportReviewSummary(summary) {
   ].sort((a, b) => a.bucket.localeCompare(b.bucket) || String(a.status).localeCompare(String(b.status)));
 }
 
-export async function loadImportReviewRows(client, batchId, { status = 'all', type = 'all', quality = 'all', q = '', limit = DEFAULT_IMPORT_REVIEW_LIMIT } = {}) {
+export async function loadImportReviewRows(client, batchId, { status = 'all', type = 'all', quality = 'all', q = '', limit = DEFAULT_IMPORT_REVIEW_LIMIT, offset = 0 } = {}) {
   const params = [batchId];
   const clauses = ['nr.import_batch_id = $1'];
 
@@ -388,7 +394,22 @@ export async function loadImportReviewRows(client, batchId, { status = 'all', ty
     clauses.push(`(${searchFields.map((field) => `${field} ${operator} ${placeholder}`).join(' or ')})`);
   }
 
+  const whereSql = clauses.join(' and ');
+  const countResult = await client.query(
+    `
+      select count(*)::int as count
+      from import_normalized_records nr
+      join import_source_rows sr on sr.id = nr.source_row_id
+      where ${whereSql}
+    `,
+    [...params],
+  );
+  const totalCount = Number(countResult.rows[0]?.count || 0);
+
   params.push(limit);
+  const limitPlaceholder = `$${params.length}`;
+  params.push(offset);
+  const offsetPlaceholder = `$${params.length}`;
   const result = await client.query(
     `
       select
@@ -414,7 +435,7 @@ export async function loadImportReviewRows(client, batchId, { status = 'all', ty
       join import_batches ib on ib.id = nr.import_batch_id
       left join business_units bu on bu.id = ib.business_unit_id
       join import_source_rows sr on sr.id = nr.source_row_id
-      where ${clauses.join(' and ')}
+      where ${whereSql}
       order by
         case nr.record_type
           when 'lead' then 0
@@ -429,7 +450,8 @@ export async function loadImportReviewRows(client, batchId, { status = 'all', ty
         coalesce(nr.confidence_score, 0)::numeric desc,
         sr.source_sheet asc,
         sr.source_row_number asc
-      limit $${params.length}
+      limit ${limitPlaceholder}
+      offset ${offsetPlaceholder}
     `,
     params,
   );
@@ -437,11 +459,23 @@ export async function loadImportReviewRows(client, batchId, { status = 'all', ty
   const sourceRowIds = [...new Set(result.rows.map((row) => row.source_row_id).filter(Boolean))];
   const reviewBySourceRow = await loadReviewItemsBySourceRow(client, batchId, sourceRowIds);
 
-  return result.rows.map((row) => ({
+  const rows = result.rows.map((row) => ({
     ...row,
     confidenceScore: row.confidence_score === null || row.confidence_score === undefined ? null : Number(row.confidence_score),
     reviewItems: reviewBySourceRow.get(row.source_row_id) || [],
   }));
+
+  return {
+    rows,
+    pagination: {
+      totalCount,
+      limit,
+      offset,
+      returnedCount: rows.length,
+      hasPreviousPage: offset > 0,
+      hasNextPage: offset + rows.length < totalCount,
+    },
+  };
 }
 
 export async function updateImportReviewStatus(client, {
