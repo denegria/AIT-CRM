@@ -107,6 +107,9 @@ GENERIC_CONTACT_NAMES = {
     "requiere informacion",
 }
 
+SUPPRESS_CONTACTABILITY_STATUSES = {"wrong_number", "disconnected", "do_not_contact", "not_current", "no_phone"}
+REVIEW_CONTACTABILITY_STATUSES = {"needs_verification", "low_confidence_alternate"}
+
 
 def col_to_number(col: str) -> int:
     value = 0
@@ -225,13 +228,15 @@ def contactability_from_text(value: object) -> dict:
         return {"status": "unknown", "priority": 0}
     if any(marker in text for marker in ("wrong number", "numero erroneo", "número erroneo", "numero malo", "número malo", "pbx")):
         return {"status": "wrong_number", "priority": 100}
-    if any(marker in text for marker in ("desconectado", "fuera de servicio")):
+    if any(marker in text for marker in ("desconectado", "fuera de servicio", "number is not working", "not working")):
         return {"status": "disconnected", "priority": 95}
     if "se mudo" in text or "se mudó" in text or "otro estado" in text:
         return {"status": "not_current", "priority": 90}
+    if any(marker in text for marker in ("no llamar mas", "no llamar más", "ya no llamar", "no volver a llamar")):
+        return {"status": "do_not_contact", "priority": 88}
     if "no tiene whatsapp" in text or "no tiene whats" in text:
         return {"status": "no_whatsapp", "priority": 75}
-    if any(marker in text for marker in ("no contesto", "no contestó", "voice m", "buzon", "buzón")):
+    if any(marker in text for marker in ("no contesto", "no contestó", "voice m", "buzon", "buzón", "apagado")):
         return {"status": "attempted_no_answer", "priority": 40}
     if any(marker in text for marker in ("concretado", "inscrito", "vino", "promete venir", "presento examen", "presentó examen")):
         return {"status": "qualified", "priority": 70}
@@ -245,6 +250,7 @@ def contactability_priority(status: object) -> int:
         "wrong_number": 100,
         "disconnected": 95,
         "not_current": 90,
+        "do_not_contact": 88,
         "no_phone": 85,
         "no_whatsapp": 75,
         "qualified": 70,
@@ -265,6 +271,80 @@ def source_tags_for(fields: dict, sheet: str) -> list[str]:
     if fields.get("owner"):
         tags.append("owner:" + normalized_lower(fields.get("owner")).replace(" ", "_"))
     return list(dict.fromkeys(tags))
+
+
+def email_hint_for(value: object) -> str | None:
+    text = normalize_text(value)
+    if not text or "@" not in text:
+        return None
+    return text
+
+
+def parsed_year(value: object) -> int | None:
+    date_text = parse_excel_date(value)
+    if not date_text:
+        return None
+    try:
+        return int(date_text[:4])
+    except ValueError:
+        return None
+
+
+def lead_quality_metadata(proposal: dict) -> dict:
+    flags = []
+    name = normalize_text(proposal.get("contactHint"))
+    phone = normalize_text(proposal.get("phoneHint"))
+    email = normalize_text(proposal.get("emailHint"))
+    metadata = proposal.get("leadMetadata") or {}
+    contactability = metadata.get("contactability") or {}
+    contactability_status = normalized_lower(contactability.get("status"))
+    source_tags = metadata.get("sourceTags") or []
+    source_label = normalize_text(proposal.get("sourceLabel"))
+    source_sheet_tag = normalize_text(proposal.get("sourceSheet")).lower().replace(" ", "_")
+    lead_year = parsed_year(proposal.get("leadDate"))
+
+    if not phone:
+        flags.append({"code": "missing_phone", "label": "Missing phone", "severity": "blocker"})
+    if not name or normalized_lower(name) == "unknown ait usa lead":
+        flags.append({"code": "phone_only", "label": "Phone only", "severity": "review"})
+    if email and "@" not in email:
+        flags.append({"code": "invalid_email", "label": "Invalid email", "severity": "review"})
+    if contactability_status in SUPPRESS_CONTACTABILITY_STATUSES:
+        flags.append(
+            {
+                "code": contactability_status,
+                "label": contactability_status.replace("_", " ").title(),
+                "severity": "blocker",
+            }
+        )
+    elif contactability_status in REVIEW_CONTACTABILITY_STATUSES:
+        flags.append(
+            {
+                "code": contactability_status,
+                "label": contactability_status.replace("_", " ").title(),
+                "severity": "review",
+            }
+        )
+    source_detail_tags = [
+        tag for tag in source_tags
+        if tag and not tag.startswith("owner:") and tag not in ("ait_usa_xlsx", source_sheet_tag)
+    ]
+    if not source_label and not source_detail_tags:
+        flags.append({"code": "source_unclear", "label": "Source unclear", "severity": "info"})
+    if lead_year and lead_year < 2025:
+        flags.append({"code": "stale_or_old_lead", "label": "Old lead", "severity": "info"})
+
+    if any(flag["severity"] == "blocker" for flag in flags):
+        disposition = "suppress_from_follow_up"
+    elif any(flag["severity"] == "review" for flag in flags):
+        disposition = "needs_review"
+    else:
+        disposition = "ready_for_follow_up"
+
+    return {
+        "qualityFlags": flags,
+        "qualityDisposition": disposition,
+    }
 
 
 def text_of(node: ET.Element | None) -> str:
@@ -526,7 +606,7 @@ def lead_proposal(sheet: str, row_number: int, values: list[str], fields: dict) 
         "contactHint": name or "Unknown AIT USA Lead",
         "phoneHint": fields["phone"],
         "originalPhoneHint": fields.get("original_phone") if fields.get("original_phone") != fields["phone"] else None,
-        "emailHint": fields.get("email") or None,
+        "emailHint": email_hint_for(fields.get("email")),
         "locationHint": fields.get("location") or None,
         "desiredService": service or None,
         "detailText": detail or None,
@@ -869,6 +949,11 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
     lead_records = []
     for phone, candidate in sorted(lead_candidates.items()):
         proposal = candidate["proposal"]
+        quality_metadata = lead_quality_metadata(proposal)
+        proposal["leadMetadata"] = {
+            **(proposal.get("leadMetadata") or {}),
+            **quality_metadata,
+        }
         lead_records.append(
             {
                 "sourceSheet": proposal["sourceSheet"],
@@ -887,6 +972,8 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
                     "sourceRowNumber": proposal["sourceRowNumber"],
                     "sourceTags": (proposal.get("leadMetadata") or {}).get("sourceTags") or [],
                     "contactability": (proposal.get("leadMetadata") or {}).get("contactability") or {},
+                    "qualityFlags": quality_metadata["qualityFlags"],
+                    "qualityDisposition": quality_metadata["qualityDisposition"],
                     "phoneResolutions": (proposal.get("leadMetadata") or {}).get("phoneResolutions") or (
                         [proposal["leadMetadata"]["phoneResolution"]]
                         if (proposal.get("leadMetadata") or {}).get("phoneResolution")

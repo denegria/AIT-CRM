@@ -50,6 +50,32 @@ function businessUnitForRow(row, batch) {
   return row?.business_unit_name || proposal.businessUnit || batch?.businessUnitName || 'Unassigned';
 }
 
+function qualityForRow(row) {
+  const proposal = proposalForRow(row);
+  const metadata = proposal.leadMetadata || {};
+  const contact = row?.proposed_contact_json || {};
+  return {
+    disposition: metadata.qualityDisposition || contact.qualityDisposition || null,
+    flags: metadata.qualityFlags || contact.qualityFlags || [],
+    sourceTags: metadata.sourceTags || contact.sourceTags || [],
+    contactability: metadata.contactability || contact.contactability || null,
+  };
+}
+
+function qualityBadgeClass(value) {
+  if (value === 'ready_for_follow_up') return 'badge-won';
+  if (value === 'suppress_from_follow_up') return 'badge-lost';
+  if (value === 'needs_review') return 'badge-medium';
+  return 'badge-pending';
+}
+
+function qualityLabel(value) {
+  if (value === 'ready_for_follow_up') return 'Ready';
+  if (value === 'suppress_from_follow_up') return 'Suppress';
+  if (value === 'needs_review') return 'Review';
+  return 'Unscored';
+}
+
 function batchLabel(batch) {
   if (!batch) return 'Latest matching batch';
   const source = batch.fileName || batch.sourceName || batch.id;
@@ -543,6 +569,7 @@ export default function ImportReviewPage() {
                   const isActive = row.id === activeId;
                   const isSelected = selectedIds.includes(row.id);
                   const sheetContext = sheetContextForRow(row);
+                  const quality = qualityForRow(row);
                   return (
                     <tr
                       key={row.id}
@@ -569,8 +596,20 @@ export default function ImportReviewPage() {
                         <span className="badge badge-pending" style={{ marginLeft: 6 }}>
                           {businessUnitForRow(row, batch)}
                         </span>
+                        {quality.disposition && (
+                          <span className={`badge ${qualityBadgeClass(quality.disposition)}`} style={{ marginLeft: 6 }}>
+                            {qualityLabel(quality.disposition)}
+                          </span>
+                        )}
                         {proposalForRow(row).paymentHint && row.record_type !== 'payment_snapshot' && (
                           <span className="badge badge-medium" style={{ marginLeft: 6 }}>Has payment fields</span>
+                        )}
+                        {quality.flags.length > 0 && (
+                          <div className="quality-tags">
+                            {quality.flags.slice(0, 3).map((flag) => (
+                              <span className="quality-tag" key={flag.code || flag.label}>{flag.label || flag.code}</span>
+                            ))}
+                          </div>
                         )}
                       </td>
                       <td>
@@ -654,6 +693,26 @@ export default function ImportReviewPage() {
                   <div>{formatDate(activeRow.created_at)}</div>
                 </div>
               </div>
+
+              {qualityForRow(activeRow).disposition && (
+                <div className="detail-section">
+                  <div className="review-meta-label">Lead quality</div>
+                  <div className="quality-panel">
+                    <span className={`badge ${qualityBadgeClass(qualityForRow(activeRow).disposition)}`}>
+                      {qualityLabel(qualityForRow(activeRow).disposition)}
+                    </span>
+                    {qualityForRow(activeRow).contactability?.status && (
+                      <span className="quality-tag">{qualityForRow(activeRow).contactability.status.replace(/_/g, ' ')}</span>
+                    )}
+                    {qualityForRow(activeRow).flags.map((flag) => (
+                      <span className="quality-tag" key={flag.code || flag.label}>{flag.label || flag.code}</span>
+                    ))}
+                    {qualityForRow(activeRow).sourceTags.slice(0, 6).map((tag) => (
+                      <span className="quality-tag quality-tag-source" key={tag}>{tag.replace(/_/g, ' ')}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="detail-section">
                 <div className="review-meta-label">Interpretation</div>
@@ -855,6 +914,43 @@ export default function ImportReviewPage() {
           color: var(--text-secondary);
           font-size: var(--text-xs);
           font-weight: 700;
+        }
+        .quality-tags {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 5px;
+          margin-top: 7px;
+          max-width: 280px;
+        }
+        .quality-tag {
+          display: inline-flex;
+          align-items: center;
+          width: fit-content;
+          max-width: 100%;
+          min-height: 20px;
+          padding: 2px 7px;
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-sm);
+          background: var(--bg-tertiary);
+          color: var(--text-secondary);
+          font-size: var(--text-xs);
+          font-weight: 700;
+          text-transform: capitalize;
+          line-height: 1.2;
+        }
+        .quality-panel {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 14px;
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-lg);
+          background: var(--bg-primary);
+        }
+        .quality-tag-source {
+          text-transform: none;
+          color: var(--text-muted);
         }
         .review-row-actions {
           display: flex;
