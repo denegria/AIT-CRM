@@ -218,8 +218,8 @@ test('import review can filter by quality disposition and flag buckets', async (
   await loadImportReviewRows(client, 'batch-1', { quality: 'dead_contact', limit: 20 });
   assert.match(calls[1].sql, /jsonb_array_elements/);
   assert.match(calls[1].sql, /quality_flag->>'code' = any\(\$2::text\[\]\)/);
-  assert.deepEqual(calls[0].params, ['batch-1', ['wrong_number', 'disconnected', 'do_not_contact', 'not_current']]);
-  assert.deepEqual(calls[1].params, ['batch-1', ['wrong_number', 'disconnected', 'do_not_contact', 'not_current'], 20, 0]);
+  assert.deepEqual(calls[0].params, ['batch-1', ['wrong_number', 'disconnected', 'do_not_contact', 'not_current', 'repeated_no_answer']]);
+  assert.deepEqual(calls[1].params, ['batch-1', ['wrong_number', 'disconnected', 'do_not_contact', 'not_current', 'repeated_no_answer'], 20, 0]);
 });
 
 test('approving staged Facebook leads promotes them into CRM records', async () => {
