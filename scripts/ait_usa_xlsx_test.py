@@ -176,6 +176,10 @@ class AitUsaParserTest(unittest.TestCase):
             "wrong_number",
         )
         self.assertEqual(
+            contactability_from_text("DICE QUE ESOY EQUIVOCADA")["status"],
+            "wrong_number",
+        )
+        self.assertEqual(
             contactability_from_text("NO ACEPTA LLAMADAS")["status"],
             "disconnected",
         )
@@ -184,11 +188,27 @@ class AitUsaParserTest(unittest.TestCase):
             "disconnected",
         )
         self.assertEqual(
+            contactability_from_text("NO DISPONIBLE-NO TIENE WHATSAP")["status"],
+            "disconnected",
+        )
+        self.assertEqual(
             contactability_from_text("SUENA DESINTERESADA")["status"],
             "do_not_contact",
         )
         self.assertEqual(
+            contactability_from_text("NO ESRTA INTERESADA")["status"],
+            "do_not_contact",
+        )
+        self.assertEqual(
             contactability_from_text("ESTA ESTUDIANDO EN OTRO CURSO")["status"],
+            "not_current",
+        )
+        self.assertEqual(
+            contactability_from_text("YA ESTA ESTUDIANDO")["status"],
+            "not_current",
+        )
+        self.assertEqual(
+            contactability_from_text("ESTA ESTUDIANDO EN OTRO LUGAR")["status"],
             "not_current",
         )
         self.assertEqual(
