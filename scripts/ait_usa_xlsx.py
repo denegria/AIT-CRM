@@ -226,13 +226,55 @@ def contactability_from_text(value: object) -> dict:
     text = normalized_lower(value)
     if not text:
         return {"status": "unknown", "priority": 0}
-    if any(marker in text for marker in ("wrong number", "numero erroneo", "número erroneo", "numero malo", "número malo", "pbx")):
+    if any(
+        marker in text
+        for marker in (
+            "wrong number",
+            "numero erroneo",
+            "número erroneo",
+            "numero malo",
+            "número malo",
+            "mal el numero",
+            "mal el número",
+            "pbx",
+        )
+    ):
         return {"status": "wrong_number", "priority": 100}
-    if any(marker in text for marker in ("desconectado", "fuera de servicio", "number is not working", "not working")):
+    if any(
+        marker in text
+        for marker in (
+            "desconectado",
+            "fuera de servicio",
+            "number is not working",
+            "not working",
+            "no esta disponible",
+            "no está disponible",
+            "no available",
+            "not available",
+        )
+    ):
         return {"status": "disconnected", "priority": 95}
     if "se mudo" in text or "se mudó" in text or "otro estado" in text:
         return {"status": "not_current", "priority": 90}
-    if any(marker in text for marker in ("no llamar mas", "no llamar más", "ya no llamar", "no volver a llamar")):
+    if any(
+        marker in text
+        for marker in (
+            "no llamar mas",
+            "no llamar más",
+            "ya no llamar",
+            "no volver a llamar",
+            "no esta interesado",
+            "no está interesado",
+            "no esta interesada",
+            "no está interesada",
+            "no interesado",
+            "no interesa",
+            "no le interesa",
+            "no quiere",
+            "no solicito",
+            "no solicitó",
+        )
+    ):
         return {"status": "do_not_contact", "priority": 88}
     if "no tiene whatsapp" in text or "no tiene whats" in text:
         return {"status": "no_whatsapp", "priority": 75}
@@ -620,12 +662,14 @@ def lead_proposal(sheet: str, row_number: int, values: list[str], fields: dict) 
     }
 
 
-def name_quality(name: object) -> tuple[int, int]:
+def name_quality(name: object) -> tuple[int, int, int]:
     text = normalize_text(name)
     if not text:
-        return (0, 0)
+        return (0, 0, 0)
+    if normalized_lower(text) in GENERIC_CONTACT_NAMES:
+        return (0, 0, len(text))
     words = [word for word in text.replace("/", " ").split() if word]
-    return (len(words), len(text))
+    return (1, len(words), len(text))
 
 
 def merge_name_aliases(*names: object) -> list[str]:
