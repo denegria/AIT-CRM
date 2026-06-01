@@ -166,9 +166,10 @@ test('import review search matches proposed JSON and lists leads before follow-u
 
   assert.equal(rows.length, 1);
   assert.equal(rows[0].confidenceScore, 0.9);
-  assert.deepEqual(calls[0].params, ['batch-1', '%Saul%', 20]);
+  assert.deepEqual(calls[0].params, ['batch-1', '(^|[^[:alnum:]])Saul', 20]);
   assert.match(searchQuery, /proposed_contact_json::text/);
   assert.match(searchQuery, /proposed_lead_json::text/);
+  assert.match(searchQuery, /proposed_note_json::text, ''\) ~\* \$2/);
   assert.match(searchQuery, /when 'lead' then 0/);
   assert.match(searchQuery, /when 'activity_event' then 6/);
   assert.match(searchQuery, /confidence_score, 0\)::numeric desc/);
