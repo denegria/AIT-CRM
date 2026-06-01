@@ -13,6 +13,12 @@ BUSINESS_UNIT = "AIT USA Institute"
 
 PRIMARY_SHEETS = ("2023 Y ANTERIORES", "2024", "ENE A MAY 2025", "2025")
 SHEET_ORDER = {name: index for index, name in enumerate(PRIMARY_SHEETS)}
+HEADER_ROWS = {
+    "2023 Y ANTERIORES": 9,
+    "2024": 9,
+    "ENE A MAY 2025": 9,
+    "2025": 10,
+}
 
 NS = {
     "main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
@@ -21,6 +27,21 @@ NS = {
 }
 
 PHONE_RE = re.compile(r"\d+")
+OWNER_MARKERS = {
+    "ana maria",
+    "andrea",
+    "ariana",
+    "edna",
+    "frank",
+    "karla",
+    "lili",
+    "liliana",
+    "liz",
+    "nicole",
+    "sindy",
+    "sofia",
+}
+NOISE_MARKERS = {"*", ".", ":", "/", "whatsapp", "whataspp"}
 
 
 def col_to_number(col: str) -> int:
@@ -207,7 +228,7 @@ def load_workbook_profile(workbook_path: str | Path) -> dict:
                     "nonEmptyRowCount": len(non_empty_rows),
                     "maxCols": max((len(row["dense"]) for row in non_empty_rows), default=0),
                     "isPrimary": sheet_name in PRIMARY_SHEETS,
-                    "headerRow": 9 if sheet_name in PRIMARY_SHEETS else None,
+                    "headerRow": HEADER_ROWS.get(sheet_name) if sheet_name in PRIMARY_SHEETS else None,
                 }
             )
             for row in parsed["rows"]:
@@ -228,10 +249,99 @@ def lead_status(values: list[str]) -> str:
     return "New Lead"
 
 
-def lead_proposal(sheet: str, row_number: int, values: list[str], phone: str) -> dict:
-    name = cell_at(values, COLS["name"])
-    service = cell_at(values, COLS["service"])
-    detail = cell_at(values, COLS["details"])
+def first_text(*values: object) -> str:
+    for value in values:
+        text = normalize_text(value)
+        if text:
+            return text
+    return ""
+
+
+def is_separator_only(values: list[str]) -> bool:
+    non_empty = [normalize_text(value) for value in values if normalize_text(value)]
+    return bool(non_empty) and all(value == "*" for value in non_empty)
+
+
+def is_marker_only(values: list[str]) -> bool:
+    non_empty = [normalize_text(value) for value in values if normalize_text(value)]
+    if not non_empty:
+        return False
+    semantic = [value for value in non_empty if normalized_lower(value) not in NOISE_MARKERS]
+    if not semantic:
+        return True
+    return all(normalized_lower(value) in OWNER_MARKERS for value in semantic)
+
+
+def looks_like_header(values: list[str]) -> bool:
+    text = normalized_lower(row_text(values))
+    return "llamar" in text and "prospecto" in text and "telefono" in text
+
+
+def starts_reference_block(values: list[str]) -> bool:
+    text = normalized_lower(row_text(values))
+    return "importate para coordinadores" in text or "importante para coordinadores" in text
+
+
+def lead_fields(sheet: str, row_number: int, values: list[str]) -> dict | None:
+    default_phone = normalize_phone(cell_at(values, COLS["phone"]))
+    if default_phone:
+        return {
+            "phone": default_phone,
+            "name": cell_at(values, COLS["name"]),
+            "email": cell_at(values, COLS["email"]),
+            "location": cell_at(values, COLS["location"]),
+            "service": cell_at(values, COLS["service"]),
+            "details": cell_at(values, COLS["details"]),
+            "owner": cell_at(values, COLS["owner"]),
+            "source": cell_at(values, COLS["source"]),
+            "lead_date": cell_at(values, COLS["lead_date"]),
+        }
+
+    if sheet != "2025":
+        return None
+
+    phone_h = normalize_phone(cell_at(values, col_to_number("H")))
+    if phone_h and cell_at(values, col_to_number("B")):
+        return {
+            "phone": phone_h,
+            "name": cell_at(values, col_to_number("B")),
+            "email": "",
+            "location": "",
+            "service": cell_at(values, col_to_number("D")),
+            "details": row_text([
+                cell_at(values, col_to_number("E")),
+                cell_at(values, col_to_number("K")),
+            ]),
+            "owner": cell_at(values, col_to_number("I")),
+            "source": cell_at(values, col_to_number("D")),
+            "lead_date": first_text(cell_at(values, col_to_number("G")), cell_at(values, col_to_number("F"))),
+        }
+
+    phone_f = normalize_phone(cell_at(values, col_to_number("F")))
+    if phone_f and cell_at(values, col_to_number("E")):
+        return {
+            "phone": phone_f,
+            "name": cell_at(values, col_to_number("E")),
+            "email": "",
+            "location": "",
+            "service": "",
+            "details": row_text([
+                cell_at(values, col_to_number("B")),
+                cell_at(values, col_to_number("G")),
+                cell_at(values, col_to_number("L")),
+            ]),
+            "owner": "",
+            "source": cell_at(values, col_to_number("B")),
+            "lead_date": first_text(cell_at(values, col_to_number("C")), cell_at(values, col_to_number("A"))),
+        }
+
+    return None
+
+
+def lead_proposal(sheet: str, row_number: int, values: list[str], fields: dict) -> dict:
+    name = fields.get("name") or ""
+    service = fields.get("service") or ""
+    detail = fields.get("details") or ""
     return {
         "businessUnit": BUSINESS_UNIT,
         "sourceType": "ait_usa_xlsx",
@@ -239,14 +349,14 @@ def lead_proposal(sheet: str, row_number: int, values: list[str], phone: str) ->
         "sourceSheet": sheet,
         "sourceRowNumber": row_number,
         "contactHint": name or "Unknown AIT USA Lead",
-        "phoneHint": phone,
-        "emailHint": cell_at(values, COLS["email"]) or None,
-        "locationHint": cell_at(values, COLS["location"]) or None,
+        "phoneHint": fields["phone"],
+        "emailHint": fields.get("email") or None,
+        "locationHint": fields.get("location") or None,
         "desiredService": service or None,
         "detailText": detail or None,
-        "ownerHint": cell_at(values, COLS["owner"]) or None,
-        "sourceLabel": cell_at(values, COLS["source"]) or None,
-        "leadDate": parse_excel_date(cell_at(values, COLS["lead_date"])),
+        "ownerHint": fields.get("owner") or None,
+        "sourceLabel": fields.get("source") or None,
+        "leadDate": parse_excel_date(fields.get("lead_date")),
         "statusHint": lead_status(values),
         "originalText": row_text(values),
         "rawValuesJson": values,
@@ -304,13 +414,22 @@ def row_sort_key(row: dict) -> tuple[int, int]:
     return (SHEET_ORDER.get(row["sheet"], 999), row["rowNumber"])
 
 
-def should_ignore_primary_row(row_number: int, values: list[str]) -> bool:
-    if row_number <= 9:
+def should_ignore_primary_row(sheet: str, row_number: int, values: list[str], in_reference_block: bool = False) -> bool:
+    if row_number <= HEADER_ROWS.get(sheet, 9):
+        return True
+    if in_reference_block:
         return True
     text = normalized_lower(row_text(values))
     if not text:
         return True
-    return text.startswith("aqui empieza") or text.startswith("aquí empieza")
+    return (
+        text.startswith("aqui empieza")
+        or text.startswith("aquí empieza")
+        or is_separator_only(values)
+        or is_marker_only(values)
+        or looks_like_header(values)
+        or starts_reference_block(values)
+    )
 
 
 def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
@@ -323,6 +442,7 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
     event_records = []
     seen_event_keys = set()
     active_phone_by_sheet: dict[str, str] = {}
+    reference_block_by_sheet: set[str] = set()
     duplicate_events = 0
     unlinked_event_rows = 0
 
@@ -336,14 +456,18 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
         row_number = row["rowNumber"]
         values = row["values"]
         raw_text = row_text(values)
-        ignored = should_ignore_primary_row(row_number, values)
-        phone = normalize_phone(cell_at(values, COLS["phone"]))
+        starts_reference = starts_reference_block(values)
+        ignored = should_ignore_primary_row(sheet, row_number, values, sheet in reference_block_by_sheet)
+        if starts_reference:
+            reference_block_by_sheet.add(sheet)
+        fields = None if ignored else lead_fields(sheet, row_number, values)
+        phone = fields["phone"] if fields else None
         blocks = follow_up_blocks(values)
         parse_status = "ignored" if ignored else "needs_review"
 
         if phone:
             active_phone_by_sheet[sheet] = phone
-            candidate = lead_proposal(sheet, row_number, values, phone)
+            candidate = lead_proposal(sheet, row_number, values, fields)
             existing = lead_candidates.get(phone)
             if not existing or row_sort_key({"sheet": sheet, "rowNumber": row_number}) >= row_sort_key(existing["source"]):
                 lead_candidates[phone] = {"source": {"sheet": sheet, "rowNumber": row_number}, "proposal": candidate}
