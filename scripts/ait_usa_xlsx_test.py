@@ -168,6 +168,30 @@ class AitUsaParserTest(unittest.TestCase):
             "wrong_number",
         )
         self.assertEqual(
+            contactability_from_text("TELEFONO EQUIVOCADO")["status"],
+            "wrong_number",
+        )
+        self.assertEqual(
+            contactability_from_text("NUMERO ERRADO")["status"],
+            "wrong_number",
+        )
+        self.assertEqual(
+            contactability_from_text("NO ACEPTA LLAMADAS")["status"],
+            "disconnected",
+        )
+        self.assertEqual(
+            contactability_from_text("TELEFONO NO DISPONIBLE")["status"],
+            "disconnected",
+        )
+        self.assertEqual(
+            contactability_from_text("SUENA DESINTERESADA")["status"],
+            "do_not_contact",
+        )
+        self.assertEqual(
+            contactability_from_text("ESTA ESTUDIANDO EN OTRO CURSO")["status"],
+            "not_current",
+        )
+        self.assertEqual(
             contactability_from_text("NO CONTESTA")["status"],
             "attempted_no_answer",
         )
