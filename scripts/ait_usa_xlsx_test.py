@@ -274,6 +274,139 @@ class AitUsaParserTest(unittest.TestCase):
         self.assertEqual(metadata["schoolHint"], "BOUND BROOK")
         self.assertIn("whatsapp", metadata["sourceTags"])
 
+    def test_non_email_source_values_do_not_populate_email_hint(self):
+        payload = self.build_payload(
+            [
+                {
+                    "sheet": "2024",
+                    "rowNumber": 10,
+                    "values": row_values(
+                        F="45300",
+                        G="Maria Lopez",
+                        I="(201) 555-0199",
+                        K="WHAT",
+                        S="WHATSAPP",
+                    ),
+                },
+                {
+                    "sheet": "2024",
+                    "rowNumber": 11,
+                    "values": row_values(
+                        F="45301",
+                        G="Carlos Lopez",
+                        I="(201) 555-0200",
+                        K="carlos@example.com",
+                        S="WHATSAPP",
+                    ),
+                },
+            ]
+        )
+
+        leads = [record["proposedLeadJson"] for record in payload["normalizedRecords"] if record["recordType"] == "lead"]
+        by_name = {lead["contactHint"]: lead for lead in leads}
+
+        self.assertIsNone(by_name["Maria Lopez"]["emailHint"])
+        self.assertEqual(by_name["Carlos Lopez"]["emailHint"], "carlos@example.com")
+
+    def test_dead_contact_phrases_set_contactability(self):
+        payload = self.build_payload(
+            [
+                {
+                    "sheet": "2024",
+                    "rowNumber": 10,
+                    "values": row_values(
+                        F="45300",
+                        G="Iris Ley",
+                        I="(201) 555-0199",
+                        Y="NUMBER IS NOT WORKING",
+                    ),
+                },
+                {
+                    "sheet": "2024",
+                    "rowNumber": 11,
+                    "values": row_values(
+                        F="45301",
+                        G="Mary Perez",
+                        I="(201) 555-0200",
+                        Y="COLGO EL TELEFONO NO LLAMAR MAS",
+                    ),
+                },
+            ]
+        )
+
+        leads = [record["proposedLeadJson"] for record in payload["normalizedRecords"] if record["recordType"] == "lead"]
+        by_name = {lead["contactHint"]: lead for lead in leads}
+
+        self.assertEqual(
+            by_name["Iris Ley"]["leadMetadata"]["contactability"]["status"],
+            "disconnected",
+        )
+        self.assertEqual(
+            by_name["Mary Perez"]["leadMetadata"]["contactability"]["status"],
+            "do_not_contact",
+        )
+
+    def test_quality_metadata_marks_ready_review_and_suppressed_leads(self):
+        payload = self.build_payload(
+            [
+                {
+                    "sheet": "2024",
+                    "rowNumber": 10,
+                    "values": row_values(
+                        F="45650",
+                        G="Maria Lopez",
+                        I="(201) 555-0199",
+                        S="WHATSAPP",
+                        Y="LE ENVIE INFORMACION",
+                    ),
+                },
+                {
+                    "sheet": "2024",
+                    "rowNumber": 11,
+                    "values": row_values(
+                        F="45651",
+                        I="(201) 555-0200",
+                        S="WHATSAPP",
+                    ),
+                },
+                {
+                    "sheet": "2024",
+                    "rowNumber": 12,
+                    "values": row_values(
+                        F="45652",
+                        G="Iris Ley",
+                        I="(201) 555-0300",
+                        S="WHATSAPP",
+                        Y="NUMBER IS NOT WORKING",
+                    ),
+                },
+            ]
+        )
+
+        leads = [record["proposedLeadJson"] for record in payload["normalizedRecords"] if record["recordType"] == "lead"]
+        by_phone = {lead["phoneHint"]: lead for lead in leads}
+
+        self.assertEqual(
+            by_phone["2015550199"]["leadMetadata"]["qualityDisposition"],
+            "ready_for_follow_up",
+        )
+        self.assertEqual(
+            by_phone["2015550200"]["leadMetadata"]["qualityDisposition"],
+            "needs_review",
+        )
+        self.assertIn(
+            "phone_only",
+            [flag["code"] for flag in by_phone["2015550200"]["leadMetadata"]["qualityFlags"]],
+        )
+        self.assertEqual(
+            by_phone["2015550300"]["leadMetadata"]["qualityDisposition"],
+            "suppress_from_follow_up",
+        )
+        self.assertIn(
+            "disconnected",
+            [flag["code"] for flag in by_phone["2015550300"]["leadMetadata"]["qualityFlags"]],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
