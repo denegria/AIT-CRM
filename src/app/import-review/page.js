@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Check, Database, Eye, Filter, Lock, RefreshCw, Search, X } from 'lucide-react';
+import { AlertTriangle, Check, Database, Eye, Filter, HelpCircle, Lock, RefreshCw, Search, X } from 'lucide-react';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 
@@ -35,6 +35,48 @@ const QUALITY_OPTIONS = [
   { value: 'source_unclear', label: 'Source unclear' },
 ];
 const QUALITY_DISPOSITION_FILTERS = new Set(['ready_for_follow_up', 'needs_review', 'suppress_from_follow_up']);
+const OUTCOME_BUCKETS = [
+  {
+    value: 'ready_for_follow_up',
+    label: 'Ready for follow-up',
+    className: 'outcome-ready',
+    description: 'Leads with enough usable contact/context to enter normal follow-up.',
+  },
+  {
+    value: 'needs_review',
+    label: 'Needs review',
+    className: 'outcome-review',
+    description: 'Leads blocked from automatic promotion until an operator resolves missing identity or ambiguous source evidence.',
+  },
+  {
+    value: 'suppress_from_follow_up',
+    label: 'Suppress from follow-up',
+    className: 'outcome-suppress',
+    description: 'Dead, bad, duplicate, or explicitly uninterested leads that should not enter the active follow-up queue.',
+  },
+];
+const SECONDARY_BUCKETS = [
+  {
+    value: 'phone_only',
+    label: 'Phone only',
+    description: 'Rows with a usable phone but no reliable prospect name. This overlaps with other buckets.',
+  },
+  {
+    value: 'dead_contact',
+    label: 'Wrong / dead contact',
+    description: 'Wrong numbers, disconnected numbers, do-not-contact, not-current, and repeated no-answer signals.',
+  },
+  {
+    value: 'old_or_stale',
+    label: 'Old / stale',
+    description: 'Older leads. Informational flag; it can overlap with ready, review, or suppress.',
+  },
+  {
+    value: 'source_unclear',
+    label: 'Source unclear',
+    description: 'Rows whose acquisition/source hint is unclear. Informational unless paired with another blocker.',
+  },
+];
 
 function labelForType(value) {
   return TYPE_LABELS[value] || value.replace(/_/g, ' ');
@@ -109,6 +151,31 @@ function qualityCount(summary, value) {
   if (value === 'old_or_stale') return countFlags(summary.qualityFlagCounts || [], ['stale_or_old_lead']);
   if (value === 'source_unclear') return countFlags(summary.qualityFlagCounts || [], ['source_unclear']);
   return Number(summary.counts?.normalizedRecords || 0);
+}
+
+function formatPercent(count, total) {
+  const numericCount = Number(count || 0);
+  const numericTotal = Number(total || 0);
+  if (!numericTotal) return '0%';
+  const percent = (numericCount / numericTotal) * 100;
+  return `${percent >= 10 ? Math.round(percent) : percent.toFixed(1)}%`;
+}
+
+function leadOutcomeTotal(summary) {
+  return OUTCOME_BUCKETS.reduce((sum, bucket) => sum + qualityCount(summary, bucket.value), 0);
+}
+
+function sortedCountRows(rows = [], key = 'reason') {
+  return [...rows]
+    .map((row) => ({ label: row[key] || 'Unknown', count: Number(row.count || 0) }))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
+}
+
+function sheetMixForDisposition(summary, disposition) {
+  return sortedCountRows(
+    (summary?.qualityDispositionSheetCounts || []).filter((row) => row.disposition === disposition),
+    'source_sheet',
+  );
 }
 
 function batchLabel(batch) {
@@ -296,6 +363,10 @@ export default function ImportReviewPage() {
   const pageEnd = Math.min(pagination.offset + rows.length, pagination.totalCount);
   const totalRowsLabel = pagination.totalCount.toLocaleString();
   const pageRowsLabel = `${pageStart.toLocaleString()}-${pageEnd.toLocaleString()} of ${totalRowsLabel}`;
+  const leadOutcomeCount = leadOutcomeTotal(summary);
+  const needsReviewReasons = sortedCountRows(summary?.needsReviewReasonCounts || []);
+  const suppressReasons = sortedCountRows(summary?.suppressReasonCounts || []);
+  const needsReviewSheetMix = sheetMixForDisposition(summary, 'needs_review');
   const goToPreviousPage = () => {
     setFilters((prev) => ({ ...prev, offset: Math.max(0, prev.offset - prev.limit) }));
   };
@@ -464,65 +535,148 @@ export default function ImportReviewPage() {
       )}
 
       {summary && (
-        <div className="grid-4" style={{ marginBottom: 16 }}>
-          <div className="card">
-            <div className="card-title">Target division</div>
-            <div style={{ fontSize: 'var(--text-xl)', fontWeight: 700, marginTop: 8 }}>{batch?.businessUnitName || 'Unassigned'}</div>
-            {!batchHasBusinessUnit && (
-              <div className="business-unit-warning">
-                <AlertTriangle size={14} />
-                Approval disabled until this batch has a division.
+        <section className="import-cockpit" aria-label="Import decision summary">
+          <div className="audit-banner">
+            <div>
+              <div className="audit-kicker">Batch confidence</div>
+              <div className="audit-title">
+                {batch?.businessUnitName || 'Unassigned'} · {batch?.fileName || batch?.sourceName || 'Latest import batch'}
               </div>
-            )}
-          </div>
-          <div className="card">
-            <div className="card-title">Source rows</div>
-            <div style={{ fontSize: 'var(--text-3xl)', fontWeight: 700 }}>{summary.counts.sourceRows.toLocaleString()}</div>
-          </div>
-          <div className="card">
-            <div className="card-title">Normalized</div>
-            <div style={{ fontSize: 'var(--text-3xl)', fontWeight: 700 }}>{summary.counts.normalizedRecords.toLocaleString()}</div>
-          </div>
-          <div className="card">
-            <div className="card-title">Visible / review</div>
-            <div style={{ fontSize: 'var(--text-3xl)', fontWeight: 700 }}>{pagination.totalCount.toLocaleString()}</div>
-            <div className="page-subtitle" style={{ margin: '4px 0 0' }}>
-              {rows.length.toLocaleString()} visible, {summary.counts.reviewItems.toLocaleString()} review items
+              <div className="audit-copy">
+                {summary.counts.sourceRows.toLocaleString()} source rows · {summary.counts.normalizedRecords.toLocaleString()} normalized records · {leadOutcomeCount.toLocaleString()} lead decisions
+              </div>
+            </div>
+            <div className="audit-meta">
+              <span className={`badge ${badgeClassForStatus(batch?.status || 'pending')}`}>{batch?.status || 'pending'}</span>
+              <span className="badge badge-contacted">{summary.counts.reviewItems.toLocaleString()} review items</span>
+              {!batchHasBusinessUnit && (
+                <span className="business-unit-warning">
+                  <AlertTriangle size={14} />
+                  Approval disabled: no division
+                </span>
+              )}
             </div>
           </div>
-        </div>
-      )}
 
-      <div className="card" style={{ marginBottom: 16 }}>
-        {summary && (
-          <div className="quality-filter-strip">
-            {QUALITY_OPTIONS.filter((option) => option.value !== 'all').map((option) => (
-              <button
-                className={`quality-filter-chip ${filters.quality === option.value ? 'quality-filter-chip-active' : ''}`}
-                key={option.value}
-                type="button"
-                onClick={() => setFilters((prev) => ({
-                  ...prev,
-                  quality: option.value,
-                  type: 'lead',
-                  offset: 0,
-                }))}
-              >
-                <span>{option.label}</span>
-                <strong>{qualityCount(summary, option.value).toLocaleString()}</strong>
-              </button>
-            ))}
+          <div className="outcome-grid">
+            {OUTCOME_BUCKETS.map((bucket) => {
+              const count = qualityCount(summary, bucket.value);
+              return (
+                <button
+                  className={`outcome-card ${bucket.className} ${filters.quality === bucket.value ? 'outcome-card-active' : ''}`}
+                  key={bucket.value}
+                  type="button"
+                  data-tooltip={bucket.description}
+                  onClick={() => setFilters((prev) => ({ ...prev, quality: bucket.value, type: 'lead', offset: 0 }))}
+                >
+                  <span className="outcome-card-label">
+                    {bucket.label}
+                    <HelpCircle size={14} />
+                  </span>
+                  <strong>{count.toLocaleString()}</strong>
+                  <span>{formatPercent(count, leadOutcomeCount)} of lead decisions</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="secondary-strip" aria-label="Overlapping quality flags">
+            {SECONDARY_BUCKETS.map((bucket) => {
+              const count = qualityCount(summary, bucket.value);
+              return (
+                <button
+                  className={`secondary-chip ${filters.quality === bucket.value ? 'secondary-chip-active' : ''}`}
+                  key={bucket.value}
+                  type="button"
+                  data-tooltip={bucket.description}
+                  onClick={() => setFilters((prev) => ({ ...prev, quality: bucket.value, type: 'lead', offset: 0 }))}
+                >
+                  <span>{bucket.label}</span>
+                  <strong>{count.toLocaleString()}</strong>
+                </button>
+              );
+            })}
             {filters.quality !== 'all' && (
               <button
-                className="quality-filter-chip"
+                className="secondary-chip clear-chip"
                 type="button"
                 onClick={() => setFilters((prev) => ({ ...prev, quality: 'all', offset: 0 }))}
               >
-                <span>Clear quality</span>
+                Clear quality filter
               </button>
             )}
           </div>
-        )}
+
+          <div className="decision-breakdowns">
+            <div className="breakdown-panel">
+              <div className="breakdown-head">
+                <div>
+                  <div className="card-title">Why needs review?</div>
+                  <p className="page-subtitle">Action buckets for the unresolved lead queue.</p>
+                </div>
+                <span className="badge badge-medium">{qualityCount(summary, 'needs_review').toLocaleString()} total</span>
+              </div>
+              <div className="bucket-list">
+                {needsReviewReasons.map((item) => (
+                  <div className="bucket-row" key={item.label}>
+                    <span>{item.label}</span>
+                    <strong>{item.count.toLocaleString()}</strong>
+                  </div>
+                ))}
+                {!needsReviewReasons.length && <div className="bucket-empty">No needs-review lead buckets found.</div>}
+              </div>
+            </div>
+
+            <div className="breakdown-panel">
+              <div className="breakdown-head">
+                <div>
+                  <div className="card-title">Suppress reasons</div>
+                  <p className="page-subtitle">Dead-lead reasons to spot rule gaps quickly.</p>
+                </div>
+                <span className="badge badge-lost">{qualityCount(summary, 'suppress_from_follow_up').toLocaleString()} total</span>
+              </div>
+              <div className="bucket-list">
+                {suppressReasons.map((item) => (
+                  <div className="bucket-row" key={item.label}>
+                    <span>{item.label}</span>
+                    <strong>{item.count.toLocaleString()}</strong>
+                  </div>
+                ))}
+                {!suppressReasons.length && <div className="bucket-empty">No suppress buckets found.</div>}
+              </div>
+            </div>
+
+            <div className="breakdown-panel">
+              <div className="breakdown-head">
+                <div>
+                  <div className="card-title">Review by sheet</div>
+                  <p className="page-subtitle">Where the unresolved rows came from.</p>
+                </div>
+                <span className="badge badge-pending">{needsReviewSheetMix.length.toLocaleString()} sheets</span>
+              </div>
+              <div className="bucket-list">
+                {needsReviewSheetMix.map((item) => {
+                  const total = qualityCount(summary, 'needs_review');
+                  return (
+                    <div className="sheet-row" key={item.label}>
+                      <div className="bucket-row">
+                        <span>{item.label}</span>
+                        <strong>{item.count.toLocaleString()}</strong>
+                      </div>
+                      <div className="sheet-bar" aria-hidden="true">
+                        <span style={{ width: formatPercent(item.count, total) }} />
+                      </div>
+                    </div>
+                  );
+                })}
+                {!needsReviewSheetMix.length && <div className="bucket-empty">No needs-review sheet mix found.</div>}
+              </div>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <div className="card" style={{ marginBottom: 16 }}>
         <div className="review-toolbar">
           <div className="review-filters">
             <div className="review-search">
@@ -901,23 +1055,107 @@ export default function ImportReviewPage() {
       </div>
 
       <style jsx>{`
-        .review-toolbar {
+        .import-cockpit {
+          display: grid;
+          gap: 14px;
+          margin-bottom: 16px;
+        }
+        .audit-banner {
           display: flex;
-          align-items: center;
+          align-items: flex-start;
           justify-content: space-between;
           gap: 16px;
-          flex-wrap: wrap;
+          padding: 16px 18px;
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-lg);
+          background: linear-gradient(135deg, var(--bg-primary), var(--bg-tertiary));
         }
-        .quality-filter-strip {
+        .audit-kicker {
+          color: var(--text-muted);
+          font-size: var(--text-xs);
+          font-weight: 800;
+          letter-spacing: 0;
+          text-transform: uppercase;
+          margin-bottom: 4px;
+        }
+        .audit-title {
+          color: var(--text-primary);
+          font-size: var(--text-xl);
+          font-weight: 800;
+          line-height: 1.2;
+        }
+        .audit-copy {
+          color: var(--text-secondary);
+          font-size: var(--text-sm);
+          margin-top: 5px;
+        }
+        .audit-meta {
+          display: flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 8px;
+          flex-wrap: wrap;
+          min-width: 220px;
+        }
+        .outcome-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 12px;
+        }
+        .outcome-card {
+          display: grid;
+          gap: 6px;
+          min-height: 118px;
+          padding: 15px;
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-lg);
+          background: var(--bg-primary);
+          color: var(--text-secondary);
+          text-align: left;
+          cursor: pointer;
+          transition: border-color var(--transition-fast), transform var(--transition-fast), box-shadow var(--transition-fast);
+        }
+        .outcome-card:hover,
+        .outcome-card-active {
+          transform: translateY(-1px);
+          box-shadow: var(--shadow-sm);
+        }
+        .outcome-card-label {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          color: var(--text-secondary);
+          font-size: var(--text-sm);
+          font-weight: 800;
+        }
+        .outcome-card strong {
+          color: var(--text-primary);
+          font-size: var(--text-3xl);
+          line-height: 1;
+        }
+        .outcome-ready:hover,
+        .outcome-ready.outcome-card-active {
+          border-color: var(--success);
+        }
+        .outcome-review:hover,
+        .outcome-review.outcome-card-active {
+          border-color: var(--warning);
+        }
+        .outcome-suppress:hover,
+        .outcome-suppress.outcome-card-active {
+          border-color: var(--danger);
+        }
+        .secondary-strip {
           display: flex;
           align-items: center;
           gap: 8px;
           flex-wrap: wrap;
-          padding-bottom: 14px;
-          margin-bottom: 14px;
-          border-bottom: 1px solid var(--border-subtle);
+          padding: 10px 12px;
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-lg);
+          background: var(--bg-primary);
         }
-        .quality-filter-chip {
+        .secondary-chip {
           display: inline-flex;
           align-items: center;
           gap: 8px;
@@ -928,17 +1166,93 @@ export default function ImportReviewPage() {
           background: var(--bg-primary);
           color: var(--text-secondary);
           font-size: var(--text-xs);
-          font-weight: 700;
+          font-weight: 800;
           cursor: pointer;
         }
-        .quality-filter-chip strong {
+        .secondary-chip strong {
           color: var(--text-primary);
           font-size: var(--text-sm);
         }
-        .quality-filter-chip-active {
+        .secondary-chip-active {
           border-color: var(--accent);
           background: var(--accent-muted);
           color: var(--accent);
+        }
+        .clear-chip {
+          color: var(--text-muted);
+        }
+        .decision-breakdowns {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 12px;
+        }
+        .breakdown-panel {
+          min-width: 0;
+          padding: 15px;
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-lg);
+          background: var(--bg-primary);
+        }
+        .breakdown-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 10px;
+          padding-bottom: 12px;
+          margin-bottom: 12px;
+          border-bottom: 1px solid var(--border-subtle);
+        }
+        .breakdown-head .page-subtitle {
+          margin: 3px 0 0;
+          font-size: var(--text-xs);
+        }
+        .bucket-list {
+          display: grid;
+          gap: 9px;
+        }
+        .bucket-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          color: var(--text-secondary);
+          font-size: var(--text-sm);
+        }
+        .bucket-row span {
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+        .bucket-row strong {
+          color: var(--text-primary);
+          font-variant-numeric: tabular-nums;
+        }
+        .bucket-empty {
+          color: var(--text-muted);
+          font-size: var(--text-sm);
+        }
+        .sheet-row {
+          display: grid;
+          gap: 5px;
+        }
+        .sheet-bar {
+          height: 5px;
+          overflow: hidden;
+          border-radius: var(--radius-sm);
+          background: var(--bg-tertiary);
+        }
+        .sheet-bar span {
+          display: block;
+          height: 100%;
+          min-width: 4px;
+          border-radius: inherit;
+          background: var(--accent);
+        }
+        .review-toolbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 16px;
+          flex-wrap: wrap;
         }
         .review-filters {
           display: flex;
@@ -1223,6 +1537,10 @@ export default function ImportReviewPage() {
           margin-top: 18px;
         }
         @media (max-width: 1180px) {
+          .outcome-grid,
+          .decision-breakdowns {
+            grid-template-columns: 1fr;
+          }
           .review-layout {
             grid-template-columns: 1fr;
           }
@@ -1231,6 +1549,13 @@ export default function ImportReviewPage() {
           }
         }
         @media (max-width: 900px) {
+          .audit-banner {
+            flex-direction: column;
+          }
+          .audit-meta {
+            justify-content: flex-start;
+            min-width: 0;
+          }
           .review-detail-meta {
             grid-template-columns: 1fr;
           }
