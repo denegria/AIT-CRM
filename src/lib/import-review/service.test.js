@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { updateImportReviewStatus } from './service.js';
+import { loadImportReviewRows, updateImportReviewStatus } from './service.js';
 
 function normalizeSql(sql) {
   return String(sql).replace(/\s+/g, ' ').trim().toLowerCase();
@@ -120,6 +120,59 @@ function createClient({ batchSourceType = 'facebook_messenger', batchBusinessUni
     },
   };
 }
+
+test('import review search matches proposed JSON and lists leads before follow-up activity', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, params = []) {
+      const normalized = normalizeSql(sql);
+      calls.push({ sql: normalized, params });
+
+      if (normalized.startsWith('select nr.id, nr.record_type')) {
+        return {
+          rows: [{
+            id: 'record-1',
+            record_type: 'lead',
+            status: 'pending',
+            confidence_score: '0.90',
+            proposed_contact_json: { name: 'CARLOS SAULES', nameAliases: ['CARLOS SAULES', 'CARLOS'] },
+            proposed_lead_json: { contactHint: 'CARLOS SAULES' },
+            proposed_estimate_json: null,
+            proposed_work_order_json: null,
+            proposed_payment_json: null,
+            proposed_note_json: null,
+            business_unit_id: 'bu-1',
+            business_unit_name: 'AIT USA',
+            source_row_id: 'source-row-1',
+            source_sheet: '2025',
+            source_row_number: 353,
+            raw_text: 'CARLOS',
+            parse_status: 'parsed',
+            created_at: new Date('2026-06-01T00:00:00.000Z'),
+          }],
+        };
+      }
+
+      if (normalized.startsWith('select source_row_id, review_type')) {
+        return { rows: [] };
+      }
+
+      throw new Error(`Unexpected query: ${normalized}`);
+    },
+  };
+
+  const rows = await loadImportReviewRows(client, 'batch-1', { q: 'Saul', limit: 20 });
+  const searchQuery = calls[0].sql;
+
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].confidenceScore, 0.9);
+  assert.deepEqual(calls[0].params, ['batch-1', '%Saul%', 20]);
+  assert.match(searchQuery, /proposed_contact_json::text/);
+  assert.match(searchQuery, /proposed_lead_json::text/);
+  assert.match(searchQuery, /when 'lead' then 0/);
+  assert.match(searchQuery, /when 'activity_event' then 6/);
+  assert.match(searchQuery, /confidence_score, 0\)::numeric desc/);
+});
 
 test('approving staged Facebook leads promotes them into CRM records', async () => {
   const { client, calls } = createClient();
