@@ -105,7 +105,7 @@ function qualityCount(summary, value) {
     return countByKey(summary.qualityDispositionCounts || [], 'disposition', value);
   }
   if (value === 'phone_only') return countFlags(summary.qualityFlagCounts || [], ['phone_only']);
-  if (value === 'dead_contact') return countFlags(summary.qualityFlagCounts || [], ['wrong_number', 'disconnected', 'do_not_contact', 'not_current']);
+  if (value === 'dead_contact') return countFlags(summary.qualityFlagCounts || [], ['wrong_number', 'disconnected', 'do_not_contact', 'not_current', 'repeated_no_answer']);
   if (value === 'old_or_stale') return countFlags(summary.qualityFlagCounts || [], ['stale_or_old_lead']);
   if (value === 'source_unclear') return countFlags(summary.qualityFlagCounts || [], ['source_unclear']);
   return Number(summary.counts?.normalizedRecords || 0);

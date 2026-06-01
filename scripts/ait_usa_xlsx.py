@@ -4,7 +4,7 @@ import hashlib
 import re
 import xml.etree.ElementTree as ET
 import zipfile
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -27,6 +27,10 @@ NS = {
 }
 
 PHONE_RE = re.compile(r"\d+")
+NO_ANSWER_RE = re.compile(
+    r"\b(no contesta|no contestan|no contesto|no contestó|no responde|no respondio|no respondió|voice m|buzon|buzón|apagado)\b",
+    re.IGNORECASE,
+)
 OWNER_MARKERS = {
     "ana maria",
     "andrea",
@@ -107,7 +111,7 @@ GENERIC_CONTACT_NAMES = {
     "requiere informacion",
 }
 
-SUPPRESS_CONTACTABILITY_STATUSES = {"wrong_number", "disconnected", "do_not_contact", "not_current", "no_phone"}
+SUPPRESS_CONTACTABILITY_STATUSES = {"wrong_number", "disconnected", "do_not_contact", "not_current", "no_phone", "repeated_no_answer"}
 REVIEW_CONTACTABILITY_STATUSES = {"needs_verification", "low_confidence_alternate"}
 
 
@@ -278,7 +282,7 @@ def contactability_from_text(value: object) -> dict:
         return {"status": "do_not_contact", "priority": 88}
     if "no tiene whatsapp" in text or "no tiene whats" in text:
         return {"status": "no_whatsapp", "priority": 75}
-    if any(marker in text for marker in ("no contesto", "no contestó", "voice m", "buzon", "buzón", "apagado")):
+    if is_no_answer_attempt(text):
         return {"status": "attempted_no_answer", "priority": 40}
     if any(marker in text for marker in ("concretado", "inscrito", "vino", "promete venir", "presento examen", "presentó examen")):
         return {"status": "qualified", "priority": 70}
@@ -294,6 +298,7 @@ def contactability_priority(status: object) -> int:
         "not_current": 90,
         "do_not_contact": 88,
         "no_phone": 85,
+        "repeated_no_answer": 82,
         "no_whatsapp": 75,
         "qualified": 70,
         "reachable": 65,
@@ -303,6 +308,10 @@ def contactability_priority(status: object) -> int:
         "low_confidence_alternate": 25,
         "unknown": 0,
     }.get(normalized_lower(status), 0)
+
+
+def is_no_answer_attempt(value: object) -> bool:
+    return bool(NO_ANSWER_RE.search(normalized_lower(value)))
 
 
 def source_tags_for(fields: dict, sheet: str) -> list[str]:
@@ -344,6 +353,7 @@ def lead_quality_metadata(proposal: dict) -> dict:
     source_label = normalize_text(proposal.get("sourceLabel"))
     source_sheet_tag = normalize_text(proposal.get("sourceSheet")).lower().replace(" ", "_")
     lead_year = parsed_year(proposal.get("leadDate"))
+    no_answer_attempt_count = int(metadata.get("noAnswerAttemptCount") or 0)
 
     if not phone:
         flags.append({"code": "missing_phone", "label": "Missing phone", "severity": "blocker"})
@@ -351,14 +361,23 @@ def lead_quality_metadata(proposal: dict) -> dict:
         flags.append({"code": "phone_only", "label": "Phone only", "severity": "review"})
     if email and "@" not in email:
         flags.append({"code": "invalid_email", "label": "Invalid email", "severity": "review"})
-    if contactability_status in SUPPRESS_CONTACTABILITY_STATUSES:
+    if no_answer_attempt_count >= 3:
         flags.append(
             {
-                "code": contactability_status,
-                "label": contactability_status.replace("_", " ").title(),
+                "code": "repeated_no_answer",
+                "label": f"{no_answer_attempt_count} no-answer attempts",
                 "severity": "blocker",
             }
         )
+    if contactability_status in SUPPRESS_CONTACTABILITY_STATUSES:
+        if not any(flag["code"] == contactability_status for flag in flags):
+            flags.append(
+                {
+                    "code": contactability_status,
+                    "label": contactability_status.replace("_", " ").title(),
+                    "severity": "blocker",
+                }
+            )
     elif contactability_status in REVIEW_CONTACTABILITY_STATUSES:
         flags.append(
             {
@@ -1005,9 +1024,26 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
             }
         )
 
+    no_answer_attempts_by_phone = Counter(
+        event["proposedNoteJson"]["phoneHint"]
+        for event in event_records
+        if is_no_answer_attempt((event.get("proposedNoteJson") or {}).get("message"))
+    )
+
     lead_records = []
     for phone, candidate in sorted(lead_candidates.items()):
         proposal = candidate["proposal"]
+        no_answer_attempt_count = no_answer_attempts_by_phone.get(phone, 0)
+        if no_answer_attempt_count >= 3:
+            metadata = proposal.get("leadMetadata") or {}
+            repeated_status = {
+                "status": "repeated_no_answer",
+                "reason": f"{no_answer_attempt_count} no-answer follow-up events in source workbook",
+            }
+            if contactability_priority((metadata.get("contactability") or {}).get("status")) < contactability_priority("repeated_no_answer"):
+                metadata["contactability"] = repeated_status
+            metadata["noAnswerAttemptCount"] = no_answer_attempt_count
+            proposal["leadMetadata"] = metadata
         quality_metadata = lead_quality_metadata(proposal)
         proposal["leadMetadata"] = {
             **(proposal.get("leadMetadata") or {}),

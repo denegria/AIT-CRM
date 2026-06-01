@@ -9,7 +9,7 @@ const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const REVIEWABLE_RECORD_STATUSES = ['pending', 'needs_review'];
 const QUALITY_FLAG_FILTERS = {
   phone_only: ['phone_only'],
-  dead_contact: ['wrong_number', 'disconnected', 'do_not_contact', 'not_current'],
+  dead_contact: ['wrong_number', 'disconnected', 'do_not_contact', 'not_current', 'repeated_no_answer'],
   old_or_stale: ['stale_or_old_lead'],
   source_unclear: ['source_unclear'],
 };

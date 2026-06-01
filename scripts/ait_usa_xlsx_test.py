@@ -167,6 +167,42 @@ class AitUsaParserTest(unittest.TestCase):
             contactability_from_text("ESTA MAL EL NUMERO")["status"],
             "wrong_number",
         )
+        self.assertEqual(
+            contactability_from_text("NO CONTESTA")["status"],
+            "attempted_no_answer",
+        )
+
+    def test_three_no_answer_follow_ups_suppress_lead(self):
+        payload = self.build_payload(
+            [
+                {
+                    "sheet": "2025",
+                    "rowNumber": 33,
+                    "values": row_values(F="45810", G="Carlos", I="973 519 5947", Y="NO CONTESTA"),
+                },
+                {
+                    "sheet": "2025",
+                    "rowNumber": 34,
+                    "values": row_values(V="45848", W="LILIANA", Y="NO CONTESTA"),
+                },
+                {
+                    "sheet": "2025",
+                    "rowNumber": 35,
+                    "values": row_values(V="45941", W="LILIANA", Y="NO CONTESTA"),
+                },
+            ]
+        )
+
+        leads = [record["proposedLeadJson"] for record in payload["normalizedRecords"] if record["recordType"] == "lead"]
+        events = [record["proposedNoteJson"] for record in payload["normalizedRecords"] if record["recordType"] == "activity_event"]
+        metadata = leads[0]["leadMetadata"]
+
+        self.assertEqual(len(leads), 1)
+        self.assertEqual(len(events), 3)
+        self.assertEqual(metadata["qualityDisposition"], "suppress_from_follow_up")
+        self.assertEqual(metadata["contactability"]["status"], "repeated_no_answer")
+        self.assertEqual(metadata["noAnswerAttemptCount"], 3)
+        self.assertIn("repeated_no_answer", [flag["code"] for flag in metadata["qualityFlags"]])
 
     def test_2025_default_phone_row_uses_shifted_h_name_when_g_is_blank(self):
         payload = self.build_payload(
