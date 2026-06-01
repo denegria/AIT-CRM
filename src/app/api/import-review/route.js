@@ -12,6 +12,7 @@ import {
   normalizeImportReviewText,
   normalizeQualityFilter,
   parseImportReviewLimit,
+  parseImportReviewOffset,
   resolveImportReviewBatchId,
   updateImportReviewStatus,
 } from '@/lib/import-review/service.js';
@@ -90,12 +91,13 @@ export async function GET(request) {
         organizationId: auth.organizationId,
         businessUnitId: businessUnitId && businessUnitId !== 'all' ? businessUnitId : null,
       });
-      const rows = await loadImportReviewRows(client, batchId, {
+      const { rows, pagination } = await loadImportReviewRows(client, batchId, {
         status: normalizeImportReviewText(url.searchParams.get('status')),
         type: normalizeImportReviewText(url.searchParams.get('type')),
         quality: normalizeQualityFilter(url.searchParams.get('quality')),
         q: normalizeImportReviewText(url.searchParams.get('q'), ''),
         limit: parseImportReviewLimit(url.searchParams.get('limit')),
+        offset: parseImportReviewOffset(url.searchParams.get('offset')),
       });
 
       return NextResponse.json({
@@ -103,6 +105,7 @@ export async function GET(request) {
         batches,
         summary,
         rows,
+        pagination,
       });
     });
   } catch (error) {
