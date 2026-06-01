@@ -70,6 +70,10 @@ function normalizePhone(value) {
   return digits.length >= 7 ? digits : null;
 }
 
+function normalizeIdentityKey(value) {
+  return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
 function contactNameFromProposal(proposal) {
   const contactHint = cleanText(proposal.contactHint);
   if (contactHint) return contactHint.slice(0, 160);
@@ -244,7 +248,8 @@ async function findOrCreateContact(client, context, proposal, sourceLabel, dryRu
   const phone = normalizePhone(proposal.phoneHint);
   const companyName = cleanText(proposal.customerName || proposal.contactHint);
   const personName = cleanText(proposal.contactName);
-  const name = (personName || companyName || contactNameFromProposal(proposal)).slice(0, 160);
+  const name = (companyName || personName || contactNameFromProposal(proposal)).slice(0, 160);
+  const companyKey = normalizeIdentityKey(companyName);
 
   if (phone) {
     const existing = await client.query(
@@ -260,6 +265,27 @@ async function findOrCreateContact(client, context, proposal, sourceLabel, dryRu
       [context.organizationId, phone, context.businessUnitId],
     );
     if (existing.rowCount) return existing.rows[0].id;
+  }
+
+  if (companyKey.length >= 4) {
+    const existingByCompany = await client.query(
+      `
+        select id
+        from contacts
+        where organization_id = $1
+          and primary_business_unit_id = $2
+          and (
+            regexp_replace(lower(coalesce(company_name, '')), '[^a-z0-9]', '', 'g') = $3
+            or regexp_replace(lower(coalesce(name, '')), '[^a-z0-9]', '', 'g') = $3
+          )
+        order by
+          case when phone is not null and phone <> '' then 0 else 1 end,
+          created_at asc
+        limit 1
+      `,
+      [context.organizationId, context.businessUnitId, companyKey],
+    );
+    if (existingByCompany.rowCount) return existingByCompany.rows[0].id;
   }
 
   if (dryRun) return `dry-contact:${phone || name}`;
