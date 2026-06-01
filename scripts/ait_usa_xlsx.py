@@ -242,6 +242,10 @@ def contactability_from_text(value: object) -> dict:
             "número equivocado",
             "telefono equivocado",
             "teléfono equivocado",
+            "estoy equivocada",
+            "estoy equivocado",
+            "esoy equivocada",
+            "esoy equivocado",
             "numero malo",
             "número malo",
             "mal el numero",
@@ -259,6 +263,7 @@ def contactability_from_text(value: object) -> dict:
             "not working",
             "no esta disponible",
             "no está disponible",
+            "no disponible",
             "telefono no disponible",
             "teléfono no disponible",
             "no acepta llamadas",
@@ -268,7 +273,18 @@ def contactability_from_text(value: object) -> dict:
         )
     ):
         return {"status": "disconnected", "priority": 95}
-    if "se mudo" in text or "se mudó" in text or "otro estado" in text or "otro curso" in text:
+    if any(
+        marker in text
+        for marker in (
+            "se mudo",
+            "se mudó",
+            "otro estado",
+            "otro curso",
+            "ya esta estudiando",
+            "ya está estudiando",
+            "estudiando en otro lugar",
+        )
+    ):
         return {"status": "not_current", "priority": 90}
     if any(
         marker in text
@@ -281,6 +297,7 @@ def contactability_from_text(value: object) -> dict:
             "no está interesado",
             "no esta interesada",
             "no está interesada",
+            "no esrta interesada",
             "no interesado",
             "desinteresado",
             "desinteresada",
