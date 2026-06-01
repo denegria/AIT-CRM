@@ -175,6 +175,36 @@ test('import review search matches proposed JSON and lists leads before follow-u
   assert.match(searchQuery, /confidence_score, 0\)::numeric desc/);
 });
 
+test('import review can filter by quality disposition and flag buckets', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, params = []) {
+      const normalized = normalizeSql(sql);
+      calls.push({ sql: normalized, params });
+
+      if (normalized.startsWith('select nr.id, nr.record_type')) {
+        return { rows: [] };
+      }
+
+      if (normalized.startsWith('select source_row_id, review_type')) {
+        return { rows: [] };
+      }
+
+      throw new Error(`Unexpected query: ${normalized}`);
+    },
+  };
+
+  await loadImportReviewRows(client, 'batch-1', { quality: 'ready_for_follow_up', limit: 20 });
+  assert.match(calls[0].sql, /qualitydisposition' = \$2/);
+  assert.deepEqual(calls[0].params, ['batch-1', 'ready_for_follow_up', 20]);
+
+  calls.length = 0;
+  await loadImportReviewRows(client, 'batch-1', { quality: 'dead_contact', limit: 20 });
+  assert.match(calls[0].sql, /jsonb_array_elements/);
+  assert.match(calls[0].sql, /quality_flag->>'code' = any\(\$2::text\[\]\)/);
+  assert.deepEqual(calls[0].params, ['batch-1', ['wrong_number', 'disconnected', 'do_not_contact', 'not_current'], 20]);
+});
+
 test('approving staged Facebook leads promotes them into CRM records', async () => {
   const { client, calls } = createClient();
 

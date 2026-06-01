@@ -10,6 +10,7 @@ import {
   loadImportReviewRows,
   loadImportReviewSummary,
   normalizeImportReviewText,
+  normalizeQualityFilter,
   parseImportReviewLimit,
   resolveImportReviewBatchId,
   updateImportReviewStatus,
@@ -92,6 +93,7 @@ export async function GET(request) {
       const rows = await loadImportReviewRows(client, batchId, {
         status: normalizeImportReviewText(url.searchParams.get('status')),
         type: normalizeImportReviewText(url.searchParams.get('type')),
+        quality: normalizeQualityFilter(url.searchParams.get('quality')),
         q: normalizeImportReviewText(url.searchParams.get('q'), ''),
         limit: parseImportReviewLimit(url.searchParams.get('limit')),
       });
