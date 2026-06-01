@@ -54,6 +54,28 @@ function dateLabel(item) {
   }).format(date);
 }
 
+function timelineDateParts(item) {
+  const raw = item.timestamp || item.date;
+  if (!raw) return { date: '', time: '' };
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) {
+    return { date: String(raw).slice(0, 10), time: '' };
+  }
+  return {
+    date: new Intl.DateTimeFormat(undefined, {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    }).format(date),
+    time: item.timestamp
+      ? new Intl.DateTimeFormat(undefined, {
+          hour: 'numeric',
+          minute: '2-digit',
+        }).format(date)
+      : '',
+  };
+}
+
 function timelineIcon(type) {
   if (type === 'task') return <CheckSquare size={16} />;
   if (type === 'message') return <MessageCircle size={16} />;
@@ -61,6 +83,16 @@ function timelineIcon(type) {
   if (type === 'lead') return <Tag size={16} />;
   if (type === 'note') return <MessageSquare size={16} />;
   return <Activity size={16} />;
+}
+
+function timelineTone(item) {
+  const eventType = String(item.eventType || '').toLowerCase();
+  const text = String(item.text || '').toLowerCase();
+  if (eventType.includes('ait_usa.follow_up')) return 'imported';
+  if (text.includes('wrong number') || text.includes('disconnected') || text.includes('pbx')) return 'blocked';
+  if (item.type === 'message') return 'message';
+  if (item.type === 'lead') return 'lead';
+  return 'default';
 }
 
 function conversationDateLabel(message) {
@@ -422,29 +454,38 @@ export default function ContactDetailPage() {
                 </div>
 
                 <div className={s.timeline}>
-                  {timeline.map((item) => (
-                    <div key={item.id} className={s.timelineItem}>
-                      <div className={s.timelineIcon}>{timelineIcon(item.type)}</div>
-                      <div className={s.timelineBody}>
-                        <div className={s.timelineMeta}>
-                          <span className={s.timelineType}>{item.typeLabel || item.type}</span>
-                          <span className={s.timelineDate}>{dateLabel(item)}</span>
-                        </div>
-                        {item.title && item.title !== item.typeLabel && (
-                          <div className={s.timelineTitle}>{item.title}</div>
-                        )}
-                        <div className={s.timelineText}>{item.text}</div>
-                        <div className={s.timelineDetails}>
-                          {item.actor?.name && <span>By {item.actor.name}</span>}
-                          {item.source?.label && <span>{item.source.label}{item.source.row ? ` row ${item.source.row}` : ''}</span>}
-                          {item.businessUnit?.name && <span>{item.businessUnit.name}</span>}
-                          {(item.linkedRecords || [])
-                            .filter((record) => record.type !== 'contact')
-                            .map((record) => <span key={`${item.id}-${record.type}-${record.id}`}>{record.label}</span>)}
+                  {timeline.map((item) => {
+                    const dateParts = timelineDateParts(item);
+                    return (
+                      <div key={item.id} className={`${s.timelineItem} ${s[`tone_${timelineTone(item)}`] || ''}`}>
+                        <div className={s.timelineIcon}>{timelineIcon(item.type)}</div>
+                        <div className={s.timelineBody}>
+                          <div className={s.timelineMeta}>
+                            <div className={s.timelineTypeGroup}>
+                              <span className={s.timelineType}>{item.typeLabel || item.type}</span>
+                              {item.eventType && <span className={s.timelineEventType}>{item.eventType.replaceAll('_', ' ')}</span>}
+                            </div>
+                            <time className={s.timelineDateStack} dateTime={item.timestamp || item.date || undefined} title={dateLabel(item)}>
+                              <span>{dateParts.date}</span>
+                              {dateParts.time && <strong>{dateParts.time}</strong>}
+                            </time>
+                          </div>
+                          {item.title && item.title !== item.typeLabel && (
+                            <div className={s.timelineTitle}>{item.title}</div>
+                          )}
+                          <div className={s.timelineText}>{item.text}</div>
+                          <div className={s.timelineDetails}>
+                            {item.actor?.name && <span>By {item.actor.name}</span>}
+                            {item.source?.label && <span>{item.source.label}{item.source.row ? ` row ${item.source.row}` : ''}</span>}
+                            {item.businessUnit?.name && <span>{item.businessUnit.name}</span>}
+                            {(item.linkedRecords || [])
+                              .filter((record) => record.type !== 'contact')
+                              .map((record) => <span key={`${item.id}-${record.type}-${record.id}`}>{record.label}</span>)}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                   {timeline.length === 0 && (
                     <div className={s.timelineEmpty}>No activity recorded yet.</div>
                   )}
