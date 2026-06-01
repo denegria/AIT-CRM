@@ -255,6 +255,9 @@ export async function loadImportReviewSummary(client, batchId) {
     reviewTypeCounts,
     qualityDispositionCounts,
     qualityFlagCounts,
+    qualityDispositionSheetCounts,
+    needsReviewReasonCounts,
+    suppressReasonCounts,
   ] = await Promise.all([
     client.query(
       'select parse_status as status, count(*)::int as count from import_source_rows where import_batch_id = $1 group by parse_status',
@@ -304,6 +307,83 @@ export async function loadImportReviewSummary(client, batchId) {
       `,
       [batchId],
     ),
+    client.query(
+      `
+        select
+          coalesce(sr.source_sheet, 'Unknown sheet') as source_sheet,
+          proposed_lead_json->'leadMetadata'->>'qualityDisposition' as disposition,
+          count(*)::int as count
+        from import_normalized_records nr
+        join import_source_rows sr on sr.id = nr.source_row_id
+        where nr.import_batch_id = $1
+          and nr.record_type = 'lead'
+          and nr.proposed_lead_json->'leadMetadata' ? 'qualityDisposition'
+        group by 1, 2
+        order by count(*)::int desc, source_sheet asc, disposition asc
+      `,
+      [batchId],
+    ),
+    client.query(
+      `
+        select reason, count(*)::int as count
+        from (
+          select
+            case
+              when (proposed_lead_json->'leadMetadata'->'contactability'->>'status') = 'attempted_no_answer'
+                and coalesce((proposed_lead_json->'leadMetadata'->>'noAnswerAttemptCount')::int, 0) >= 2
+                then '2 no-answer attempts'
+              when (proposed_lead_json->'leadMetadata'->'contactability'->>'status') = 'attempted_no_answer'
+                then '1 no-answer attempt'
+              when (proposed_lead_json->'leadMetadata'->'contactability'->>'status') = 'no_whatsapp'
+                then 'No WhatsApp signal'
+              when exists (
+                select 1
+                from jsonb_array_elements(coalesce(proposed_lead_json->'leadMetadata'->'qualityFlags', '[]'::jsonb)) as quality_flag
+                where quality_flag->>'code' = 'phone_only'
+              )
+                then 'Phone only / no name'
+              when exists (
+                select 1
+                from jsonb_array_elements(coalesce(proposed_lead_json->'leadMetadata'->'qualityFlags', '[]'::jsonb)) as quality_flag
+                where quality_flag->>'code' = 'source_unclear'
+              )
+                then 'Source unclear'
+              else 'Warm no-name / operator decision'
+            end as reason
+          from import_normalized_records
+          where import_batch_id = $1
+            and record_type = 'lead'
+            and proposed_lead_json->'leadMetadata'->>'qualityDisposition' = 'needs_review'
+        ) reasons
+        group by reason
+        order by count(*)::int desc, reason asc
+      `,
+      [batchId],
+    ),
+    client.query(
+      `
+        select reason, count(*)::int as count
+        from (
+          select
+            case proposed_lead_json->'leadMetadata'->'contactability'->>'status'
+              when 'repeated_no_answer' then 'Repeated no-answer'
+              when 'do_not_contact' then 'Do not contact / not interested'
+              when 'disconnected' then 'Disconnected / unavailable'
+              when 'wrong_number' then 'Wrong number'
+              when 'not_current' then 'Not current / moved'
+              when 'no_phone' then 'No usable phone'
+              else 'Other suppress rule'
+            end as reason
+          from import_normalized_records
+          where import_batch_id = $1
+            and record_type = 'lead'
+            and proposed_lead_json->'leadMetadata'->>'qualityDisposition' = 'suppress_from_follow_up'
+        ) reasons
+        group by reason
+        order by count(*)::int desc, reason asc
+      `,
+      [batchId],
+    ),
   ]);
 
   return {
@@ -319,6 +399,9 @@ export async function loadImportReviewSummary(client, batchId) {
     reviewTypeCounts: reviewTypeCounts.rows,
     qualityDispositionCounts: qualityDispositionCounts.rows,
     qualityFlagCounts: qualityFlagCounts.rows,
+    qualityDispositionSheetCounts: qualityDispositionSheetCounts.rows,
+    needsReviewReasonCounts: needsReviewReasonCounts.rows,
+    suppressReasonCounts: suppressReasonCounts.rows,
   };
 }
 
