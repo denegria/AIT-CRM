@@ -128,6 +128,10 @@ test('import review search matches proposed JSON and lists leads before follow-u
       const normalized = normalizeSql(sql);
       calls.push({ sql: normalized, params });
 
+      if (normalized.startsWith('select count(*)::int as count')) {
+        return { rows: [{ count: 1 }] };
+      }
+
       if (normalized.startsWith('select nr.id, nr.record_type')) {
         return {
           rows: [{
@@ -161,18 +165,25 @@ test('import review search matches proposed JSON and lists leads before follow-u
     },
   };
 
-  const rows = await loadImportReviewRows(client, 'batch-1', { q: 'Saul', limit: 20 });
-  const searchQuery = calls[0].sql;
+  const result = await loadImportReviewRows(client, 'batch-1', { q: 'Saul', limit: 20, offset: 40 });
+  const countQuery = calls[0].sql;
+  const searchQuery = calls[1].sql;
 
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].confidenceScore, 0.9);
-  assert.deepEqual(calls[0].params, ['batch-1', '(^|[^[:alnum:]])Saul', 20]);
+  assert.equal(result.rows.length, 1);
+  assert.equal(result.rows[0].confidenceScore, 0.9);
+  assert.equal(result.pagination.totalCount, 1);
+  assert.equal(result.pagination.offset, 40);
+  assert.deepEqual(calls[0].params, ['batch-1', '(^|[^[:alnum:]])Saul']);
+  assert.deepEqual(calls[1].params, ['batch-1', '(^|[^[:alnum:]])Saul', 20, 40]);
+  assert.match(countQuery, /select count\(\*\)::int as count/);
   assert.match(searchQuery, /proposed_contact_json::text/);
   assert.match(searchQuery, /proposed_lead_json::text/);
   assert.match(searchQuery, /proposed_note_json::text, ''\) ~\* \$2/);
   assert.match(searchQuery, /when 'lead' then 0/);
   assert.match(searchQuery, /when 'activity_event' then 6/);
   assert.match(searchQuery, /confidence_score, 0\)::numeric desc/);
+  assert.match(searchQuery, /limit \$3/);
+  assert.match(searchQuery, /offset \$4/);
 });
 
 test('import review can filter by quality disposition and flag buckets', async () => {
@@ -181,6 +192,10 @@ test('import review can filter by quality disposition and flag buckets', async (
     async query(sql, params = []) {
       const normalized = normalizeSql(sql);
       calls.push({ sql: normalized, params });
+
+      if (normalized.startsWith('select count(*)::int as count')) {
+        return { rows: [{ count: 0 }] };
+      }
 
       if (normalized.startsWith('select nr.id, nr.record_type')) {
         return { rows: [] };
@@ -195,14 +210,16 @@ test('import review can filter by quality disposition and flag buckets', async (
   };
 
   await loadImportReviewRows(client, 'batch-1', { quality: 'ready_for_follow_up', limit: 20 });
-  assert.match(calls[0].sql, /qualitydisposition' = \$2/);
-  assert.deepEqual(calls[0].params, ['batch-1', 'ready_for_follow_up', 20]);
+  assert.match(calls[1].sql, /qualitydisposition' = \$2/);
+  assert.deepEqual(calls[0].params, ['batch-1', 'ready_for_follow_up']);
+  assert.deepEqual(calls[1].params, ['batch-1', 'ready_for_follow_up', 20, 0]);
 
   calls.length = 0;
   await loadImportReviewRows(client, 'batch-1', { quality: 'dead_contact', limit: 20 });
-  assert.match(calls[0].sql, /jsonb_array_elements/);
-  assert.match(calls[0].sql, /quality_flag->>'code' = any\(\$2::text\[\]\)/);
-  assert.deepEqual(calls[0].params, ['batch-1', ['wrong_number', 'disconnected', 'do_not_contact', 'not_current'], 20]);
+  assert.match(calls[1].sql, /jsonb_array_elements/);
+  assert.match(calls[1].sql, /quality_flag->>'code' = any\(\$2::text\[\]\)/);
+  assert.deepEqual(calls[0].params, ['batch-1', ['wrong_number', 'disconnected', 'do_not_contact', 'not_current']]);
+  assert.deepEqual(calls[1].params, ['batch-1', ['wrong_number', 'disconnected', 'do_not_contact', 'not_current'], 20, 0]);
 });
 
 test('approving staged Facebook leads promotes them into CRM records', async () => {

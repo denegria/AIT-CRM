@@ -209,7 +209,7 @@ function formatDate(value) {
 export default function ImportReviewPage() {
   const { loaded, dataSource, access, businessUnits } = useCRM();
   const { toast } = useToast();
-  const [filters, setFilters] = useState({ status: 'pending', type: 'all', quality: 'all', q: '', limit: 120, businessUnitId: 'all', batchId: '' });
+  const [filters, setFilters] = useState({ status: 'pending', type: 'all', quality: 'all', q: '', limit: 120, offset: 0, businessUnitId: 'all', batchId: '' });
   const [reloadKey, setReloadKey] = useState(0);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -220,6 +220,7 @@ export default function ImportReviewPage() {
   const [batches, setBatches] = useState([]);
   const [summary, setSummary] = useState(null);
   const [rows, setRows] = useState([]);
+  const [pagination, setPagination] = useState({ totalCount: 0, limit: 120, offset: 0, returnedCount: 0, hasPreviousPage: false, hasNextPage: false });
   const [selectedIds, setSelectedIds] = useState([]);
   const [activeId, setActiveId] = useState(null);
 
@@ -238,6 +239,7 @@ export default function ImportReviewPage() {
         if (filters.batchId) params.set('batchId', filters.batchId);
         if (filters.q.trim()) params.set('q', filters.q.trim());
         params.set('limit', String(filters.limit));
+        params.set('offset', String(filters.offset));
 
         const response = await fetch(`/api/import-review?${params.toString()}`, { signal: controller.signal });
         const payload = await response.json();
@@ -252,6 +254,7 @@ export default function ImportReviewPage() {
         setBatches(payload.batches || []);
         setSummary(payload.summary);
         setRows(payload.rows || []);
+        setPagination(payload.pagination || { totalCount: payload.rows?.length || 0, limit: filters.limit, offset: filters.offset, returnedCount: payload.rows?.length || 0, hasPreviousPage: false, hasNextPage: false });
         setSelectedIds((prev) => prev.filter((id) => (payload.rows || []).some((row) => row.id === id)));
         setActiveId((prev) => {
           if (prev && (payload.rows || []).some((row) => row.id === prev)) return prev;
@@ -262,6 +265,7 @@ export default function ImportReviewPage() {
         if (err.name !== 'AbortError') {
           setError(err.message || 'Unable to load import review queue.');
           setRows([]);
+          setPagination({ totalCount: 0, limit: filters.limit, offset: filters.offset, returnedCount: 0, hasPreviousPage: false, hasNextPage: false });
           setSummary(null);
           setBatch(null);
           setBatches([]);
@@ -288,6 +292,16 @@ export default function ImportReviewPage() {
   const canReview = access.canWriteImportReview;
   const batchHasBusinessUnit = Boolean(batch?.businessUnitId || batch?.businessUnitName);
   const canApproveRows = canReview && batchHasBusinessUnit;
+  const pageStart = pagination.totalCount > 0 ? pagination.offset + 1 : 0;
+  const pageEnd = Math.min(pagination.offset + rows.length, pagination.totalCount);
+  const totalRowsLabel = pagination.totalCount.toLocaleString();
+  const pageRowsLabel = `${pageStart.toLocaleString()}-${pageEnd.toLocaleString()} of ${totalRowsLabel}`;
+  const goToPreviousPage = () => {
+    setFilters((prev) => ({ ...prev, offset: Math.max(0, prev.offset - prev.limit) }));
+  };
+  const goToNextPage = () => {
+    setFilters((prev) => ({ ...prev, offset: prev.offset + prev.limit }));
+  };
 
   async function unlockAdminSession(event) {
     event.preventDefault();
@@ -471,8 +485,10 @@ export default function ImportReviewPage() {
           </div>
           <div className="card">
             <div className="card-title">Visible / review</div>
-            <div style={{ fontSize: 'var(--text-3xl)', fontWeight: 700 }}>{rows.length.toLocaleString()}</div>
-            <div className="page-subtitle" style={{ margin: '4px 0 0' }}>{summary.counts.reviewItems.toLocaleString()} review items</div>
+            <div style={{ fontSize: 'var(--text-3xl)', fontWeight: 700 }}>{pagination.totalCount.toLocaleString()}</div>
+            <div className="page-subtitle" style={{ margin: '4px 0 0' }}>
+              {rows.length.toLocaleString()} visible, {summary.counts.reviewItems.toLocaleString()} review items
+            </div>
           </div>
         </div>
       )}
@@ -489,6 +505,7 @@ export default function ImportReviewPage() {
                   ...prev,
                   quality: option.value,
                   type: 'lead',
+                  offset: 0,
                 }))}
               >
                 <span>{option.label}</span>
@@ -499,7 +516,7 @@ export default function ImportReviewPage() {
               <button
                 className="quality-filter-chip"
                 type="button"
-                onClick={() => setFilters((prev) => ({ ...prev, quality: 'all' }))}
+                onClick={() => setFilters((prev) => ({ ...prev, quality: 'all', offset: 0 }))}
               >
                 <span>Clear quality</span>
               </button>
@@ -513,14 +530,14 @@ export default function ImportReviewPage() {
               <input
                 className="input review-search-input"
                 value={filters.q}
-                onChange={(e) => setFilters((prev) => ({ ...prev, q: e.target.value }))}
+                onChange={(e) => setFilters((prev) => ({ ...prev, q: e.target.value, offset: 0 }))}
                 placeholder="Search sheet, raw text, type, or status"
               />
             </div>
             <select
               className="input select"
               value={filters.businessUnitId}
-              onChange={(e) => setFilters((prev) => ({ ...prev, businessUnitId: e.target.value, batchId: '' }))}
+              onChange={(e) => setFilters((prev) => ({ ...prev, businessUnitId: e.target.value, batchId: '', offset: 0 }))}
               style={{ width: 190 }}
             >
               <option value="all">All divisions</option>
@@ -533,7 +550,7 @@ export default function ImportReviewPage() {
             <select
               className="input select"
               value={filters.batchId}
-              onChange={(e) => setFilters((prev) => ({ ...prev, batchId: e.target.value }))}
+              onChange={(e) => setFilters((prev) => ({ ...prev, batchId: e.target.value, offset: 0 }))}
               style={{ width: 300 }}
             >
               <option value="">Latest matching batch</option>
@@ -546,7 +563,7 @@ export default function ImportReviewPage() {
             <select
               className="input select"
               value={filters.status}
-              onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+              onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value, offset: 0 }))}
               style={{ width: 170 }}
             >
               {STATUS_OPTIONS.map((option) => (
@@ -558,7 +575,7 @@ export default function ImportReviewPage() {
             <select
               className="input select"
               value={filters.type}
-              onChange={(e) => setFilters((prev) => ({ ...prev, type: e.target.value }))}
+              onChange={(e) => setFilters((prev) => ({ ...prev, type: e.target.value, offset: 0 }))}
               style={{ width: 190 }}
             >
               {Object.entries(TYPE_LABELS).map(([value, label]) => (
@@ -570,7 +587,7 @@ export default function ImportReviewPage() {
             <select
               className="input select"
               value={filters.quality}
-              onChange={(e) => setFilters((prev) => ({ ...prev, quality: e.target.value, type: e.target.value === 'all' ? prev.type : 'lead' }))}
+              onChange={(e) => setFilters((prev) => ({ ...prev, quality: e.target.value, type: e.target.value === 'all' ? prev.type : 'lead', offset: 0 }))}
               style={{ width: 220 }}
             >
               {QUALITY_OPTIONS.map((option) => (
@@ -582,7 +599,7 @@ export default function ImportReviewPage() {
             <select
               className="input select"
               value={filters.limit}
-              onChange={(e) => setFilters((prev) => ({ ...prev, limit: Number(e.target.value) }))}
+              onChange={(e) => setFilters((prev) => ({ ...prev, limit: Number(e.target.value), offset: 0 }))}
               style={{ width: 120 }}
             >
               {[60, 120, 180, 250].map((value) => (
@@ -615,10 +632,18 @@ export default function ImportReviewPage() {
             <div>
               <div className="card-title" style={{ marginBottom: 4 }}>Staged rows</div>
               <p className="page-subtitle" style={{ margin: 0 }}>
-                {loading ? 'Loading review queue…' : `${rows.length.toLocaleString()} rows loaded from ${batch?.fileName || 'the latest batch'}`}
+                {loading ? 'Loading review queue…' : `Showing ${pageRowsLabel} rows from ${batch?.fileName || 'the latest batch'}`}
               </p>
             </div>
-            <span className="badge badge-pending">{selectedCount.toLocaleString()} selected</span>
+            <div className="pagination-actions">
+              <button className="btn btn-sm" disabled={loading || !pagination.hasPreviousPage} onClick={goToPreviousPage}>
+                Previous
+              </button>
+              <span className="badge badge-pending">{selectedCount.toLocaleString()} selected</span>
+              <button className="btn btn-sm" disabled={loading || !pagination.hasNextPage} onClick={goToNextPage}>
+                Next
+              </button>
+            </div>
           </div>
 
           <div className="review-table">
@@ -972,6 +997,13 @@ export default function ImportReviewPage() {
           gap: 12px;
           padding: 18px 18px 14px;
           border-bottom: 1px solid var(--border-subtle);
+        }
+        .pagination-actions {
+          display: inline-flex;
+          align-items: center;
+          justify-content: flex-end;
+          gap: 8px;
+          flex-wrap: wrap;
         }
         .review-table {
           overflow: auto;
