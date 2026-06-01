@@ -197,6 +197,83 @@ class AitUsaParserTest(unittest.TestCase):
         self.assertEqual(len(events), 1)
         self.assertEqual(events[0]["proposedNoteJson"]["phoneHint"], "5109780010")
 
+    def test_manual_near_phone_resolution_merges_confirmed_duplicate(self):
+        payload = self.build_payload(
+            [
+                {
+                    "sheet": "2023 Y ANTERIORES",
+                    "rowNumber": 10,
+                    "values": row_values(
+                        F="43328",
+                        G="MARIA SOLIS",
+                        I="732 645 6593",
+                        L="INGLES",
+                        Y="LE MANDE MENSAJE INFORMATIVO DE LAS CLASES",
+                        V="45406",
+                        W="KARLA",
+                    ),
+                },
+                {
+                    "sheet": "2023 Y ANTERIORES",
+                    "rowNumber": 925,
+                    "values": row_values(
+                        F="45196",
+                        G="MARIA SOLIS",
+                        I="732 646 6593",
+                        Y="WRONG NUMBER",
+                        V="45395",
+                        W="ANGELINA",
+                    ),
+                },
+            ]
+        )
+
+        leads = [record for record in payload["normalizedRecords"] if record["recordType"] == "lead"]
+        events = [record for record in payload["normalizedRecords"] if record["recordType"] == "activity_event"]
+
+        self.assertEqual(len(leads), 1)
+        self.assertEqual(leads[0]["sourceRowNumber"], 10)
+        self.assertEqual(leads[0]["proposedContactJson"]["phone"], "7326456593")
+        self.assertEqual(leads[0]["proposedLeadJson"]["originalPhoneHints"], ["7326466593"])
+        self.assertEqual(leads[0]["proposedLeadJson"]["leadMetadata"]["contactability"]["status"], "reachable")
+        self.assertEqual(events[1]["proposedNoteJson"]["phoneHint"], "7326456593")
+        self.assertEqual(events[1]["proposedNoteJson"]["originalPhoneHint"], "7326466593")
+        self.assertEqual(events[1]["proposedNoteJson"]["contactabilityStatus"], "wrong_number")
+
+    def test_structured_lead_metadata_preserves_follow_up_fields(self):
+        payload = self.build_payload(
+            [
+                {
+                    "sheet": "2024",
+                    "rowNumber": 10,
+                    "values": row_values(
+                        D="SI",
+                        E="LILI",
+                        F="45300",
+                        G="Maria Lopez",
+                        I="(201) 555-0199",
+                        N="SABADO",
+                        O="10 AM",
+                        P="PRESENTO",
+                        Q="BASICO",
+                        R="BOUND BROOK",
+                        S="WHATSAPP",
+                    ),
+                },
+            ]
+        )
+
+        lead = [record for record in payload["normalizedRecords"] if record["recordType"] == "lead"][0]
+        metadata = lead["proposedLeadJson"]["leadMetadata"]
+
+        self.assertEqual(metadata["callEligibility"], "SI")
+        self.assertEqual(metadata["dayPreference"], "SABADO")
+        self.assertEqual(metadata["schedulePreference"], "10 AM")
+        self.assertEqual(metadata["testStatus"], "PRESENTO")
+        self.assertEqual(metadata["levelHint"], "BASICO")
+        self.assertEqual(metadata["schoolHint"], "BOUND BROOK")
+        self.assertIn("whatsapp", metadata["sourceTags"])
+
 
 if __name__ == "__main__":
     unittest.main()

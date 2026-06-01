@@ -281,7 +281,7 @@
 .timelineItem {
   display: flex;
   gap: 16px;
-  padding-bottom: 24px;
+  padding-bottom: 22px;
   position: relative;
 }
 .timelineItem::before {
@@ -308,6 +308,26 @@
   flex-shrink: 0;
   z-index: 1;
 }
+.timelineItem.tone_imported .timelineIcon {
+  color: var(--accent);
+  background: var(--accent-muted);
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border-subtle));
+}
+.timelineItem.tone_blocked .timelineIcon {
+  color: var(--danger);
+  background: var(--danger-muted);
+  border-color: color-mix(in srgb, var(--danger) 28%, var(--border-subtle));
+}
+.timelineItem.tone_message .timelineIcon {
+  color: var(--info);
+  background: var(--info-muted);
+  border-color: color-mix(in srgb, var(--info) 28%, var(--border-subtle));
+}
+.timelineItem.tone_lead .timelineIcon {
+  color: var(--success);
+  background: var(--success-muted);
+  border-color: color-mix(in srgb, var(--success) 28%, var(--border-subtle));
+}
 .timelineBody {
   flex: 1;
   background: color-mix(in srgb, var(--bg-secondary) 72%, var(--bg-tertiary));
@@ -319,19 +339,53 @@
 .timelineMeta {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
+  align-items: flex-start;
+  gap: 14px;
+  margin-bottom: 10px;
+}
+.timelineTypeGroup {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
 }
 .timelineType {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
   font-size: 10px;
+  line-height: 1.1;
   font-weight: 700;
   text-transform: uppercase;
   color: var(--text-muted);
 }
-.timelineDate {
+.timelineEventType {
   font-size: var(--text-xs);
   color: var(--text-muted);
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.timelineDateStack {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.2;
+  text-align: right;
   white-space: nowrap;
+}
+.timelineDateStack strong {
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 800;
 }
 .timelineTitle {
   color: var(--text-primary);
@@ -679,7 +733,9 @@
     flex-direction: column;
     gap: 4px;
   }
-  .timelineDate {
+  .timelineDateStack {
+    align-items: flex-start;
+    text-align: left;
     white-space: normal;
   }
   .conversationToolbar,

@@ -42,6 +42,70 @@ OWNER_MARKERS = {
     "sofia",
 }
 NOISE_MARKERS = {"*", ".", ":", "/", "whatsapp", "whataspp"}
+MANUAL_PHONE_RESOLUTIONS = {
+    ("2023 Y ANTERIORES", 10): {
+        "group": "maria-solis-2023",
+        "primaryPhone": "7326456593",
+        "primaryRecord": True,
+        "contactabilityStatus": "reachable",
+        "reason": "Primary number has real information-sent follow-up.",
+    },
+    ("2023 Y ANTERIORES", 925): {
+        "group": "maria-solis-2023",
+        "primaryPhone": "7326456593",
+        "invalidPhone": "7326466593",
+        "contactabilityStatus": "wrong_number",
+        "reason": "Follow-ups mark this near-match number as no WhatsApp, wrong number, and PBX.",
+    },
+    ("2023 Y ANTERIORES", 484): {
+        "group": "orlando-granados",
+        "primaryPhone": "7327053298",
+        "alternatePhone": "7325073298",
+        "contactabilityStatus": "low_confidence_alternate",
+        "reason": "Older sparse row merged into the later row with substantive return-interest follow-up.",
+    },
+    ("2024", 1928): {
+        "group": "orlando-granados",
+        "primaryPhone": "7327053298",
+        "primaryRecord": True,
+        "contactabilityStatus": "reachable",
+        "reason": "Follow-up says old student wants to return and a call was scheduled.",
+    },
+    ("2023 Y ANTERIORES", 1132): {
+        "group": "liz-torres",
+        "primaryPhone": "8482370937",
+        "alternatePhone": "8482370917",
+        "contactabilityStatus": "disconnected",
+        "reason": "Older number had voicemail, no WhatsApp, and disconnected follow-ups.",
+    },
+    ("2024", 1641): {
+        "group": "liz-torres",
+        "primaryPhone": "8482370937",
+        "primaryRecord": True,
+        "contactabilityStatus": "not_current",
+        "reason": "Latest contextual follow-up says moved out of state.",
+    },
+    ("2023 Y ANTERIORES", 722): {
+        "group": "nelson-marquez",
+        "primaryPhone": "9082053572",
+        "alternatePhone": "9082023572",
+        "contactabilityStatus": "needs_verification",
+        "reason": "Near-match number merged, but both histories are no-answer style follow-ups.",
+    },
+    ("2023 Y ANTERIORES", 1087): {
+        "group": "nelson-marquez",
+        "primaryPhone": "9082053572",
+        "primaryRecord": True,
+        "contactabilityStatus": "needs_verification",
+        "reason": "Near-match number merged, but both histories are no-answer style follow-ups.",
+    },
+}
+
+GENERIC_CONTACT_NAMES = {
+    "unknown ait usa lead",
+    "prospecto",
+    "requiere informacion",
+}
 
 
 def col_to_number(col: str) -> int:
@@ -113,6 +177,17 @@ def normalize_phone(value: object) -> str | None:
     return None
 
 
+def phone_resolution(sheet: str, row_number: int, original_phone: str | None) -> dict:
+    resolution = MANUAL_PHONE_RESOLUTIONS.get((sheet, row_number))
+    if not resolution:
+        return {"phone": original_phone, "resolution": None}
+    primary_phone = resolution.get("primaryPhone") or original_phone
+    payload = {**resolution}
+    if original_phone and original_phone != primary_phone:
+        payload.setdefault("originalPhone", original_phone)
+    return {"phone": primary_phone, "resolution": payload}
+
+
 def parse_excel_date(value: object) -> str | None:
     text = normalize_text(value)
     if not text:
@@ -142,6 +217,54 @@ def parse_occurred_at(date_value: object, time_value: object = "") -> str | None
         base = datetime.fromisoformat(date_part)
         return (base + timedelta(seconds=seconds)).isoformat(timespec="seconds") + ".000Z"
     return f"{date_part}T12:00:00.000Z"
+
+
+def contactability_from_text(value: object) -> dict:
+    text = normalized_lower(value)
+    if not text:
+        return {"status": "unknown", "priority": 0}
+    if any(marker in text for marker in ("wrong number", "numero erroneo", "número erroneo", "numero malo", "número malo", "pbx")):
+        return {"status": "wrong_number", "priority": 100}
+    if any(marker in text for marker in ("desconectado", "fuera de servicio")):
+        return {"status": "disconnected", "priority": 95}
+    if "se mudo" in text or "se mudó" in text or "otro estado" in text:
+        return {"status": "not_current", "priority": 90}
+    if "no tiene whatsapp" in text or "no tiene whats" in text:
+        return {"status": "no_whatsapp", "priority": 75}
+    if any(marker in text for marker in ("no contesto", "no contestó", "voice m", "buzon", "buzón")):
+        return {"status": "attempted_no_answer", "priority": 40}
+    if any(marker in text for marker in ("concretado", "inscrito", "vino", "promete venir", "presento examen", "presentó examen")):
+        return {"status": "qualified", "priority": 70}
+    if any(marker in text for marker in ("enviado", "mande mensaje", "mandé mensaje", "informacion", "información", "quiere", "llamada")):
+        return {"status": "contacted", "priority": 55}
+    return {"status": "unknown", "priority": 0}
+
+
+def contactability_priority(status: object) -> int:
+    return {
+        "wrong_number": 100,
+        "disconnected": 95,
+        "not_current": 90,
+        "no_phone": 85,
+        "no_whatsapp": 75,
+        "qualified": 70,
+        "reachable": 65,
+        "contacted": 55,
+        "attempted_no_answer": 40,
+        "needs_verification": 35,
+        "low_confidence_alternate": 25,
+        "unknown": 0,
+    }.get(normalized_lower(status), 0)
+
+
+def source_tags_for(fields: dict, sheet: str) -> list[str]:
+    tags = ["ait_usa_xlsx", sheet.lower().replace(" ", "_")]
+    source = normalized_lower(fields.get("source"))
+    if source:
+        tags.append(source.replace(" ", "_"))
+    if fields.get("owner"):
+        tags.append("owner:" + normalized_lower(fields.get("owner")).replace(" ", "_"))
+    return list(dict.fromkeys(tags))
 
 
 def text_of(node: ET.Element | None) -> str:
@@ -238,13 +361,15 @@ def load_workbook_profile(workbook_path: str | Path) -> dict:
 
 def lead_status(values: list[str]) -> str:
     text = normalized_lower(row_text(values))
+    if "se mudo" in text or "se mudó" in text or "wrong number" in text or "pbx" in text:
+        return "Lost"
     if any(marker in text for marker in ("ya no llamar", "no llamar", "no quiere", "no interesa", "no interesado")):
         return "Lost"
     if any(marker in text for marker in ("numero malo", "número malo", "fuera de servicio", "error", "wrong")):
         return "Lost"
     if any(marker in text for marker in ("concretado", "inscrito", "vino", "promete venir")):
         return "Qualified"
-    if any(marker in text for marker in ("llamar", "contact", "seguimiento", "whatsapp")):
+    if any(marker in text for marker in ("llamar", "contact", "seguimiento", "whatsapp", "mande mensaje", "mandé mensaje", "enviado", "quiere", "no contesto", "no contestó", "voice m", "buzon", "buzón")):
         return "Contacted"
     return "New Lead"
 
@@ -285,8 +410,11 @@ def starts_reference_block(values: list[str]) -> bool:
 def lead_fields(sheet: str, row_number: int, values: list[str]) -> dict | None:
     default_phone = normalize_phone(cell_at(values, COLS["phone"]))
     if default_phone:
+        resolved = phone_resolution(sheet, row_number, default_phone)
         return {
-            "phone": default_phone,
+            "phone": resolved["phone"],
+            "original_phone": default_phone,
+            "phone_resolution": resolved["resolution"],
             "name": cell_at(values, COLS["name"]),
             "email": cell_at(values, COLS["email"]),
             "location": cell_at(values, COLS["location"]),
@@ -295,6 +423,12 @@ def lead_fields(sheet: str, row_number: int, values: list[str]) -> dict | None:
             "owner": cell_at(values, COLS["owner"]),
             "source": cell_at(values, COLS["source"]),
             "lead_date": cell_at(values, COLS["lead_date"]),
+            "call_eligibility": cell_at(values, COLS["call"]),
+            "day_preference": cell_at(values, COLS["day"]),
+            "schedule_preference": cell_at(values, COLS["schedule"]),
+            "test_status": cell_at(values, COLS["test"]),
+            "level_hint": cell_at(values, COLS["level"]),
+            "school_hint": cell_at(values, COLS["school"]),
         }
 
     if sheet != "2025":
@@ -302,8 +436,11 @@ def lead_fields(sheet: str, row_number: int, values: list[str]) -> dict | None:
 
     phone_h = normalize_phone(cell_at(values, col_to_number("H")))
     if phone_h and cell_at(values, col_to_number("B")):
+        resolved = phone_resolution(sheet, row_number, phone_h)
         return {
-            "phone": phone_h,
+            "phone": resolved["phone"],
+            "original_phone": phone_h,
+            "phone_resolution": resolved["resolution"],
             "name": cell_at(values, col_to_number("B")),
             "email": "",
             "location": "",
@@ -315,12 +452,21 @@ def lead_fields(sheet: str, row_number: int, values: list[str]) -> dict | None:
             "owner": cell_at(values, col_to_number("I")),
             "source": cell_at(values, col_to_number("D")),
             "lead_date": first_text(cell_at(values, col_to_number("G")), cell_at(values, col_to_number("F"))),
+            "call_eligibility": "",
+            "day_preference": "",
+            "schedule_preference": "",
+            "test_status": "",
+            "level_hint": "",
+            "school_hint": "",
         }
 
     phone_f = normalize_phone(cell_at(values, col_to_number("F")))
     if phone_f and cell_at(values, col_to_number("E")):
+        resolved = phone_resolution(sheet, row_number, phone_f)
         return {
-            "phone": phone_f,
+            "phone": resolved["phone"],
+            "original_phone": phone_f,
+            "phone_resolution": resolved["resolution"],
             "name": cell_at(values, col_to_number("E")),
             "email": "",
             "location": "",
@@ -333,6 +479,12 @@ def lead_fields(sheet: str, row_number: int, values: list[str]) -> dict | None:
             "owner": "",
             "source": cell_at(values, col_to_number("B")),
             "lead_date": first_text(cell_at(values, col_to_number("C")), cell_at(values, col_to_number("A"))),
+            "call_eligibility": "",
+            "day_preference": "",
+            "schedule_preference": "",
+            "test_status": "",
+            "level_hint": "",
+            "school_hint": "",
         }
 
     return None
@@ -342,6 +494,29 @@ def lead_proposal(sheet: str, row_number: int, values: list[str], fields: dict) 
     name = fields.get("name") or ""
     service = fields.get("service") or ""
     detail = fields.get("details") or ""
+    original_text = row_text(values)
+    contactability = contactability_from_text(original_text)
+    resolution = fields.get("phone_resolution") or None
+    if resolution and resolution.get("contactabilityStatus"):
+        contactability = {
+            "status": resolution["contactabilityStatus"],
+            "priority": 110,
+            "reason": resolution.get("reason"),
+        }
+    metadata = {
+        "callEligibility": fields.get("call_eligibility") or None,
+        "dayPreference": fields.get("day_preference") or None,
+        "schedulePreference": fields.get("schedule_preference") or None,
+        "testStatus": fields.get("test_status") or None,
+        "levelHint": fields.get("level_hint") or None,
+        "schoolHint": fields.get("school_hint") or None,
+        "sourceTags": source_tags_for(fields, sheet),
+        "contactability": {
+            "status": contactability.get("status"),
+            "reason": contactability.get("reason"),
+        },
+        "phoneResolution": resolution,
+    }
     return {
         "businessUnit": BUSINESS_UNIT,
         "sourceType": "ait_usa_xlsx",
@@ -350,6 +525,7 @@ def lead_proposal(sheet: str, row_number: int, values: list[str], fields: dict) 
         "sourceRowNumber": row_number,
         "contactHint": name or "Unknown AIT USA Lead",
         "phoneHint": fields["phone"],
+        "originalPhoneHint": fields.get("original_phone") if fields.get("original_phone") != fields["phone"] else None,
         "emailHint": fields.get("email") or None,
         "locationHint": fields.get("location") or None,
         "desiredService": service or None,
@@ -358,7 +534,8 @@ def lead_proposal(sheet: str, row_number: int, values: list[str], fields: dict) 
         "sourceLabel": fields.get("source") or None,
         "leadDate": parse_excel_date(fields.get("lead_date")),
         "statusHint": lead_status(values),
-        "originalText": row_text(values),
+        "leadMetadata": {key: value for key, value in metadata.items() if value not in (None, {}, [])},
+        "originalText": original_text,
         "rawValuesJson": values,
     }
 
@@ -383,6 +560,55 @@ def merge_name_aliases(*names: object) -> list[str]:
     return aliases
 
 
+def merge_unique_values(*values: object) -> list[str]:
+    merged = []
+    seen = set()
+    for value in values:
+        if isinstance(value, list):
+            candidates = value
+        else:
+            candidates = [value]
+        for candidate in candidates:
+            text = normalize_text(candidate)
+            key = normalized_lower(text)
+            if text and key not in seen:
+                merged.append(text)
+                seen.add(key)
+    return merged
+
+
+def merge_lead_metadata(primary: dict | None, secondary: dict | None) -> dict:
+    primary = primary or {}
+    secondary = secondary or {}
+    merged = {**secondary, **primary}
+    merged["sourceTags"] = merge_unique_values(secondary.get("sourceTags") or [], primary.get("sourceTags") or [])
+
+    resolutions = []
+    for value in (secondary.get("phoneResolution"), primary.get("phoneResolution")):
+        if value and value not in resolutions:
+            resolutions.append(value)
+    if resolutions:
+        merged["phoneResolutions"] = resolutions
+
+    primary_resolution = primary.get("phoneResolution") or {}
+    if primary_resolution.get("primaryRecord") and primary.get("contactability"):
+        merged["contactability"] = primary["contactability"]
+    else:
+        contactability_options = [
+            primary.get("contactability") or {},
+            secondary.get("contactability") or {},
+        ]
+        ranked = sorted(
+            contactability_options,
+            key=lambda item: contactability_priority(item.get("status")),
+            reverse=True,
+        )
+        if ranked and ranked[0].get("status"):
+            merged["contactability"] = ranked[0]
+
+    return {key: value for key, value in merged.items() if value not in (None, {}, [])}
+
+
 def merge_lead_candidate(existing: dict | None, candidate: dict, sheet: str, row_number: int) -> dict:
     if not existing:
         aliases = merge_name_aliases(candidate.get("contactHint"))
@@ -391,7 +617,12 @@ def merge_lead_candidate(existing: dict | None, candidate: dict, sheet: str, row
 
     existing_proposal = existing["proposal"]
     existing_source = existing["source"]
-    use_candidate_as_base = row_sort_key({"sheet": sheet, "rowNumber": row_number}) >= row_sort_key(existing_source)
+    existing_resolution = (existing_proposal.get("leadMetadata") or {}).get("phoneResolution") or {}
+    candidate_resolution = (candidate.get("leadMetadata") or {}).get("phoneResolution") or {}
+    if candidate_resolution.get("primaryRecord") != existing_resolution.get("primaryRecord"):
+        use_candidate_as_base = bool(candidate_resolution.get("primaryRecord"))
+    else:
+        use_candidate_as_base = row_sort_key({"sheet": sheet, "rowNumber": row_number}) >= row_sort_key(existing_source)
     base = candidate if use_candidate_as_base else existing_proposal
     other = existing_proposal if use_candidate_as_base else candidate
 
@@ -412,6 +643,13 @@ def merge_lead_candidate(existing: dict | None, candidate: dict, sheet: str, row
         merged["desiredService"] = other["desiredService"]
     if not merged.get("detailText") and other.get("detailText"):
         merged["detailText"] = other["detailText"]
+    merged["leadMetadata"] = merge_lead_metadata(merged.get("leadMetadata"), other.get("leadMetadata"))
+    merged["originalPhoneHints"] = merge_unique_values(
+        existing_proposal.get("originalPhoneHints") or [],
+        existing_proposal.get("originalPhoneHint"),
+        candidate.get("originalPhoneHints") or [],
+        candidate.get("originalPhoneHint"),
+    )
 
     source = {"sheet": merged["sourceSheet"], "rowNumber": merged["sourceRowNumber"]}
     return {"source": source, "proposal": merged}
@@ -444,7 +682,8 @@ def event_key(phone: str, block: dict) -> tuple[str, str, str, str, str]:
     )
 
 
-def event_proposal(sheet: str, row_number: int, values: list[str], phone: str, block: dict) -> dict:
+def event_proposal(sheet: str, row_number: int, values: list[str], phone: str, block: dict, original_phone: str | None = None) -> dict:
+    contactability = contactability_from_text(block["message"])
     return {
         "businessUnit": BUSINESS_UNIT,
         "sourceType": "ait_usa_xlsx",
@@ -454,11 +693,13 @@ def event_proposal(sheet: str, row_number: int, values: list[str], phone: str, b
         "recordType": "activity_event",
         "eventType": "ait_usa.follow_up",
         "phoneHint": phone,
+        "originalPhoneHint": original_phone if original_phone and original_phone != phone else None,
         "message": block["message"],
         "actorHint": block.get("owner") or None,
         "occurredAt": parse_occurred_at(block.get("date"), block.get("time")),
         "eventDate": parse_excel_date(block.get("date")) or None,
         "eventTimeHint": block.get("time") or None,
+        "contactabilityStatus": contactability["status"],
         "originalText": row_text(values),
         "rawValuesJson": values,
     }
@@ -466,6 +707,69 @@ def event_proposal(sheet: str, row_number: int, values: list[str], phone: str, b
 
 def row_sort_key(row: dict) -> tuple[int, int]:
     return (SHEET_ORDER.get(row["sheet"], 999), row["rowNumber"])
+
+
+def duplicate_name_key(name: object) -> str:
+    return re.sub(r"[^a-z0-9 ]+", " ", normalized_lower(name)).strip()
+
+
+def phone_distance(left: str, right: str) -> int | None:
+    if len(left) != len(right):
+        return None
+    return sum(1 for a, b in zip(left, right) if a != b)
+
+
+def possible_duplicate_groups(lead_records: list[dict]) -> list[dict]:
+    by_name: dict[str, list[dict]] = {}
+    for record in lead_records:
+        contact = record["proposedContactJson"]
+        key = duplicate_name_key(contact.get("name"))
+        if key in GENERIC_CONTACT_NAMES or len(key.split()) < 2:
+            continue
+        by_name.setdefault(key, []).append(record)
+
+    groups = []
+    manual_groups = {
+        resolution["group"]
+        for resolution in MANUAL_PHONE_RESOLUTIONS.values()
+        if resolution.get("group")
+    }
+    for name_key, records in by_name.items():
+        phones = sorted({record["proposedContactJson"]["phone"] for record in records if record["proposedContactJson"].get("phone")})
+        if len(phones) < 2:
+            continue
+        pairs = []
+        for index, phone in enumerate(phones):
+            for other in phones[index + 1:]:
+                distance = phone_distance(phone, other)
+                if distance is not None and distance <= 2:
+                    pairs.append({"phone": phone, "otherPhone": other, "distance": distance})
+        if not pairs:
+            continue
+        resolution_groups = {
+            (record["proposedLeadJson"].get("leadMetadata") or {}).get("phoneResolution", {}).get("group")
+            for record in records
+        }
+        if any(group in manual_groups for group in resolution_groups if group):
+            continue
+        groups.append(
+            {
+                "name": records[0]["proposedContactJson"]["name"],
+                "nameKey": name_key,
+                "phones": phones,
+                "sourceRows": [
+                    {
+                        "sourceSheet": record["sourceSheet"],
+                        "sourceRowNumber": record["sourceRowNumber"],
+                        "phone": record["proposedContactJson"]["phone"],
+                    }
+                    for record in records
+                ],
+                "nearPhonePairs": pairs,
+                "resolution": "needs_review",
+            }
+        )
+    return groups
 
 
 def should_ignore_primary_row(sheet: str, row_number: int, values: list[str], in_reference_block: bool = False) -> bool:
@@ -516,6 +820,7 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
             reference_block_by_sheet.add(sheet)
         fields = None if ignored else lead_fields(sheet, row_number, values)
         phone = fields["phone"] if fields else None
+        original_phone = fields.get("original_phone") if fields else None
         blocks = follow_up_blocks(values)
         parse_status = "ignored" if ignored else "needs_review"
 
@@ -535,7 +840,7 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
                     duplicate_events += 1
                     continue
                 seen_event_keys.add(key)
-                proposal = event_proposal(sheet, row_number, values, event_phone, block)
+                proposal = event_proposal(sheet, row_number, values, event_phone, block, original_phone)
                 event_records.append(
                     {
                         "sourceSheet": sheet,
@@ -580,6 +885,13 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
                     "sourceLabel": proposal.get("sourceLabel") or "AIT USA Seguimiento Central",
                     "sourceSheet": proposal["sourceSheet"],
                     "sourceRowNumber": proposal["sourceRowNumber"],
+                    "sourceTags": (proposal.get("leadMetadata") or {}).get("sourceTags") or [],
+                    "contactability": (proposal.get("leadMetadata") or {}).get("contactability") or {},
+                    "phoneResolutions": (proposal.get("leadMetadata") or {}).get("phoneResolutions") or (
+                        [proposal["leadMetadata"]["phoneResolution"]]
+                        if (proposal.get("leadMetadata") or {}).get("phoneResolution")
+                        else []
+                    ),
                 },
                 "proposedLeadJson": proposal,
             }
@@ -598,6 +910,7 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
             }
         )
 
+    duplicate_groups = possible_duplicate_groups(lead_records)
     normalized_records = lead_records + event_records
     sheet_counts = {}
     for row in source_rows:
@@ -643,7 +956,9 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
             "reviewItems": len(review_items),
             "duplicateActivityEventsSkipped": duplicate_events,
             "unlinkedEventRows": unlinked_event_rows,
+            "possibleDuplicateGroups": len(duplicate_groups),
         },
+        "possibleDuplicateGroups": duplicate_groups,
         "sourceRows": source_rows,
         "normalizedRecords": normalized_records,
         "reviewItems": review_items,
