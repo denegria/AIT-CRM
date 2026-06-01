@@ -307,6 +307,12 @@ export async function loadImportReviewRows(client, batchId, { status = 'all', ty
       or coalesce(sr.source_sheet, '') ilike ${placeholder}
       or coalesce(nr.record_type, '') ilike ${placeholder}
       or coalesce(nr.status, '') ilike ${placeholder}
+      or coalesce(nr.proposed_contact_json::text, '') ilike ${placeholder}
+      or coalesce(nr.proposed_lead_json::text, '') ilike ${placeholder}
+      or coalesce(nr.proposed_estimate_json::text, '') ilike ${placeholder}
+      or coalesce(nr.proposed_work_order_json::text, '') ilike ${placeholder}
+      or coalesce(nr.proposed_payment_json::text, '') ilike ${placeholder}
+      or coalesce(nr.proposed_note_json::text, '') ilike ${placeholder}
     )`);
   }
 
@@ -338,7 +344,17 @@ export async function loadImportReviewRows(client, batchId, { status = 'all', ty
       join import_source_rows sr on sr.id = nr.source_row_id
       where ${clauses.join(' and ')}
       order by
-        coalesce(nr.confidence_score, 999)::numeric asc,
+        case nr.record_type
+          when 'lead' then 0
+          when 'contact' then 1
+          when 'work_order' then 2
+          when 'estimate' then 3
+          when 'payment_snapshot' then 4
+          when 'note' then 5
+          when 'activity_event' then 6
+          else 9
+        end asc,
+        coalesce(nr.confidence_score, 0)::numeric desc,
         sr.source_sheet asc,
         sr.source_row_number asc
       limit $${params.length}

@@ -363,6 +363,60 @@ def lead_proposal(sheet: str, row_number: int, values: list[str], fields: dict) 
     }
 
 
+def name_quality(name: object) -> tuple[int, int]:
+    text = normalize_text(name)
+    if not text:
+        return (0, 0)
+    words = [word for word in text.replace("/", " ").split() if word]
+    return (len(words), len(text))
+
+
+def merge_name_aliases(*names: object) -> list[str]:
+    aliases = []
+    seen = set()
+    for name in names:
+        text = normalize_text(name)
+        key = normalized_lower(text)
+        if text and key not in seen:
+            aliases.append(text)
+            seen.add(key)
+    return aliases
+
+
+def merge_lead_candidate(existing: dict | None, candidate: dict, sheet: str, row_number: int) -> dict:
+    if not existing:
+        aliases = merge_name_aliases(candidate.get("contactHint"))
+        candidate["nameAliases"] = aliases
+        return {"source": {"sheet": sheet, "rowNumber": row_number}, "proposal": candidate}
+
+    existing_proposal = existing["proposal"]
+    existing_source = existing["source"]
+    use_candidate_as_base = row_sort_key({"sheet": sheet, "rowNumber": row_number}) >= row_sort_key(existing_source)
+    base = candidate if use_candidate_as_base else existing_proposal
+    other = existing_proposal if use_candidate_as_base else candidate
+
+    aliases = merge_name_aliases(
+        *(existing_proposal.get("nameAliases") or []),
+        existing_proposal.get("contactHint"),
+        candidate.get("contactHint"),
+        *(candidate.get("nameAliases") or []),
+    )
+    best_name = max(aliases, key=name_quality, default=base.get("contactHint") or "")
+
+    merged = {**base, "contactHint": best_name or base.get("contactHint"), "nameAliases": aliases}
+    if not merged.get("emailHint") and other.get("emailHint"):
+        merged["emailHint"] = other["emailHint"]
+    if not merged.get("locationHint") and other.get("locationHint"):
+        merged["locationHint"] = other["locationHint"]
+    if not merged.get("desiredService") and other.get("desiredService"):
+        merged["desiredService"] = other["desiredService"]
+    if not merged.get("detailText") and other.get("detailText"):
+        merged["detailText"] = other["detailText"]
+
+    source = {"sheet": merged["sourceSheet"], "rowNumber": merged["sourceRowNumber"]}
+    return {"source": source, "proposal": merged}
+
+
 def follow_up_blocks(values: list[str]) -> list[dict]:
     blocks = []
     for index in ("1", "2"):
@@ -469,8 +523,7 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
             active_phone_by_sheet[sheet] = phone
             candidate = lead_proposal(sheet, row_number, values, fields)
             existing = lead_candidates.get(phone)
-            if not existing or row_sort_key({"sheet": sheet, "rowNumber": row_number}) >= row_sort_key(existing["source"]):
-                lead_candidates[phone] = {"source": {"sheet": sheet, "rowNumber": row_number}, "proposal": candidate}
+            lead_candidates[phone] = merge_lead_candidate(existing, candidate, sheet, row_number)
             parse_status = "parsed"
 
         event_phone = phone or active_phone_by_sheet.get(sheet)
@@ -521,6 +574,7 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
                 "proposedContactJson": {
                     "businessUnit": BUSINESS_UNIT,
                     "name": proposal["contactHint"],
+                    "nameAliases": proposal.get("nameAliases") or [],
                     "phone": phone,
                     "email": proposal.get("emailHint"),
                     "sourceLabel": proposal.get("sourceLabel") or "AIT USA Seguimiento Central",

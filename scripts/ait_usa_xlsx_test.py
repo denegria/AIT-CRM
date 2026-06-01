@@ -103,6 +103,31 @@ class AitUsaParserTest(unittest.TestCase):
         self.assertEqual(len(events), 1)
         self.assertEqual(payload["counts"]["duplicateActivityEventsSkipped"], 1)
 
+    def test_same_phone_keeps_richer_contact_name_as_alias(self):
+        payload = self.build_payload(
+            [
+                {
+                    "sheet": "ENE A MAY 2025",
+                    "rowNumber": 1677,
+                    "values": row_values(F="38518", G="CARLOS SAULES", I="9.084445894E9"),
+                },
+                {
+                    "sheet": "2025",
+                    "rowNumber": 353,
+                    "values": row_values(F="38518", G="CARLOS", I="9.084445894E9"),
+                },
+            ]
+        )
+
+        leads = [record for record in payload["normalizedRecords"] if record["recordType"] == "lead"]
+
+        self.assertEqual(len(leads), 1)
+        self.assertEqual(leads[0]["sourceSheet"], "2025")
+        self.assertEqual(leads[0]["sourceRowNumber"], 353)
+        self.assertEqual(leads[0]["proposedContactJson"]["name"], "CARLOS SAULES")
+        self.assertEqual(leads[0]["proposedLeadJson"]["contactHint"], "CARLOS SAULES")
+        self.assertEqual(leads[0]["proposedContactJson"]["nameAliases"], ["CARLOS SAULES", "CARLOS"])
+
     def test_separator_and_2025_header_rows_are_ignored(self):
         payload = self.build_payload(
             [
