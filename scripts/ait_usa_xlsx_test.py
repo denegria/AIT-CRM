@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from ait_usa_xlsx import BUSINESS_UNIT, build_staging_artifact, col_to_number
+from ait_usa_xlsx import BUSINESS_UNIT, build_staging_artifact, col_to_number, contactability_from_text
 
 
 def row_values(**cells):
@@ -127,6 +127,46 @@ class AitUsaParserTest(unittest.TestCase):
         self.assertEqual(leads[0]["proposedContactJson"]["name"], "CARLOS SAULES")
         self.assertEqual(leads[0]["proposedLeadJson"]["contactHint"], "CARLOS SAULES")
         self.assertEqual(leads[0]["proposedContactJson"]["nameAliases"], ["CARLOS SAULES", "CARLOS"])
+
+    def test_same_phone_prefers_real_name_over_unknown_placeholder(self):
+        payload = self.build_payload(
+            [
+                {
+                    "sheet": "2025",
+                    "rowNumber": 20,
+                    "values": row_values(F="45826", G="JUAN", I="201 281 5261"),
+                },
+                {
+                    "sheet": "2025",
+                    "rowNumber": 21,
+                    "values": row_values(F="45827", I="201 281 5261", Y="NO CONTESTA"),
+                },
+            ]
+        )
+
+        leads = [record for record in payload["normalizedRecords"] if record["recordType"] == "lead"]
+
+        self.assertEqual(len(leads), 1)
+        self.assertEqual(leads[0]["proposedContactJson"]["name"], "JUAN")
+        self.assertEqual(leads[0]["proposedLeadJson"]["contactHint"], "JUAN")
+        self.assertNotIn(
+            "phone_only",
+            [flag["code"] for flag in leads[0]["proposedLeadJson"]["leadMetadata"]["qualityFlags"]],
+        )
+
+    def test_contactability_catches_unavailable_and_not_interested_phrases(self):
+        self.assertEqual(
+            contactability_from_text("NO SE LE PUDO ENVIAR VIDEO PORQUE EL NUMERO NO ESTA DISPONIBLE")["status"],
+            "disconnected",
+        )
+        self.assertEqual(
+            contactability_from_text("NO ESTA INTERESADA AHORA")["status"],
+            "do_not_contact",
+        )
+        self.assertEqual(
+            contactability_from_text("ESTA MAL EL NUMERO")["status"],
+            "wrong_number",
+        )
 
     def test_separator_and_2025_header_rows_are_ignored(self):
         payload = self.build_payload(
