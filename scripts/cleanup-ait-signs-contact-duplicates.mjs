@@ -19,6 +19,11 @@ const CONTACT_TABLES = [
   'follow_up_sequence_step_runs',
 ];
 
+const COMPANY_ALIASES = new Map([
+  ['delimiddlesex', "SAL'S DELI"],
+  ['salsdeli', "SAL'S DELI"],
+]);
+
 function parseArgs(argv) {
   const options = {
     dryRun: true,
@@ -48,8 +53,13 @@ export function normalizeIdentityKey(value) {
   return cleanText(value).toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+export function canonicalCompanyName(value) {
+  const label = cleanText(value);
+  return COMPANY_ALIASES.get(normalizeIdentityKey(label)) || label;
+}
+
 function companyLabel(row) {
-  return cleanText(row.company_name || row.name);
+  return canonicalCompanyName(row.company_name || row.name);
 }
 
 function choosePrimary(rows) {
@@ -109,7 +119,7 @@ async function loadAitSignsContacts(client) {
 }
 
 export function buildPlan(rows, { company = null } = {}) {
-  const requestedCompanyKey = company ? normalizeIdentityKey(company) : null;
+  const requestedCompanyKey = company ? normalizeIdentityKey(canonicalCompanyName(company)) : null;
   const groups = new Map();
   for (const row of rows) {
     const key = normalizeIdentityKey(companyLabel(row));

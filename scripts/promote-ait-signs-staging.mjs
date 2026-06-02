@@ -74,6 +74,16 @@ function normalizeIdentityKey(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
+const COMPANY_ALIASES = new Map([
+  ['delimiddlesex', "SAL'S DELI"],
+  ['salsdeli', "SAL'S DELI"],
+]);
+
+function canonicalCompanyName(value) {
+  const label = cleanText(value);
+  return COMPANY_ALIASES.get(normalizeIdentityKey(label)) || label;
+}
+
 function contactNameFromProposal(proposal) {
   const contactHint = cleanText(proposal.contactHint);
   if (contactHint) return contactHint.slice(0, 160);
@@ -246,7 +256,7 @@ async function getRecordsForPromotion(client, batchId, options) {
 
 async function findOrCreateContact(client, context, proposal, sourceLabel, dryRun) {
   const phone = normalizePhone(proposal.phoneHint);
-  const companyName = cleanText(proposal.customerName || proposal.contactHint);
+  const companyName = canonicalCompanyName(proposal.customerName || proposal.contactHint);
   const personName = cleanText(proposal.contactName);
   const name = (companyName || personName || contactNameFromProposal(proposal)).slice(0, 160);
   const companyKey = normalizeIdentityKey(companyName);
