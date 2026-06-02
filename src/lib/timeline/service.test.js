@@ -171,17 +171,64 @@ test('buildContactTimeline makes AIT Signs promoted work and financial history r
         occurredAt: new Date('2026-04-02T13:00:00.000Z'),
       },
     ],
+    workOrders: [{
+      id: 'work-order-1',
+      workOrderNumber: 'AIT-WO-45',
+      title: 'Installed acrylic sign',
+      status: 'Completed',
+      estimatedCost: '554.45',
+    }],
+    paymentSnapshots: [{
+      id: 'payment-snapshot-1',
+      amount: '500.00',
+      balanceAfter: '54.45',
+      sourceSheet: 'WORK ORDER TERMINADOS Y PAGADOS',
+      sourceRow: 90,
+    }],
   });
 
   const work = timeline.find((entry) => entry.eventType === 'import_promoted_work_order');
   const payment = timeline.find((entry) => entry.eventType === 'import_promoted_payment_snapshot');
 
-  assert.equal(work.title, 'Previous work');
+  assert.equal(work.title, 'Installed acrylic sign');
+  assert.equal(work.text, 'AIT-WO-45 · $554.45 · Completed');
+  assert.equal(work.record.kind, 'work_order');
+  assert.equal(work.record.stageLabel, 'Completed');
+  assert.deepEqual(work.record.stages.map((stage) => stage.label), ['Work order', 'Delivered', 'Completed']);
   assert.equal(work.presentation.category, 'work');
   assert.equal(work.presentation.provenance.sourceKind, 'Active work source');
-  assert.equal(payment.title, 'Payment snapshot');
+  assert.equal(work.presentation.provenance.rawText, 'INSTALAR LETRERO - ENTREGADO PENDIENTE DE COBRO');
+  assert.equal(payment.title, 'Payment snapshot $500');
+  assert.equal(payment.text, '$500 · Balance $54.45');
+  assert.equal(payment.record.kind, 'payment_snapshot');
   assert.equal(payment.presentation.category, 'payment');
   assert.equal(payment.presentation.provenance.sourceKind, 'Completed work source');
+});
+
+test('buildContactTimeline demotes raw imported notes behind source details', () => {
+  const timeline = buildContactTimeline({
+    notes: [{
+      id: 'note-raw-1',
+      body: '1527 | SI | NO | 45315.0 | BLUE MOUNTAIN | FELIX | (20) YARD SIGN 24 X 18 | ENTREGADO | $ | 520.0 | 34.45 | 554.45',
+      createdAt: new Date('2026-05-30T13:05:44.087Z'),
+    }, {
+      id: 'note-cleanup-1',
+      body: 'AIT Signs cleanup merged duplicate customer contacts into this account.\nMerged duplicate contacts:\n- FELIX | company: BLUE MOUNTAIN | linked rows: 3',
+      createdAt: new Date('2026-06-02T02:22:29.828Z'),
+    }],
+  });
+
+  const rawNote = timeline.find((entry) => entry.id === 'note:note-raw-1');
+  const cleanupNote = timeline.find((entry) => entry.id === 'note:note-cleanup-1');
+
+  assert.equal(rawNote.title, 'Imported workbook note');
+  assert.equal(rawNote.text, 'Workbook note captured for audit. Expand source details for the original imported row.');
+  assert.equal(rawNote.presentation.category, 'import');
+  assert.equal(rawNote.presentation.provenance.sourceKind, 'Imported workbook note');
+  assert.match(rawNote.presentation.provenance.rawText, /BLUE MOUNTAIN/);
+  assert.equal(cleanupNote.title, 'Source cleanup note');
+  assert.equal(cleanupNote.presentation.category, 'import');
+  assert.equal(cleanupNote.presentation.provenance.sourceKind, 'Cleanup provenance');
 });
 
 test('filterTimelineRowsForBusinessUnit preserves unassigned rows and allowed divisions only', () => {

@@ -9,7 +9,7 @@ import {
   AlertCircle, ArrowLeft, Mail, Phone, MapPin, Calendar, 
   Plus, FileText, ClipboardList, 
   MessageSquare, Edit3, Tag, Activity, CheckSquare, MessageCircle,
-  Inbox, Send, DollarSign, Archive, BriefcaseBusiness
+  Inbox, Send, DollarSign, Archive, BriefcaseBusiness, CheckCircle2
 } from 'lucide-react';
 import { PIPELINE_STATUSES } from '@/lib/sales-workflow';
 
@@ -126,6 +126,24 @@ function timelineTone(item) {
   if (item.type === 'message') return 'message';
   if (item.type === 'lead') return 'lead';
   return 'default';
+}
+
+function recordStageLabel(record) {
+  if (!record?.stageLabel) return '';
+  return record.stageLabel;
+}
+
+function recordStageAria(record) {
+  if (!record?.stages?.length) return '';
+  const steps = record.stages.map((step) => `${step.label} ${step.state}`).join(', ');
+  return `${record.label || 'Record'} stage: ${steps}`;
+}
+
+function recordKindClass(record) {
+  if (record?.kind === 'work_order') return s.recordWork;
+  if (record?.kind === 'estimate') return s.recordEstimate;
+  if (record?.kind === 'payment_snapshot') return s.recordPayment;
+  return '';
 }
 
 function latestTimelineItem(items, category) {
@@ -540,12 +558,18 @@ export default function ContactDetailPage() {
                   {timeline.map((item) => {
                     const dateParts = timelineDateParts(item);
                     const provenance = item.presentation?.provenance;
+                    const record = item.record;
                     const visibleDetails = [
                       item.actor?.name ? `By ${item.actor.name}` : '',
                       item.businessUnit?.name || '',
                       ...(item.linkedRecords || [])
-                        .filter((record) => record.type !== 'contact')
-                        .map((record) => record.label),
+                        .filter((linkedRecord) => {
+                          if (linkedRecord.type === 'contact') return false;
+                          if (record?.kind === 'work_order' && linkedRecord.type === 'work_order') return false;
+                          if (record?.kind === 'estimate' && linkedRecord.type === 'estimate') return false;
+                          return true;
+                        })
+                        .map((linkedRecord) => linkedRecord.label),
                     ].filter(Boolean);
                     return (
                       <div key={item.id} className={`${s.timelineItem} ${s[`tone_${timelineTone(item)}`] || ''}`}>
@@ -561,10 +585,41 @@ export default function ContactDetailPage() {
                               {dateParts.time && <strong>{dateParts.time}</strong>}
                             </time>
                           </div>
-                          {item.title && item.title !== item.typeLabel && (
+                          {!record && item.title && item.title !== item.typeLabel && (
                             <div className={s.timelineTitle}>{item.title}</div>
                           )}
-                          <div className={s.timelineText}>{item.text}</div>
+                          {record && (
+                            <div className={`${s.timelineRecord} ${recordKindClass(record)}`}>
+                              <div className={s.timelineRecordHeader}>
+                                <div className={s.timelineRecordTitleBlock}>
+                                  <span className={s.timelineRecordKind}>{record.label}</span>
+                                  <strong>{record.title}</strong>
+                                </div>
+                                {recordStageLabel(record) && (
+                                  <span className={s.timelineStageBadge}>
+                                    {recordStageLabel(record) === 'Completed' && <CheckCircle2 size={12} />}
+                                    {recordStageLabel(record)}
+                                  </span>
+                                )}
+                              </div>
+                              {!!record.meta?.length && (
+                                <div className={s.timelineRecordMeta}>
+                                  {record.meta.map((meta) => <span key={`${item.id}-${meta}`}>{meta}</span>)}
+                                </div>
+                              )}
+                              {!!record.stages?.length && (
+                                <ol className={s.timelineStages} aria-label={recordStageAria(record)}>
+                                  {record.stages.map((step) => (
+                                    <li key={`${item.id}-${step.label}`} className={s[`stage_${step.state}`] || ''}>
+                                      <span />
+                                      <small>{step.label}</small>
+                                    </li>
+                                  ))}
+                                </ol>
+                              )}
+                            </div>
+                          )}
+                          {item.text && <div className={`${s.timelineText} ${record ? s.timelineTextSecondary : ''}`}>{item.text}</div>}
                           {(visibleDetails.length > 0 || provenance) && (
                             <div className={s.timelineDetails}>
                               {visibleDetails.map((detail) => <span key={`${item.id}-${detail}`}>{detail}</span>)}
@@ -577,6 +632,7 @@ export default function ContactDetailPage() {
                                       <span>{provenance.sourceLabel}{provenance.sourceRow ? ` row ${provenance.sourceRow}` : ''}</span>
                                     )}
                                     {provenance.eventType && <span>{provenance.eventType}</span>}
+                                    {provenance.rawText && <pre className={s.timelineRawText}>{provenance.rawText}</pre>}
                                   </div>
                                 </details>
                               )}

@@ -2,12 +2,15 @@ import { and, desc, eq, inArray } from 'drizzle-orm';
 import {
   activityEvents,
   businessUnits,
+  estimates,
   leadStatusHistory,
   leads,
   notes,
+  paymentSnapshots,
   taskEvents,
   tasks,
   users,
+  workOrders,
 } from '../../db/schema.js';
 
 export const TIMELINE_TYPES = {
@@ -60,7 +63,7 @@ const TIMELINE_CATEGORIES = {
 const TIMELINE_CATEGORY_LABELS = {
   [TIMELINE_CATEGORIES.ESTIMATE]: 'Estimate',
   [TIMELINE_CATEGORIES.FOLLOW_UP]: 'Follow-up',
-  [TIMELINE_CATEGORIES.IMPORT]: 'Import',
+  [TIMELINE_CATEGORIES.IMPORT]: 'Source details',
   [TIMELINE_CATEGORIES.LEAD]: 'Lead',
   [TIMELINE_CATEGORIES.MESSAGE]: 'Message',
   [TIMELINE_CATEGORIES.NOTE]: 'Note',
@@ -84,6 +87,10 @@ function compactObject(value) {
   return Object.fromEntries(
     Object.entries(value).filter(([, entry]) => entry !== undefined && entry !== null && entry !== ''),
   );
+}
+
+function compactArray(values = []) {
+  return values.filter((value) => value !== undefined && value !== null && value !== '');
 }
 
 function byId(rows = []) {
@@ -138,6 +145,218 @@ function sourcePayload(row, fallbackLabel = '') {
   return null;
 }
 
+function sourceKey(sourceSheet, sourceRow) {
+  if (!sourceSheet || !sourceRow) return '';
+  return `${sourceSheet}::${sourceRow}`;
+}
+
+function moneyLabel(value) {
+  if (value === undefined || value === null || value === '') return '';
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric) || numeric === 0) return '';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: Number.isInteger(numeric) ? 0 : 2,
+    maximumFractionDigits: 2,
+  }).format(numeric);
+}
+
+function normalizedStatus(value = '') {
+  return String(value || '').trim().toLowerCase();
+}
+
+function statusLabel(value = '') {
+  const status = String(value || '').trim();
+  if (!status) return '';
+  return status
+    .replaceAll('_', ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function isCompletedStage(status = '', source = {}) {
+  const normalized = normalizedStatus(status);
+  const sourceText = `${source?.label || ''} ${source?.sourceKind || ''}`.toLowerCase();
+  return [
+    'completed',
+    'complete',
+    'delivered',
+    'paid',
+    'delivered_paid',
+    'terminado',
+    'pagado',
+    'entregado',
+  ].some((token) => normalized.includes(token) || sourceText.includes(token));
+}
+
+function stageStepsForRecord(kind, status, source) {
+  const completed = isCompletedStage(status, source);
+  if (kind === 'estimate') {
+    return [
+      { label: 'Estimate', state: 'complete' },
+      { label: 'Approved', state: completed ? 'complete' : 'pending' },
+      { label: 'Completed', state: completed ? 'complete' : 'pending' },
+    ];
+  }
+  if (kind === 'work_order') {
+    return [
+      { label: 'Work order', state: 'complete' },
+      { label: completed ? 'Delivered' : 'In progress', state: completed ? 'complete' : 'current' },
+      { label: 'Completed', state: completed ? 'complete' : 'pending' },
+    ];
+  }
+  return [];
+}
+
+function readableLine(value = '') {
+  return String(value || '')
+    .replace(/\s+/g, ' ')
+    .replace(/\s+·\s+/g, ' · ')
+    .trim();
+}
+
+function workbookLikeText(value = '') {
+  const text = String(value || '');
+  if (!text) return false;
+  const pipeCount = (text.match(/\|/g) || []).length;
+  const moneyCount = (text.match(/\$\s*\d|\d+\.\d{2,}/g) || []).length;
+  const excelSerialCount = (text.match(/\b4[3-6]\d{3}(?:\.0)?\b/g) || []).length;
+  return pipeCount >= 4 || (pipeCount >= 2 && moneyCount >= 2) || excelSerialCount >= 2;
+}
+
+function cleanupMergeNoteText(value = '') {
+  return String(value || '').startsWith('AIT Signs cleanup merged duplicate customer contacts');
+}
+
+function importedNoteInterpretation(value = '') {
+  const text = String(value || '').trim();
+  if (!text) return null;
+  if (cleanupMergeNoteText(text)) {
+    return {
+      title: 'Source cleanup note',
+      text: 'Duplicate customer/contact rows were folded into this account. Expand source details for preserved aliases and linked-row counts.',
+      hint: {
+        category: TIMELINE_CATEGORIES.IMPORT,
+        categoryLabel: 'Source details',
+        priority: 'secondary',
+        isImported: true,
+        sourceKind: 'Cleanup provenance',
+        rawText: text,
+      },
+    };
+  }
+  if (workbookLikeText(text)) {
+    return {
+      title: 'Imported workbook note',
+      text: 'Workbook note captured for audit. Expand source details for the original imported row.',
+      hint: {
+        category: TIMELINE_CATEGORIES.IMPORT,
+        categoryLabel: 'Source details',
+        priority: 'secondary',
+        isImported: true,
+        sourceKind: 'Imported workbook note',
+        rawText: text,
+      },
+    };
+  }
+  return null;
+}
+
+function workOrderRecordPayload(row, source) {
+  if (!row) return null;
+  const amount = moneyLabel(row.estimatedCost);
+  const status = statusLabel(row.status);
+  return compactObject({
+    kind: 'work_order',
+    label: 'Work order',
+    number: row.workOrderNumber,
+    title: readableLine(row.title) || 'AIT Signs work order',
+    status,
+    amount,
+    stageLabel: isCompletedStage(row.status, source) ? 'Completed' : status || 'In progress',
+    stages: stageStepsForRecord('work_order', row.status, source),
+    meta: compactArray([
+      row.workOrderNumber,
+      status,
+      amount,
+      row.deliveryDate ? `Due ${row.deliveryDate}` : '',
+    ]),
+  });
+}
+
+function estimateRecordPayload(row, source) {
+  if (!row) return null;
+  const amount = moneyLabel(row.total || row.subtotal);
+  const balance = moneyLabel(row.balanceDue);
+  const status = statusLabel(row.status);
+  return compactObject({
+    kind: 'estimate',
+    label: 'Estimate',
+    number: row.estimateNumber,
+    title: row.estimateNumber ? `Estimate ${row.estimateNumber}` : 'AIT Signs estimate',
+    status,
+    amount,
+    balance,
+    stageLabel: isCompletedStage(row.status, source) ? 'Completed' : status || 'Estimate',
+    stages: stageStepsForRecord('estimate', row.status, source),
+    meta: compactArray([
+      row.estimateNumber,
+      status,
+      amount,
+      balance ? `Balance ${balance}` : '',
+    ]),
+  });
+}
+
+function paymentRecordPayload(row) {
+  if (!row) return null;
+  const amount = moneyLabel(row.amount);
+  const balance = moneyLabel(row.balanceAfter);
+  return compactObject({
+    kind: 'payment_snapshot',
+    label: 'Payment',
+    title: amount ? `Payment snapshot ${amount}` : 'Payment snapshot',
+    status: balance ? 'Balance recorded' : 'Payment recorded',
+    amount,
+    balance,
+    stageLabel: balance ? 'Balance recorded' : 'Payment recorded',
+    meta: compactArray([
+      amount,
+      balance ? `Balance ${balance}` : '',
+      row.paymentMethod,
+      row.checkNumber ? `Check ${row.checkNumber}` : '',
+    ]),
+  });
+}
+
+function interpretedImportText(event, record) {
+  const eventType = String(event.eventType || '').toLowerCase();
+  if (record?.kind === 'work_order') {
+    return compactArray([
+      record.number,
+      record.amount,
+      record.stageLabel,
+    ]).join(' · ') || 'Work order imported from AIT Signs history.';
+  }
+  if (record?.kind === 'estimate') {
+    return compactArray([
+      record.amount,
+      record.balance ? `Balance ${record.balance}` : '',
+      record.stageLabel,
+    ]).join(' · ') || 'Estimate imported from AIT Signs history.';
+  }
+  if (record?.kind === 'payment_snapshot') {
+    return compactArray([
+      record.amount,
+      record.balance ? `Balance ${record.balance}` : '',
+    ]).join(' · ') || 'Payment details imported from AIT Signs history.';
+  }
+  if (eventType === 'import_promoted_note' && workbookLikeText(event.message)) {
+    return 'Workbook note captured for audit. Expand source details for the original imported row.';
+  }
+  return event.message || titleCaseEventType(event.eventType);
+}
+
 function titleCaseEventType(eventType) {
   const normalized = String(eventType || '').trim().toLowerCase();
   if (EVENT_TITLE_OVERRIDES[normalized]) return EVENT_TITLE_OVERRIDES[normalized];
@@ -163,6 +382,7 @@ export function presentationForTimelineEntry(entry) {
   const text = String(entry.text || '').toLowerCase();
   const linkedTypes = new Set((entry.linkedRecords || []).map((record) => record.type));
   const hasSource = Boolean(entry.source?.label || entry.source?.row);
+  const hint = entry.presentationHint || {};
   const isImport = eventType.includes('import') || hasSource;
   const isFollowUp = eventType.includes('follow_up') || text.includes('volver a llamar') || text.includes('llamar de nuevo');
 
@@ -181,15 +401,21 @@ export function presentationForTimelineEntry(entry) {
     eventType: entry.eventType || '',
     sourceLabel: entry.source?.label || '',
     sourceRow: entry.source?.row || '',
-    sourceKind: sourceKindLabel(entry.source),
+    sourceKind: hint.sourceKind || sourceKindLabel(entry.source),
+    rawText: entry.rawText || hint.rawText || '',
   });
+  const categoryOverride = hint.category || '';
+  const categoryLabelOverride = hint.categoryLabel || '';
+  const priorityOverride = hint.priority || '';
+  const importedOverride = hint.isImported || false;
+  const finalCategory = categoryOverride || category;
 
   return {
-    category,
-    categoryLabel: TIMELINE_CATEGORY_LABELS[category],
-    priority: category === TIMELINE_CATEGORIES.IMPORT ? 'secondary' : 'primary',
+    category: finalCategory,
+    categoryLabel: categoryLabelOverride || TIMELINE_CATEGORY_LABELS[finalCategory],
+    priority: priorityOverride || (finalCategory === TIMELINE_CATEGORIES.IMPORT ? 'secondary' : 'primary'),
     provenance: Object.keys(provenance).length ? provenance : null,
-    isImported: isImport,
+    isImported: importedOverride || isImport,
   };
 }
 
@@ -230,6 +456,9 @@ export function buildContactTimeline({
   leadStatusHistory: leadStatusRows = [],
   tasks: taskRows = [],
   leads: leadRows = [],
+  estimates: estimateRows = [],
+  workOrders: workOrderRows = [],
+  paymentSnapshots: paymentSnapshotRows = [],
   users: userRows = [],
   businessUnits: businessUnitRows = [],
   type = '',
@@ -238,18 +467,28 @@ export function buildContactTimeline({
   const userLookup = byId(userRows);
   const businessUnitLookup = byId(businessUnitRows);
   const taskLookup = byId(taskRows);
+  const estimateLookup = byId(estimateRows);
+  const workOrderLookup = byId(workOrderRows);
+  const paymentSnapshotLookup = new Map(
+    paymentSnapshotRows
+      .map((row) => [sourceKey(row.sourceSheet, row.sourceRow), row])
+      .filter(([key]) => key),
+  );
   const hasCanonicalTaskEvents = taskEventRows.length > 0;
 
   const entries = [];
 
   for (const note of noteRows) {
+    const importedNote = importedNoteInterpretation(note.body);
     entries.push(withPresentation({
       id: `note:${note.id}`,
       type: TIMELINE_TYPES.NOTE,
       typeLabel: TIMELINE_TYPE_LABELS[TIMELINE_TYPES.NOTE],
       eventType: 'note.created',
-      title: 'Note',
-      text: note.body,
+      title: importedNote?.title || 'Note',
+      text: importedNote?.text || note.body,
+      rawText: importedNote?.hint?.rawText || '',
+      presentationHint: importedNote?.hint || null,
       timestamp: isoTimestamp(note.createdAt),
       date: isoDate(note.createdAt),
       actor: userPayload(note.authorUserId, userLookup),
@@ -261,19 +500,36 @@ export function buildContactTimeline({
   for (const event of activityRows) {
     if (hasCanonicalTaskEvents && String(event.eventType || '').startsWith('task.')) continue;
     const entryType = timelineTypeForEvent(event.eventType);
+    const source = sourcePayload(event);
+    const linkedWorkOrder = event.workOrderId ? workOrderLookup.get(event.workOrderId) : null;
+    const linkedEstimate = event.estimateId ? estimateLookup.get(event.estimateId) : null;
+    const linkedPayment = paymentSnapshotLookup.get(sourceKey(event.sourceSheet, event.sourceRow));
+    const record = workOrderRecordPayload(linkedWorkOrder, source)
+      || estimateRecordPayload(linkedEstimate, source)
+      || (String(event.eventType || '').toLowerCase().includes('payment') ? paymentRecordPayload(linkedPayment) : null);
+    const rawImportedText = String(event.eventType || '').toLowerCase().startsWith('import_promoted_')
+      ? event.message || ''
+      : '';
+    const importedWorkbookNote = String(event.eventType || '').toLowerCase() === 'import_promoted_note' && workbookLikeText(rawImportedText);
+    const eventPresentationHint = rawImportedText && (record || workbookLikeText(rawImportedText))
+      ? { rawText: rawImportedText }
+      : null;
     entries.push(withPresentation({
       id: `activity:${event.id}`,
       type: entryType,
       typeLabel: TIMELINE_TYPE_LABELS[entryType],
       eventType: event.eventType,
-      title: titleCaseEventType(event.eventType),
-      text: event.message || titleCaseEventType(event.eventType),
+      title: record?.title || (importedWorkbookNote ? 'Imported workbook note' : titleCaseEventType(event.eventType)),
+      text: interpretedImportText(event, record),
+      rawText: eventPresentationHint?.rawText || '',
       timestamp: isoTimestamp(event.occurredAt || event.createdAt),
       date: isoDate(event.occurredAt || event.createdAt),
       actor: userPayload(event.actorUserId, userLookup),
-      source: sourcePayload(event),
+      source,
       businessUnit: businessUnitPayload(event.businessUnitId, businessUnitLookup),
       linkedRecords: linkedRecordPayload(event),
+      record,
+      presentationHint: eventPresentationHint,
     }));
   }
 
@@ -397,6 +653,11 @@ export async function listContactTimeline({
   const taskRows = filterTimelineRowsForBusinessUnit(taskRowsRaw, businessUnitIds);
   const leadStatusRows = filterTimelineRowsForBusinessUnit(leadStatusRowsRaw, businessUnitIds);
   const taskIds = taskRows.map((task) => task.id);
+  const linkedWorkOrderIds = uniqueIds([...noteRows, ...activityRows, ...taskRows], ['workOrderId']);
+  const linkedEstimateIds = uniqueIds([...noteRows, ...activityRows, ...leadRows], ['estimateId']);
+  const paymentSourceRows = [...new Set(activityRows
+    .filter((row) => String(row.eventType || '').toLowerCase().includes('payment') && row.sourceRow)
+    .map((row) => row.sourceRow))];
 
   const taskEventRows = taskIds.length
     ? await db
@@ -415,7 +676,7 @@ export async function listContactTimeline({
     ['businessUnitId'],
   );
 
-  const [userRows, businessUnitRows] = await Promise.all([
+  const [userRows, businessUnitRows, workOrderRows, estimateRows, paymentSnapshotRowsRaw] = await Promise.all([
     userIds.length
       ? db
           .select({ id: users.id, name: users.name, email: users.email })
@@ -428,7 +689,27 @@ export async function listContactTimeline({
           .from(businessUnits)
           .where(and(eq(businessUnits.organizationId, organizationId), inArray(businessUnits.id, businessUnitLookupIds)))
       : [],
+    linkedWorkOrderIds.length
+      ? db
+          .select()
+          .from(workOrders)
+          .where(and(eq(workOrders.organizationId, organizationId), inArray(workOrders.id, linkedWorkOrderIds)))
+      : [],
+    linkedEstimateIds.length
+      ? db
+          .select()
+          .from(estimates)
+          .where(and(eq(estimates.organizationId, organizationId), inArray(estimates.id, linkedEstimateIds)))
+      : [],
+    paymentSourceRows.length
+      ? db
+          .select()
+          .from(paymentSnapshots)
+          .where(and(eq(paymentSnapshots.organizationId, organizationId), inArray(paymentSnapshots.sourceRow, paymentSourceRows)))
+      : [],
   ]);
+  const paymentSourceKeys = new Set(activityRows.map((row) => sourceKey(row.sourceSheet, row.sourceRow)).filter(Boolean));
+  const paymentSnapshotRows = paymentSnapshotRowsRaw.filter((row) => paymentSourceKeys.has(sourceKey(row.sourceSheet, row.sourceRow)));
 
   return buildContactTimeline({
     notes: noteRows,
@@ -437,6 +718,9 @@ export async function listContactTimeline({
     leadStatusHistory: leadStatusRows,
     tasks: taskRows,
     leads: leadRows,
+    estimates: estimateRows,
+    workOrders: workOrderRows,
+    paymentSnapshots: paymentSnapshotRows,
     users: userRows,
     businessUnits: businessUnitRows,
     type,
