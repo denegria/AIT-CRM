@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildPlan, normalizeIdentityKey } from './cleanup-ait-signs-contact-duplicates.mjs';
+import { buildPlan, canonicalCompanyName, normalizeIdentityKey } from './cleanup-ait-signs-contact-duplicates.mjs';
 
 test('normalizes punctuation variants for AIT Signs customer identity', () => {
   assert.equal(normalizeIdentityKey("SAL'S DELI"), 'salsdeli');
   assert.equal(normalizeIdentityKey('SALS DELI'), 'salsdeli');
+  assert.equal(canonicalCompanyName('DELI MIDDLESEX'), "SAL'S DELI");
 });
 
 test('plans Saul duplicate contacts under the SALS DELI company account', () => {
@@ -34,7 +35,7 @@ test('plans Saul duplicate contacts under the SALS DELI company account', () => 
       created_at: '2026-05-30T00:02:00.000Z',
     },
     {
-      id: 'other-company',
+      id: 'same-company-alias',
       name: 'SAUL',
       company_name: 'DELI MIDDLESEX',
       phone: null,
@@ -49,15 +50,15 @@ test('plans Saul duplicate contacts under the SALS DELI company account', () => 
   assert.equal(plan.mergeGroups[0].displayName, "SAL'S DELI");
   assert.deepEqual(
     plan.mergeGroups[0].duplicates.map((row) => row.id),
-    ['contact-no-phone-a', 'contact-no-phone-b'],
+    ['contact-no-phone-a', 'contact-no-phone-b', 'same-company-alias'],
   );
   assert.deepEqual(
     plan.displayUpdates.map((update) => [update.contactId, update.from, update.to]),
     [
       ['contact-phone', 'SAUL', "SAL'S DELI"],
-      ['contact-no-phone-a', 'SAUL', 'SALS DELI'],
-      ['contact-no-phone-b', 'SAUL', 'SALS DELI'],
-      ['other-company', 'SAUL', 'DELI MIDDLESEX'],
+      ['contact-no-phone-a', 'SAUL', "SAL'S DELI"],
+      ['contact-no-phone-b', 'SAUL', "SAL'S DELI"],
+      ['same-company-alias', 'SAUL', "SAL'S DELI"],
     ],
   );
 });
