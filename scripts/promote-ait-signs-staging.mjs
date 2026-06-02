@@ -158,7 +158,7 @@ function crmStatusFor(record, proposal) {
     if (hint === 'not_interested' || hint === 'invalid_contact' || hint === 'lost') return 'Lost';
     if (hint === 'contacted' || hint === 'follow_up') return 'Contacted';
     if (hint === 'qualified') return 'Qualified';
-    return 'New Lead';
+    return 'Intake';
   }
   if (record.record_type === 'work_order') {
     if (hint === 'delivered_paid') return 'Completed';

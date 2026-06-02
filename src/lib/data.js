@@ -8,6 +8,7 @@ const d = (offset) => {
 export const STATUSES = {
   lead: [
     'New Lead',
+    'Intake',
     'Follow Up',
     'Enrolled',
     'Completed / Previous Student',
@@ -44,10 +45,10 @@ export const businessUnits = [
 export const contacts = [
   {
     id: 'c-1',
-    name: 'Sample Signs Lead',
+    name: 'Sample Signs Intake',
     email: 'lead@example.com',
     phone: '(555) 010-1000',
-    status: 'New Lead',
+    status: 'Intake',
     source: 'Facebook Ads',
     businessUnitId: 'bu-demo-signs',
     primaryBusinessUnitId: 'bu-demo-signs',
@@ -55,8 +56,8 @@ export const contacts = [
     lastContact: d(-1),
     lastTouch: d(-1),
     lastEdited: d(-1),
-    latestComment: 'Demo lead awaiting import staging review.',
-    notes: [{ text: 'Demo lead awaiting import staging review.', date: d(-1) }],
+    latestComment: 'Demo intake row awaiting import staging review.',
+    notes: [{ text: 'Demo intake row awaiting import staging review.', date: d(-1) }],
   },
   {
     id: 'c-2',
@@ -147,6 +148,6 @@ export const salesLedger = [
     contactId: 'c-1',
     date: d(-1),
     note: 'Demo activity. Real customer history stays in staging until reviewed.',
-    stage: 'New Lead',
+    stage: 'Intake',
   },
 ];

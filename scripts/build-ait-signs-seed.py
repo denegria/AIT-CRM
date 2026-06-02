@@ -18,7 +18,7 @@ EMPLOYEES = [
 ]
 
 STATUS_MAP = {
-    "lead": "New Lead",
+    "lead": "Intake",
     "lead_contacted": "Contacted",
     "lead_follow_up": "Contacted",
     "lead_lost": "Lost",
@@ -110,7 +110,7 @@ def status_label(record_type: str, text: str) -> str:
         return STATUS_MAP["work_order"]
     if record_type == "payment":
         return STATUS_MAP["payment"]
-    return STATUS_MAP.get(record_type, "New Lead")
+    return STATUS_MAP.get(record_type, "Intake")
 
 
 def build_title(text: str, fallback: str) -> str:
@@ -210,7 +210,7 @@ def build_seed() -> dict:
         if contact_key not in contact_map:
             contact_index += 1
             status = status_label(record_type, text)
-            if record_type == "lead" and status == "New Lead" and row_kind == "note":
+            if record_type == "lead" and status == "Intake" and row_kind == "note":
                 status = "Contacted"
             contact_map[contact_key] = {
                 "id": f"c-{contact_index}",
@@ -231,7 +231,7 @@ def build_seed() -> dict:
             contact["notes"].append({"text": text, "date": note_date})
             contact["lastContact"] = max(contact["lastContact"], note_date)
         if record_type in {"lead", "estimate", "work_order", "payment"}:
-            if record_type == "lead" and contact["status"] == "New Lead" and any(
+            if record_type == "lead" and contact["status"] == "Intake" and any(
                 marker in text.upper() for marker in ["SE CONTACT", "LLAMAR", "SEGUIMIENTO"]
             ):
                 contact["status"] = "Contacted"
@@ -349,7 +349,7 @@ def build_seed() -> dict:
             {"id": "bu-ait-taxes", "name": "AIT Taxes", "label": "Divisions", "color": "#ef4444", "isActive": True},
         ],
         "STATUSES": {
-            "lead": ["New Lead", "Contacted", "Qualified", "Proposal Sent", "Won", "Lost"],
+            "lead": ["Intake", "Estimate", "Work Order", "Fulfillment", "Invoice / Payment"],
             "workOrder": ["Pending", "In Progress", "Completed", "On Hold"],
             "financial": ["Draft", "Pending", "Paid", "Overdue"],
             "priority": ["Low", "Medium", "High"],

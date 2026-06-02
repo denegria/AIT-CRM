@@ -1,19 +1,13 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
+import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
 import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
-import KanbanBoard from '@/components/KanbanBoard';
 import Modal from '@/components/Modal';
-import { AlertCircle, Clock3, LayoutDashboard as KanbanIcon, List, UserPlus, UserRoundCheck } from 'lucide-react';
-import {
-  PIPELINE_STATUSES,
-  isWorkflowStatusClosed,
-  workflowColumnsForBusinessUnit,
-  workflowForBusinessUnit,
-  workflowFromContact,
-} from '@/lib/sales-workflow';
+import { AlertCircle, UserPlus, UserRoundCheck } from 'lucide-react';
+import { isWorkflowStatusClosed } from '@/lib/sales-workflow';
 
 const empty = {
   name: '',
@@ -74,50 +68,27 @@ export default function ContactsPage() {
   const router = useRouter();
   const [drawer, setDrawer] = useState(null); // null | 'new' | contact object
   const [form, setForm] = useState(empty);
-  const [viewMode, setViewMode] = useState('table'); // 'table' | 'kanban'
   const [statusFilter, setStatusFilter] = useState('All');
   const [workflowFilter, setWorkflowFilter] = useState('all');
   const [ownerFilter, setOwnerFilter] = useState('all');
-  const [kanbanBusinessUnitId, setKanbanBusinessUnitId] = useState('');
 
   const canWrite = access.canWriteCrm;
-  const businessUnitById = useMemo(
-    () => new Map((accessibleBusinessUnits || []).map((unit) => [unit.id, unit])),
-    [accessibleBusinessUnits],
-  );
-  const contactCountByBusinessUnitId = useMemo(() => {
-    const counts = new Map();
-    for (const contact of contacts || []) {
-      const businessUnitId = contact.businessUnitId || contact.primaryBusinessUnitId;
-      if (!businessUnitId) continue;
-      counts.set(businessUnitId, (counts.get(businessUnitId) || 0) + 1);
-    }
-    return counts;
-  }, [contacts]);
-  const defaultKanbanBusinessUnitId = useMemo(() => {
-    let bestUnitId = accessibleBusinessUnits[0]?.id || '';
-    let bestCount = -1;
-    for (const unit of accessibleBusinessUnits || []) {
-      const count = contactCountByBusinessUnitId.get(unit.id) || 0;
-      if (count > bestCount) {
-        bestCount = count;
-        bestUnitId = unit.id;
-      }
-    }
-    return bestUnitId;
-  }, [accessibleBusinessUnits, contactCountByBusinessUnitId]);
-  const currentScopedBusinessUnitId =
-    currentBusinessUnitId !== 'all' && currentBusinessUnitId !== 'unassigned' ? currentBusinessUnitId : '';
-  const resolvedKanbanBusinessUnitId = currentScopedBusinessUnitId ||
-    (businessUnitById.has(kanbanBusinessUnitId) ? kanbanBusinessUnitId : defaultKanbanBusinessUnitId);
-  const kanbanBusinessUnit = businessUnitById.get(resolvedKanbanBusinessUnitId) || currentBusinessUnit || null;
-  const activeWorkflow = workflowForBusinessUnit(kanbanBusinessUnit);
-  const kanbanColumns = workflowColumnsForBusinessUnit(kanbanBusinessUnit);
-  const defaultBusinessUnitId = currentBusinessUnitId !== 'all' && currentBusinessUnitId !== 'unassigned' ? currentBusinessUnitId : accessibleBusinessUnits[0]?.id || '';
-  const statusOptionsForBusinessUnitId = (businessUnitId) => {
-    const workflow = workflowForBusinessUnit(businessUnitById.get(businessUnitId) || null);
-    return workflow.statuses;
-  };
+  const {
+    businessUnitById,
+    contactRows,
+    currentScopedBusinessUnitId,
+    defaultBusinessUnitId,
+    statusOptions,
+    statusOptionsForBusinessUnitId,
+  } = useContactWorkflowView({
+    contacts,
+    workOrders,
+    financials,
+    employees,
+    accessibleBusinessUnits,
+    currentBusinessUnitId,
+    currentBusinessUnit,
+  });
   const openNew = () => {
     if (!canWrite) return;
     const defaultStatuses = statusOptionsForBusinessUnitId(defaultBusinessUnitId);
@@ -152,64 +123,6 @@ export default function ContactsPage() {
     }
   };
 
-  const empName = (id) => employees.find(e => e.id === id)?.name || (id ? id : 'Unassigned');
-  const unitName = (id) => accessibleBusinessUnits.find((unit) => unit.id === id)?.name || 'Unassigned';
-  const workOrdersByContactId = useMemo(() => {
-    const lookup = new Map();
-    for (const order of workOrders || []) {
-      if (!order.contactId) continue;
-      const rows = lookup.get(order.contactId) || [];
-      rows.push(order);
-      lookup.set(order.contactId, rows);
-    }
-    return lookup;
-  }, [workOrders]);
-  const financialsByContactId = useMemo(() => {
-    const lookup = new Map();
-    for (const record of financials || []) {
-      if (!record.contactId) continue;
-      const rows = lookup.get(record.contactId) || [];
-      rows.push(record);
-      lookup.set(record.contactId, rows);
-    }
-    return lookup;
-  }, [financials]);
-  const contactsWithWorkflow = useMemo(() => contacts.map((contact) => {
-    const businessUnit = businessUnitById.get(contact.businessUnitId || contact.primaryBusinessUnitId) || null;
-    const relatedFinancials = financialsByContactId.get(contact.id) || [];
-    const workflow = workflowFromContact(contact, {
-      businessUnit,
-      workOrders: workOrdersByContactId.get(contact.id) || [],
-      financials: relatedFinancials,
-      paymentSnapshots: relatedFinancials.filter((record) => ['Receipt', 'Invoice'].includes(record.type)),
-    });
-    return {
-      ...contact,
-      workflowKey: workflow.workflowKey,
-      workflowLabel: workflow.workflowLabel,
-      status: workflow.status,
-      currentStage: workflow.currentStage,
-      tags: workflow.tags?.length ? workflow.tags : contact.tags,
-      nextAction: workflow.nextAction || contact.nextAction,
-      priority: workflow.priority || contact.priority,
-      outreachState: workflow.outreachState || contact.outreachState,
-      needsFirstOutreach: workflow.needsFirstOutreach || contact.needsFirstOutreach,
-    };
-  }), [businessUnitById, contacts, financialsByContactId, workOrdersByContactId]);
-  const workflowStats = {
-    needsFirstOutreach: contactsWithWorkflow.filter((contact) => contact.needsFirstOutreach).length,
-    unassigned: contactsWithWorkflow.filter((contact) => !contact.assignedTo).length,
-    active: contactsWithWorkflow.filter((contact) => {
-      const businessUnit = businessUnitById.get(contact.businessUnitId || contact.primaryBusinessUnitId) || null;
-      return !isWorkflowStatusClosed(contact.status, businessUnit);
-    }).length,
-  };
-  const statusOptions = useMemo(() => {
-    if (currentScopedBusinessUnitId) return activeWorkflow.statuses;
-    const statuses = [...new Set(contactsWithWorkflow.map((contact) => contact.status).filter(Boolean))];
-    return statuses.length ? statuses : PIPELINE_STATUSES;
-  }, [activeWorkflow.statuses, contactsWithWorkflow, currentScopedBusinessUnitId]);
-
   const columns = [
     { key: 'name', label: 'Name', sortable: true, editable: true },
     { key: 'email', label: 'Email', sortable: true, editable: true },
@@ -223,7 +136,7 @@ export default function ContactsPage() {
     { key: 'lastEdited', label: 'Last Edited', sortable: true },
   ];
 
-  const filteredContacts = contactsWithWorkflow.filter((contact) => {
+  const filteredContacts = contactRows.filter((contact) => {
     const statusMatch = statusFilter === 'All' || contact.status === statusFilter;
     const businessUnit = businessUnitById.get(contact.businessUnitId || contact.primaryBusinessUnitId) || null;
     const workflowMatch =
@@ -237,11 +150,6 @@ export default function ContactsPage() {
       contact.assignedTo === ownerFilter;
     return statusMatch && workflowMatch && ownerMatch;
   });
-  const dataWithEmp = filteredContacts.map(c => ({ ...c, assignedLabel: empName(c.assignedTo), divisionLabel: unitName(c.businessUnitId || c.primaryBusinessUnitId) }));
-  const kanbanData = dataWithEmp.filter((contact) => {
-    if (!resolvedKanbanBusinessUnitId || currentScopedBusinessUnitId) return true;
-    return (contact.businessUnitId || contact.primaryBusinessUnitId) === resolvedKanbanBusinessUnitId;
-  });
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
@@ -249,18 +157,10 @@ export default function ContactsPage() {
     <div className="fade-in">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Contacts & Leads</h1>
+          <h1 className="page-title">Contacts</h1>
           <p className="page-subtitle">{contacts.length} contacts in {currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}</p>
         </div>
         <div className="flex-gap contacts-header-actions">
-          <div className="view-toggle">
-            <button className={`btn-icon ${viewMode === 'table' ? 'active' : ''}`} onClick={() => setViewMode('table')} title="Table View">
-              <List size={18} />
-            </button>
-            <button className={`btn-icon ${viewMode === 'kanban' ? 'active' : ''}`} onClick={() => setViewMode('kanban')} title="Pipeline View">
-              <KanbanIcon size={18} />
-            </button>
-          </div>
           <select className="input select contacts-filter" style={{width:130, padding:'4px 8px'}} value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
             <option value="All">All Statuses</option>
             {statusOptions.map(s=><option key={s} value={s}>{s}</option>)}
@@ -280,254 +180,34 @@ export default function ContactsPage() {
         </div>
       </div>
 
-      <style jsx>{`
-        .view-toggle {
-          display: flex;
-          background: var(--bg-tertiary);
-          padding: 4px;
-          border-radius: var(--radius-md);
-          border: 1px solid var(--border-subtle);
-          margin-right: 8px;
-        }
-        .view-toggle .btn-icon {
-          padding: 4px 8px;
-          border-radius: var(--radius-sm);
-          color: var(--text-muted);
-        }
-        .view-toggle .btn-icon.active {
-          background: var(--bg-secondary);
-          color: var(--accent);
-          box-shadow: var(--shadow-sm);
-        }
-        .workflow-strip {
-          display: grid;
-          grid-template-columns: repeat(3, minmax(0, 1fr));
-          gap: 12px;
-          margin-bottom: 16px;
-        }
-        .workflow-stat {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          min-height: 58px;
-          padding: 12px 14px;
-          background: var(--bg-secondary);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-lg);
-          box-shadow: var(--shadow-sm);
-        }
-        .workflow-stat strong {
-          display: block;
-          font-size: var(--text-xl);
-          line-height: 1;
-        }
-        .workflow-stat span {
-          color: var(--text-secondary);
-          font-size: var(--text-xs);
-        }
-          .workflow-stat svg { color: var(--accent); }
-        .kanban-scope-bar {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          margin-bottom: 12px;
-          padding: 10px 12px;
-          background: var(--bg-secondary);
-          border: 1px solid var(--border-subtle);
-          border-radius: var(--radius-md);
-        }
-        .kanban-scope-title {
-          display: flex;
-          flex-direction: column;
-          gap: 2px;
-          min-width: 0;
-        }
-        .kanban-scope-title strong {
-          font-size: var(--text-sm);
-          line-height: 1.2;
-        }
-        .kanban-scope-title span {
-          color: var(--text-secondary);
-          font-size: var(--text-xs);
-        }
-        .kanban-scope-select {
-          width: min(240px, 100%);
-        }
-        .workflow-cell { min-width: 190px; max-width: 260px; }
-        .workflow-line {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-          color: var(--text-primary);
-          font-weight: 600;
-          font-size: var(--text-xs);
-        }
-        .workflow-line svg {
-          color: var(--warning);
-          flex: 0 0 auto;
-        }
-        .workflow-next {
-          margin-top: 4px;
-          color: var(--text-secondary);
-          font-size: var(--text-xs);
-          line-height: 1.35;
-          white-space: normal;
-        }
-        .workflow-tags {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 4px;
-          margin-top: 6px;
-        }
-        .workflow-tag {
-          padding: 2px 6px;
-          border-radius: 999px;
-          background: var(--warning-muted);
-          color: var(--warning);
-          font-size: 10px;
-          font-weight: 600;
-          text-transform: capitalize;
-        }
-        .contacts-header-actions {
-          flex-wrap: wrap;
-          justify-content: flex-end;
-        }
-        @media (max-width: 900px) and (min-width: 641px) {
-          .workflow-strip {
-            gap: 8px;
-          }
-          .workflow-stat {
-            min-height: 48px;
-            padding: 9px 10px;
-            gap: 8px;
-          }
-          .workflow-stat strong {
-            font-size: var(--text-lg);
-          }
-          .workflow-stat span {
-            font-size: 10px;
-            line-height: 1.15;
-          }
-          .workflow-stat svg {
-            width: 15px;
-            height: 15px;
-          }
-          .contacts-header-actions {
-            gap: 6px;
-          }
-        }
-        @media (max-width: 640px) {
-          .workflow-strip { grid-template-columns: 1fr; }
-          .contacts-header-actions {
-            width: 100%;
-            justify-content: stretch;
-          }
-          .contacts-header-actions :global(.btn),
-          .contacts-header-actions :global(.input),
-          .contacts-filter {
-            flex: 1 1 100%;
-            width: 100% !important;
-          }
-          .view-toggle {
-            width: 100%;
-            margin-right: 0;
-          }
-          .view-toggle .btn-icon {
-            flex: 1;
-            justify-content: center;
-          }
-          .kanban-scope-bar {
-            align-items: stretch;
-            flex-direction: column;
-          }
-          .kanban-scope-select {
-            width: 100%;
-          }
-        }
-      `}</style>
-
-      <div className="workflow-strip">
-        <div className="workflow-stat">
-          <AlertCircle size={18} />
-          <div><strong>{workflowStats.needsFirstOutreach}</strong><span>need first outreach</span></div>
-        </div>
-        <div className="workflow-stat">
-          <Clock3 size={18} />
-          <div><strong>{workflowStats.active}</strong><span>active pipeline</span></div>
-        </div>
-        <div className="workflow-stat">
-          <UserRoundCheck size={18} />
-          <div><strong>{workflowStats.unassigned}</strong><span>unassigned contacts</span></div>
-        </div>
+      <div className="card" style={{padding:16}}>
+        <DataTable
+          columns={columns}
+          data={filteredContacts}
+          searchPlaceholder="Search contacts..."
+          onEdit={canWrite ? (id, u) => {
+            updateContact(id, u)
+              .then(() => toast('Field updated'))
+              .catch((error) => toast(error?.message || 'Update failed.', 'error'));
+          } : undefined}
+          actions={[
+            { label: 'View', onClick: (r) => router.push(`/contacts/${r.id}`) },
+            ...(canWrite ? [
+              ...(currentUser?.id ? [{
+                label: 'Assign to me',
+                icon: <UserPlus size={14} />,
+                onClick: (r) => {
+                  updateContact(r.id, { assignedTo: currentUser.id })
+                    .then(() => toast('Contact assigned'))
+                    .catch((error) => toast(error?.message || 'Assignment failed.', 'error'));
+                },
+              }] : []),
+              { label: 'Edit', onClick: openEdit },
+              { label: 'Delete', onClick: (r) => { deleteContact(r.id); toast('Contact deleted', 'error'); }, danger: true },
+            ] : []),
+          ]}
+        />
       </div>
-
-      {viewMode === 'table' ? (
-        <div className="card" style={{padding:16}}>
-          <DataTable
-            columns={columns}
-            data={dataWithEmp}
-            searchPlaceholder="Search contacts..."
-            onEdit={canWrite ? (id, u) => {
-              updateContact(id, u)
-                .then(() => toast('Field updated'))
-                .catch((error) => toast(error?.message || 'Update failed.', 'error'));
-            } : undefined}
-            actions={[
-              { label: 'View', onClick: (r) => router.push(`/contacts/${r.id}`) },
-              ...(canWrite ? [
-                ...(currentUser?.id ? [{
-                  label: 'Assign to me',
-                  icon: <UserPlus size={14} />,
-                  onClick: (r) => {
-                    updateContact(r.id, { assignedTo: currentUser.id })
-                      .then(() => toast('Contact assigned'))
-                      .catch((error) => toast(error?.message || 'Assignment failed.', 'error'));
-                  },
-                }] : []),
-                { label: 'Edit', onClick: openEdit },
-                { label: 'Delete', onClick: (r) => { deleteContact(r.id); toast('Contact deleted', 'error'); }, danger: true },
-              ] : []),
-            ]}
-          />
-        </div>
-      ) : (
-        <>
-          <div className="kanban-scope-bar">
-            <div className="kanban-scope-title">
-              <strong>{activeWorkflow.label}</strong>
-              <span>{kanbanBusinessUnit?.name || currentBusinessUnit?.name || 'Selected division'} · {kanbanData.length} contacts</span>
-            </div>
-            {!currentScopedBusinessUnitId && accessibleBusinessUnits.length > 1 && (
-              <select
-                className="input select kanban-scope-select"
-                value={resolvedKanbanBusinessUnitId}
-                onChange={(event) => setKanbanBusinessUnitId(event.target.value)}
-                aria-label="Kanban division"
-              >
-                {accessibleBusinessUnits.map((unit) => (
-                  <option key={unit.id} value={unit.id}>{unit.name}</option>
-                ))}
-              </select>
-            )}
-          </div>
-          <KanbanBoard
-            data={kanbanData}
-            columns={kanbanColumns}
-            onMove={canWrite ? (id, status, column) => {
-              const item = kanbanData.find((contact) => contact.id === id);
-              if (column?.isOperational) {
-                toast('Open the contact to update linked estimate, work order, fulfillment, or payment records.', 'error');
-                return;
-              }
-              updateContact(id, { status })
-              .then(() => toast('Stage updated'))
-              .catch((error) => toast(error?.message || 'Stage update failed.', 'error'));
-            } : undefined}
-            onEdit={(item) => router.push(`/contacts/${item.id}`)}
-          />
-        </>
-      )}
 
       <Modal open={!!drawer} onClose={close} title={drawer === 'new' ? 'New Contact' : 'Edit Contact'}
         footer={<><button className="btn" onClick={close}>Cancel</button><button className="btn btn-primary" onClick={save}>Save</button></>}>

@@ -18,7 +18,7 @@ test('workflowColumnsForBusinessUnit returns AIT Signs operational columns', () 
   const columns = workflowColumnsForBusinessUnit({ name: 'AIT Signs' });
   assert.deepEqual(
     columns.map((column) => column.id),
-    ['New Lead', 'Estimate', 'Work Order', 'Fulfillment', 'Invoice / Payment'],
+    ['Intake', 'Estimate', 'Work Order', 'Fulfillment', 'Invoice / Payment'],
   );
   assert.equal(columns.find((column) => column.id === 'Estimate').isOperational, true);
   assert.equal(columns.find((column) => column.id === 'Invoice / Payment').isTerminal, true);
@@ -38,8 +38,8 @@ test('workflowFromLead maps legacy statuses into the AIT USA workflow', () => {
 test('workflowFromContact derives AIT Signs stage from linked records before lead labels', () => {
   const contact = {
     id: 'contact-1',
-    status: 'New Lead',
-    currentStage: 'New Lead',
+    status: 'Intake',
+    currentStage: 'Intake',
     businessUnitId: 'bu-signs',
   };
   const businessUnit = { id: 'bu-signs', name: 'AIT Signs' };

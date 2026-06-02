@@ -1,0 +1,164 @@
+.pipelineHeader {
+  align-items: flex-start;
+}
+
+.headerCopy {
+  min-width: 0;
+}
+
+.pipelineActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.statCard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 12px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.statCard svg {
+  color: var(--accent);
+  flex: 0 0 auto;
+}
+
+.statCard strong {
+  display: block;
+  font-size: var(--text-xl);
+  line-height: 1;
+}
+
+.statCard span {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.scopeBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.scopeTitle {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.scopeTitle strong {
+  font-size: var(--text-sm);
+  line-height: 1.2;
+}
+
+.scopeTitle span {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.scopeSelect {
+  width: min(240px, 100%);
+}
+
+.filterBar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(150px, 0.8fr) minmax(220px, 1.4fr);
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.searchBox {
+  position: relative;
+}
+
+.searchBox svg {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.searchInput {
+  width: 100%;
+  padding-left: 32px;
+}
+
+@media (max-width: 900px) {
+  .statsGrid {
+    gap: 8px;
+  }
+
+  .statCard {
+    min-height: 48px;
+    padding: 9px 10px;
+    gap: 8px;
+  }
+
+  .statCard strong {
+    font-size: var(--text-lg);
+  }
+
+  .statCard span {
+    font-size: 10px;
+    line-height: 1.15;
+  }
+
+  .statCard svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  .filterBar {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .pipelineHeader {
+    gap: 12px;
+  }
+
+  .pipelineActions,
+  .pipelineActions :global(.btn) {
+    width: 100%;
+  }
+
+  .statsGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .scopeBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .scopeSelect {
+    width: 100%;
+  }
+}

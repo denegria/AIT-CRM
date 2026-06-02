@@ -116,7 +116,7 @@ export function pipelineStatusFromLead(lead, options = {}) {
     const relatedStatus = aitSignsStatusFromRelated(options);
     if (relatedStatus) return relatedStatus;
   }
-  if (!lead) return 'New Lead';
+  if (!lead) return workflow.statuses[0];
   const canonicalStatus = normalizeLifecycleStatus(lead.status, { workflowKey: workflow.key });
   if (canonicalStatus) return canonicalStatus;
   const status = clean(lead.status).toLowerCase();
@@ -124,14 +124,14 @@ export function pipelineStatusFromLead(lead, options = {}) {
     if (status.includes('previous') || status.includes('complete') || status.includes('fulfilled')) return 'Completed / Previous Student';
     if (status.includes('enroll') || status.includes('matric') || status.includes('won')) return 'Enrolled';
     if (status.includes('follow') || status.includes('contact') || status.includes('qualified')) return 'Follow Up';
-    return 'New Lead';
+    return workflow.statuses[0];
   }
   if (workflow.key === WORKFLOW_KEYS.AIT_SIGNS) {
     if (status.includes('invoice') || status.includes('payment') || status.includes('paid') || status.includes('complete')) return 'Invoice / Payment';
     if (status.includes('fulfill') || status.includes('progress') || status.includes('production')) return 'Fulfillment';
     if (status.includes('work order') || status.includes('won')) return 'Work Order';
     if (status.includes('proposal') || status.includes('estimate') || status.includes('qualified') || status.includes('contact')) return 'Estimate';
-    return 'New Lead';
+    return workflow.statuses[0];
   }
   if (status.includes('lost')) return 'Lost';
   if (status.includes('won')) return 'Won';
@@ -156,7 +156,7 @@ export function workflowFromLead(lead, options = {}) {
   const needsFirstOutreach =
     tags.includes('needs_first_outreach') ||
     outreachState === 'never_contacted' ||
-    (status === 'New Lead' && sourceName.includes('wix historical'));
+    (status === workflow.statuses[0] && sourceName.includes('wix historical'));
 
   return {
     workflowKey: workflow.key,

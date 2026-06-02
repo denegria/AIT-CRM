@@ -27,7 +27,7 @@ test('lifecycle workflows resolve division-specific statuses', () => {
   );
   assert.deepEqual(
     lifecycleWorkflowForBusinessUnit({ name: 'AIT Signs' }).statuses,
-    ['New Lead', 'Estimate', 'Work Order', 'Fulfillment', 'Invoice / Payment'],
+    ['Intake', 'Estimate', 'Work Order', 'Fulfillment', 'Invoice / Payment'],
   );
   assert.equal(normalizeLifecycleStatus('contacted', { businessUnit: { name: 'AIT USA Institute' } }), 'Follow Up');
   assert.equal(normalizeLifecycleStatus('won', { businessUnit: { name: 'AIT USA Institute' } }), 'Enrolled');
@@ -70,7 +70,7 @@ test('evaluateLifecycleTransition validates against the selected division workfl
   );
   assert.throws(
     () => evaluateLifecycleTransition({
-      fromStatus: 'New Lead',
+      fromStatus: 'Intake',
       toStatus: 'Enrolled',
       businessUnit: { name: 'AIT Signs' },
     }),
