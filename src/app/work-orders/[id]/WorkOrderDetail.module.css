@@ -31,10 +31,12 @@
   grid-template-columns: minmax(260px, 320px) 1fr;
   gap: 24px;
   margin-top: 16px;
+  min-width: 0;
 }
 
 .profileCard,
 .contentPanel {
+  min-width: 0;
   background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -150,15 +152,21 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-width: 0;
 }
 
 .contentTabs {
   display: flex;
   gap: 8px;
   border-bottom: 1px solid var(--border-subtle);
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 
 .contentTab {
+  flex: 0 0 auto;
   background: none;
   border: none;
   padding: 12px 16px;
@@ -167,6 +175,7 @@
   color: var(--text-muted);
   cursor: pointer;
   position: relative;
+  white-space: nowrap;
 }
 
 .contentTab.active {
@@ -236,6 +245,8 @@
 }
 
 .documentForm {
+  max-width: 100%;
+  overflow-x: auto;
   background: #fff;
   color: #1f2933;
   border: 1px solid #d6d9dd;
@@ -595,7 +606,7 @@
   }
 }
 
-@media (max-width: 640px) {
+@media (max-width: 900px) {
   .detailGrid {
     grid-template-columns: 1fr;
   }

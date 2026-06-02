@@ -206,6 +206,8 @@ export default function ContactsPage() {
               { label: 'Delete', onClick: (r) => { deleteContact(r.id); toast('Contact deleted', 'error'); }, danger: true },
             ] : []),
           ]}
+          mobileBadges={['status']}
+          mobileFields={['phone', 'workflow', 'assignedLabel', 'divisionLabel', 'lastTouch', 'lastEdited']}
         />
       </div>
 

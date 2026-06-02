@@ -897,6 +897,70 @@ export default function ImportReviewPage() {
                 })}
               </tbody>
             </table>
+            <div className="review-mobile-list">
+              {rows.map((row) => {
+                const sheetContext = sheetContextForRow(row);
+                const quality = qualityForRow(row);
+                const isSelected = selectedIds.includes(row.id);
+                return (
+                  <article
+                    key={row.id}
+                    className={`review-mobile-card ${row.id === activeId ? 'review-mobile-card-active' : ''}`}
+                    onClick={() => setActiveId(row.id)}
+                  >
+                    <div className="review-mobile-head">
+                      <label className="review-mobile-check" onClick={(event) => event.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={(event) => {
+                            if (event.target.checked) setSelectedIds((prev) => [...new Set([...prev, row.id])]);
+                            else setSelectedIds((prev) => prev.filter((id) => id !== row.id));
+                          }}
+                        />
+                        <span>Row {row.source_row_number}</span>
+                      </label>
+                      <span className={`badge ${badgeClassForStatus(row.status)}`}>{row.status}</span>
+                    </div>
+                    <div className="source-context">{sheetContext.label}</div>
+                    <div className="review-mobile-title">{row.source_sheet}</div>
+                    <div className="review-mobile-badges">
+                      <span className="badge badge-contacted">{labelForType(row.record_type)}</span>
+                      <span className="badge badge-pending">{businessUnitForRow(row, batch)}</span>
+                      {quality.disposition && (
+                        <span className={`badge ${qualityBadgeClass(quality.disposition)}`}>
+                          {qualityLabel(quality.disposition)}
+                        </span>
+                      )}
+                    </div>
+                    {quality.flags.length > 0 && (
+                      <div className="quality-tags">
+                        {quality.flags.slice(0, 3).map((flag) => (
+                          <span className="quality-tag" key={flag.code || flag.label}>{flag.label || flag.code}</span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="review-preview">
+                      {row.raw_text || 'No raw text captured.'}
+                    </div>
+                    <div className="review-row-actions" onClick={(event) => event.stopPropagation()}>
+                      <button className="btn btn-sm" onClick={() => setActiveId(row.id)}>
+                        <Eye size={14} />
+                        Inspect
+                      </button>
+                      <button className="btn btn-sm btn-primary" disabled={!canApproveRows || saving} onClick={() => updateRows([row.id], 'approved')}>
+                        <Check size={14} />
+                        Approve
+                      </button>
+                      <button className="btn btn-sm btn-danger" disabled={!canReview || saving} onClick={() => updateRows([row.id], 'rejected')}>
+                        <X size={14} />
+                        Reject
+                      </button>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
             {!loading && rows.length === 0 && (
               <div className="empty-state" style={{ padding: 40 }}>
                 No rows match the current filters.
@@ -1322,6 +1386,9 @@ export default function ImportReviewPage() {
         .review-table {
           overflow: auto;
         }
+        .review-mobile-list {
+          display: none;
+        }
         .review-table table th,
         .review-table table td {
           padding: 12px 14px;
@@ -1410,6 +1477,42 @@ export default function ImportReviewPage() {
           display: flex;
           flex-wrap: wrap;
           gap: 8px;
+        }
+        .review-mobile-card {
+          display: grid;
+          gap: 8px;
+          padding: 12px;
+          border-bottom: 1px solid var(--border-subtle);
+          background: var(--bg-secondary);
+          cursor: pointer;
+        }
+        .review-mobile-card-active {
+          background: var(--accent-muted);
+        }
+        .review-mobile-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 10px;
+        }
+        .review-mobile-check {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          color: var(--text-secondary);
+          font-size: var(--text-xs);
+          font-weight: 700;
+        }
+        .review-mobile-title {
+          color: var(--text-primary);
+          font-size: var(--text-sm);
+          font-weight: 800;
+          overflow-wrap: anywhere;
+        }
+        .review-mobile-badges {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 6px;
         }
         .review-detail {
           min-height: 100%;
@@ -1573,8 +1676,37 @@ export default function ImportReviewPage() {
           .review-search {
             min-width: 0;
           }
+          .review-filters :global(.input),
+          .review-filters :global(.select) {
+            width: 100% !important;
+          }
+          .review-actions :global(.btn) {
+            flex: 1 1 100%;
+          }
+          .review-list-header,
+          .review-detail-head {
+            flex-direction: column;
+          }
+          .pagination-actions,
+          .review-detail-actions {
+            width: 100%;
+            justify-content: stretch;
+          }
+          .pagination-actions :global(.btn),
+          .review-detail-actions :global(.btn) {
+            flex: 1 1 120px;
+          }
           .review-table table {
             min-width: 980px;
+          }
+          .review-table {
+            overflow: hidden;
+          }
+          .review-table table {
+            display: none;
+          }
+          .review-mobile-list {
+            display: grid;
           }
         }
       `}</style>

@@ -194,7 +194,7 @@ export default function Dashboard() {
             <div className="flex-between" style={{marginBottom:12}}>
               <div className="card-title" style={{marginBottom:0}}>Invoice Status</div>
             </div>
-            <div style={{display:'flex',alignItems:'center',gap:24}}>
+            <div style={{display:'flex',alignItems:'center',gap:24,flexWrap:'wrap',justifyContent:'center'}}>
               <PieChart data={statusData} size={140} />
               <ChartLegend data={statusData} />
             </div>
@@ -205,30 +205,32 @@ export default function Dashboard() {
       {role === 'admin' && (
         <div className="card">
           <div className="card-title">Employee Progress</div>
-          <table style={{width:'100%',borderCollapse:'collapse'}}>
-            <thead><tr>
-              <th style={{textAlign:'left',padding:'6px 12px',fontSize:'var(--text-xs)',color:'var(--text-muted)',borderBottom:'1px solid var(--border-subtle)',fontWeight:600}}>Employee</th>
-              <th style={{textAlign:'left',padding:'6px 12px',fontSize:'var(--text-xs)',color:'var(--text-muted)',borderBottom:'1px solid var(--border-subtle)',fontWeight:600}}>Tasks</th>
-              <th style={{textAlign:'left',padding:'6px 12px',fontSize:'var(--text-xs)',color:'var(--text-muted)',borderBottom:'1px solid var(--border-subtle)',fontWeight:600}}>Completed</th>
-              <th style={{textAlign:'left',padding:'6px 12px',fontSize:'var(--text-xs)',color:'var(--text-muted)',borderBottom:'1px solid var(--border-subtle)',fontWeight:600}}>Leads</th>
-              <th style={{textAlign:'left',padding:'6px 12px',fontSize:'var(--text-xs)',color:'var(--text-muted)',borderBottom:'1px solid var(--border-subtle)',fontWeight:600}}>Progress</th>
-            </tr></thead>
-            <tbody>
-              {empProgress.map(emp => (
-                <tr key={emp.id}>
-                  <td style={{padding:'8px 12px',fontSize:'var(--text-sm)',borderBottom:'1px solid var(--border-subtle)'}}>{emp.name}</td>
-                  <td style={{padding:'8px 12px',fontSize:'var(--text-sm)',color:'var(--text-secondary)',borderBottom:'1px solid var(--border-subtle)'}}>{emp.total}</td>
-                  <td style={{padding:'8px 12px',fontSize:'var(--text-sm)',color:'var(--text-secondary)',borderBottom:'1px solid var(--border-subtle)'}}>{emp.done}</td>
-                  <td style={{padding:'8px 12px',fontSize:'var(--text-sm)',color:'var(--text-secondary)',borderBottom:'1px solid var(--border-subtle)'}}>{emp.leads}</td>
-                  <td style={{padding:'8px 12px',borderBottom:'1px solid var(--border-subtle)'}}>
-                    <div style={{width:100,height:6,background:'var(--bg-hover)',borderRadius:3,overflow:'hidden'}}>
-                      <div style={{width:`${emp.total?Math.round(emp.done/emp.total*100):0}%`,height:'100%',background:'var(--accent)',borderRadius:3,transition:'width 0.3s ease'}} />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="responsive-table">
+            <table style={{width:'100%',borderCollapse:'collapse'}}>
+              <thead><tr>
+                <th style={{textAlign:'left',padding:'6px 12px',fontSize:'var(--text-xs)',color:'var(--text-muted)',borderBottom:'1px solid var(--border-subtle)',fontWeight:600}}>Employee</th>
+                <th style={{textAlign:'left',padding:'6px 12px',fontSize:'var(--text-xs)',color:'var(--text-muted)',borderBottom:'1px solid var(--border-subtle)',fontWeight:600}}>Tasks</th>
+                <th style={{textAlign:'left',padding:'6px 12px',fontSize:'var(--text-xs)',color:'var(--text-muted)',borderBottom:'1px solid var(--border-subtle)',fontWeight:600}}>Completed</th>
+                <th style={{textAlign:'left',padding:'6px 12px',fontSize:'var(--text-xs)',color:'var(--text-muted)',borderBottom:'1px solid var(--border-subtle)',fontWeight:600}}>Leads</th>
+                <th style={{textAlign:'left',padding:'6px 12px',fontSize:'var(--text-xs)',color:'var(--text-muted)',borderBottom:'1px solid var(--border-subtle)',fontWeight:600}}>Progress</th>
+              </tr></thead>
+              <tbody>
+                {empProgress.map(emp => (
+                  <tr key={emp.id}>
+                    <td style={{padding:'8px 12px',fontSize:'var(--text-sm)',borderBottom:'1px solid var(--border-subtle)'}}>{emp.name}</td>
+                    <td style={{padding:'8px 12px',fontSize:'var(--text-sm)',color:'var(--text-secondary)',borderBottom:'1px solid var(--border-subtle)'}}>{emp.total}</td>
+                    <td style={{padding:'8px 12px',fontSize:'var(--text-sm)',color:'var(--text-secondary)',borderBottom:'1px solid var(--border-subtle)'}}>{emp.done}</td>
+                    <td style={{padding:'8px 12px',fontSize:'var(--text-sm)',color:'var(--text-secondary)',borderBottom:'1px solid var(--border-subtle)'}}>{emp.leads}</td>
+                    <td style={{padding:'8px 12px',borderBottom:'1px solid var(--border-subtle)'}}>
+                      <div style={{width:100,height:6,background:'var(--bg-hover)',borderRadius:3,overflow:'hidden'}}>
+                        <div style={{width:`${emp.total?Math.round(emp.done/emp.total*100):0}%`,height:'100%',background:'var(--accent)',borderRadius:3,transition:'width 0.3s ease'}} />
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

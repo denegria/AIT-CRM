@@ -230,7 +230,7 @@ export default function FinancialsPage() {
         <div className="form-group">
           <label className="form-label">Line Items</label>
           {form.items.map((it, idx) => (
-            <div key={idx} style={{display:'flex',gap:8,marginBottom:6,alignItems:'center'}}>
+            <div key={idx} style={{display:'flex',gap:8,marginBottom:6,alignItems:'center',flexWrap:'wrap'}}>
               <input className="input" placeholder="Description" value={it.desc} onChange={e=>updateItem(idx,'desc',e.target.value)} style={{flex:2}} />
               <input className="input" type="number" placeholder="Qty" value={it.qty} onChange={e=>updateItem(idx,'qty',Number(e.target.value))} style={{width:60}} />
               <input className="input" type="number" placeholder="Rate" value={it.rate} onChange={e=>updateItem(idx,'rate',Number(e.target.value))} style={{width:90}} />

@@ -35,3 +35,20 @@
   border-radius:var(--radius-md); color:var(--text-primary); outline:none;
 }
 .addInput:focus { border-color:var(--border-focus); box-shadow:var(--shadow-focus); }
+
+@media (max-width: 520px) {
+  .meta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .addRow {
+    flex-direction: column;
+  }
+
+  .addRow .addInput,
+  .addRow button {
+    width: 100%;
+  }
+}

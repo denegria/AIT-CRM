@@ -12,7 +12,19 @@ function badgeClass(val) {
   return map[v] || 'badge-new';
 }
 
-export default function DataTable({ columns, data, actions, onEdit, searchPlaceholder, toolbarExtra, selectable, selectedIds = [], onSelect }) {
+export default function DataTable({
+  columns,
+  data,
+  actions,
+  onEdit,
+  searchPlaceholder,
+  toolbarExtra,
+  selectable,
+  selectedIds = [],
+  onSelect,
+  mobileFields,
+  mobileBadges,
+}) {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
@@ -67,7 +79,16 @@ export default function DataTable({ columns, data, actions, onEdit, searchPlaceh
 
   const mobilePrimary = columns[0];
   const mobileSecondary = columns[1];
-  const mobileBadge = columns.find((column) => column.type === 'badge');
+  const defaultBadgeColumns = columns.filter((column) => column.type === 'badge').slice(0, 2);
+  const mobileBadgeColumns = mobileBadges?.length
+    ? mobileBadges.map((entry) => (typeof entry === 'string' ? columns.find((column) => column.key === entry) : entry)).filter(Boolean)
+    : defaultBadgeColumns;
+  const defaultMobileFields = columns
+    .filter((column) => ![mobilePrimary?.key, mobileSecondary?.key, ...mobileBadgeColumns.map((badge) => badge.key)].includes(column.key))
+    .slice(0, 4);
+  const mobileFieldColumns = mobileFields?.length
+    ? mobileFields.map((entry) => (typeof entry === 'string' ? columns.find((column) => column.key === entry) : entry)).filter(Boolean)
+    : defaultMobileFields;
 
   return (
     <div className={s.wrap}>
@@ -150,7 +171,23 @@ export default function DataTable({ columns, data, actions, onEdit, searchPlaceh
                 <div className={s.mobileTitle}>{mobilePrimary ? renderCell(mobilePrimary, row, false) : row.id}</div>
                 {mobileSecondary && <div className={s.mobileSubtitle}>{renderCell(mobileSecondary, row, false)}</div>}
               </div>
-              {mobileBadge && <div className={s.mobileBadge}>{renderCell(mobileBadge, row, false)}</div>}
+              {mobileBadgeColumns.length > 0 && (
+                <div className={s.mobileBadges}>
+                  {mobileBadgeColumns.map((badge) => (
+                    <span key={badge.key} className={s.mobileBadge}>{renderCell(badge, row, false)}</span>
+                  ))}
+                </div>
+              )}
+              {mobileFieldColumns.length > 0 && (
+                <div className={s.mobileFields}>
+                  {mobileFieldColumns.map((field) => (
+                    <div key={field.key || field.label} className={s.mobileField}>
+                      <span>{field.label}</span>
+                      <div className={s.mobileFieldValue}>{renderCell(field, row, false)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
               {actions && (
                 <div className={s.mobileActions}>
                   {actions.map((a, i) => (

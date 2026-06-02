@@ -148,6 +148,8 @@ export default function WorkOrdersPage() {
               danger: true,
             }] : []),
           ]}
+          mobileBadges={['status', 'priority']}
+          mobileFields={['client', 'divisionLabel', 'dueDate', 'estimatedCost']}
         />
       </div>
 

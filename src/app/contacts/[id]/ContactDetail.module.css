@@ -192,8 +192,13 @@
   gap: 8px;
   border-bottom: 1px solid var(--border-subtle);
   padding-bottom: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
 }
 .contentTab {
+  flex: 0 0 auto;
   background: none;
   border: none;
   padding: 12px 16px;
@@ -202,6 +207,7 @@
   color: var(--text-muted);
   cursor: pointer;
   position: relative;
+  white-space: nowrap;
 }
 .contentTab.active {
   color: var(--accent);
@@ -480,6 +486,7 @@
   opacity: 0.9;
 }
 .timelineBody {
+  min-width: 0;
   flex: 1;
   background: color-mix(in srgb, var(--bg-secondary) 72%, var(--bg-tertiary));
   padding: 14px;

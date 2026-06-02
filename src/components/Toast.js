@@ -50,7 +50,7 @@ export function ToastProvider({ children }) {
         }
         .toast {
           pointer-events: auto;
-          min-width: 280px;
+          min-width: min(280px, calc(100vw - 32px));
           max-width: 400px;
           background: var(--bg-secondary);
           border: 1px solid var(--border-subtle);
@@ -95,6 +95,18 @@ export function ToastProvider({ children }) {
         @keyframes slideIn {
           from { transform: translateX(100%); opacity: 0; }
           to { transform: translateX(0); opacity: 1; }
+        }
+
+        @media (max-width: 900px) {
+          .toast-container {
+            left: 12px;
+            right: 12px;
+            bottom: calc(84px + env(safe-area-inset-bottom));
+          }
+          .toast {
+            width: 100%;
+            max-width: none;
+          }
         }
       `}</style>
     </ToastContext.Provider>

@@ -113,7 +113,7 @@ export default function ReportsPage() {
         </div>
         <div className="card">
           <div className="card-title" style={{marginBottom:16}}>Invoice Status</div>
-          <div style={{display:'flex',alignItems:'center',gap:32,justifyContent:'center'}}>
+          <div style={{display:'flex',alignItems:'center',gap:32,justifyContent:'center',flexWrap:'wrap'}}>
             <PieChart data={statusBreakdown} size={160} />
             <ChartLegend data={statusBreakdown} />
           </div>
@@ -123,7 +123,7 @@ export default function ReportsPage() {
       <div className="grid-2">
         <div className="card">
           <div className="card-title" style={{marginBottom:16}}>Lead Sources</div>
-          <div style={{display:'flex',alignItems:'center',gap:32,justifyContent:'center'}}>
+          <div style={{display:'flex',alignItems:'center',gap:32,justifyContent:'center',flexWrap:'wrap'}}>
             <PieChart data={sourceBreakdown} size={160} />
             <ChartLegend data={sourceBreakdown} />
           </div>
@@ -131,7 +131,7 @@ export default function ReportsPage() {
         <div className="card">
           <div className="card-title" style={{marginBottom:16}}>{scopeLabel} Mix</div>
           {divisionBreakdown.length ? (
-            <div style={{display:'flex',alignItems:'center',gap:32,justifyContent:'center'}}>
+            <div style={{display:'flex',alignItems:'center',gap:32,justifyContent:'center',flexWrap:'wrap'}}>
               <PieChart data={divisionBreakdown} size={160} />
               <ChartLegend data={divisionBreakdown} />
             </div>

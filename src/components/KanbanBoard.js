@@ -55,6 +55,13 @@ export default function KanbanBoard({ data, columns, onMove, onEdit }) {
     setDragOverCol(null);
   };
 
+  const moveCard = (event, item) => {
+    event.stopPropagation();
+    const nextColumn = normalizedColumns.find((column) => column.id === event.target.value);
+    if (!nextColumn || nextColumn.id === item.status) return;
+    if (onMove) onMove(item.id, nextColumn.id, nextColumn);
+  };
+
   return (
     <div className={s.kanbanContainer}>
       {normalizedColumns.map(col => {
@@ -112,6 +119,16 @@ export default function KanbanBoard({ data, columns, onMove, onEdit }) {
                     </div>
                     {!!item.tags?.length && <span className={s.cardTag}>{item.tags[0].replaceAll('_', ' ')}</span>}
                   </div>
+                  {onMove && (
+                    <label className={s.cardMove} onClick={(event) => event.stopPropagation()}>
+                      <span>Move to</span>
+                      <select value={item.status} onChange={(event) => moveCard(event, item)}>
+                        {normalizedColumns.map((column) => (
+                          <option key={column.id} value={column.id}>{column.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                 </div>
               ))}
               {columnCards.length === 0 && (

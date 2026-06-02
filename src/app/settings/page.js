@@ -506,7 +506,7 @@ export default function SettingsPage() {
         </div>
 
         {dataSource === 'postgres' && access.canWriteSettings ? (
-          <div style={{display:'grid',gridTemplateColumns:'minmax(min(100%,320px),0.7fr) minmax(min(100%,420px),1fr)',gap:14,alignItems:'start'}}>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,320px),1fr))',gap:14,alignItems:'start'}}>
             <div style={{display:'flex',flexDirection:'column',gap:10}}>
               <div style={{padding:'12px',background:'var(--bg-tertiary)',border:'1px solid var(--border-subtle)',borderRadius:'var(--radius-md)'}}>
                 <div style={{fontSize:'var(--text-sm)',fontWeight:700,marginBottom:8}}>Channel Controls</div>
@@ -641,7 +641,7 @@ export default function SettingsPage() {
                 <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)',padding:'10px',background:'var(--bg-tertiary)',borderRadius:'var(--radius-md)'}}>No templates registered yet.</div>
               )}
               {messageTemplates.map((template) => (
-                <div key={template.id} style={{display:'grid',gridTemplateColumns:'minmax(0,1fr) auto',gap:10,alignItems:'start',padding:'10px',background:'var(--bg-tertiary)',border:'1px solid var(--border-subtle)',borderRadius:'var(--radius-md)'}}>
+                <div key={template.id} style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,220px),1fr))',gap:10,alignItems:'start',padding:'10px',background:'var(--bg-tertiary)',border:'1px solid var(--border-subtle)',borderRadius:'var(--radius-md)'}}>
                   <div style={{minWidth:0}}>
                     <div style={{display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',marginBottom:4}}>
                       <span style={{fontSize:'var(--text-sm)',fontWeight:700}}>{template.displayName}</span>
@@ -746,7 +746,7 @@ export default function SettingsPage() {
           <p style={{fontSize:'var(--text-sm)',color:'var(--text-secondary)',marginBottom:12}}>Manage business units used by scopes, users, and inbound lead routing.</p>
           {dataSource === 'postgres' && access.canWriteSettings ? (
             <>
-              <form onSubmit={handleSaveBusinessUnit} style={{display:'grid',gridTemplateColumns:'minmax(160px,1fr) minmax(120px,0.7fr) 44px auto',gap:8,alignItems:'center',marginBottom:12}}>
+              <form onSubmit={handleSaveBusinessUnit} style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,140px),1fr))',gap:8,alignItems:'center',marginBottom:12}}>
                 <input
                   className="input"
                   placeholder="Division name"
