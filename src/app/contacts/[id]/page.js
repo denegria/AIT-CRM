@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState, useMemo } from 'react';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
@@ -143,6 +144,7 @@ function recordKindClass(record) {
   if (record?.kind === 'work_order') return s.recordWork;
   if (record?.kind === 'estimate') return s.recordEstimate;
   if (record?.kind === 'payment_snapshot') return s.recordPayment;
+  if (record?.kind === 'website_lead') return s.recordLead;
   return '';
 }
 
@@ -158,6 +160,10 @@ function snapshotDetail(items, category) {
 
 function timelineEmptyText(filterValue) {
   return TIMELINE_FILTERS.find((filter) => filter.value === filterValue)?.empty || 'No activity recorded yet.';
+}
+
+function normalizedBusinessLabel(value = '') {
+  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ');
 }
 
 function conversationDateLabel(message) {
@@ -179,7 +185,18 @@ export default function ContactDetailPage() {
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
-  const { contacts, workOrders, financials, updateContact, loaded, employees, sources, access, dataSource } = useCRM();
+  const {
+    contacts,
+    workOrders,
+    financials,
+    updateContact,
+    loaded,
+    employees,
+    sources,
+    access,
+    dataSource,
+    businessUnits,
+  } = useCRM();
   const [activeTab, setActiveTab] = useState('timeline');
   const [timelineFilter, setTimelineFilter] = useState('all');
   const [serverTimeline, setServerTimeline] = useState({ contactId: '', reloadKey: -1, items: null, error: false });
@@ -202,6 +219,12 @@ export default function ContactDetailPage() {
   const contact = useMemo(() => contacts.find(c => c.id === params.id), [contacts, params.id]);
   const contactWorkOrders = useMemo(() => workOrders.filter(wo => wo.contactId === params.id), [workOrders, params.id]);
   const contactFinancials = useMemo(() => financials.filter(f => f.contactId === params.id), [financials, params.id]);
+  const contactBusinessUnit = businessUnits.find((unit) => unit.id === contact?.businessUnitId || unit.id === contact?.primaryBusinessUnitId);
+  const unitLabel = normalizedBusinessLabel(contactBusinessUnit?.name || contactBusinessUnit?.label);
+  const sourceLabel = normalizedBusinessLabel(contact?.source);
+  const isAitUsaContact = unitLabel.includes('ait usa') || sourceLabel.includes('ait usa');
+  const showWorkOrdersTab = !isAitUsaContact;
+  const renderedActiveTab = !showWorkOrdersTab && activeTab === 'workorders' ? 'timeline' : activeTab;
   const assignedEmployee = useMemo(() => employees.find(e => e.id === contact?.assignedTo), [employees, contact]);
   const fallbackTimeline = useMemo(() => {
     if (!contact) return [];
@@ -488,14 +511,16 @@ export default function ContactDetailPage() {
         {/* Right Section: Content */}
         <div className={s.contentSection}>
           <div className={s.contentTabs}>
-            <button className={`${s.contentTab} ${activeTab === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')}>Timeline</button>
-            <button className={`${s.contentTab} ${activeTab === 'conversations' ? s.active : ''}`} onClick={() => setActiveTab('conversations')}>Conversations ({conversationMessages.length})</button>
-            <button className={`${s.contentTab} ${activeTab === 'workorders' ? s.active : ''}`} onClick={() => setActiveTab('workorders')}>Work Orders ({contactWorkOrders.length})</button>
-            <button className={`${s.contentTab} ${activeTab === 'financials' ? s.active : ''}`} onClick={() => setActiveTab('financials')}>Financials ({contactFinancials.length})</button>
+            <button className={`${s.contentTab} ${renderedActiveTab === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')}>Timeline</button>
+            <button className={`${s.contentTab} ${renderedActiveTab === 'conversations' ? s.active : ''}`} onClick={() => setActiveTab('conversations')}>Conversations ({conversationMessages.length})</button>
+            {showWorkOrdersTab && (
+              <button className={`${s.contentTab} ${renderedActiveTab === 'workorders' ? s.active : ''}`} onClick={() => setActiveTab('workorders')}>Work Orders ({contactWorkOrders.length})</button>
+            )}
+            <button className={`${s.contentTab} ${renderedActiveTab === 'financials' ? s.active : ''}`} onClick={() => setActiveTab('financials')}>Financials ({contactFinancials.length})</button>
           </div>
 
           <div className={s.tabContent}>
-            {activeTab === 'timeline' && (
+            {renderedActiveTab === 'timeline' && (
               <div className={s.timelineView}>
                 <div className={s.noteBox}>
                   <textarea 
@@ -595,11 +620,20 @@ export default function ContactDetailPage() {
                                   <span className={s.timelineRecordKind}>{record.label}</span>
                                   <strong>{record.title}</strong>
                                 </div>
-                                {recordStageLabel(record) && (
-                                  <span className={s.timelineStageBadge}>
-                                    {recordStageLabel(record) === 'Completed' && <CheckCircle2 size={12} />}
-                                    {recordStageLabel(record)}
-                                  </span>
+                                {(recordStageLabel(record) || record.href) && (
+                                  <div className={s.timelineRecordActions}>
+                                    {recordStageLabel(record) && (
+                                      <span className={s.timelineStageBadge}>
+                                        {recordStageLabel(record) === 'Completed' && <CheckCircle2 size={12} />}
+                                        {recordStageLabel(record)}
+                                      </span>
+                                    )}
+                                    {record.href && (
+                                      <Link className={s.timelineRecordLink} href={record.href}>
+                                        Open
+                                      </Link>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                               {!!record.meta?.length && (
@@ -649,7 +683,7 @@ export default function ContactDetailPage() {
               </div>
             )}
 
-            {activeTab === 'conversations' && (
+            {renderedActiveTab === 'conversations' && (
               <div className={s.conversationView}>
                 <div className={s.conversationToolbar}>
                   <div className={s.conversationTitle}>
@@ -787,10 +821,10 @@ export default function ContactDetailPage() {
               </div>
             )}
 
-            {activeTab === 'workorders' && (
+            {showWorkOrdersTab && renderedActiveTab === 'workorders' && (
               <div className={s.recordsList}>
                 {contactWorkOrders.map(wo => (
-                  <div key={wo.id} className={s.recordCard}>
+                  <Link key={wo.id} className={`${s.recordCard} ${s.recordLinkCard}`} href={`/work-orders/${wo.id}`}>
                     <div className={s.recordMain}>
                       <div className={s.recordIcon}><ClipboardList size={20} /></div>
                       <div>
@@ -799,13 +833,13 @@ export default function ContactDetailPage() {
                       </div>
                     </div>
                     <span className={`badge badge-${wo.status.toLowerCase().replace(' ', '')}`}>{wo.status}</span>
-                  </div>
+                  </Link>
                 ))}
                 {contactWorkOrders.length === 0 && <div className="empty-state">No work orders linked.</div>}
               </div>
             )}
 
-            {activeTab === 'financials' && (
+            {renderedActiveTab === 'financials' && (
               <div className={s.recordsList}>
                 {contactFinancials.map(f => (
                   <div key={f.id} className={s.recordCard}>

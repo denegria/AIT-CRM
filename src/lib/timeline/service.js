@@ -215,6 +215,85 @@ function readableLine(value = '') {
     .trim();
 }
 
+function parsePipeKeyValues(value = '') {
+  const fields = {};
+  for (const part of String(value || '').split('|')) {
+    const separatorIndex = part.indexOf('=');
+    if (separatorIndex < 0) continue;
+    const key = part.slice(0, separatorIndex).trim();
+    const rawValue = part.slice(separatorIndex + 1).trim();
+    if (!key || !rawValue || rawValue === 'none' || rawValue === 'unknown') continue;
+    fields[key] = rawValue;
+  }
+  return fields;
+}
+
+function fieldChip(label, value) {
+  const text = readableLine(value);
+  if (!text) return '';
+  return `${label} ${text}`;
+}
+
+function websiteLeadRecordPayload(lead) {
+  const sourceType = String(lead?.sourceType || '').toLowerCase();
+  const sourceName = String(lead?.sourceName || '');
+  if (sourceType !== 'website_form' && !sourceName.toLowerCase().includes('wix')) return null;
+  const fields = parsePipeKeyValues(lead.originalNotes);
+  const stage = readableLine(fields.current_stage || lead.currentStage || lead.status || 'New Lead');
+  const meta = compactArray([
+    stage ? fieldChip('Stage', stage) : '',
+    fields.service ? fieldChip('Interest', fields.service) : '',
+    fields.address ? fieldChip('Location', fields.address) : '',
+    fields.age ? fieldChip('Age', fields.age) : '',
+    fields.source_key ? fieldChip('Source', fields.source_key) : '',
+    fields.external_id ? fieldChip('Submission', fields.external_id) : '',
+  ]);
+
+  return compactObject({
+    kind: 'website_lead',
+    label: 'Website lead',
+    title: sourceName || 'Website form lead',
+    status: lead.status,
+    stageLabel: stage,
+    meta,
+    fields,
+  });
+}
+
+function websiteLeadText(lead, record) {
+  const message = readableLine(record?.fields?.message || lead.originalNotes);
+  if (message && !message.includes('external_id=') && !message.includes('source_key=')) return message;
+  return 'Website lead submitted.';
+}
+
+function websiteFormDetailsNote(value = '') {
+  const text = String(value || '').trim();
+  if (!/^Website form details:/i.test(text)) return null;
+  const rows = text
+    .split(/\r?\n/)
+    .map((row) => row.replace(/^-\s*/, '').trim())
+    .filter((row) => row && !/^Website form details:/i.test(row))
+    .map((row) => {
+      const separatorIndex = row.indexOf(':');
+      if (separatorIndex < 0) return readableLine(row);
+      return fieldChip(row.slice(0, separatorIndex).trim(), row.slice(separatorIndex + 1).trim());
+    })
+    .filter(Boolean);
+  if (!rows.length) return null;
+  return {
+    title: 'Website form details',
+    text: rows.join(' · '),
+    hint: {
+      category: TIMELINE_CATEGORIES.NOTE,
+      categoryLabel: 'Note',
+      priority: 'primary',
+      isImported: true,
+      sourceKind: 'Website form details',
+      rawText: text,
+    },
+  };
+}
+
 function workbookLikeText(value = '') {
   const text = String(value || '');
   if (!text) return false;
@@ -231,6 +310,8 @@ function cleanupMergeNoteText(value = '') {
 function importedNoteInterpretation(value = '') {
   const text = String(value || '').trim();
   if (!text) return null;
+  const websiteDetails = websiteFormDetailsNote(text);
+  if (websiteDetails) return websiteDetails;
   if (cleanupMergeNoteText(text)) {
     return {
       title: 'Source cleanup note',
@@ -269,6 +350,7 @@ function workOrderRecordPayload(row, source) {
   return compactObject({
     kind: 'work_order',
     label: 'Work order',
+    href: row.id ? `/work-orders/${row.id}` : '',
     number: row.workOrderNumber,
     title: readableLine(row.title) || 'AIT Signs work order',
     status,
@@ -581,19 +663,28 @@ export function buildContactTimeline({
   }
 
   for (const lead of leadRows) {
+    const record = websiteLeadRecordPayload(lead);
+    const rawImportedText = record && lead.originalNotes ? lead.originalNotes : '';
     entries.push(withPresentation({
       id: `lead:${lead.id}`,
       type: TIMELINE_TYPES.LEAD,
       typeLabel: TIMELINE_TYPE_LABELS[TIMELINE_TYPES.LEAD],
       eventType: 'lead.created',
-      title: lead.sourceName || titleCaseEventType(lead.sourceType || 'lead'),
-      text: lead.originalNotes || `Lead status: ${lead.status || 'New Lead'}`,
+      title: record?.title || lead.sourceName || titleCaseEventType(lead.sourceType || 'lead'),
+      text: record ? websiteLeadText(lead, record) : (lead.originalNotes || `Lead status: ${lead.status || 'New Lead'}`),
+      rawText: rawImportedText,
       timestamp: isoTimestamp(lead.createdAt),
       date: isoDate(lead.createdAt),
       actor: userPayload(lead.assignedUserId, userLookup),
       source: sourcePayload(lead, lead.sourceName || lead.sourceType || 'Lead'),
       businessUnit: businessUnitPayload(lead.businessUnitId, businessUnitLookup),
       linkedRecords: linkedRecordPayload(lead),
+      record,
+      presentationHint: rawImportedText ? {
+        rawText: rawImportedText,
+        isImported: true,
+        sourceKind: 'Website form row',
+      } : null,
     }));
   }
 

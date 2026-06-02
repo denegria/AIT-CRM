@@ -58,6 +58,28 @@ test('AIT Signs document estimates tax when only subtotal-like cost is present',
   assert.equal(document.amounts.totalDisplay, '$3,731.88');
 });
 
+test('AIT Signs document breaks imported workbook descriptions into item lines', () => {
+  const document = buildAitSignsDocument({
+    workOrderNumber: 'AIT-WO-ARCH-1515',
+    client: 'ROJAS TRANSPORTATIONS',
+    contactName: 'CARLOS',
+    phone: '9089548607',
+    status: 'Canceled',
+    estimatedCost: 234.575,
+    description: '(2) SIGN LETTERNING CREARLE UN LOGO - LO HIZO POR OTRO LADO · 1503 | SI | NO | 45280.0 | ANC TRANSPORT FLEMINGTON | CARLOS | 908 9548607 | (2) SIGN LETTERNING CREARLE UN LOGO | LO HIZO POR OTRO LADO | JOEL | $ | 220.0 | 14.575 | 234.575 | 234.575 | 234.575 · Import: WORK ORDER TERMINADOS Y PAGADOS · row 1515 · lost',
+  });
+
+  assert.equal(document.items.length, 1);
+  assert.equal(document.items[0].description, 'SIGN LETTERING CREARLE UN LOGO');
+  assert.equal(document.items[0].detail, 'LO HIZO POR OTRO LADO');
+  assert.equal(document.items[0].qty, 2);
+  assert.equal(document.items[0].rate, 110);
+  assert.equal(document.items[0].amount, 220);
+  assert.equal(document.amounts.subtotalDisplay, '$220.00');
+  assert.equal(document.amounts.taxDisplay, '$14.58');
+  assert.equal(document.amounts.totalDisplay, '$234.58');
+});
+
 test('AIT Signs document formatters keep paper-friendly money and dates', () => {
   assert.equal(formatAitSignsMoney('3,500'), '$3,500.00');
   assert.equal(formatAitSignsMoney(''), 'Not captured');

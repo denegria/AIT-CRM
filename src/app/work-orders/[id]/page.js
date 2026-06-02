@@ -277,7 +277,10 @@ export default function WorkOrderDetailPage() {
                     {documentPreview.items.map((item, index) => (
                       <div className={s.documentItemRow} key={`${item.description}-${index}`}>
                         <span>{index + 1}</span>
-                        <span>{item.description}</span>
+                        <span className={s.documentItemDescription}>
+                          <strong>{item.description}</strong>
+                          {item.detail && <small>{item.detail}</small>}
+                        </span>
                         <span>{formatAitSignsMoney(item.rate, '')}</span>
                         <span>{item.qty}</span>
                         <span>{formatAitSignsMoney(item.amount, '')}</span>

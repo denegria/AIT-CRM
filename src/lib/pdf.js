@@ -175,12 +175,23 @@ export function generateWorkOrderPDF(wo, context = {}) {
     doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(35,35,35);
     for (const [index, item] of form.items.entries()) {
       const lines = doc.splitTextToSize(item.description || '', 84);
+      const detailLines = item.detail ? doc.splitTextToSize(item.detail, 84) : [];
       doc.text(String(index + 1), 25, y);
+      doc.setFont('helvetica','bold');
       doc.text(lines, 40, y);
+      if (detailLines.length) {
+        doc.setFont('helvetica','normal');
+        doc.setFontSize(7);
+        doc.setTextColor(95,95,95);
+        doc.text(detailLines, 40, y + (lines.length * 5));
+        doc.setFontSize(9);
+        doc.setTextColor(35,35,35);
+      }
+      doc.setFont('helvetica','normal');
       doc.text(formatAitSignsMoney(item.rate, ''), 149, y, { align: 'right' });
       doc.text(String(item.qty || 1), 159, y);
       doc.text(formatAitSignsMoney(item.amount, ''), 184, y, { align: 'right' });
-      y += Math.max(lines.length * 5, 7) + 5;
+      y += Math.max((lines.length + detailLines.length) * 5, 7) + 5;
     }
 
     y = Math.max(y + 4, 190);

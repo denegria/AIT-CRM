@@ -69,6 +69,144 @@ export function formatAitSignsDate(value, placeholder = AIT_SIGNS_FORM_MISSING_F
   return `${date.getMonth() + 1}/${date.getDate()}/${date.getFullYear()}`;
 }
 
+function compactArray(values = []) {
+  return values.filter((value) => value !== undefined && value !== null && value !== '');
+}
+
+function compactObject(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined && entry !== null && entry !== ''),
+  );
+}
+
+function descriptionBeforeImportTrail(value) {
+  const text = cleanText(value);
+  if (!text) return '';
+  const match = text.match(/\s+[•·-]\s*Import:/i);
+  if (!match) return text;
+  return text.slice(0, match.index).trim();
+}
+
+function splitWorkbookCells(value) {
+  return String(value || '')
+    .split('|')
+    .map((cell) => cell.trim())
+    .filter(Boolean);
+}
+
+function hasWorkbookCells(value) {
+  return splitWorkbookCells(value).length >= 4;
+}
+
+function stripSourceRowSuffix(value) {
+  return cleanText(value)
+    .replace(/\s+·\s*\d{2,6}(?:\.0)?\s*$/i, '')
+    .trim();
+}
+
+function polishWorkDescription(value) {
+  return stripSourceRowSuffix(value)
+    .replace(/\bletterning\b/gi, 'LETTERING')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function splitDescriptionAndNote(value) {
+  const text = polishWorkDescription(value);
+  const pieces = text.split(/\s+-\s+/).map(cleanText).filter(Boolean);
+  if (pieces.length <= 1) return { description: text, detail: '' };
+  return {
+    description: pieces[0],
+    detail: pieces.slice(1).join(' - '),
+  };
+}
+
+function quantityFromDescription(value) {
+  const match = cleanText(value).match(/^\((\d+)\)\s*/);
+  if (!match) return 1;
+  const qty = Number(match[1]);
+  return Number.isFinite(qty) && qty > 0 ? qty : 1;
+}
+
+function stripQuantityPrefix(value) {
+  return cleanText(value).replace(/^\(\d+\)\s*/, '').trim();
+}
+
+function isWorkbookNoiseCell(value) {
+  const text = cleanText(value);
+  if (!text) return true;
+  if (text === '$') return true;
+  if (/^(si|no|yes|n\/a)$/i.test(text)) return true;
+  if (/^\d{7,15}$/.test(text.replace(/[^\d]/g, ''))) return true;
+  if (/^4[3-6]\d{3}(?:\.0)?$/.test(text)) return true;
+  if (/^[\d$,.]+$/.test(text)) return true;
+  return false;
+}
+
+function workbookDescriptionCell(cells = []) {
+  const quantityCell = cells.find((cell) => /^\(\d+\)\s*\S/.test(cell));
+  if (quantityCell) return quantityCell;
+  return cells
+    .filter((cell) => /[a-z]/i.test(cell) && !isWorkbookNoiseCell(cell))
+    .sort((left, right) => right.length - left.length)[0] || '';
+}
+
+function workbookDetailCell(cells = [], descriptionCell = '') {
+  const descriptionIndex = cells.indexOf(descriptionCell);
+  const candidates = cells
+    .slice(descriptionIndex >= 0 ? descriptionIndex + 1 : 0)
+    .filter((cell) => /[a-z]/i.test(cell) && !isWorkbookNoiseCell(cell) && cell !== descriptionCell)
+    .filter((cell) => !/^[A-Z]{2,}(?:\s+[A-Z]{2,}){0,2}$/.test(cell.trim()));
+  return candidates[0] || '';
+}
+
+function workbookAmountHints(cells = []) {
+  const markerIndex = cells.findIndex((cell) => cleanText(cell) === '$');
+  const amountCells = (markerIndex >= 0 ? cells.slice(markerIndex + 1) : cells)
+    .map(moneyNumber)
+    .filter((amount) => amount !== null);
+  if (markerIndex < 0 || amountCells.length < 2) return {};
+  return compactObject({
+    subtotal: amountCells[0],
+    tax: amountCells[1],
+    total: amountCells[2],
+  });
+}
+
+function importedLineItemBreakdown(fallbackDescription, fallbackAmount) {
+  const descriptionText = descriptionBeforeImportTrail(fallbackDescription);
+  if (!descriptionText || (!hasWorkbookCells(descriptionText) && !descriptionText.includes(' · '))) return null;
+
+  const sections = descriptionText
+    .split(/\s+·\s+/)
+    .map(cleanText)
+    .filter(Boolean);
+  const rawSection = sections.find(hasWorkbookCells) || '';
+  const cells = splitWorkbookCells(rawSection || descriptionText);
+  const cleanSection = sections.find((section) => !hasWorkbookCells(section) && !/^import:/i.test(section)) || '';
+  const rawDescriptionCell = cleanSection || workbookDescriptionCell(cells);
+  if (!rawDescriptionCell) return null;
+
+  const split = splitDescriptionAndNote(rawDescriptionCell);
+  const detail = split.detail || workbookDetailCell(cells, rawDescriptionCell);
+  const qty = quantityFromDescription(split.description);
+  const description = stripQuantityPrefix(split.description) || AIT_SIGNS_FORM_MISSING_FIELD;
+  const amountHints = workbookAmountHints(cells);
+  const lineAmount = firstMoney(amountHints.subtotal, fallbackAmount);
+  const rate = lineAmount === null ? null : roundCurrency(lineAmount / qty);
+
+  return {
+    amountHints,
+    items: [{
+      description,
+      detail: detail ? polishWorkDescription(detail) : '',
+      qty,
+      rate,
+      amount: lineAmount,
+    }],
+  };
+}
+
 function normalizeLineItems(record, fallbackDescription, fallbackAmount) {
   const sourceItems = Array.isArray(record?.items) ? record.items : [];
   const items = sourceItems
@@ -78,6 +216,7 @@ function normalizeLineItems(record, fallbackDescription, fallbackAmount) {
       const amount = firstMoney(item.amount, rate === null ? null : qty * rate);
       return {
         description: firstText(item.desc, item.description, item.title, fallbackDescription),
+        detail: firstText(item.detail, item.note, item.notes),
         qty,
         rate,
         amount,
@@ -85,14 +224,21 @@ function normalizeLineItems(record, fallbackDescription, fallbackAmount) {
     })
     .filter((item) => item.description || item.amount !== null);
 
-  if (items.length > 0) return items;
+  if (items.length > 0) return { items, amountHints: {} };
 
-  return [{
-    description: fallbackDescription || AIT_SIGNS_FORM_MISSING_FIELD,
-    qty: 1,
-    rate: fallbackAmount,
-    amount: fallbackAmount,
-  }];
+  const importedBreakdown = importedLineItemBreakdown(fallbackDescription, fallbackAmount);
+  if (importedBreakdown?.items?.length) return importedBreakdown;
+
+  return {
+    amountHints: {},
+    items: [{
+      description: fallbackDescription || AIT_SIGNS_FORM_MISSING_FIELD,
+      detail: '',
+      qty: 1,
+      rate: fallbackAmount,
+      amount: fallbackAmount,
+    }],
+  };
 }
 
 function sumLineAmounts(items) {
@@ -101,22 +247,24 @@ function sumLineAmounts(items) {
   return roundCurrency(amounts.reduce((sum, amount) => sum + amount, 0));
 }
 
-function resolveAmounts(record, items) {
+function resolveAmounts(record, items, amountHints = {}) {
   const itemSubtotal = sumLineAmounts(items);
   const subtotal = firstMoney(
     record?.subtotal,
     record?.subTotal,
+    amountHints.subtotal,
     itemSubtotal,
     record?.estimatedCost,
     record?.amount,
     record?.total,
   );
-  const explicitTax = firstMoney(record?.tax, record?.salesTax);
+  const explicitTax = firstMoney(record?.tax, record?.salesTax, amountHints.tax);
   const taxEstimated = explicitTax === null && subtotal !== null;
   const tax = explicitTax ?? (subtotal === null ? null : roundCurrency(subtotal * AIT_SIGNS_FORM_TAX_RATE));
   const total = firstMoney(
     record?.total,
     record?.amountWithTax,
+    amountHints.total,
     subtotal === null || tax === null ? null : subtotal + tax,
     record?.amount,
     record?.estimatedCost,
@@ -172,8 +320,9 @@ export function buildAitSignsDocument(record = {}, context = {}) {
     AIT_SIGNS_FORM_MISSING_FIELD,
   );
   const fallbackAmount = firstMoney(record.subtotal, record.estimatedCost, record.amount, record.total);
-  const items = normalizeLineItems(record, description, fallbackAmount);
-  const amounts = resolveAmounts(record, items);
+  const lineItems = normalizeLineItems(record, description, fallbackAmount);
+  const items = lineItems.items;
+  const amounts = resolveAmounts(record, items, lineItems.amountHints);
   const assignedName = firstText(context.assignedEmployee?.name, record.assignedToName, record.assignedName);
 
   return {

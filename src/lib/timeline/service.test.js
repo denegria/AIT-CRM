@@ -148,6 +148,44 @@ test('buildContactTimeline preserves imported AIT USA follow-up provenance', () 
   assert.deepEqual(followUp.linkedRecords.map((record) => record.type), ['contact', 'lead']);
 });
 
+test('buildContactTimeline interprets Wix website imports without raw pipe text', () => {
+  const timeline = buildContactTimeline({
+    notes: [{
+      id: 'website-details-note',
+      contactId: 'contact-wix-1',
+      leadId: 'lead-wix-1',
+      body: 'Website form details:\n- Age: 36\n- Location: New jersey',
+      createdAt: new Date('2026-05-20T20:07:00.000Z'),
+    }],
+    leads: [{
+      id: 'lead-wix-1',
+      contactId: 'contact-wix-1',
+      businessUnitId: 'bu-ait-usa',
+      sourceType: 'website_form',
+      sourceName: 'Wix Contact Form',
+      status: 'New Lead',
+      currentStage: 'New Lead',
+      originalNotes: 'website_form | external_id=none | source_key=wix-ait-usa | source_row_id=source-row-1 | current_stage=New Lead | address=New jersey | age=36 | message=Website lead submitted.',
+      createdAt: new Date('2026-05-20T20:07:00.000Z'),
+    }],
+    businessUnits: [{ id: 'bu-ait-usa', name: 'AIT USA', label: 'Divisions' }],
+  });
+
+  const lead = timeline.find((entry) => entry.id === 'lead:lead-wix-1');
+  const detailsNote = timeline.find((entry) => entry.id === 'note:website-details-note');
+
+  assert.equal(lead.title, 'Wix Contact Form');
+  assert.equal(lead.text, 'Website lead submitted.');
+  assert.equal(lead.text.includes('source_key='), false);
+  assert.equal(lead.record.kind, 'website_lead');
+  assert.deepEqual(lead.record.meta, ['Stage New Lead', 'Location New jersey', 'Age 36', 'Source wix-ait-usa']);
+  assert.equal(lead.presentation.category, 'lead');
+  assert.equal(lead.presentation.provenance.sourceKind, 'Website form row');
+  assert.match(lead.presentation.provenance.rawText, /source_key=wix-ait-usa/);
+  assert.equal(detailsNote.title, 'Website form details');
+  assert.equal(detailsNote.text, 'Age 36 · Location New jersey');
+});
+
 test('buildContactTimeline makes AIT Signs promoted work and financial history readable', () => {
   const timeline = buildContactTimeline({
     activityEvents: [
@@ -193,6 +231,7 @@ test('buildContactTimeline makes AIT Signs promoted work and financial history r
   assert.equal(work.title, 'Installed acrylic sign');
   assert.equal(work.text, 'AIT-WO-45 · $554.45 · Completed');
   assert.equal(work.record.kind, 'work_order');
+  assert.equal(work.record.href, '/work-orders/work-order-1');
   assert.equal(work.record.stageLabel, 'Completed');
   assert.deepEqual(work.record.stages.map((stage) => stage.label), ['Work order', 'Delivered', 'Completed']);
   assert.equal(work.presentation.category, 'work');
