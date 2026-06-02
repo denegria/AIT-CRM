@@ -14,15 +14,22 @@ import {
 import { PIPELINE_STATUSES } from '@/lib/sales-workflow';
 
 const TIMELINE_FILTERS = [
-  { value: 'all', label: 'All' },
-  { value: 'follow_up', label: 'Follow-ups' },
-  { value: 'work', label: 'Work' },
-  { value: 'estimate', label: 'Estimates' },
-  { value: 'payment', label: 'Payments' },
-  { value: 'note', label: 'Notes' },
-  { value: 'task', label: 'Tasks' },
-  { value: 'message', label: 'Messages' },
-  { value: 'import', label: 'Import' },
+  { value: 'all', label: 'All history', empty: 'No activity recorded yet.' },
+  { value: 'follow_up', label: 'Follow-ups', empty: 'No follow-up attempts recorded yet.' },
+  { value: 'work', label: 'Previous work', empty: 'No previous work recorded yet.' },
+  { value: 'estimate', label: 'Estimates', empty: 'No estimate history recorded yet.' },
+  { value: 'payment', label: 'Payments', empty: 'No payment snapshots recorded yet.' },
+  { value: 'note', label: 'Notes', empty: 'No notes recorded yet.' },
+  { value: 'task', label: 'Tasks', empty: 'No tasks recorded yet.' },
+  { value: 'message', label: 'Messages', empty: 'No messages recorded yet.' },
+  { value: 'import', label: 'Source details', empty: 'No standalone source details recorded yet.' },
+];
+
+const SNAPSHOT_ITEMS = [
+  { key: 'work', label: 'Previous work', icon: ClipboardList, tone: 'work' },
+  { key: 'payment', label: 'Payments', icon: DollarSign, tone: 'payment' },
+  { key: 'estimate', label: 'Estimates', icon: BriefcaseBusiness, tone: 'estimate' },
+  { key: 'follow_up', label: 'Follow-ups', icon: AlertCircle, tone: 'follow_up' },
 ];
 
 function newManualSendRequestId() {
@@ -121,6 +128,20 @@ function timelineTone(item) {
   return 'default';
 }
 
+function latestTimelineItem(items, category) {
+  return items.find((item) => timelineCategory(item) === category);
+}
+
+function snapshotDetail(items, category) {
+  const latest = latestTimelineItem(items, category);
+  if (!latest) return 'No matching history yet';
+  return `Latest ${dateLabel(latest)}`;
+}
+
+function timelineEmptyText(filterValue) {
+  return TIMELINE_FILTERS.find((filter) => filter.value === filterValue)?.empty || 'No activity recorded yet.';
+}
+
 function conversationDateLabel(message) {
   return dateLabel({ timestamp: message.timestamp || message.createdAt });
 }
@@ -186,6 +207,11 @@ export default function ContactDetailPage() {
     if (timelineFilter === 'all') return timelineSource;
     return timelineSource.filter((item) => timelineCategory(item) === timelineFilter);
   }, [timelineFilter, timelineSource]);
+  const timelineSnapshot = useMemo(() => SNAPSHOT_ITEMS.map((item) => ({
+    ...item,
+    count: timelineCounts[item.key] || 0,
+    detail: snapshotDetail(timelineSource, item.key),
+  })), [timelineCounts, timelineSource]);
   const hasMatchingServerConversations = serverConversations.contactId === contact?.id && serverConversations.reloadKey === conversationReloadKey;
   const conversationMessages = hasMatchingServerConversations && serverConversations.items ? serverConversations.items : [];
   const conversationStatus = dataSource === 'postgres' && contact?.id && !hasMatchingServerConversations
@@ -393,8 +419,13 @@ export default function ContactDetailPage() {
         <div className={s.profileCard}>
           <div className={s.profileHeader}>
             <div className={s.profileAvatarLarge}>{contact.name.charAt(0)}</div>
-            <h1 className={s.profileName}>{contact.name}</h1>
-            <span className={`badge badge-${contact.status.toLowerCase().replace(' ', '')}`}>{contact.status}</span>
+            <div className={s.profileTitleBlock}>
+              <div className={s.profileNameRow}>
+                <h1 className={s.profileName}>{contact.name}</h1>
+                <span className={`badge badge-${contact.status.toLowerCase().replace(' ', '')}`}>{contact.status}</span>
+              </div>
+              {contact.source && <div className={s.profileSource}>Source: {contact.source}</div>}
+            </div>
           </div>
 
           {(contact.currentStage || contact.nextAction || contact.tags?.length) && (
@@ -462,6 +493,28 @@ export default function ContactDetailPage() {
                   </div>
                 </div>
 
+                <div className={s.snapshotStrip} aria-label="Current contact snapshot">
+                  {timelineSnapshot.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        className={`${s.snapshotItem} ${s[`snapshot_${item.tone}`] || ''}`}
+                        onClick={() => setTimelineFilter(item.key)}
+                        aria-label={`${item.label}: ${item.count} records. ${item.detail}`}
+                      >
+                        <span className={s.snapshotIcon}><Icon size={15} /></span>
+                        <span className={s.snapshotCopy}>
+                          <span>{item.label}</span>
+                          <strong>{item.count}</strong>
+                        </span>
+                        <small>{item.detail}</small>
+                      </button>
+                    );
+                  })}
+                </div>
+
                 <div className={s.timelineToolbar}>
                   <div className={s.timelineFilters} aria-label="Timeline filters">
                     {TIMELINE_FILTERS.map((filter) => (
@@ -470,9 +523,12 @@ export default function ContactDetailPage() {
                         className={`${s.timelineFilter} ${timelineFilter === filter.value ? s.active : ''}`}
                         onClick={() => setTimelineFilter(filter.value)}
                         type="button"
+                        aria-pressed={timelineFilter === filter.value}
+                        aria-label={`${filter.label}: ${timelineCounts[filter.value] || 0} records`}
                       >
                         {filter.label}
-                        <span>{timelineCounts[filter.value] || 0}</span>
+                        <span className={s.timelineFilterCount}>{timelineCounts[filter.value] || 0}</span>
+                        {timelineFilter === filter.value && <span className={s.srOnly}> selected</span>}
                       </button>
                     ))}
                   </div>
@@ -531,7 +587,7 @@ export default function ContactDetailPage() {
                     );
                   })}
                   {timeline.length === 0 && (
-                    <div className={s.timelineEmpty}>No activity recorded yet.</div>
+                    <div className={s.timelineEmpty}>{timelineEmptyText(timelineFilter)}</div>
                   )}
                 </div>
               </div>
