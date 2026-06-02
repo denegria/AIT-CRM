@@ -307,7 +307,7 @@ export default function ContactDetailPage() {
   }, [contact?.id, dataSource, conversationReloadKey]);
 
   useEffect(() => {
-    if (!access.canWriteCrm || dataSource !== 'postgres') return undefined;
+    if (!access.canWriteCrm || !access.canReadSettings || dataSource !== 'postgres') return undefined;
     let cancelled = false;
     fetch('/api/message-templates?purpose=manual_follow_up&status=active', { cache: 'no-store' })
       .then(async (response) => {
@@ -324,7 +324,7 @@ export default function ContactDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [access.canWriteCrm, dataSource]);
+  }, [access.canReadSettings, access.canWriteCrm, dataSource]);
 
   const channelTemplates = useMemo(() => messageTemplates.filter((template) => (
     template.channel === manualSend.channel || template.channel === 'all'
