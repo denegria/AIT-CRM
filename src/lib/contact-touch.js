@@ -4,6 +4,7 @@ const EXCEL_EPOCH_MS = Date.UTC(1899, 11, 30);
 const EXCEL_DAY_MS = 24 * 60 * 60 * 1000;
 const MIN_EXCEL_SERIAL = 40000;
 const MAX_EXCEL_SERIAL = 60000;
+const TOUCH_FUTURE_GRACE_MS = EXCEL_DAY_MS;
 
 function cleanText(value = '') {
   return String(value || '')
@@ -24,29 +25,54 @@ function isoDateFromTime(time) {
   return new Date(time).toISOString().slice(0, 10);
 }
 
-function excelSerialToTime(serial) {
-  const value = Number(serial);
-  if (!Number.isFinite(value) || value < MIN_EXCEL_SERIAL || value > MAX_EXCEL_SERIAL) return 0;
-  return EXCEL_EPOCH_MS + Math.round(value) * EXCEL_DAY_MS;
+function allowedFutureTime(referenceTime = Date.now()) {
+  return referenceTime + TOUCH_FUTURE_GRACE_MS;
 }
 
-export function latestExcelDateFromText(value = '') {
+function isAllowedTouchTime(time, referenceTime = Date.now()) {
+  return Boolean(time && time <= allowedFutureTime(referenceTime));
+}
+
+function excelSerialToTime(serial, referenceTime = Date.now()) {
+  const value = Number(serial);
+  if (!Number.isFinite(value) || value < MIN_EXCEL_SERIAL || value > MAX_EXCEL_SERIAL) return 0;
+  const time = EXCEL_EPOCH_MS + Math.round(value) * EXCEL_DAY_MS;
+  return isAllowedTouchTime(time, referenceTime) ? time : 0;
+}
+
+export function latestExcelDateFromText(value = '', { referenceTime = Date.now() } = {}) {
   const text = String(value || '');
   if (!text) return 0;
-  const matches = text.matchAll(/(^|[^\d])(\d{5})(?:\.0+)?(?=$|[^\d])/g);
+  const matches = text.matchAll(/(^|[^\d.])(\d{5})(?:\.0+)?(?=$|[^\d])/g);
   let latest = 0;
   for (const match of matches) {
-    latest = Math.max(latest, excelSerialToTime(match[2]));
+    latest = Math.max(latest, excelSerialToTime(match[2], referenceTime));
   }
   return latest;
 }
 
-function businessTimeFromText(value, fallback) {
-  return latestExcelDateFromText(value) || dateTime(fallback);
+function businessTimeFromText(value, fallback, referenceTime, { allowFallback = true } = {}) {
+  const textTime = latestExcelDateFromText(value, { referenceTime });
+  if (textTime) return textTime;
+  if (!allowFallback) return 0;
+  const fallbackTime = dateTime(fallback);
+  return isAllowedTouchTime(fallbackTime, referenceTime) ? fallbackTime : 0;
 }
 
 function isCleanupNote(text = '') {
   return cleanText(text).toLowerCase().startsWith('ait signs cleanup merged duplicate customer contacts');
+}
+
+function isImportedHistoryText(text = '') {
+  return String(text || '').split('|').length >= 4;
+}
+
+function isImportedHistoryRow(row = {}) {
+  return (
+    String(row.eventType || '').startsWith('import_') ||
+    Boolean(row.sourceSheet || row.sourceRow) ||
+    isImportedHistoryText(row.description || row.body || row.text || row.message)
+  );
 }
 
 function isAitUsaTouchEvent(eventType = '') {
@@ -61,8 +87,8 @@ function isAitUsaTouchEvent(eventType = '') {
   );
 }
 
-function addCandidate(candidates, candidate) {
-  if (!candidate?.time) return;
+function addCandidate(candidates, candidate, referenceTime) {
+  if (!isAllowedTouchTime(candidate?.time, referenceTime)) return;
   candidates.push({
     ...candidate,
     text: cleanText(candidate.text),
@@ -88,6 +114,7 @@ export function summarizeContactTouch({
   workOrders = [],
   estimates = [],
   paymentSnapshots = [],
+  referenceTime = Date.now(),
 } = {}) {
   const workflowKey = workflowKeyForBusinessUnit(businessUnit || contact.businessUnitName || contact.divisionLabel || '');
   const latestCommentCandidates = [];
@@ -101,19 +128,20 @@ export function summarizeContactTouch({
       text,
       kind: 'message',
       label: 'Message',
-    });
+    }, referenceTime);
     addCandidate(touchCandidates, {
       time,
       text,
       kind: 'message',
       label: 'Message',
-    });
+    }, referenceTime);
   }
 
   for (const event of activityEvents || []) {
     const text = event.message || event.eventType || '';
+    const allowFallback = workflowKey !== WORKFLOW_KEYS.AIT_SIGNS || !isImportedHistoryRow(event);
     const eventTime = workflowKey === WORKFLOW_KEYS.AIT_SIGNS
-      ? businessTimeFromText(text, event.occurredAt || event.createdAt)
+      ? businessTimeFromText(text, event.occurredAt || event.createdAt, referenceTime, { allowFallback })
       : dateTime(event.occurredAt || event.createdAt);
     const label = String(event.eventType || '').includes('follow_up') ? 'Follow-up' : 'Activity';
     addCandidate(latestCommentCandidates, {
@@ -121,7 +149,7 @@ export function summarizeContactTouch({
       text,
       kind: 'activity',
       label,
-    });
+    }, referenceTime);
 
     if (
       workflowKey === WORKFLOW_KEYS.AIT_SIGNS ||
@@ -132,47 +160,51 @@ export function summarizeContactTouch({
         text,
         kind: 'activity',
         label,
-      });
+      }, referenceTime);
     }
   }
 
   for (const note of notes || []) {
     const text = note.body || note.text || '';
     if (isCleanupNote(text)) continue;
+    const allowFallback = workflowKey !== WORKFLOW_KEYS.AIT_SIGNS || !isImportedHistoryRow(note);
     const noteTime = workflowKey === WORKFLOW_KEYS.AIT_SIGNS
-      ? businessTimeFromText(text, note.createdAt)
+      ? businessTimeFromText(text, note.createdAt, referenceTime, { allowFallback })
       : dateTime(note.createdAt);
     addCandidate(latestCommentCandidates, {
       time: noteTime,
       text,
       kind: 'note',
       label: 'Note',
-    });
+    }, referenceTime);
     if (workflowKey === WORKFLOW_KEYS.AIT_SIGNS) {
       addCandidate(touchCandidates, {
         time: noteTime,
         text,
         kind: 'note',
         label: 'History',
-      });
+      }, referenceTime);
     }
   }
 
   if (workflowKey === WORKFLOW_KEYS.AIT_SIGNS) {
     for (const order of workOrders || []) {
       const text = order.description || order.title || order.workOrderNumber || 'Work order';
+      const orderTime = businessTimeFromText(text, order.deliveryDate || order.createdAt, referenceTime, {
+        allowFallback: !isImportedHistoryRow(order),
+      });
       addCandidate(touchCandidates, {
-        time: businessTimeFromText(text, order.deliveryDate),
+        time: orderTime,
         text: order.title || order.description || order.workOrderNumber || 'Work order',
         kind: 'work_order',
         label: 'Job',
-      });
+      }, referenceTime);
       addCandidate(latestCommentCandidates, {
-        time: businessTimeFromText(text, order.deliveryDate),
+        time: orderTime,
         text: order.title || order.description || order.workOrderNumber || 'Work order',
         kind: 'work_order',
         label: 'Job',
-      });
+      }, referenceTime);
     }
 
     for (const estimate of estimates || []) {
@@ -183,13 +215,13 @@ export function summarizeContactTouch({
         text,
         kind: 'estimate',
         label: 'Estimate',
-      });
+      }, referenceTime);
       addCandidate(latestCommentCandidates, {
         time: dateTime(estimate.approvedAt || estimate.rejectedAt),
         text,
         kind: 'estimate',
         label: 'Estimate',
-      });
+      }, referenceTime);
     }
 
     for (const payment of paymentSnapshots || []) {
@@ -200,13 +232,13 @@ export function summarizeContactTouch({
         text,
         kind: 'payment',
         label: 'Payment',
-      });
+      }, referenceTime);
       addCandidate(latestCommentCandidates, {
         time: dateTime(payment.paidAt),
         text,
         kind: 'payment',
         label: 'Payment',
-      });
+      }, referenceTime);
     }
   }
 

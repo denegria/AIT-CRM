@@ -13,6 +13,20 @@ test('latestExcelDateFromText extracts workbook business dates instead of import
   assert.equal(latestExcelDateFromText('plain note without workbook dates'), 0);
 });
 
+test('latestExcelDateFromText ignores decimal money fragments and future serials', () => {
+  const text = '144 | 45931.0 | BLUE MOUNTAIN | $ | 265 | 17.55625 | 282.55625 | 282.56 | 545.0 | 45946.0 | -0.00375';
+  assert.equal(
+    new Date(latestExcelDateFromText(text, { referenceTime: new Date('2026-06-02T12:00:00.000Z').getTime() })).toISOString().slice(0, 10),
+    '2025-10-16',
+  );
+  assert.equal(
+    latestExcelDateFromText('future date-looking artifact | 55625.0 | BLUE MOUNTAIN', {
+      referenceTime: new Date('2026-06-02T12:00:00.000Z').getTime(),
+    }),
+    0,
+  );
+});
+
 test('summarizeContactTouch keeps AIT USA last touch to follow-up/contact events', () => {
   const summary = summarizeContactTouch({
     contact: {
@@ -20,6 +34,7 @@ test('summarizeContactTouch keeps AIT USA last touch to follow-up/contact events
       createdAt: new Date('2026-06-01T15:00:00.000Z'),
     },
     businessUnit: { name: 'AIT USA Institute' },
+    referenceTime: new Date('2026-06-02T20:00:00.000Z').getTime(),
     notes: [{
       body: 'Internal note after profile edit.',
       createdAt: new Date('2026-06-02T16:00:00.000Z'),
@@ -48,6 +63,7 @@ test('summarizeContactTouch uses AIT Signs job history dates and exposes edit se
       createdAt: new Date('2026-06-01T15:00:00.000Z'),
     },
     businessUnit: { name: 'AIT Signs' },
+    referenceTime: new Date('2026-06-02T20:00:00.000Z').getTime(),
     activityEvents: [{
       eventType: 'import_promoted_work_order',
       message: '1450 | SI | NO | 45215.0 | EL PALACIO | 30 STICKERS 1.5 X 1.5 | ENTREGADO',
@@ -59,4 +75,46 @@ test('summarizeContactTouch uses AIT Signs job history dates and exposes edit se
   assert.equal(summary.lastTouch, '2023-10-16');
   assert.equal(summary.lastEdited, '2026-06-02');
   assert.match(summary.latestComment, /EL PALACIO/);
+});
+
+test('summarizeContactTouch ignores future AIT Signs date artifacts', () => {
+  const summary = summarizeContactTouch({
+    contact: {
+      updatedAt: new Date('2026-06-02T15:00:00.000Z'),
+      createdAt: new Date('2026-06-01T15:00:00.000Z'),
+    },
+    businessUnit: { name: 'AIT Signs' },
+    referenceTime: new Date('2026-06-02T20:00:00.000Z').getTime(),
+    activityEvents: [{
+      eventType: 'import_promoted_work_order',
+      message: '144 | 45931.0 | BLUE MOUNTAIN | 12 YARD SIGNS | 17.55625 | 282.55625 | 45946.0',
+      createdAt: new Date('2026-05-30T13:05:44.087Z'),
+    }],
+  });
+
+  assert.equal(summary.lastTouch, '2025-10-16');
+  assert.equal(summary.lastEdited, '2026-06-02');
+});
+
+test('summarizeContactTouch does not use import timestamps as AIT Signs business touch dates', () => {
+  const summary = summarizeContactTouch({
+    contact: {
+      updatedAt: new Date('2026-06-02T15:00:00.000Z'),
+      createdAt: new Date('2026-06-01T15:00:00.000Z'),
+    },
+    businessUnit: { name: 'AIT Signs' },
+    referenceTime: new Date('2026-06-02T20:00:00.000Z').getTime(),
+    activityEvents: [{
+      eventType: 'import_promoted_work_order',
+      message: '1370 | SI | NO | BLUE MOUNTAIN | 20 YARD SIGN | READY | $ | 482.0 | 31.92 | 513.0',
+      createdAt: new Date('2026-05-30T13:05:44.087Z'),
+    }, {
+      eventType: 'import_promoted_work_order',
+      message: '144 | 45931.0 | BLUE MOUNTAIN | 12 YARD SIGNS | 45946.0',
+      createdAt: new Date('2026-05-30T13:05:44.087Z'),
+    }],
+  });
+
+  assert.equal(summary.lastTouch, '2025-10-16');
+  assert.equal(summary.latestCommentDate, '2025-10-16');
 });
