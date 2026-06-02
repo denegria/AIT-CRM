@@ -94,6 +94,8 @@ async function loadAitSignsContacts(client) {
     `
       select
         c.id,
+        c.organization_id,
+        c.primary_business_unit_id,
         c.name,
         c.company_name,
         c.phone,
@@ -157,6 +159,23 @@ export function buildPlan(rows, { company = null } = {}) {
   return { mergeGroups, displayUpdates };
 }
 
+function duplicateMergeNote(group) {
+  const lines = [
+    'AIT Signs cleanup merged duplicate customer contacts into this account.',
+    'Merged duplicate contacts:',
+  ];
+  for (const duplicate of group.duplicates) {
+    const parts = [
+      cleanText(duplicate.name) || 'Unnamed contact',
+      cleanText(duplicate.company_name) ? `company: ${cleanText(duplicate.company_name)}` : null,
+      cleanText(duplicate.phone) ? `phone: ${cleanText(duplicate.phone)}` : null,
+      `linked rows: ${Number(duplicate.linked_count || 0)}`,
+    ].filter(Boolean);
+    lines.push(`- ${parts.join(' | ')}`);
+  }
+  return lines.join('\n');
+}
+
 async function applyPlan(client, plan) {
   const tableAvailability = new Map();
   for (const tableName of CONTACT_TABLES) {
@@ -183,6 +202,26 @@ async function applyPlan(client, plan) {
       [group.primary.id, group.displayName, group.primary.phone || ''],
     );
     renamedContacts += 1;
+
+    if (group.duplicates.length) {
+      await client.query(
+        `
+          insert into notes (
+            organization_id,
+            business_unit_id,
+            contact_id,
+            body
+          )
+          values ($1, $2, $3, $4)
+        `,
+        [
+          group.primary.organization_id,
+          group.primary.primary_business_unit_id,
+          group.primary.id,
+          duplicateMergeNote(group),
+        ],
+      );
+    }
 
     const duplicateIds = group.duplicates.map((row) => row.id);
     for (const tableName of CONTACT_TABLES) {
