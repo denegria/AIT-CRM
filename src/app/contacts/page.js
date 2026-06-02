@@ -85,10 +85,31 @@ export default function ContactsPage() {
     () => new Map((accessibleBusinessUnits || []).map((unit) => [unit.id, unit])),
     [accessibleBusinessUnits],
   );
+  const contactCountByBusinessUnitId = useMemo(() => {
+    const counts = new Map();
+    for (const contact of contacts || []) {
+      const businessUnitId = contact.businessUnitId || contact.primaryBusinessUnitId;
+      if (!businessUnitId) continue;
+      counts.set(businessUnitId, (counts.get(businessUnitId) || 0) + 1);
+    }
+    return counts;
+  }, [contacts]);
+  const defaultKanbanBusinessUnitId = useMemo(() => {
+    let bestUnitId = accessibleBusinessUnits[0]?.id || '';
+    let bestCount = -1;
+    for (const unit of accessibleBusinessUnits || []) {
+      const count = contactCountByBusinessUnitId.get(unit.id) || 0;
+      if (count > bestCount) {
+        bestCount = count;
+        bestUnitId = unit.id;
+      }
+    }
+    return bestUnitId;
+  }, [accessibleBusinessUnits, contactCountByBusinessUnitId]);
   const currentScopedBusinessUnitId =
     currentBusinessUnitId !== 'all' && currentBusinessUnitId !== 'unassigned' ? currentBusinessUnitId : '';
   const resolvedKanbanBusinessUnitId = currentScopedBusinessUnitId ||
-    (businessUnitById.has(kanbanBusinessUnitId) ? kanbanBusinessUnitId : accessibleBusinessUnits[0]?.id || '');
+    (businessUnitById.has(kanbanBusinessUnitId) ? kanbanBusinessUnitId : defaultKanbanBusinessUnitId);
   const kanbanBusinessUnit = businessUnitById.get(resolvedKanbanBusinessUnitId) || currentBusinessUnit || null;
   const activeWorkflow = workflowForBusinessUnit(kanbanBusinessUnit);
   const kanbanColumns = workflowColumnsForBusinessUnit(kanbanBusinessUnit);
