@@ -2,11 +2,12 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Calendar, ClipboardList, Edit3, FileText, User } from 'lucide-react';
+import { ArrowLeft, Calendar, ClipboardList, Edit3, FileText, Printer, User } from 'lucide-react';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
 import { generateWorkOrderPDF } from '@/lib/pdf';
+import { buildAitSignsDocument, formatAitSignsMoney } from '@/lib/ait-signs-document';
 import s from './WorkOrderDetail.module.css';
 
 function badgeKey(value) {
@@ -51,6 +52,18 @@ export default function WorkOrderDetailPage() {
     () => accessibleBusinessUnits.find((unit) => unit.id === workOrder?.businessUnitId),
     [accessibleBusinessUnits, workOrder?.businessUnitId]
   );
+  const documentContext = useMemo(
+    () => ({
+      contact: relatedContact,
+      assignedEmployee,
+      businessUnit: assignedDivision,
+    }),
+    [assignedDivision, assignedEmployee, relatedContact]
+  );
+  const documentPreview = useMemo(
+    () => workOrder ? buildAitSignsDocument(workOrder, documentContext) : null,
+    [documentContext, workOrder]
+  );
 
   function openEditModal() {
     if (!canWriteWorkOrders || !workOrder) return;
@@ -68,6 +81,11 @@ export default function WorkOrderDetailPage() {
     }
   }
 
+  function handlePrintDocument() {
+    setActiveTab('document');
+    requestAnimationFrame(() => window.print());
+  }
+
   if (!loaded) return <div className="empty-state">Loading...</div>;
   if (!workOrder) return <div className="empty-state">Work order not found</div>;
 
@@ -78,7 +96,10 @@ export default function WorkOrderDetailPage() {
           <ArrowLeft size={18} /> Back to Work Orders
         </button>
         <div className={s.headerActions}>
-          <button className="btn" onClick={() => { generateWorkOrderPDF(workOrder); toast('PDF generated'); }}>
+          <button className="btn" onClick={handlePrintDocument}>
+            <Printer size={16} /> Print Form
+          </button>
+          <button className="btn" onClick={() => { generateWorkOrderPDF(workOrder, documentContext); toast('PDF generated'); }}>
             <FileText size={16} /> Export PDF
           </button>
           {canWriteWorkOrders && (
@@ -140,6 +161,9 @@ export default function WorkOrderDetailPage() {
             <button className={`${s.contentTab} ${activeTab === 'description' ? s.active : ''}`} onClick={() => setActiveTab('description')}>
               Description
             </button>
+            <button className={`${s.contentTab} ${activeTab === 'document' ? s.active : ''}`} onClick={() => setActiveTab('document')}>
+              Document
+            </button>
           </div>
 
           <section className={s.contentPanel}>
@@ -174,6 +198,104 @@ export default function WorkOrderDetailPage() {
             {activeTab === 'description' && (
               <div className={s.description}>
                 {workOrder.description || 'No description captured yet.'}
+              </div>
+            )}
+
+            {activeTab === 'document' && documentPreview && (
+              <div className={s.documentShell}>
+                <div className={s.documentActions}>
+                  <button className="btn btn-sm" onClick={handlePrintDocument}>
+                    <Printer size={14} /> Print
+                  </button>
+                </div>
+                <section className={s.documentForm}>
+                  <header className={s.documentHeader}>
+                    <div className={s.documentBrand}>
+                      <div className={s.documentLogo} aria-label="AIT logo">
+                        <span className={s.documentLogoA}>A</span><span>IT</span>
+                      </div>
+                      <div>
+                        <div className={s.documentCompany}>{documentPreview.company.name}</div>
+                        <div className={s.documentTagline}>{documentPreview.company.tagline}</div>
+                        <div className={s.documentCompanyContact}>
+                          {documentPreview.company.address} | {documentPreview.company.phone} | {documentPreview.company.email}
+                        </div>
+                      </div>
+                    </div>
+                    <div className={s.documentTitleBlock}>
+                      <div className={s.documentTitle}>{documentPreview.title}</div>
+                      <div className={s.documentNumberBox}>
+                        <div><span>Estimate #</span><strong>{documentPreview.number}</strong></div>
+                        <div><span>Date</span><strong>{documentPreview.dateDisplay}</strong></div>
+                      </div>
+                    </div>
+                  </header>
+
+                  <div className={s.documentServiceStrip}>
+                    {documentPreview.services.map((service) => (
+                      <div key={service.label}>
+                        <strong>{service.label}</strong>
+                        <span>{service.detail}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className={s.documentFormMeta}>
+                    <div className={s.documentInfoBox}>
+                      <div className={s.documentInfoTitle}>Billing Info</div>
+                      <dl>
+                        <div><dt>Name</dt><dd>{documentPreview.billingInfo.name}</dd></div>
+                        <div><dt>Contact Name</dt><dd>{documentPreview.billingInfo.contactName}</dd></div>
+                        <div><dt>Address</dt><dd>{documentPreview.billingInfo.address}</dd></div>
+                        <div><dt>Phone</dt><dd>{documentPreview.billingInfo.phone}</dd></div>
+                      </dl>
+                    </div>
+                    <div className={s.documentInfoBox}>
+                      <div className={s.documentInfoTitle}>Work Address (if different)</div>
+                      <dl>
+                        <div><dt>Name</dt><dd>{documentPreview.workAddress.name}</dd></div>
+                        <div><dt>Contact Name</dt><dd>{documentPreview.workAddress.contactName}</dd></div>
+                        <div><dt>Address</dt><dd>{documentPreview.workAddress.address}</dd></div>
+                        <div><dt>Phone</dt><dd>{documentPreview.workAddress.phone}</dd></div>
+                      </dl>
+                    </div>
+                    <div className={s.documentSummaryBox}>
+                      <div><span>Status</span><strong>{documentPreview.status}</strong></div>
+                      <div><span>{scopeLabel}</span><strong>{documentPreview.division}</strong></div>
+                      <div><span>Assigned</span><strong>{documentPreview.assignedName}</strong></div>
+                    </div>
+                  </div>
+
+                  <div className={s.documentItems}>
+                    <div className={s.documentItemsHead}>
+                      <span>ITM</span>
+                      <span>Description</span>
+                      <span>Unit Price</span>
+                      <span>Qt</span>
+                      <span>Total</span>
+                    </div>
+                    {documentPreview.items.map((item, index) => (
+                      <div className={s.documentItemRow} key={`${item.description}-${index}`}>
+                        <span>{index + 1}</span>
+                        <span>{item.description}</span>
+                        <span>{formatAitSignsMoney(item.rate, '')}</span>
+                        <span>{item.qty}</span>
+                        <span>{formatAitSignsMoney(item.amount, '')}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className={s.documentTotals}>
+                    <div><span>Subtotal</span><strong>{documentPreview.amounts.subtotalDisplay}</strong></div>
+                    <div><span>Tax ({documentPreview.amounts.taxRateLabel})</span><strong>{documentPreview.amounts.taxDisplay}</strong></div>
+                    <div className={s.documentTotalFinal}><span>Total</span><strong>{documentPreview.amounts.totalDisplay}</strong></div>
+                  </div>
+
+                  <footer className={s.documentFooter}>
+                    <strong>Thank You for Your Business</strong>
+                    <span>{documentPreview.footerNote}</span>
+                  </footer>
+                </section>
               </div>
             )}
           </section>

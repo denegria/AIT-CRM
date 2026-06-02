@@ -1,4 +1,5 @@
 import { jsPDF } from 'jspdf';
+import { buildAitSignsDocument, formatAitSignsMoney } from '@/lib/ait-signs-document';
 
 const COMPANY = { name: 'AIT Services', address: '1200 Commerce Dr, Suite 400', city: 'Austin, TX 78701', phone: '(512) 555-0100', email: 'info@aitservices.com' };
 
@@ -104,26 +105,97 @@ export function generateReceiptPDF(record) {
   }
 }
 
-export function generateWorkOrderPDF(wo) {
+export function generateWorkOrderPDF(wo, context = {}) {
   try {
+    const form = buildAitSignsDocument(wo, context);
     const doc = new jsPDF();
-    let y = header(doc, 'WORK ORDER', wo.number);
-    doc.setFontSize(8); doc.setTextColor(130,130,130); doc.text('CLIENT', 20, y);
-    doc.setFontSize(11); doc.setTextColor(30,30,30); doc.setFont('helvetica','bold');
-    doc.text(wo.client||'', 20, y+7); doc.setFont('helvetica','normal');
-    doc.setFontSize(9); doc.setTextColor(100,100,100);
-    doc.text(`Priority: ${wo.priority||''}`, 140, y); doc.text(`Status: ${wo.status||''}`, 140, y+6);
-    doc.text(`Due: ${wo.dueDate||''}`, 140, y+12);
-    y += 24;
-    doc.setFontSize(8); doc.setTextColor(130,130,130); doc.text('DESCRIPTION', 20, y);
-    y += 7; doc.setFontSize(10); doc.setTextColor(50,50,50);
-    const lines = doc.splitTextToSize(wo.description||'', 160);
-    doc.text(lines, 20, y); y += lines.length * 5 + 8;
-    doc.setFontSize(8); doc.setTextColor(130,130,130); doc.text('ESTIMATED COST', 20, y);
-    y += 7; doc.setFontSize(12); doc.setTextColor(30,30,30); doc.setFont('helvetica','bold');
-    doc.text(`$${(wo.estimatedCost||0).toLocaleString()}`, 20, y);
-    footer(doc);
-    doc.save(`${wo.number}.pdf`);
+    const drawInfoBox = (title, info, x, y, width = 84) => {
+      doc.setDrawColor(20,20,20); doc.rect(x, y, width, 38);
+      doc.setFillColor(243,244,246); doc.rect(x, y, width, 7, 'F');
+      doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(185,28,28);
+      doc.text(title.toUpperCase(), x + 3, y + 5);
+      doc.setFontSize(7); doc.setTextColor(100,100,100);
+      doc.text('NAME', x + 3, y + 13); doc.text('CONTACT', x + 3, y + 21);
+      doc.text('ADDRESS', x + 3, y + 29); doc.text('PHONE', x + 3, y + 36);
+      doc.setFont('helvetica','normal'); doc.setTextColor(35,35,35);
+      doc.text(doc.splitTextToSize(info.name || '', width - 30), x + 27, y + 13);
+      doc.text(doc.splitTextToSize(info.contactName || '', width - 30), x + 27, y + 21);
+      doc.text(doc.splitTextToSize(info.address || '', width - 30), x + 27, y + 29);
+      doc.text(doc.splitTextToSize(info.phone || '', width - 30), x + 27, y + 36);
+    };
+
+    doc.setFontSize(18); doc.setFont('helvetica','bold'); doc.setTextColor(24,24,24);
+    doc.rect(20, 15, 18, 14);
+    doc.setFillColor(185,28,28); doc.rect(23, 18, 4, 8, 'F');
+    doc.setTextColor(185,28,28); doc.text('A', 23, 25);
+    doc.setTextColor(24,24,24); doc.text('IT', 29, 25);
+    doc.text(form.company.name, 42, 21);
+    doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(90,90,90);
+    doc.text(form.company.tagline, 42, 28);
+    doc.setFontSize(7);
+    doc.text(`${form.company.address} | ${form.company.phone} | ${form.company.email}`, 42, 34);
+    doc.setFontSize(16); doc.setFont('helvetica','bold'); doc.setTextColor(24,24,24);
+    doc.text('ESTIMATE / WORK ORDER', 190, 22, { align: 'right' });
+    doc.setFillColor(243,244,246); doc.rect(150, 27, 19, 20, 'F');
+    doc.setDrawColor(20,20,20);
+    doc.rect(150, 27, 40, 20);
+    doc.line(150, 37, 190, 37);
+    doc.line(169, 27, 169, 47);
+    doc.setFontSize(6); doc.setFont('helvetica','bold'); doc.setTextColor(100,100,100);
+    doc.text('ESTIMATE #', 152, 33);
+    doc.text('DATE', 152, 43);
+    doc.setFontSize(8); doc.setTextColor(24,24,24);
+    doc.text(form.number, 187, 33, { align: 'right' });
+    doc.text(form.dateDisplay, 187, 43, { align: 'right' });
+
+    let y = 52;
+    const serviceWidth = 170 / form.services.length;
+    for (const [index, service] of form.services.entries()) {
+      const x = 20 + serviceWidth * index;
+      doc.setFillColor(185,28,28);
+      doc.rect(x, y, serviceWidth, 17, 'FD');
+      doc.setFontSize(7); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
+      doc.text(service.label, x + serviceWidth / 2, y + 6, { align: 'center' });
+      doc.setFontSize(5); doc.setFont('helvetica','normal'); doc.setTextColor(255,232,232);
+      doc.text(doc.splitTextToSize(service.detail, serviceWidth - 4), x + serviceWidth / 2, y + 11, { align: 'center' });
+    }
+
+    drawInfoBox('Billing Info', form.billingInfo, 20, 77);
+    drawInfoBox('Work Address (if different)', form.workAddress, 106, 77);
+
+    y = 124;
+    doc.setFillColor(20,24,32); doc.rect(20, y, 170, 9, 'F');
+    doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.setTextColor(255,255,255);
+    doc.text('ITM', 24, y + 6);
+    doc.text('DESCRIPTION', 40, y + 6);
+    doc.text('UNIT PRICE', 134, y + 6);
+    doc.text('QT', 158, y + 6);
+    doc.text('TOTAL', 184, y + 6, { align: 'right' });
+    y += 16;
+    doc.setFontSize(9); doc.setFont('helvetica','normal'); doc.setTextColor(35,35,35);
+    for (const [index, item] of form.items.entries()) {
+      const lines = doc.splitTextToSize(item.description || '', 84);
+      doc.text(String(index + 1), 25, y);
+      doc.text(lines, 40, y);
+      doc.text(formatAitSignsMoney(item.rate, ''), 149, y, { align: 'right' });
+      doc.text(String(item.qty || 1), 159, y);
+      doc.text(formatAitSignsMoney(item.amount, ''), 184, y, { align: 'right' });
+      y += Math.max(lines.length * 5, 7) + 5;
+    }
+
+    y = Math.max(y + 4, 190);
+    doc.setDrawColor(210,210,210); doc.line(118, y, 190, y);
+    y += 9; doc.setFontSize(10); doc.setFont('helvetica','normal');
+    doc.text('Subtotal', 136, y); doc.text(form.amounts.subtotalDisplay, 190, y, { align: 'right' });
+    y += 8; doc.text(`Tax (${form.amounts.taxRateLabel})`, 136, y); doc.text(form.amounts.taxDisplay, 190, y, { align: 'right' });
+    y += 9; doc.setFont('helvetica','bold'); doc.setFontSize(12);
+    doc.text('Total', 136, y); doc.text(form.amounts.totalDisplay, 190, y, { align: 'right' });
+    doc.setFontSize(14); doc.setFont('helvetica','bold'); doc.setTextColor(30,30,30);
+    doc.text('Thank You for Your Business', 105, 260, { align: 'center' });
+    doc.setDrawColor(185,28,28); doc.rect(35, 265, 140, 12);
+    doc.setFontSize(6); doc.setFont('helvetica','bold'); doc.setTextColor(185,28,28);
+    doc.text(doc.splitTextToSize(form.footerNote.toUpperCase(), 132), 105, 270, { align: 'center' });
+    doc.save(`${form.number || wo.number || 'ait-signs-work-order'}.pdf`);
   } catch (err) {
     console.error('PDF Generation Error:', err);
     alert('Failed to generate PDF. Please check console for details.');

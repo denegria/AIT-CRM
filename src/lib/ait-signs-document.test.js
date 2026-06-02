@@ -1,0 +1,65 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  buildAitSignsDocument,
+  formatAitSignsDate,
+  formatAitSignsMoney,
+} from './ait-signs-document.js';
+
+test('AIT Signs document maps the attached paper estimate fields', () => {
+  const document = buildAitSignsDocument(
+    {
+      type: 'Estimate',
+      estimateNumber: '2026-079',
+      date: '2026-05-19',
+      customerName: 'XTREEM KLEEN',
+      workContact: 'MIKE',
+      description: 'Exterior sign package',
+      subtotal: 3500,
+      tax: 231.88,
+      total: 3731.88,
+      status: 'Proposal Sent',
+    },
+    {
+      businessUnit: { name: 'AIT Signs' },
+    },
+  );
+
+  assert.equal(document.company.name, 'AIT SIGNS PRINTING');
+  assert.equal(document.company.tagline, 'WEB PAGE & DIGITAL ADS');
+  assert.equal(document.title, 'Estimate');
+  assert.equal(document.number, '2026-079');
+  assert.equal(document.dateDisplay, '5/19/2026');
+  assert.equal(document.customerName, 'XTREEM KLEEN');
+  assert.equal(document.workContact, 'MIKE');
+  assert.equal(document.billingInfo.name, 'XTREEM KLEEN');
+  assert.equal(document.workAddress.contactName, 'MIKE');
+  assert.equal(document.division, 'AIT Signs');
+  assert.equal(document.items[0].description, 'Exterior sign package');
+  assert.equal(document.amounts.subtotalDisplay, '$3,500.00');
+  assert.equal(document.amounts.taxDisplay, '$231.88');
+  assert.equal(document.amounts.totalDisplay, '$3,731.88');
+  assert.equal(document.services.length, 5);
+  assert.match(document.footerNote, /Printing guarantee/);
+});
+
+test('AIT Signs document estimates tax when only subtotal-like cost is present', () => {
+  const document = buildAitSignsDocument({
+    workOrderNumber: 'WO-100',
+    client: 'XTREEM KLEEN',
+    contactName: 'MIKE',
+    title: 'Exterior sign package',
+    estimatedCost: 3500,
+  });
+
+  assert.equal(document.amounts.taxEstimated, true);
+  assert.equal(document.amounts.subtotalDisplay, '$3,500.00');
+  assert.equal(document.amounts.taxDisplay, '$231.88');
+  assert.equal(document.amounts.totalDisplay, '$3,731.88');
+});
+
+test('AIT Signs document formatters keep paper-friendly money and dates', () => {
+  assert.equal(formatAitSignsMoney('3,500'), '$3,500.00');
+  assert.equal(formatAitSignsMoney(''), 'Not captured');
+  assert.equal(formatAitSignsDate('2026-05-19T14:00:00.000Z'), '5/19/2026');
+});
