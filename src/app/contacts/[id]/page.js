@@ -9,18 +9,20 @@ import {
   AlertCircle, ArrowLeft, Mail, Phone, MapPin, Calendar, 
   Plus, FileText, ClipboardList, 
   MessageSquare, Edit3, Tag, Activity, CheckSquare, MessageCircle,
-  Inbox, Send
+  Inbox, Send, DollarSign, Archive, BriefcaseBusiness
 } from 'lucide-react';
 import { PIPELINE_STATUSES } from '@/lib/sales-workflow';
 
 const TIMELINE_FILTERS = [
   { value: 'all', label: 'All' },
+  { value: 'follow_up', label: 'Follow-ups' },
+  { value: 'work', label: 'Work' },
+  { value: 'estimate', label: 'Estimates' },
+  { value: 'payment', label: 'Payments' },
   { value: 'note', label: 'Notes' },
   { value: 'task', label: 'Tasks' },
   { value: 'message', label: 'Messages' },
-  { value: 'work_order', label: 'Work orders' },
-  { value: 'lead', label: 'Leads' },
-  { value: 'activity', label: 'Activity' },
+  { value: 'import', label: 'Import' },
 ];
 
 function newManualSendRequestId() {
@@ -37,6 +39,13 @@ function noteTimelineItem(note) {
     date: note.date || note.createdAt || '',
     timestamp: note.timestamp || note.createdAt || note.date || '',
     linkedRecords: [],
+    presentation: {
+      category: 'note',
+      categoryLabel: 'Note',
+      priority: 'primary',
+      provenance: null,
+      isImported: false,
+    },
   };
 }
 
@@ -76,19 +85,36 @@ function timelineDateParts(item) {
   };
 }
 
-function timelineIcon(type) {
-  if (type === 'task') return <CheckSquare size={16} />;
-  if (type === 'message') return <MessageCircle size={16} />;
-  if (type === 'work_order') return <ClipboardList size={16} />;
-  if (type === 'lead') return <Tag size={16} />;
-  if (type === 'note') return <MessageSquare size={16} />;
+function timelineCategory(item) {
+  return item.presentation?.category || item.type || 'activity';
+}
+
+function timelineCategoryLabel(item) {
+  return item.presentation?.categoryLabel || item.typeLabel || item.type || 'Activity';
+}
+
+function timelineIcon(item) {
+  const category = timelineCategory(item);
+  if (category === 'task') return <CheckSquare size={16} />;
+  if (category === 'message') return <MessageCircle size={16} />;
+  if (category === 'work') return <ClipboardList size={16} />;
+  if (category === 'estimate') return <BriefcaseBusiness size={16} />;
+  if (category === 'payment') return <DollarSign size={16} />;
+  if (category === 'lead') return <Tag size={16} />;
+  if (category === 'note') return <MessageSquare size={16} />;
+  if (category === 'import') return <Archive size={16} />;
   return <Activity size={16} />;
 }
 
 function timelineTone(item) {
+  const category = timelineCategory(item);
   const eventType = String(item.eventType || '').toLowerCase();
   const text = String(item.text || '').toLowerCase();
-  if (eventType.includes('ait_usa.follow_up')) return 'imported';
+  if (category === 'follow_up') return 'follow_up';
+  if (category === 'work') return 'work';
+  if (category === 'estimate') return 'estimate';
+  if (category === 'payment') return 'payment';
+  if (category === 'import') return 'imported';
   if (text.includes('wrong number') || text.includes('disconnected') || text.includes('pbx')) return 'blocked';
   if (item.type === 'message') return 'message';
   if (item.type === 'lead') return 'lead';
@@ -152,12 +178,13 @@ export default function ContactDetailPage() {
   const timelineSource = hasMatchingServerTimeline && serverTimeline.items ? serverTimeline.items : fallbackTimeline;
   const timelineCounts = useMemo(() => timelineSource.reduce((counts, item) => {
     counts.all += 1;
-    counts[item.type] = (counts[item.type] || 0) + 1;
+    const category = timelineCategory(item);
+    counts[category] = (counts[category] || 0) + 1;
     return counts;
   }, { all: 0 }), [timelineSource]);
   const timeline = useMemo(() => {
     if (timelineFilter === 'all') return timelineSource;
-    return timelineSource.filter((item) => item.type === timelineFilter);
+    return timelineSource.filter((item) => timelineCategory(item) === timelineFilter);
   }, [timelineFilter, timelineSource]);
   const hasMatchingServerConversations = serverConversations.contactId === contact?.id && serverConversations.reloadKey === conversationReloadKey;
   const conversationMessages = hasMatchingServerConversations && serverConversations.items ? serverConversations.items : [];
@@ -456,14 +483,22 @@ export default function ContactDetailPage() {
                 <div className={s.timeline}>
                   {timeline.map((item) => {
                     const dateParts = timelineDateParts(item);
+                    const provenance = item.presentation?.provenance;
+                    const visibleDetails = [
+                      item.actor?.name ? `By ${item.actor.name}` : '',
+                      item.businessUnit?.name || '',
+                      ...(item.linkedRecords || [])
+                        .filter((record) => record.type !== 'contact')
+                        .map((record) => record.label),
+                    ].filter(Boolean);
                     return (
                       <div key={item.id} className={`${s.timelineItem} ${s[`tone_${timelineTone(item)}`] || ''}`}>
-                        <div className={s.timelineIcon}>{timelineIcon(item.type)}</div>
+                        <div className={s.timelineIcon}>{timelineIcon(item)}</div>
                         <div className={s.timelineBody}>
                           <div className={s.timelineMeta}>
                             <div className={s.timelineTypeGroup}>
-                              <span className={s.timelineType}>{item.typeLabel || item.type}</span>
-                              {item.eventType && <span className={s.timelineEventType}>{item.eventType.replaceAll('_', ' ')}</span>}
+                              <span className={s.timelineType}>{timelineCategoryLabel(item)}</span>
+                              {item.presentation?.isImported && <span className={s.timelineEventType}>Imported history</span>}
                             </div>
                             <time className={s.timelineDateStack} dateTime={item.timestamp || item.date || undefined} title={dateLabel(item)}>
                               <span>{dateParts.date}</span>
@@ -474,14 +509,23 @@ export default function ContactDetailPage() {
                             <div className={s.timelineTitle}>{item.title}</div>
                           )}
                           <div className={s.timelineText}>{item.text}</div>
-                          <div className={s.timelineDetails}>
-                            {item.actor?.name && <span>By {item.actor.name}</span>}
-                            {item.source?.label && <span>{item.source.label}{item.source.row ? ` row ${item.source.row}` : ''}</span>}
-                            {item.businessUnit?.name && <span>{item.businessUnit.name}</span>}
-                            {(item.linkedRecords || [])
-                              .filter((record) => record.type !== 'contact')
-                              .map((record) => <span key={`${item.id}-${record.type}-${record.id}`}>{record.label}</span>)}
-                          </div>
+                          {(visibleDetails.length > 0 || provenance) && (
+                            <div className={s.timelineDetails}>
+                              {visibleDetails.map((detail) => <span key={`${item.id}-${detail}`}>{detail}</span>)}
+                              {provenance && (
+                                <details className={s.timelineProvenance}>
+                                  <summary>Source details</summary>
+                                  <div>
+                                    {provenance.sourceKind && <span>{provenance.sourceKind}</span>}
+                                    {provenance.sourceLabel && (
+                                      <span>{provenance.sourceLabel}{provenance.sourceRow ? ` row ${provenance.sourceRow}` : ''}</span>
+                                    )}
+                                    {provenance.eventType && <span>{provenance.eventType}</span>}
+                                  </div>
+                                </details>
+                              )}
+                            </div>
+                          )}
                         </div>
                       </div>
                     );

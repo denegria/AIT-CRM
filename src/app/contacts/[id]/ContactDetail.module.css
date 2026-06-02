@@ -309,14 +309,19 @@
   z-index: 1;
 }
 .timelineItem.tone_imported .timelineIcon {
-  color: var(--accent);
-  background: var(--accent-muted);
-  border-color: color-mix(in srgb, var(--accent) 32%, var(--border-subtle));
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border-color: var(--border-subtle);
 }
 .timelineItem.tone_blocked .timelineIcon {
   color: var(--danger);
   background: var(--danger-muted);
   border-color: color-mix(in srgb, var(--danger) 28%, var(--border-subtle));
+}
+.timelineItem.tone_follow_up .timelineIcon {
+  color: var(--accent);
+  background: var(--accent-muted);
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border-subtle));
 }
 .timelineItem.tone_message .timelineIcon {
   color: var(--info);
@@ -327,6 +332,26 @@
   color: var(--success);
   background: var(--success-muted);
   border-color: color-mix(in srgb, var(--success) 28%, var(--border-subtle));
+}
+.timelineItem.tone_work .timelineIcon {
+  color: var(--warning);
+  background: var(--warning-muted);
+  border-color: color-mix(in srgb, var(--warning) 30%, var(--border-subtle));
+}
+.timelineItem.tone_estimate .timelineIcon {
+  color: var(--info);
+  background: var(--info-muted);
+  border-color: color-mix(in srgb, var(--info) 28%, var(--border-subtle));
+}
+.timelineItem.tone_payment .timelineIcon {
+  color: var(--success);
+  background: var(--success-muted);
+  border-color: color-mix(in srgb, var(--success) 28%, var(--border-subtle));
+}
+.timelineItem.tone_imported .timelineBody {
+  background: var(--bg-secondary);
+  border-style: dashed;
+  box-shadow: none;
 }
 .timelineBody {
   flex: 1;
@@ -414,6 +439,30 @@
   font-size: var(--text-xs);
   line-height: 1.25;
   overflow-wrap: anywhere;
+}
+.timelineProvenance {
+  max-width: 100%;
+}
+.timelineProvenance summary {
+  min-height: 21px;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-tertiary) 66%, transparent);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1.25;
+  cursor: pointer;
+}
+.timelineProvenance div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 8px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
 }
 .timelineEmpty {
   padding: 24px;

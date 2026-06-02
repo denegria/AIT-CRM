@@ -29,12 +29,44 @@ const TIMELINE_TYPE_LABELS = {
 };
 
 const EVENT_TITLE_OVERRIDES = {
-  'ait_usa.follow_up': 'Imported follow-up',
-  'import.follow_up': 'Imported follow-up',
-  imported_follow_up: 'Imported follow-up',
-  import_promoted_follow_up: 'Imported follow-up',
-  import_promoted_lead: 'Imported lead',
+  'ait_usa.follow_up': 'Follow-up attempt',
+  'import.follow_up': 'Follow-up attempt',
+  imported_follow_up: 'Follow-up attempt',
+  import_promoted_follow_up: 'Follow-up attempt',
+  import_promoted_estimate: 'Estimate history',
+  import_promoted_payment_snapshot: 'Payment snapshot',
+  import_promoted_work_order: 'Previous work',
+  import_promoted_lead: 'Lead history',
   import_promoted_note: 'Imported note',
+  'work_order.created': 'Work order created',
+  'work_order.updated': 'Work order updated',
+  'work_order.deleted': 'Work order deleted',
+  'lead.status_changed': 'Status changed',
+  'contact.note_added': 'Note added',
+};
+
+const TIMELINE_CATEGORIES = {
+  ESTIMATE: 'estimate',
+  FOLLOW_UP: 'follow_up',
+  IMPORT: 'import',
+  LEAD: 'lead',
+  MESSAGE: 'message',
+  NOTE: 'note',
+  PAYMENT: 'payment',
+  TASK: 'task',
+  WORK: 'work',
+};
+
+const TIMELINE_CATEGORY_LABELS = {
+  [TIMELINE_CATEGORIES.ESTIMATE]: 'Estimate',
+  [TIMELINE_CATEGORIES.FOLLOW_UP]: 'Follow-up',
+  [TIMELINE_CATEGORIES.IMPORT]: 'Import',
+  [TIMELINE_CATEGORIES.LEAD]: 'Lead',
+  [TIMELINE_CATEGORIES.MESSAGE]: 'Message',
+  [TIMELINE_CATEGORIES.NOTE]: 'Note',
+  [TIMELINE_CATEGORIES.PAYMENT]: 'Payment',
+  [TIMELINE_CATEGORIES.TASK]: 'Task',
+  [TIMELINE_CATEGORIES.WORK]: 'Work',
 };
 
 function isoTimestamp(value) {
@@ -116,6 +148,58 @@ function titleCaseEventType(eventType) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function sourceKindLabel(source = {}) {
+  if (!source) return '';
+  const sheet = String(source.label || '').toLowerCase();
+  if (sheet.includes('termin') || sheet.includes('pagad')) return 'Completed work source';
+  if (sheet.includes('work order') || sheet.includes('15 signs')) return 'Active work source';
+  if (sheet.includes('estim')) return 'Estimate source';
+  if (sheet.includes('interes') || sheet.includes('prospect')) return 'Prospect source';
+  return source.label ? 'Import source' : '';
+}
+
+export function presentationForTimelineEntry(entry) {
+  const eventType = String(entry.eventType || '').toLowerCase();
+  const text = String(entry.text || '').toLowerCase();
+  const linkedTypes = new Set((entry.linkedRecords || []).map((record) => record.type));
+  const hasSource = Boolean(entry.source?.label || entry.source?.row);
+  const isImport = eventType.includes('import') || hasSource;
+  const isFollowUp = eventType.includes('follow_up') || text.includes('volver a llamar') || text.includes('llamar de nuevo');
+
+  let category = TIMELINE_CATEGORIES.IMPORT;
+  if (isFollowUp) category = TIMELINE_CATEGORIES.FOLLOW_UP;
+  else if (eventType.includes('payment') || linkedTypes.has('payment')) category = TIMELINE_CATEGORIES.PAYMENT;
+  else if (eventType.includes('estimate') || linkedTypes.has('estimate')) category = TIMELINE_CATEGORIES.ESTIMATE;
+  else if (eventType.includes('work_order') || linkedTypes.has('work_order') || entry.type === TIMELINE_TYPES.WORK_ORDER) category = TIMELINE_CATEGORIES.WORK;
+  else if (entry.type === TIMELINE_TYPES.TASK) category = TIMELINE_CATEGORIES.TASK;
+  else if (entry.type === TIMELINE_TYPES.MESSAGE) category = TIMELINE_CATEGORIES.MESSAGE;
+  else if (entry.type === TIMELINE_TYPES.NOTE) category = TIMELINE_CATEGORIES.NOTE;
+  else if (entry.type === TIMELINE_TYPES.LEAD) category = TIMELINE_CATEGORIES.LEAD;
+  else if (!isImport) category = TIMELINE_CATEGORIES.NOTE;
+
+  const provenance = compactObject({
+    eventType: entry.eventType || '',
+    sourceLabel: entry.source?.label || '',
+    sourceRow: entry.source?.row || '',
+    sourceKind: sourceKindLabel(entry.source),
+  });
+
+  return {
+    category,
+    categoryLabel: TIMELINE_CATEGORY_LABELS[category],
+    priority: category === TIMELINE_CATEGORIES.IMPORT ? 'secondary' : 'primary',
+    provenance: Object.keys(provenance).length ? provenance : null,
+    isImported: isImport,
+  };
+}
+
+function withPresentation(entry) {
+  return {
+    ...entry,
+    presentation: presentationForTimelineEntry(entry),
+  };
+}
+
 export function timelineTypeForEvent(eventType = '') {
   const type = String(eventType || '').toLowerCase();
   if (type.startsWith('task.')) return TIMELINE_TYPES.TASK;
@@ -159,7 +243,7 @@ export function buildContactTimeline({
   const entries = [];
 
   for (const note of noteRows) {
-    entries.push({
+    entries.push(withPresentation({
       id: `note:${note.id}`,
       type: TIMELINE_TYPES.NOTE,
       typeLabel: TIMELINE_TYPE_LABELS[TIMELINE_TYPES.NOTE],
@@ -171,13 +255,13 @@ export function buildContactTimeline({
       actor: userPayload(note.authorUserId, userLookup),
       businessUnit: businessUnitPayload(note.businessUnitId, businessUnitLookup),
       linkedRecords: linkedRecordPayload(note),
-    });
+    }));
   }
 
   for (const event of activityRows) {
     if (hasCanonicalTaskEvents && String(event.eventType || '').startsWith('task.')) continue;
     const entryType = timelineTypeForEvent(event.eventType);
-    entries.push({
+    entries.push(withPresentation({
       id: `activity:${event.id}`,
       type: entryType,
       typeLabel: TIMELINE_TYPE_LABELS[entryType],
@@ -190,12 +274,12 @@ export function buildContactTimeline({
       source: sourcePayload(event),
       businessUnit: businessUnitPayload(event.businessUnitId, businessUnitLookup),
       linkedRecords: linkedRecordPayload(event),
-    });
+    }));
   }
 
   for (const taskEvent of taskEventRows) {
     const task = taskLookup.get(taskEvent.taskId);
-    entries.push({
+    entries.push(withPresentation({
       id: `task:${taskEvent.id}`,
       type: TIMELINE_TYPES.TASK,
       typeLabel: TIMELINE_TYPE_LABELS[TIMELINE_TYPES.TASK],
@@ -215,11 +299,11 @@ export function buildContactTimeline({
         from: userPayload(taskEvent.fromOwnerUserId, userLookup),
         to: userPayload(taskEvent.toOwnerUserId, userLookup),
       }),
-    });
+    }));
   }
 
   for (const statusEvent of leadStatusRows) {
-    entries.push({
+    entries.push(withPresentation({
       id: `lead_status:${statusEvent.id}`,
       type: TIMELINE_TYPES.LEAD,
       typeLabel: TIMELINE_TYPE_LABELS[TIMELINE_TYPES.LEAD],
@@ -237,11 +321,11 @@ export function buildContactTimeline({
         from: statusEvent.fromStatus,
         to: statusEvent.toStatus,
       }),
-    });
+    }));
   }
 
   for (const lead of leadRows) {
-    entries.push({
+    entries.push(withPresentation({
       id: `lead:${lead.id}`,
       type: TIMELINE_TYPES.LEAD,
       typeLabel: TIMELINE_TYPE_LABELS[TIMELINE_TYPES.LEAD],
@@ -254,7 +338,7 @@ export function buildContactTimeline({
       source: sourcePayload(lead, lead.sourceName || lead.sourceType || 'Lead'),
       businessUnit: businessUnitPayload(lead.businessUnitId, businessUnitLookup),
       linkedRecords: linkedRecordPayload(lead),
-    });
+    }));
   }
 
   return entries
