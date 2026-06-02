@@ -17,6 +17,7 @@ import {
   updateContactWithLeadAndNotes,
 } from '@/lib/crm/write-helpers.js';
 import { workflowFromLead } from '@/lib/sales-workflow';
+import { summarizeContactTouch } from '@/lib/contact-touch.js';
 
 async function loadBusinessUnitForWorkflow(db, session, businessUnitId) {
   if (!businessUnitId) return null;
@@ -33,6 +34,11 @@ async function loadBusinessUnitForWorkflow(db, session, businessUnitId) {
 
 function toContactPayload(row, lead = null, noteRows = [], businessUnit = null) {
   const workflow = workflowFromLead(lead, { businessUnit });
+  const touchSummary = summarizeContactTouch({
+    contact: row,
+    businessUnit,
+    notes: noteRows,
+  });
   return {
     id: row.id,
     name: row.name,
@@ -54,7 +60,14 @@ function toContactPayload(row, lead = null, noteRows = [], businessUnit = null) 
     needsFirstOutreach: workflow.needsFirstOutreach,
     source: lead?.sourceName || row.sourceLabel || '',
     assignedTo: lead?.assignedUserId || '',
-    lastContact: row.updatedAt?.toISOString?.().slice(0, 10) || row.createdAt?.toISOString?.().slice(0, 10) || '',
+    lastContact: touchSummary.lastTouch,
+    lastTouch: touchSummary.lastTouch,
+    lastTouchLabel: touchSummary.lastTouchLabel,
+    lastTouchText: touchSummary.lastTouchText,
+    latestComment: touchSummary.latestComment,
+    latestCommentDate: touchSummary.latestCommentDate,
+    latestCommentLabel: touchSummary.latestCommentLabel,
+    lastEdited: touchSummary.lastEdited,
     notes: noteRows.map((note) => ({
       id: note.id,
       text: note.body,

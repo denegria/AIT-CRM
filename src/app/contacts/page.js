@@ -219,7 +219,8 @@ export default function ContactsPage() {
     { key: 'assignedLabel', label: 'Owner', sortable: true },
     { key: 'divisionLabel', label: scopeLabel, sortable: true },
     { key: 'source', label: 'Source', sortable: true },
-    { key: 'lastContact', label: 'Last Contact', sortable: true },
+    { key: 'lastTouch', label: 'Last Touch', sortable: true },
+    { key: 'lastEdited', label: 'Last Edited', sortable: true },
   ];
 
   const filteredContacts = contactsWithWorkflow.filter((contact) => {

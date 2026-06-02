@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { AlertCircle, MoreHorizontal, Calendar, Phone } from 'lucide-react';
+import { AlertCircle, MoreHorizontal, CalendarCheck, MessageSquareText, PencilLine, Phone } from 'lucide-react';
 import s from './KanbanBoard.module.css';
 
 export default function KanbanBoard({ data, columns, onMove, onEdit }) {
@@ -96,9 +96,14 @@ export default function KanbanBoard({ data, columns, onMove, onEdit }) {
                       {item.nextAction && <div className={s.workflowAction}>{item.nextAction}</div>}
                     </div>
                   )}
+                  <div className={s.cardComment}>
+                    <MessageSquareText size={12} />
+                    <span>{item.latestComment || 'No latest comment yet'}</span>
+                  </div>
                   <div className={s.cardMeta}>
                     <div className={s.metaItem}><Phone size={12} /> <span>{item.phone}</span></div>
-                    <div className={s.metaItem}><Calendar size={12} /> <span>{item.lastContact}</span></div>
+                    <div className={s.metaItem}><CalendarCheck size={12} /> <span>Touch {item.lastTouch || item.lastContact || 'None'}</span></div>
+                    <div className={s.metaItem}><PencilLine size={12} /> <span>Edit {item.lastEdited || 'None'}</span></div>
                   </div>
                   <div className={s.cardFooter}>
                     <div className={s.cardUser}>

@@ -53,6 +53,9 @@ export const contacts = [
     primaryBusinessUnitId: 'bu-demo-signs',
     assignedTo: 'emp-1',
     lastContact: d(-1),
+    lastTouch: d(-1),
+    lastEdited: d(-1),
+    latestComment: 'Demo lead awaiting import staging review.',
     notes: [{ text: 'Demo lead awaiting import staging review.', date: d(-1) }],
   },
   {
@@ -66,6 +69,9 @@ export const contacts = [
     primaryBusinessUnitId: 'bu-demo-signs',
     assignedTo: 'emp-2',
     lastContact: d(-3),
+    lastTouch: d(-3),
+    lastEdited: d(-2),
+    latestComment: 'Demo estimate record used only when no database is configured.',
     notes: [{ text: 'Demo estimate record used only when no database is configured.', date: d(-3) }],
   },
   {
@@ -79,6 +85,9 @@ export const contacts = [
     primaryBusinessUnitId: 'bu-demo-signs',
     assignedTo: 'emp-3',
     lastContact: d(-5),
+    lastTouch: d(-5),
+    lastEdited: d(-4),
+    latestComment: 'Demo work order record for local UI fallback.',
     notes: [{ text: 'Demo work order record for local UI fallback.', date: d(-5) }],
   },
 ];

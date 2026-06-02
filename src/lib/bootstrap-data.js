@@ -17,6 +17,7 @@ import {
   importSourceRows as importSourceRowsTable,
   importNormalizedRecords as importNormalizedRecordsTable,
   importReviewItems as importReviewItemsTable,
+  conversationMessages as conversationMessagesTable,
 } from '../db/schema.js';
 import {
   scopedBusinessUnitWhere,
@@ -27,6 +28,7 @@ import { toBusinessUnitPayload } from './crm/payloads.js';
 import { workflowFromLead } from './sales-workflow';
 import { TASK_STATUSES } from './tasks/constants.js';
 import { buildContactTimeline, filterTimelineRowsForBusinessUnit } from './timeline/service.js';
+import { summarizeContactTouch } from './contact-touch.js';
 
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const toBootstrapBusinessUnitPayload = (row) => toBusinessUnitPayload(row, { emptyColor: null });
@@ -84,6 +86,7 @@ function mapContacts(
   const workOrdersByContactId = rowsByContactId(relatedRows.workOrders || []);
   const estimatesByContactId = rowsByContactId(relatedRows.estimates || []);
   const paymentSnapshotsByContactId = rowsByContactId(relatedRows.paymentSnapshots || []);
+  const conversationMessagesByContactId = rowsByContactId(relatedRows.conversationMessages || []);
 
   return contactRows.map((contact, index) => {
     const lead = leadByContactId.get(contact.id);
@@ -96,6 +99,13 @@ function mapContacts(
     });
     const contactNotes = filterTimelineRowsForBusinessUnit(notesByContactId.get(contact.id) || [], businessUnitIds);
     const contactEvents = filterTimelineRowsForBusinessUnit(eventsByContactId.get(contact.id) || [], businessUnitIds);
+    const contactConversationMessages = filterTimelineRowsForBusinessUnit(
+      conversationMessagesByContactId.get(contact.id) || [],
+      businessUnitIds,
+    );
+    const contactWorkOrders = workOrdersByContactId.get(contact.id) || [];
+    const contactEstimates = estimatesByContactId.get(contact.id) || [];
+    const contactPaymentSnapshots = paymentSnapshotsByContactId.get(contact.id) || [];
     const noteItems = contactNotes.map((note) => ({
       id: note.id,
       text: note.body,
@@ -112,9 +122,16 @@ function mapContacts(
       leads: lead ? [lead] : [],
       businessUnits: businessUnitRows,
     });
-    const recentActivity = [...noteItems, ...eventItems]
-      .filter((item) => item.date)
-      .sort((a, b) => b.date.localeCompare(a.date))[0];
+    const touchSummary = summarizeContactTouch({
+      contact,
+      businessUnit,
+      notes: contactNotes,
+      activityEvents: contactEvents,
+      conversationMessages: contactConversationMessages,
+      workOrders: contactWorkOrders,
+      estimates: contactEstimates,
+      paymentSnapshots: contactPaymentSnapshots,
+    });
 
     return {
       id: contact.id,
@@ -137,8 +154,15 @@ function mapContacts(
       needsFirstOutreach: workflow.needsFirstOutreach,
       source: lead?.sourceName || lead?.sourceType || contact.sourceLabel || seedData.SOURCES[index % seedData.SOURCES.length],
       assignedTo: lead?.assignedUserId || '',
-      lastContact: recentActivity?.date || toIsoDate(contact.updatedAt) || toIsoDate(contact.createdAt),
-      notes: noteItems.length ? noteItems : recentActivity ? [recentActivity] : [],
+      lastContact: touchSummary.lastTouch,
+      lastTouch: touchSummary.lastTouch,
+      lastTouchLabel: touchSummary.lastTouchLabel,
+      lastTouchText: touchSummary.lastTouchText,
+      latestComment: touchSummary.latestComment,
+      latestCommentDate: touchSummary.latestCommentDate,
+      latestCommentLabel: touchSummary.latestCommentLabel,
+      lastEdited: touchSummary.lastEdited,
+      notes: noteItems.length ? noteItems : eventItems,
       timeline: timelineItems,
     };
   });
@@ -390,6 +414,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       paymentRows,
       noteRows,
       eventRows,
+      conversationMessageRows,
       taskRows,
       importStaging,
     ] = await Promise.all([
@@ -401,6 +426,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       db.select().from(paymentSnapshotsTable).where(scopedBusinessUnitWhere(paymentSnapshotsTable, session)).orderBy(desc(paymentSnapshotsTable.createdAt)),
       db.select().from(notesTable).where(scopedOrgWhere(notesTable, session)).orderBy(desc(notesTable.createdAt)),
       db.select().from(activityEventsTable).where(scopedOrgWhere(activityEventsTable, session)).orderBy(desc(activityEventsTable.createdAt)),
+      db.select().from(conversationMessagesTable).where(scopedOrgWhere(conversationMessagesTable, session)).orderBy(desc(conversationMessagesTable.occurredAt)),
       db.select().from(tasksTable).where(scopedBusinessUnitWhere(tasksTable, session)).orderBy(asc(tasksTable.dueAt), desc(tasksTable.createdAt)),
       access.canReadImportReview ? getImportStagingSummary(db) : Promise.resolve(null),
     ]);
@@ -424,6 +450,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
         workOrders: workOrderRows,
         estimates: estimateRows,
         paymentSnapshots: paymentRows,
+        conversationMessages: conversationMessageRows,
       },
     );
     const contactLookup = new Map(contacts.map((contact) => [contact.id, contact]));
