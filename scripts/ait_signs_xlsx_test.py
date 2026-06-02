@@ -2,6 +2,8 @@ import unittest
 
 from ait_signs_xlsx import (
     amount_hint_for_structured_row,
+    build_staging_artifact,
+    extract_first_phone,
     status_hint_for_row,
     structured_proposal_hints,
 )
@@ -94,6 +96,70 @@ class AitSignsWorkbookMappingTest(unittest.TestCase):
         self.assertEqual(status_hint_for_row("1. INTERESADOS", no_interest), "not_interested")
         self.assertEqual(status_hint_for_row("1. INTERESADOS", converted), "converted_to_work_order")
         self.assertEqual(status_hint_for_row("1. INTERESADOS", invalid), "invalid_contact")
+
+    def test_decimal_money_values_are_not_phone_numbers(self):
+        values = row_with(
+            {
+                17: "1650.0",
+                18: "109.3125",
+                19: "1650.0",
+            }
+        )
+
+        self.assertIsNone(extract_first_phone(values))
+
+    def test_identityless_rows_do_not_create_normalized_records(self):
+        report = {
+            "sheets": [
+                {
+                    "name": "2. ESTIMADOS",
+                    "rowCount": 1,
+                    "nonEmptyRowCount": 1,
+                    "headerRow": None,
+                    "maxCols": 19,
+                },
+                {
+                    "name": "1. INTERESADOS",
+                    "rowCount": 1,
+                    "nonEmptyRowCount": 1,
+                    "headerRow": None,
+                    "maxCols": 13,
+                },
+            ],
+            "rowInventory": [
+                {
+                    "sheet": "2. ESTIMADOS",
+                    "rowNumber": 145,
+                    "kind": "financial_line",
+                    "confidence": 0.62,
+                    "summary": "1650.0 | 109.3125 | 1650.0",
+                    "values": row_with({17: "1650.0", 18: "109.3125", 19: "1650.0"}),
+                },
+                {
+                    "sheet": "1. INTERESADOS",
+                    "rowNumber": 14,
+                    "kind": "note",
+                    "confidence": 0.66,
+                    "summary": "NO CONTESTO 03/28/24 ANGELINA 4:45 PM",
+                    "values": row_with({13: "NO CONTESTO 03/28/24 ANGELINA 4:45 PM"}),
+                },
+            ],
+        }
+
+        artifact = build_staging_artifact(report, __file__)
+
+        self.assertEqual(artifact["counts"]["normalizedRecords"], 0)
+        self.assertEqual(artifact["counts"]["reviewItems"], 2)
+        self.assertEqual(
+            [row["parseStatus"] for row in artifact["sourceRows"]],
+            ["needs_review", "needs_review"],
+        )
+        self.assertTrue(
+            all(
+                item["reason"].startswith("Missing customer/contact/phone identity:")
+                for item in artifact["reviewItems"]
+            )
+        )
 
 
 if __name__ == "__main__":
