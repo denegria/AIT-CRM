@@ -194,6 +194,11 @@ def extract_first_phone(values: list[str]) -> str | None:
         text = normalize_text(value)
         if not text:
             continue
+        compact = text.replace(",", "")
+        if "." in compact and compact.replace(".", "", 1).isdigit():
+            continue
+        if EXCEL_SERIAL_RE.match(compact):
+            continue
         for match in PHONE_RE.finditer(text):
             phone = normalize_text(match.group(0))
             digits = re.sub(r"\D", "", phone)
@@ -403,6 +408,14 @@ def structured_proposal_hints(values: list[str], family: str) -> dict:
     }
 
 
+def has_contact_identity(proposal: dict) -> bool:
+    for key in ("customerName", "contactName", "contactHint", "phoneHint"):
+        value = proposal.get(key)
+        if value is not None and normalize_text(value):
+            return True
+    return False
+
+
 def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
     workbook_file = Path(workbook_path)
     source_name = workbook_file.stem
@@ -501,6 +514,25 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
                 for key, value in structured_hints.items()
                 if value is not None and key not in {"contactHint", "phoneHint", "moneyHint"}
             }
+            if not has_contact_identity(proposed_base):
+                source_row["parseStatus"] = "needs_review"
+                review_items.append(
+                    {
+                        "sourceSheet": row["sheet"],
+                        "sourceRowNumber": row["rowNumber"],
+                        "reviewType": row["kind"],
+                        "reason": f"Missing customer/contact/phone identity: {row['summary']}",
+                        "reviewStatus": "pending",
+                        "proposedResolutionJson": {
+                            "workbookPath": str(workbook_file),
+                            "businessUnit": "AIT Signs",
+                            "sourceType": source_type_for_sheet(row["sheet"]),
+                            "rowKind": row["kind"],
+                            "confidence": row["confidence"],
+                        },
+                    }
+                )
+                continue
             record_type = "note"
             proposed_field = "proposedNoteJson"
             if row["kind"] == "note":
