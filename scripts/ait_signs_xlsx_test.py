@@ -3,6 +3,7 @@ import unittest
 from ait_signs_xlsx import (
     amount_hint_for_structured_row,
     build_staging_artifact,
+    contact_identity_fields,
     extract_first_phone,
     status_hint_for_row,
     structured_proposal_hints,
@@ -59,6 +60,7 @@ class AitSignsWorkbookMappingTest(unittest.TestCase):
         values = row_with(
             {
                 7: "609 802 4421",
+                9: "service@example.com",
                 10: "HACEN BANDERAS",
                 13: "LLAMAR DE NUEVO EN LA TARDE",
             }
@@ -67,6 +69,31 @@ class AitSignsWorkbookMappingTest(unittest.TestCase):
         hints = structured_proposal_hints(values, "lead_intake")
         self.assertIsNone(hints["contactHint"])
         self.assertEqual(hints["workDescription"], "HACEN BANDERAS")
+        self.assertEqual(hints["emailHint"], "service@example.com")
+
+    def test_identity_fields_exclude_row_narrative_and_financial_artifacts(self):
+        fields = contact_identity_fields(
+            {
+                "customerName": "PINEBERRY",
+                "contactName": "Alex",
+                "phoneHint": "8563089146",
+                "emailHint": "alex@example.com",
+                "workDescription": "channel letters",
+                "originalText": "PINEBERRY | channel letters | 623.75",
+                "moneyHint": "623.75",
+                "rawValuesJson": ["PINEBERRY", "channel letters", "623.75"],
+            }
+        )
+
+        self.assertEqual(
+            fields,
+            {
+                "customerName": "PINEBERRY",
+                "contactName": "Alex",
+                "phoneHint": "8563089146",
+                "emailHint": "alex@example.com",
+            },
+        )
 
     def test_obvious_lead_statuses_are_classified(self):
         no_interest = row_with(
@@ -160,6 +187,50 @@ class AitSignsWorkbookMappingTest(unittest.TestCase):
                 for item in artifact["reviewItems"]
             )
         )
+
+    def test_normalized_records_carry_identity_only_field_list(self):
+        report = {
+            "sheets": [
+                {
+                    "name": "2. ESTIMADOS",
+                    "rowCount": 1,
+                    "nonEmptyRowCount": 1,
+                    "headerRow": None,
+                    "maxCols": 19,
+                },
+            ],
+            "rowInventory": [
+                {
+                    "sheet": "2. ESTIMADOS",
+                    "rowNumber": 22,
+                    "kind": "record_candidate",
+                    "confidence": 0.82,
+                    "summary": "PINEBERRY | channel letters | 856 308 9146 | 623.75",
+                    "values": row_with(
+                        {
+                            5: "PINEBERRY",
+                            7: "856 308 9146",
+                            10: "channel letters",
+                            19: "623.75",
+                        }
+                    ),
+                },
+            ],
+        }
+
+        artifact = build_staging_artifact(report, __file__)
+        proposal = artifact["normalizedRecords"][0]["proposedEstimateJson"]
+
+        self.assertEqual(
+            proposal["contactIdentityFields"],
+            {
+                "customerName": "PINEBERRY",
+                "contactHint": "PINEBERRY",
+                "phoneHint": "8563089146",
+            },
+        )
+        self.assertEqual(proposal["workDescription"], "channel letters")
+        self.assertEqual(proposal["moneyHint"], "623.75")
 
 
 if __name__ == "__main__":

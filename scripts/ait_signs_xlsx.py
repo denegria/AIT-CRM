@@ -17,6 +17,7 @@ NS = {
 }
 
 PHONE_RE = re.compile(r"(?<!\d)(?:\+?\d[\d\s().-]{5,}\d)(?!\d)")
+EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 MONEY_RE = re.compile(r"(?<!\w)\$?\s*\d[\d,]*(?:\.\d+)?(?!\w)")
 EXCEL_SERIAL_RE = re.compile(r"^4[0-9]{4}(?:\.0)?$")
 
@@ -209,6 +210,17 @@ def extract_first_phone(values: list[str]) -> str | None:
     return max(candidates, key=lambda item: item[0])[1]
 
 
+def extract_first_email(values: list[str]) -> str | None:
+    for value in values:
+        text = normalize_text(value)
+        if not text:
+            continue
+        match = EMAIL_RE.search(text)
+        if match:
+            return match.group(0).lower()
+    return None
+
+
 def money_value(value: object) -> str | None:
     text = normalize_text(value)
     if not text:
@@ -394,6 +406,7 @@ def structured_proposal_hints(values: list[str], family: str) -> dict:
         "contactName": contact,
         "contactHint": customer or contact or None,
         "phoneHint": normalize_text(re.sub(r"\D", "", phone)) if phone else None,
+        "emailHint": extract_first_email(values),
         "workDescription": structured_cell(values, COL_WORK_DESCRIPTION),
         "statusText": structured_cell(values, COL_STATUS),
         "observationText": structured_cell(values, COL_OBSERVATION),
@@ -409,11 +422,35 @@ def structured_proposal_hints(values: list[str], family: str) -> dict:
 
 
 def has_contact_identity(proposal: dict) -> bool:
-    for key in ("customerName", "contactName", "contactHint", "phoneHint"):
+    for key in ("customerName", "contactName", "contactHint", "phoneHint", "emailHint", "addressHint"):
         value = proposal.get(key)
         if value is not None and normalize_text(value):
             return True
     return False
+
+
+def contact_identity_fields(proposal: dict) -> dict:
+    fields: dict[str, str] = {}
+    for key in (
+        "customerName",
+        "companyName",
+        "contactName",
+        "contactHint",
+        "phoneHint",
+        "emailHint",
+        "addressHint",
+    ):
+        value = proposal.get(key)
+        if value is not None and normalize_text(value):
+            fields[key] = normalize_text(value)
+    aliases = [
+        normalize_text(value)
+        for value in proposal.get("nameAliases", [])
+        if normalize_text(value)
+    ]
+    if aliases:
+        fields["nameAliases"] = aliases
+    return fields
 
 
 def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
@@ -533,6 +570,7 @@ def build_staging_artifact(report: dict, workbook_path: str | Path) -> dict:
                     }
                 )
                 continue
+            proposed_base["contactIdentityFields"] = contact_identity_fields(proposed_base)
             record_type = "note"
             proposed_field = "proposedNoteJson"
             if row["kind"] == "note":

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import process from 'node:process';
+import { pathToFileURL } from 'node:url';
 import { Client } from 'pg';
 
 const BUSINESS_UNIT_NAME = 'AIT Signs';
@@ -61,16 +62,16 @@ function proposalFor(record) {
   );
 }
 
-function cleanText(value) {
+export function cleanText(value) {
   return String(value || '').trim().replace(/\s+/g, ' ');
 }
 
-function normalizePhone(value) {
+export function normalizePhone(value) {
   const digits = String(value || '').replace(/\D/g, '');
   return digits.length >= 7 ? digits : null;
 }
 
-function normalizeIdentityKey(value) {
+export function normalizeIdentityKey(value) {
   return String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
@@ -79,22 +80,37 @@ const COMPANY_ALIASES = new Map([
   ['salsdeli', "SAL'S DELI"],
 ]);
 
-function canonicalCompanyName(value) {
+export function canonicalCompanyName(value) {
   const label = cleanText(value);
   return COMPANY_ALIASES.get(normalizeIdentityKey(label)) || label;
 }
 
-function contactNameFromProposal(proposal) {
-  const contactHint = cleanText(proposal.contactHint);
-  if (contactHint) return contactHint.slice(0, 160);
-  const rawValues = Array.isArray(proposal.rawValuesJson) ? proposal.rawValuesJson : [];
-  for (const value of rawValues) {
-    const text = cleanText(value);
-    if (!text || /\d/.test(text) || text.length < 3) continue;
-    if (/^(FB|SI|NO|AIT|ACTIVO)$/i.test(text)) continue;
-    return text.slice(0, 160);
-  }
-  return 'Unknown AIT Signs Contact';
+function identityValue(proposal, key) {
+  const fields = proposal && typeof proposal.contactIdentityFields === 'object' && !Array.isArray(proposal.contactIdentityFields)
+    ? proposal.contactIdentityFields
+    : {};
+  return cleanText(fields[key] || proposal?.[key]);
+}
+
+export function contactIdentityFromProposal(proposal) {
+  const companyName = canonicalCompanyName(
+    identityValue(proposal, 'companyName')
+    || identityValue(proposal, 'customerName'),
+  );
+  const personName = (
+    identityValue(proposal, 'contactName')
+    || (!companyName ? identityValue(proposal, 'contactHint') : '')
+  );
+  const contactHint = identityValue(proposal, 'contactHint');
+  const name = cleanText(companyName || personName || contactHint || 'Unknown AIT Signs Contact').slice(0, 160);
+  return {
+    name,
+    companyName: companyName || null,
+    personName: personName || null,
+    phone: normalizePhone(identityValue(proposal, 'phoneHint')),
+    email: identityValue(proposal, 'emailHint') || null,
+    address: identityValue(proposal, 'addressHint') || null,
+  };
 }
 
 function amountFromProposal(proposal) {
@@ -255,10 +271,8 @@ async function getRecordsForPromotion(client, batchId, options) {
 }
 
 async function findOrCreateContact(client, context, proposal, sourceLabel, dryRun) {
-  const phone = normalizePhone(proposal.phoneHint);
-  const companyName = canonicalCompanyName(proposal.customerName || proposal.contactHint);
-  const personName = cleanText(proposal.contactName);
-  const name = (companyName || personName || contactNameFromProposal(proposal)).slice(0, 160);
+  const identity = contactIdentityFromProposal(proposal);
+  const { name, companyName, phone, email, address } = identity;
   const companyKey = normalizeIdentityKey(companyName);
 
   if (phone) {
@@ -273,6 +287,22 @@ async function findOrCreateContact(client, context, proposal, sourceLabel, dryRu
         limit 1
       `,
       [context.organizationId, phone, context.businessUnitId],
+    );
+    if (existing.rowCount) return existing.rows[0].id;
+  }
+
+  if (email) {
+    const existing = await client.query(
+      `
+        select id
+        from contacts
+        where organization_id = $1
+          and lower(email) = lower($2)
+          and primary_business_unit_id = $3
+        order by created_at asc
+        limit 1
+      `,
+      [context.organizationId, email, context.businessUnitId],
     );
     if (existing.rowCount) return existing.rows[0].id;
   }
@@ -308,12 +338,14 @@ async function findOrCreateContact(client, context, proposal, sourceLabel, dryRu
         name,
         company_name,
         phone,
+        email,
+        address,
         source_label
       )
-      values ($1, $2, $3, $4, $5, $6)
+      values ($1, $2, $3, $4, $5, $6, $7, $8)
       returning id
     `,
-    [context.organizationId, context.businessUnitId, name, companyName || null, phone, sourceLabel],
+    [context.organizationId, context.businessUnitId, name, companyName || null, phone, email, address, sourceLabel],
   );
   return result.rows[0].id;
 }
@@ -626,7 +658,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exitCode = 1;
-});
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}
