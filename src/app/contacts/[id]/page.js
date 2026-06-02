@@ -12,7 +12,7 @@ import {
   MessageSquare, Edit3, Tag, Activity, CheckSquare, MessageCircle,
   Inbox, Send, DollarSign, Archive, BriefcaseBusiness, CheckCircle2
 } from 'lucide-react';
-import { PIPELINE_STATUSES } from '@/lib/sales-workflow';
+import { PIPELINE_STATUSES, workflowForBusinessUnit } from '@/lib/sales-workflow';
 
 const TIMELINE_FILTERS = [
   { value: 'all', label: 'All history', empty: 'No activity recorded yet.' },
@@ -220,6 +220,7 @@ export default function ContactDetailPage() {
   const contactWorkOrders = useMemo(() => workOrders.filter(wo => wo.contactId === params.id), [workOrders, params.id]);
   const contactFinancials = useMemo(() => financials.filter(f => f.contactId === params.id), [financials, params.id]);
   const contactBusinessUnit = businessUnits.find((unit) => unit.id === contact?.businessUnitId || unit.id === contact?.primaryBusinessUnitId);
+  const contactStatusOptions = workflowForBusinessUnit(contactBusinessUnit).statuses;
   const unitLabel = normalizedBusinessLabel(contactBusinessUnit?.name || contactBusinessUnit?.label);
   const sourceLabel = normalizedBusinessLabel(contact?.source);
   const isAitUsaContact = unitLabel.includes('ait usa') || sourceLabel.includes('ait usa');
@@ -896,7 +897,7 @@ export default function ContactDetailPage() {
           <div className="form-group">
             <label className="form-label">Status</label>
             <select className="input select" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}>
-              {PIPELINE_STATUSES.map(st => <option key={st} value={st}>{st}</option>)}
+              {[...new Set([...(contactStatusOptions || PIPELINE_STATUSES), ...(editForm.status ? [editForm.status] : [])])].map(st => <option key={st} value={st}>{st}</option>)}
             </select>
           </div>
           <div className="form-group">

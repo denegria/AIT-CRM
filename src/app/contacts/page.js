@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
@@ -7,7 +7,13 @@ import DataTable from '@/components/DataTable';
 import KanbanBoard from '@/components/KanbanBoard';
 import Modal from '@/components/Modal';
 import { AlertCircle, Clock3, LayoutDashboard as KanbanIcon, List, UserPlus, UserRoundCheck } from 'lucide-react';
-import { PIPELINE_STATUSES } from '@/lib/sales-workflow';
+import {
+  PIPELINE_STATUSES,
+  isWorkflowStatusClosed,
+  workflowColumnsForBusinessUnit,
+  workflowForBusinessUnit,
+  workflowFromContact,
+} from '@/lib/sales-workflow';
 
 const empty = {
   name: '',
@@ -49,6 +55,8 @@ function WorkflowCell({ row }) {
 export default function ContactsPage() {
   const {
     contacts,
+    workOrders,
+    financials,
     addContact,
     updateContact,
     deleteContact,
@@ -70,12 +78,35 @@ export default function ContactsPage() {
   const [statusFilter, setStatusFilter] = useState('All');
   const [workflowFilter, setWorkflowFilter] = useState('all');
   const [ownerFilter, setOwnerFilter] = useState('all');
+  const [kanbanBusinessUnitId, setKanbanBusinessUnitId] = useState('');
 
   const canWrite = access.canWriteCrm;
+  const businessUnitById = useMemo(
+    () => new Map((accessibleBusinessUnits || []).map((unit) => [unit.id, unit])),
+    [accessibleBusinessUnits],
+  );
+  const currentScopedBusinessUnitId =
+    currentBusinessUnitId !== 'all' && currentBusinessUnitId !== 'unassigned' ? currentBusinessUnitId : '';
+  const resolvedKanbanBusinessUnitId = currentScopedBusinessUnitId ||
+    (businessUnitById.has(kanbanBusinessUnitId) ? kanbanBusinessUnitId : accessibleBusinessUnits[0]?.id || '');
+  const kanbanBusinessUnit = businessUnitById.get(resolvedKanbanBusinessUnitId) || currentBusinessUnit || null;
+  const activeWorkflow = workflowForBusinessUnit(kanbanBusinessUnit);
+  const kanbanColumns = workflowColumnsForBusinessUnit(kanbanBusinessUnit);
   const defaultBusinessUnitId = currentBusinessUnitId !== 'all' && currentBusinessUnitId !== 'unassigned' ? currentBusinessUnitId : accessibleBusinessUnits[0]?.id || '';
+  const statusOptionsForBusinessUnitId = (businessUnitId) => {
+    const workflow = workflowForBusinessUnit(businessUnitById.get(businessUnitId) || null);
+    return workflow.statuses;
+  };
   const openNew = () => {
     if (!canWrite) return;
-    setForm({ ...empty, businessUnitId: defaultBusinessUnitId, primaryBusinessUnitId: defaultBusinessUnitId });
+    const defaultStatuses = statusOptionsForBusinessUnitId(defaultBusinessUnitId);
+    setForm({
+      ...empty,
+      status: defaultStatuses[0] || empty.status,
+      currentStage: defaultStatuses[0] || empty.status,
+      businessUnitId: defaultBusinessUnitId,
+      primaryBusinessUnitId: defaultBusinessUnitId,
+    });
     setDrawer('new');
   };
   const openEdit = (row) => { if (!canWrite) return; setForm({ ...row }); setDrawer(row); };
@@ -102,11 +133,61 @@ export default function ContactsPage() {
 
   const empName = (id) => employees.find(e => e.id === id)?.name || (id ? id : 'Unassigned');
   const unitName = (id) => accessibleBusinessUnits.find((unit) => unit.id === id)?.name || 'Unassigned';
+  const workOrdersByContactId = useMemo(() => {
+    const lookup = new Map();
+    for (const order of workOrders || []) {
+      if (!order.contactId) continue;
+      const rows = lookup.get(order.contactId) || [];
+      rows.push(order);
+      lookup.set(order.contactId, rows);
+    }
+    return lookup;
+  }, [workOrders]);
+  const financialsByContactId = useMemo(() => {
+    const lookup = new Map();
+    for (const record of financials || []) {
+      if (!record.contactId) continue;
+      const rows = lookup.get(record.contactId) || [];
+      rows.push(record);
+      lookup.set(record.contactId, rows);
+    }
+    return lookup;
+  }, [financials]);
+  const contactsWithWorkflow = useMemo(() => contacts.map((contact) => {
+    const businessUnit = businessUnitById.get(contact.businessUnitId || contact.primaryBusinessUnitId) || null;
+    const relatedFinancials = financialsByContactId.get(contact.id) || [];
+    const workflow = workflowFromContact(contact, {
+      businessUnit,
+      workOrders: workOrdersByContactId.get(contact.id) || [],
+      financials: relatedFinancials,
+      paymentSnapshots: relatedFinancials.filter((record) => ['Receipt', 'Invoice'].includes(record.type)),
+    });
+    return {
+      ...contact,
+      workflowKey: workflow.workflowKey,
+      workflowLabel: workflow.workflowLabel,
+      status: workflow.status,
+      currentStage: workflow.currentStage,
+      tags: workflow.tags?.length ? workflow.tags : contact.tags,
+      nextAction: workflow.nextAction || contact.nextAction,
+      priority: workflow.priority || contact.priority,
+      outreachState: workflow.outreachState || contact.outreachState,
+      needsFirstOutreach: workflow.needsFirstOutreach || contact.needsFirstOutreach,
+    };
+  }), [businessUnitById, contacts, financialsByContactId, workOrdersByContactId]);
   const workflowStats = {
-    needsFirstOutreach: contacts.filter((contact) => contact.needsFirstOutreach).length,
-    unassigned: contacts.filter((contact) => !contact.assignedTo).length,
-    active: contacts.filter((contact) => !['Won', 'Lost'].includes(contact.status)).length,
+    needsFirstOutreach: contactsWithWorkflow.filter((contact) => contact.needsFirstOutreach).length,
+    unassigned: contactsWithWorkflow.filter((contact) => !contact.assignedTo).length,
+    active: contactsWithWorkflow.filter((contact) => {
+      const businessUnit = businessUnitById.get(contact.businessUnitId || contact.primaryBusinessUnitId) || null;
+      return !isWorkflowStatusClosed(contact.status, businessUnit);
+    }).length,
   };
+  const statusOptions = useMemo(() => {
+    if (currentScopedBusinessUnitId) return activeWorkflow.statuses;
+    const statuses = [...new Set(contactsWithWorkflow.map((contact) => contact.status).filter(Boolean))];
+    return statuses.length ? statuses : PIPELINE_STATUSES;
+  }, [activeWorkflow.statuses, contactsWithWorkflow, currentScopedBusinessUnitId]);
 
   const columns = [
     { key: 'name', label: 'Name', sortable: true, editable: true },
@@ -120,13 +201,14 @@ export default function ContactsPage() {
     { key: 'lastContact', label: 'Last Contact', sortable: true },
   ];
 
-  const filteredContacts = contacts.filter((contact) => {
+  const filteredContacts = contactsWithWorkflow.filter((contact) => {
     const statusMatch = statusFilter === 'All' || contact.status === statusFilter;
+    const businessUnit = businessUnitById.get(contact.businessUnitId || contact.primaryBusinessUnitId) || null;
     const workflowMatch =
       workflowFilter === 'all' ||
       (workflowFilter === 'needs_first_outreach' && contact.needsFirstOutreach) ||
       (workflowFilter === 'unassigned' && !contact.assignedTo) ||
-      (workflowFilter === 'active' && !['Won', 'Lost'].includes(contact.status));
+      (workflowFilter === 'active' && !isWorkflowStatusClosed(contact.status, businessUnit));
     const ownerMatch =
       ownerFilter === 'all' ||
       (ownerFilter === 'unassigned' && !contact.assignedTo) ||
@@ -134,6 +216,10 @@ export default function ContactsPage() {
     return statusMatch && workflowMatch && ownerMatch;
   });
   const dataWithEmp = filteredContacts.map(c => ({ ...c, assignedLabel: empName(c.assignedTo), divisionLabel: unitName(c.businessUnitId || c.primaryBusinessUnitId) }));
+  const kanbanData = dataWithEmp.filter((contact) => {
+    if (!resolvedKanbanBusinessUnitId || currentScopedBusinessUnitId) return true;
+    return (contact.businessUnitId || contact.primaryBusinessUnitId) === resolvedKanbanBusinessUnitId;
+  });
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
@@ -155,7 +241,7 @@ export default function ContactsPage() {
           </div>
           <select className="input select contacts-filter" style={{width:130, padding:'4px 8px'}} value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
             <option value="All">All Statuses</option>
-            {PIPELINE_STATUSES.map(s=><option key={s} value={s}>{s}</option>)}
+            {statusOptions.map(s=><option key={s} value={s}>{s}</option>)}
           </select>
           <select className="input select contacts-filter contacts-workflow-filter" style={{width:180, padding:'4px 8px'}} value={workflowFilter} onChange={e=>setWorkflowFilter(e.target.value)}>
             <option value="all">All Workflows</option>
@@ -217,7 +303,35 @@ export default function ContactsPage() {
           color: var(--text-secondary);
           font-size: var(--text-xs);
         }
-        .workflow-stat svg { color: var(--accent); }
+          .workflow-stat svg { color: var(--accent); }
+        .kanban-scope-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          margin-bottom: 12px;
+          padding: 10px 12px;
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-md);
+        }
+        .kanban-scope-title {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          min-width: 0;
+        }
+        .kanban-scope-title strong {
+          font-size: var(--text-sm);
+          line-height: 1.2;
+        }
+        .kanban-scope-title span {
+          color: var(--text-secondary);
+          font-size: var(--text-xs);
+        }
+        .kanban-scope-select {
+          width: min(240px, 100%);
+        }
         .workflow-cell { min-width: 190px; max-width: 260px; }
         .workflow-line {
           display: flex;
@@ -301,6 +415,13 @@ export default function ContactsPage() {
             flex: 1;
             justify-content: center;
           }
+          .kanban-scope-bar {
+            align-items: stretch;
+            flex-direction: column;
+          }
+          .kanban-scope-select {
+            width: 100%;
+          }
         }
       `}</style>
 
@@ -349,16 +470,41 @@ export default function ContactsPage() {
           />
         </div>
       ) : (
-        <KanbanBoard 
-          data={dataWithEmp}
-          columns={PIPELINE_STATUSES}
-          onMove={canWrite ? (id, status) => {
-            updateContact(id, { status })
+        <>
+          <div className="kanban-scope-bar">
+            <div className="kanban-scope-title">
+              <strong>{activeWorkflow.label}</strong>
+              <span>{kanbanBusinessUnit?.name || currentBusinessUnit?.name || 'Selected division'} · {kanbanData.length} contacts</span>
+            </div>
+            {!currentScopedBusinessUnitId && accessibleBusinessUnits.length > 1 && (
+              <select
+                className="input select kanban-scope-select"
+                value={resolvedKanbanBusinessUnitId}
+                onChange={(event) => setKanbanBusinessUnitId(event.target.value)}
+                aria-label="Kanban division"
+              >
+                {accessibleBusinessUnits.map((unit) => (
+                  <option key={unit.id} value={unit.id}>{unit.name}</option>
+                ))}
+              </select>
+            )}
+          </div>
+          <KanbanBoard
+            data={kanbanData}
+            columns={kanbanColumns}
+            onMove={canWrite ? (id, status, column) => {
+              const item = kanbanData.find((contact) => contact.id === id);
+              if (column?.isOperational) {
+                toast('Open the contact to update linked estimate, work order, fulfillment, or payment records.', 'error');
+                return;
+              }
+              updateContact(id, { status })
               .then(() => toast('Stage updated'))
               .catch((error) => toast(error?.message || 'Stage update failed.', 'error'));
-          } : undefined}
-          onEdit={(item) => router.push(`/contacts/${item.id}`)}
-        />
+            } : undefined}
+            onEdit={(item) => router.push(`/contacts/${item.id}`)}
+          />
+        </>
       )}
 
       <Modal open={!!drawer} onClose={close} title={drawer === 'new' ? 'New Contact' : 'Edit Contact'}
@@ -381,7 +527,12 @@ export default function ContactsPage() {
           <div className="form-group">
             <label className="form-label">Status</label>
             <select className="input select" value={form.status} onChange={e => setForm(f => ({...f, status: e.target.value}))}>
-              {PIPELINE_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
+              {[
+                ...new Set([
+                  ...(statusOptionsForBusinessUnitId(form.businessUnitId || form.primaryBusinessUnitId) || []),
+                  ...(form.status ? [form.status] : []),
+                ]),
+              ].map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
           <div className="form-group">
@@ -403,7 +554,16 @@ export default function ContactsPage() {
           <select
             className="input select"
             value={form.businessUnitId || form.primaryBusinessUnitId || ''}
-            onChange={e => setForm(f => ({...f, businessUnitId: e.target.value, primaryBusinessUnitId: e.target.value}))}
+            onChange={e => {
+              const nextBusinessUnitId = e.target.value;
+              const nextStatuses = statusOptionsForBusinessUnitId(nextBusinessUnitId);
+              setForm(f => ({
+                ...f,
+                businessUnitId: nextBusinessUnitId,
+                primaryBusinessUnitId: nextBusinessUnitId,
+                status: nextStatuses.includes(f.status) ? f.status : nextStatuses[0] || f.status,
+              }));
+            }}
           >
             {canUseConsolidatedScope && <option value="">Unassigned</option>}
             {accessibleBusinessUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}

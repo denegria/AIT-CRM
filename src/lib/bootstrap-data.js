@@ -38,7 +38,26 @@ function toIsoDate(value) {
   return dt.toISOString().slice(0, 10);
 }
 
-function mapContacts(contactRows, leadRows, noteRows, eventRows, businessUnitRows = [], businessUnitIds = null) {
+function rowsByContactId(rows = []) {
+  const lookup = new Map();
+  for (const row of rows) {
+    if (!row.contactId) continue;
+    const list = lookup.get(row.contactId) || [];
+    list.push(row);
+    lookup.set(row.contactId, list);
+  }
+  return lookup;
+}
+
+function mapContacts(
+  contactRows,
+  leadRows,
+  noteRows,
+  eventRows,
+  businessUnitRows = [],
+  businessUnitIds = null,
+  relatedRows = {},
+) {
   const leadByContactId = new Map();
   for (const lead of leadRows) {
     if (!lead.contactId || leadByContactId.has(lead.contactId)) continue;
@@ -61,9 +80,20 @@ function mapContacts(contactRows, leadRows, noteRows, eventRows, businessUnitRow
     eventsByContactId.set(event.contactId, list);
   }
 
+  const businessUnitById = new Map(businessUnitRows.map((unit) => [unit.id, unit]));
+  const workOrdersByContactId = rowsByContactId(relatedRows.workOrders || []);
+  const estimatesByContactId = rowsByContactId(relatedRows.estimates || []);
+  const paymentSnapshotsByContactId = rowsByContactId(relatedRows.paymentSnapshots || []);
+
   return contactRows.map((contact, index) => {
     const lead = leadByContactId.get(contact.id);
-    const workflow = workflowFromLead(lead);
+    const businessUnit = businessUnitById.get(contact.primaryBusinessUnitId) || null;
+    const workflow = workflowFromLead(lead, {
+      businessUnit,
+      workOrders: workOrdersByContactId.get(contact.id) || [],
+      estimates: estimatesByContactId.get(contact.id) || [],
+      paymentSnapshots: paymentSnapshotsByContactId.get(contact.id) || [],
+    });
     const contactNotes = filterTimelineRowsForBusinessUnit(notesByContactId.get(contact.id) || [], businessUnitIds);
     const contactEvents = filterTimelineRowsForBusinessUnit(eventsByContactId.get(contact.id) || [], businessUnitIds);
     const noteItems = contactNotes.map((note) => ({
@@ -94,6 +124,10 @@ function mapContacts(contactRows, leadRows, noteRows, eventRows, businessUnitRow
       address: contact.address || '',
       businessUnitId: contact.primaryBusinessUnitId || '',
       primaryBusinessUnitId: contact.primaryBusinessUnitId || '',
+      businessUnitName: businessUnit?.name || '',
+      hasLeadStatus: Boolean(lead),
+      workflowKey: workflow.workflowKey,
+      workflowLabel: workflow.workflowLabel,
       status: workflow.status,
       currentStage: workflow.currentStage,
       tags: workflow.tags,
@@ -386,6 +420,11 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       eventRows,
       businessUnitRows,
       session.user.canAccessAllBusinessUnits ? null : session.user.businessUnitIds,
+      {
+        workOrders: workOrderRows,
+        estimates: estimateRows,
+        paymentSnapshots: paymentRows,
+      },
     );
     const contactLookup = new Map(contacts.map((contact) => [contact.id, contact]));
     const workOrders = mapWorkOrders(workOrderRows, contactLookup);

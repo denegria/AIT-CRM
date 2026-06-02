@@ -1,4 +1,12 @@
-import { LIFECYCLE_STATUSES, normalizeLifecycleStatus } from './crm/lifecycle.js';
+import {
+  LIFECYCLE_STATUSES,
+  WORKFLOW_DEFINITIONS,
+  WORKFLOW_KEYS,
+  lifecycleWorkflowForBusinessUnit,
+  lifecycleWorkflowForKey,
+  normalizeLifecycleStatus,
+  workflowKeyForBusinessUnit,
+} from './crm/lifecycle.js';
 
 export const PIPELINE_STATUSES = LIFECYCLE_STATUSES;
 
@@ -9,6 +17,10 @@ export const FIRST_OUTREACH_ACTION =
 
 function clean(value) {
   return String(value || '').trim();
+}
+
+function normalized(value) {
+  return clean(value).toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
 }
 
 function textAfter(label, text) {
@@ -30,34 +42,126 @@ export function tagsFromLeadNotes(notes) {
   return normalizeWorkflowTags(raw);
 }
 
-export function pipelineStatusFromLead(lead) {
+function newestDateValue(records = [], dateFields = ['updatedAt', 'createdAt']) {
+  return records.reduce((latest, record) => {
+    for (const field of dateFields) {
+      const raw = record?.[field];
+      if (!raw) continue;
+      const time = raw instanceof Date ? raw.getTime() : new Date(raw).getTime();
+      if (!Number.isNaN(time) && time > latest) return time;
+    }
+    return latest;
+  }, 0);
+}
+
+function hasRows(rows) {
+  return Array.isArray(rows) && rows.length > 0;
+}
+
+function aitSignsStatusFromRelated({ workOrders = [], estimates = [], paymentSnapshots = [], financials = [] } = {}) {
+  const paymentLikeFinancials = financials.filter((item) => {
+    const type = normalized(item.type);
+    const status = normalized(item.status);
+    return type.includes('invoice') || type.includes('receipt') || status === 'paid';
+  });
+  if (hasRows(paymentSnapshots) || hasRows(paymentLikeFinancials)) return 'Invoice / Payment';
+
+  if (hasRows(workOrders)) {
+    const statuses = workOrders.map((order) => normalized(order.status));
+    if (statuses.some((status) => ['completed', 'paid', 'delivered paid', 'pending collection'].includes(status))) {
+      return 'Invoice / Payment';
+    }
+    if (statuses.some((status) => ['in progress', 'in production', 'ready to deliver', 'ready for delivery', 'fulfillment'].includes(status))) {
+      return 'Fulfillment';
+    }
+    return 'Work Order';
+  }
+
+  const estimateLikeFinancials = financials.filter((item) => normalized(item.type).includes('estimate'));
+  if (hasRows(estimates) || hasRows(estimateLikeFinancials)) return 'Estimate';
+  return null;
+}
+
+function businessUnitById(businessUnits = [], id = '') {
+  return (businessUnits || []).find((unit) => unit.id === id) || null;
+}
+
+export function workflowForBusinessUnit(businessUnit = null) {
+  return lifecycleWorkflowForBusinessUnit(businessUnit);
+}
+
+export function workflowForContact(contact = {}, businessUnits = []) {
+  const businessUnit = contact.businessUnit || businessUnitById(
+    businessUnits,
+    contact.businessUnitId || contact.primaryBusinessUnitId,
+  );
+  return workflowForBusinessUnit(businessUnit || contact.businessUnitName || contact.divisionLabel || '');
+}
+
+export function workflowColumnsForBusinessUnit(businessUnit = null) {
+  const workflow = workflowForBusinessUnit(businessUnit);
+  return workflow.statuses.map((status) => ({
+    id: status,
+    label: status,
+    isTerminal: workflow.terminalStatuses.includes(status),
+    isOperational: Boolean(workflow.operationalStatuses?.includes(status)),
+  }));
+}
+
+export function pipelineStatusFromLead(lead, options = {}) {
+  const workflow = options.workflowKey
+    ? lifecycleWorkflowForKey(options.workflowKey)
+    : workflowForBusinessUnit(options.businessUnit || options.businessUnitName || '');
+  if (workflow.key === WORKFLOW_KEYS.AIT_SIGNS) {
+    const relatedStatus = aitSignsStatusFromRelated(options);
+    if (relatedStatus) return relatedStatus;
+  }
   if (!lead) return 'New Lead';
-  const canonicalStatus = normalizeLifecycleStatus(lead.status);
+  const canonicalStatus = normalizeLifecycleStatus(lead.status, { workflowKey: workflow.key });
   if (canonicalStatus) return canonicalStatus;
   const status = clean(lead.status).toLowerCase();
+  if (workflow.key === WORKFLOW_KEYS.AIT_USA) {
+    if (status.includes('previous') || status.includes('complete') || status.includes('fulfilled')) return 'Completed / Previous Student';
+    if (status.includes('enroll') || status.includes('matric') || status.includes('won')) return 'Enrolled';
+    if (status.includes('follow') || status.includes('contact') || status.includes('qualified')) return 'Follow Up';
+    return 'New Lead';
+  }
+  if (workflow.key === WORKFLOW_KEYS.AIT_SIGNS) {
+    if (status.includes('invoice') || status.includes('payment') || status.includes('paid') || status.includes('complete')) return 'Invoice / Payment';
+    if (status.includes('fulfill') || status.includes('progress') || status.includes('production')) return 'Fulfillment';
+    if (status.includes('work order') || status.includes('won')) return 'Work Order';
+    if (status.includes('proposal') || status.includes('estimate') || status.includes('qualified') || status.includes('contact')) return 'Estimate';
+    return 'New Lead';
+  }
   if (status.includes('lost')) return 'Lost';
   if (status.includes('won')) return 'Won';
   if (status.includes('proposal') || status.includes('estimate')) return 'Proposal Sent';
   if (status.includes('qualified')) return 'Qualified';
   if (status.includes('contact')) return 'Contacted';
-  return 'New Lead';
+  return WORKFLOW_DEFINITIONS[WORKFLOW_KEYS.DEFAULT].statuses[0];
 }
 
-export function workflowFromLead(lead) {
+export function workflowFromLead(lead, options = {}) {
+  const workflow = options.workflowKey
+    ? lifecycleWorkflowForKey(options.workflowKey)
+    : workflowForBusinessUnit(options.businessUnit || options.businessUnitName || '');
   const notes = clean(lead?.originalNotes);
   const tags = tagsFromLeadNotes(notes);
   const outreachState = textAfter('outreach_state', notes);
   const nextAction = textAfter('next_action', notes);
   const priority = textAfter('priority', notes);
-  const currentStage = normalizeLifecycleStatus(lead?.currentStage) || pipelineStatusFromLead(lead);
+  const status = pipelineStatusFromLead(lead, { ...options, workflowKey: workflow.key });
+  const currentStage = normalizeLifecycleStatus(lead?.currentStage, { workflowKey: workflow.key }) || status;
   const sourceName = clean(lead?.sourceName || lead?.sourceType).toLowerCase();
   const needsFirstOutreach =
     tags.includes('needs_first_outreach') ||
     outreachState === 'never_contacted' ||
-    (pipelineStatusFromLead(lead) === 'New Lead' && sourceName.includes('wix historical'));
+    (status === 'New Lead' && sourceName.includes('wix historical'));
 
   return {
-    status: pipelineStatusFromLead(lead),
+    workflowKey: workflow.key,
+    workflowLabel: workflow.label,
+    status,
     currentStage,
     tags,
     outreachState,
@@ -65,4 +169,38 @@ export function workflowFromLead(lead) {
     nextAction: nextAction || (needsFirstOutreach ? FIRST_OUTREACH_ACTION : ''),
     needsFirstOutreach,
   };
+}
+
+export function workflowFromContact(contact = {}, options = {}) {
+  const businessUnit = options.businessUnit || businessUnitById(
+    options.businessUnits,
+    contact.businessUnitId || contact.primaryBusinessUnitId,
+  );
+  const workflowKey = workflowKeyForBusinessUnit(businessUnit || contact.businessUnitName || contact.divisionLabel || '');
+  const leadLike = {
+    status: contact.status,
+    currentStage: contact.currentStage,
+    sourceName: contact.source,
+    sourceType: contact.source,
+    originalNotes: contact.originalNotes || contact.notesText || '',
+  };
+  const workflow = workflowFromLead(leadLike, {
+    ...options,
+    businessUnit,
+    workflowKey,
+  });
+  return {
+    ...workflow,
+    lastActivityAt: Math.max(
+      newestDateValue(options.workOrders || [], ['updatedAt', 'createdAt', 'dueDate', 'deliveryDate']),
+      newestDateValue(options.estimates || [], ['updatedAt', 'createdAt', 'date', 'dueDate']),
+      newestDateValue(options.paymentSnapshots || [], ['paidAt', 'createdAt', 'updatedAt']),
+      newestDateValue(options.financials || [], ['date', 'dueDate', 'createdAt', 'updatedAt']),
+    ),
+  };
+}
+
+export function isWorkflowStatusClosed(status, businessUnit = null) {
+  const workflow = workflowForBusinessUnit(businessUnit);
+  return workflow.closedStatuses.includes(normalizeLifecycleStatus(status, { workflowKey: workflow.key }));
 }

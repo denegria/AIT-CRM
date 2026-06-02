@@ -18,8 +18,21 @@ import {
 } from '@/lib/crm/write-helpers.js';
 import { workflowFromLead } from '@/lib/sales-workflow';
 
-function toContactPayload(row, lead = null, noteRows = []) {
-  const workflow = workflowFromLead(lead);
+async function loadBusinessUnitForWorkflow(db, session, businessUnitId) {
+  if (!businessUnitId) return null;
+  const [businessUnit] = await db
+    .select({ id: businessUnits.id, name: businessUnits.name, label: businessUnits.label })
+    .from(businessUnits)
+    .where(and(
+      eq(businessUnits.id, businessUnitId),
+      eq(businessUnits.organizationId, session.user.organizationId),
+    ))
+    .limit(1);
+  return businessUnit || null;
+}
+
+function toContactPayload(row, lead = null, noteRows = [], businessUnit = null) {
+  const workflow = workflowFromLead(lead, { businessUnit });
   return {
     id: row.id,
     name: row.name,
@@ -28,6 +41,10 @@ function toContactPayload(row, lead = null, noteRows = []) {
     address: row.address || '',
     businessUnitId: row.primaryBusinessUnitId || '',
     primaryBusinessUnitId: row.primaryBusinessUnitId || '',
+    businessUnitName: businessUnit?.name || '',
+    hasLeadStatus: Boolean(lead),
+    workflowKey: workflow.workflowKey,
+    workflowLabel: workflow.workflowLabel,
     status: workflow.status,
     currentStage: workflow.currentStage,
     tags: workflow.tags,
@@ -120,8 +137,9 @@ export async function POST(request) {
     return crmErrorResponse(error);
   }
   let status;
+  const businessUnit = await loadBusinessUnitForWorkflow(db, session, businessUnitId);
   try {
-    status = requireLifecycleStatus(body.status || 'New Lead');
+    status = requireLifecycleStatus(body.status || 'New Lead', { businessUnit });
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
@@ -147,7 +165,7 @@ export async function POST(request) {
     } : null,
   });
 
-  return NextResponse.json({ contact: toContactPayload(contact, lead) }, { status: 201 });
+  return NextResponse.json({ contact: toContactPayload(contact, lead, [], businessUnit) }, { status: 201 });
 }
 
 export async function PATCH(request) {
@@ -198,6 +216,10 @@ export async function PATCH(request) {
   }
 
   let lead = await latestLeadForContact(db, session.user.organizationId, id);
+  const statusBusinessUnitId = hasBusinessUnitPatch && patch.primaryBusinessUnitId
+    ? patch.primaryBusinessUnitId
+    : lead?.businessUnitId || existing.primaryBusinessUnitId;
+  const statusBusinessUnit = await loadBusinessUnitForWorkflow(db, session, statusBusinessUnitId);
   if (hasBusinessUnitPatch && patch.primaryBusinessUnitId === null && lead) {
     return NextResponse.json(
       { error: 'Contacts with leads must stay assigned to a business unit.' },
@@ -222,6 +244,7 @@ export async function PATCH(request) {
         transition = evaluateLifecycleTransition({
           fromStatus: lead.status,
           toStatus: body.status,
+          businessUnit: statusBusinessUnit,
           canReopenClosedStatus: session.user.canAccessAllBusinessUnits,
         });
       } catch (error) {
@@ -266,7 +289,12 @@ export async function PATCH(request) {
     return NextResponse.json({ error: error.message || 'Contact update failed.' }, { status: 500 });
   }
 
-  return NextResponse.json({ contact: toContactPayload(result.contact, result.lead, result.noteRows) });
+  const resultBusinessUnit = await loadBusinessUnitForWorkflow(
+    db,
+    session,
+    result.contact.primaryBusinessUnitId || result.lead?.businessUnitId,
+  );
+  return NextResponse.json({ contact: toContactPayload(result.contact, result.lead, result.noteRows, resultBusinessUnit) });
 }
 
 export async function DELETE(request) {

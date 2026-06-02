@@ -6,7 +6,21 @@ const d = (offset) => {
 };
 
 export const STATUSES = {
-  lead: ['New Lead', 'Contacted', 'Qualified', 'Proposal Sent', 'Won', 'Lost'],
+  lead: [
+    'New Lead',
+    'Follow Up',
+    'Enrolled',
+    'Completed / Previous Student',
+    'Estimate',
+    'Work Order',
+    'Fulfillment',
+    'Invoice / Payment',
+    'Contacted',
+    'Qualified',
+    'Proposal Sent',
+    'Won',
+    'Lost',
+  ],
   workOrder: ['Pending', 'In Progress', 'Completed', 'On Hold'],
   financial: ['Draft', 'Pending', 'Paid', 'Overdue'],
   priority: ['Low', 'Medium', 'High'],

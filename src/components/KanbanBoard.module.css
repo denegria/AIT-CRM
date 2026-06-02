@@ -20,6 +20,9 @@
 .kanbanColumn.terminal:hover {
   opacity: 1;
 }
+.kanbanColumn.operational .kanbanHeader {
+  background: color-mix(in srgb, var(--accent-muted) 34%, var(--bg-secondary));
+}
 .kanbanColumn.dragOver {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 6%, var(--bg-tertiary));
