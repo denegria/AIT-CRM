@@ -10,11 +10,11 @@
 }
 .kanbanColumn {
   flex: 0 0 280px;
-  background: color-mix(in srgb, var(--bg-tertiary) 78%, var(--bg-secondary));
-  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-tertiary) 78%, var(--bg-secondary)), var(--bg-tertiary));
+  border-radius: var(--radius-xl);
   display: flex; flex-direction: column;
-  border: 1px solid var(--border-subtle);
-  box-shadow: var(--shadow-sm);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
+  box-shadow: var(--shadow-soft);
   transition: opacity 0.2s;
 }
 .kanbanColumn.terminal {
@@ -37,7 +37,7 @@
   display: flex; justify-content: space-between; align-items: center;
   border-bottom: 1px solid var(--border-subtle);
   background: color-mix(in srgb, var(--bg-secondary) 54%, transparent);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  border-radius: var(--radius-xl) var(--radius-xl) 0 0;
 }
 .kanbanTitle {
   font-weight: 600; font-size: var(--text-sm);
@@ -45,7 +45,7 @@
 }
 .kanbanCount {
   font-size: var(--text-xs);
-  background: var(--bg-secondary);
+  background: var(--bg-elevated);
   color: var(--text-muted);
   padding: 2px 8px;
   border-radius: 10px;
@@ -58,17 +58,17 @@
 }
 .kanbanCard {
   min-width: 0;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, var(--bg-elevated), var(--bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
+  border-radius: var(--radius-lg);
   padding: 12px;
   cursor: grab;
-  box-shadow: var(--shadow-sm);
+  box-shadow: var(--shadow-soft);
   transition: transform 0.16s, box-shadow 0.16s, border-color 0.16s;
 }
 .kanbanCard:hover {
   box-shadow: var(--shadow-md);
-  border-color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 50%, var(--border-subtle));
   transform: translateY(-1px);
 }
 .kanbanCard.needsFirstOutreach {
@@ -76,10 +76,10 @@
   box-shadow: inset 3px 0 0 var(--warning), var(--shadow-sm);
 }
 .kanbanCard.instituteCard {
-  border-left: 3px solid color-mix(in srgb, #22c55e 74%, var(--accent));
+  border-left: 4px solid color-mix(in srgb, #22c55e 74%, var(--accent));
 }
 .kanbanCard.signsCard {
-  border-left: 3px solid var(--accent);
+  border-left: 4px solid var(--accent);
 }
 .kanbanCard:active { cursor: grabbing; }
 .kanbanCard.dragging { opacity: 0.5; transform: scale(0.95); }
@@ -141,9 +141,9 @@
 .cardWorkflow {
   margin: -4px 0 10px;
   padding: 8px;
-  background: color-mix(in srgb, var(--warning-muted) 42%, var(--bg-tertiary));
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warning-muted) 36%, var(--bg-tertiary));
+  border: 1px solid color-mix(in srgb, var(--warning) 16%, var(--border-subtle));
+  border-radius: var(--radius-md);
 }
 .workflowStage {
   display: flex;
@@ -166,9 +166,9 @@
   min-height: 24px;
   margin: -2px 0 10px;
   padding: 5px 7px;
-  background: color-mix(in srgb, var(--bg-tertiary) 78%, transparent);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-tertiary) 62%, var(--bg-secondary));
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
   font-size: 11px;
   line-height: 1.25;
@@ -215,7 +215,7 @@
   white-space: nowrap;
   padding: 2px 7px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--accent-muted) 54%, var(--bg-tertiary));
+  background: color-mix(in srgb, var(--accent-muted) 48%, var(--bg-secondary));
   color: var(--accent);
   font-size: 10px;
   font-weight: 700;
@@ -231,7 +231,7 @@
   display: flex; align-items: center; justify-content: space-between;
   gap: 8px;
   min-width: 0;
-  padding-top: 8px; border-top: 1px solid var(--border-subtle);
+  padding-top: 8px; border-top: 1px solid color-mix(in srgb, var(--border-subtle) 72%, transparent);
 }
 .cardUser {
   display: flex; align-items: center; gap: 8px;
@@ -247,7 +247,7 @@
 .userAvatar {
   width: 20px; height: 20px;
   background: var(--accent-muted); color: var(--accent);
-  border-radius: 50%;
+  border-radius: 999px;
   display: flex; align-items: center; justify-content: center;
   font-weight: 700; font-size: 10px;
 }
@@ -268,8 +268,8 @@
   width: 100%;
   min-height: 32px;
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
   color: var(--text-primary);
   font: inherit;
   font-size: var(--text-xs);
@@ -278,7 +278,7 @@
 .kanbanEmpty {
   height: 60px;
   border: 1px dashed var(--border-default);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   display: flex; align-items: center; justify-content: center;
   color: var(--text-muted); font-size: var(--text-xs);
   font-style: italic;
