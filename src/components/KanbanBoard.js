@@ -1,7 +1,123 @@
 'use client';
 import { useState } from 'react';
-import { AlertCircle, MoreHorizontal, CalendarCheck, MessageSquareText, PencilLine, Phone } from 'lucide-react';
+import {
+  AlertCircle,
+  BriefcaseBusiness,
+  CalendarCheck,
+  GraduationCap,
+  Mail,
+  MessageSquareText,
+  Phone,
+  UserRound,
+} from 'lucide-react';
 import s from './KanbanBoard.module.css';
+
+function clean(value) {
+  return String(value || '').trim();
+}
+
+function titleLabel(value = '') {
+  return clean(value)
+    .replaceAll('_', ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function firstPresent(values = []) {
+  return values.map(clean).find(Boolean) || '';
+}
+
+function isAitUsa(item) {
+  return item.workflowKey === 'ait_usa';
+}
+
+function isAitSigns(item) {
+  return item.workflowKey === 'ait_signs';
+}
+
+function noisyImportedComment(value = '') {
+  const text = clean(value);
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  if (/(source file|merged row|workflow:|tags?:|source row|wix source|wix contacts export)/i.test(text)) return true;
+  const dotParts = text.split(' · ').filter(Boolean);
+  return dotParts.length >= 4 && (
+    /\b(fb|ok|archive|work order|estimate|source)\b/i.test(text) ||
+    /\d+\.\d+/.test(text)
+  );
+}
+
+function contactabilityLabel(item) {
+  const status = item.enrollmentSignals?.contactability?.status || item.contactabilityStatus || '';
+  if (!status || status === 'reachable') return '';
+  return titleLabel(status);
+}
+
+function sourceLabel(item) {
+  if (isAitUsa(item)) {
+    return firstPresent([
+      item.enrollmentSignals?.source?.channel,
+      item.inquirySource,
+      item.source,
+    ]);
+  }
+  if (isAitSigns(item)) return firstPresent([item.businessUnitName, item.workflowLabel, 'AIT Signs']);
+  return item.source || item.workflowLabel || 'Pipeline';
+}
+
+function enrollmentLine(item) {
+  const inquiry = item.enrollmentSignals?.inquiry || {};
+  return [
+    inquiry.programInterest || item.programInterest,
+    inquiry.age ? `Age ${inquiry.age}` : '',
+    inquiry.location,
+  ].filter(Boolean).join(' · ');
+}
+
+function cardSummary(item) {
+  if (isAitUsa(item)) {
+    if (item.enrollmentSignals?.contactability?.canFollowUp === false) {
+      return item.enrollmentSignals.contactability.reason || 'Needs contact information before outreach.';
+    }
+    const channel = item.enrollmentSignals?.source?.channel || item.inquirySource;
+    return firstPresent([
+      item.enrollmentSignals?.process?.nextAction,
+      item.nextAction,
+      channel ? `New enrollment inquiry from ${channel}.` : '',
+      'Enrollment lead ready for review.',
+    ]);
+  }
+  if (isAitSigns(item)) {
+    if (!noisyImportedComment(item.latestComment)) return item.latestComment;
+    return firstPresent([
+      item.latestCommentLabel ? `${item.latestCommentLabel} available in history.` : '',
+      item.operationalSummary,
+      item.nextAction,
+      'Open contact for source details.',
+    ]);
+  }
+  return noisyImportedComment(item.latestComment) ? 'Open contact for source details.' : (item.latestComment || 'No latest comment yet');
+}
+
+function cardChips(item) {
+  if (isAitUsa(item)) {
+    return [
+      item.needsFirstOutreach ? 'First Outreach' : '',
+      item.qualityDisposition === 'ready_for_follow_up' ? 'Ready Follow-up' : titleLabel(item.qualityDisposition),
+      contactabilityLabel(item),
+      item.enrollmentSignals?.source?.tags?.includes('wix_history') ? 'Wix History' : '',
+    ].filter(Boolean).slice(0, 3);
+  }
+  if (isAitSigns(item)) {
+    return [
+      item.currentStage || item.status,
+      item.relatedWorkOrderCount ? `${item.relatedWorkOrderCount} Work Orders` : '',
+      item.relatedEstimateCount ? `${item.relatedEstimateCount} Estimates` : '',
+      item.relatedPaymentCount ? `${item.relatedPaymentCount} Payments` : '',
+    ].filter(Boolean).slice(0, 3);
+  }
+  return (item.tags || []).map(titleLabel).slice(0, 3);
+}
 
 export default function KanbanBoard({ data, columns, onMove, onEdit }) {
   const [draggingId, setDraggingId] = useState(null);
@@ -84,16 +200,30 @@ export default function KanbanBoard({ data, columns, onMove, onEdit }) {
               {columnCards.map(item => (
                 <div 
                   key={item.id} 
-                  className={`${s.kanbanCard} ${item.needsFirstOutreach ? s.needsFirstOutreach : ''} ${draggingId === item.id ? s.dragging : ''}`}
+                  className={`${s.kanbanCard} ${isAitUsa(item) ? s.instituteCard : ''} ${isAitSigns(item) ? s.signsCard : ''} ${item.needsFirstOutreach ? s.needsFirstOutreach : ''} ${draggingId === item.id ? s.dragging : ''}`}
                   draggable
                   onDragStart={(e) => onDragStart(e, item.id)}
                   onClick={() => onEdit && onEdit(item)}
                 >
                   <div className={s.cardTop}>
-                    <span className={s.cardSource}>{item.source}</span>
-                    <button className={s.cardMore}><MoreHorizontal size={14} /></button>
+                    <span className={s.cardSource}>{sourceLabel(item)}</span>
+                    {item.needsFirstOutreach && (
+                      <span className={s.cardUrgency}><AlertCircle size={12} /> New</span>
+                    )}
                   </div>
                   <div className={s.cardName}>{item.name}</div>
+                  {isAitUsa(item) && enrollmentLine(item) && (
+                    <div className={s.cardSubline}>
+                      <GraduationCap size={12} />
+                      <span>{enrollmentLine(item)}</span>
+                    </div>
+                  )}
+                  {isAitSigns(item) && item.operationalSummary && (
+                    <div className={s.cardSubline}>
+                      <BriefcaseBusiness size={12} />
+                      <span>{item.operationalSummary}</span>
+                    </div>
+                  )}
                   {(item.currentStage || item.nextAction) && (
                     <div className={s.cardWorkflow}>
                       <div className={s.workflowStage}>
@@ -105,19 +235,25 @@ export default function KanbanBoard({ data, columns, onMove, onEdit }) {
                   )}
                   <div className={s.cardComment}>
                     <MessageSquareText size={12} />
-                    <span>{item.latestComment || 'No latest comment yet'}</span>
+                    <span>{cardSummary(item)}</span>
                   </div>
                   <div className={s.cardMeta}>
-                    <div className={s.metaItem}><Phone size={12} /> <span>{item.phone}</span></div>
+                    <div className={s.metaItem}>
+                      {item.phone ? <Phone size={12} /> : <Mail size={12} />}
+                      <span>{item.phone || item.email || 'No contact channel'}</span>
+                    </div>
                     <div className={s.metaItem}><CalendarCheck size={12} /> <span>Touch {item.lastTouch || item.lastContact || 'None'}</span></div>
-                    <div className={s.metaItem}><PencilLine size={12} /> <span>Edit {item.lastEdited || 'None'}</span></div>
+                  </div>
+                  <div className={s.cardChips}>
+                    {cardChips(item).map((chip) => (
+                      <span key={chip} className={s.cardChip}>{chip}</span>
+                    ))}
                   </div>
                   <div className={s.cardFooter}>
                     <div className={s.cardUser}>
-                      <div className={s.userAvatar}>{item.assignedLabel?.charAt(0) || 'U'}</div>
+                      <div className={s.userAvatar}>{item.assignedLabel?.charAt(0) || <UserRound size={11} />}</div>
                       <span>{item.assignedLabel || 'Unassigned'}</span>
                     </div>
-                    {!!item.tags?.length && <span className={s.cardTag}>{item.tags[0].replaceAll('_', ' ')}</span>}
                   </div>
                   {onMove && (
                     <label className={s.cardMove} onClick={(event) => event.stopPropagation()}>

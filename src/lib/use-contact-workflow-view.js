@@ -10,6 +10,47 @@ import {
   workflowFromContact,
 } from '@/lib/sales-workflow';
 
+function moneyLabel(value) {
+  const amount = Number(value || 0);
+  if (!Number.isFinite(amount) || amount <= 0) return '';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+function buildOperationalSummary({ workOrders = [], financials = [] } = {}) {
+  const workOrder = workOrders[0];
+  if (workOrder) {
+    return [
+      workOrder.number || 'Work order',
+      workOrder.status || workOrder.title,
+      workOrder.dueDate ? `Due ${workOrder.dueDate}` : '',
+    ].filter(Boolean).join(' · ');
+  }
+
+  const estimate = financials.find((record) => record.type === 'Estimate');
+  if (estimate) {
+    return [
+      estimate.number || 'Estimate',
+      moneyLabel(estimate.amount),
+      estimate.status,
+    ].filter(Boolean).join(' · ');
+  }
+
+  const receipt = financials.find((record) => ['Receipt', 'Invoice'].includes(record.type));
+  if (receipt) {
+    return [
+      receipt.type || 'Payment',
+      moneyLabel(receipt.amount),
+      receipt.date,
+    ].filter(Boolean).join(' · ');
+  }
+
+  return '';
+}
+
 export function useContactWorkflowView({
   contacts = [],
   workOrders = [],
@@ -117,6 +158,13 @@ export function useContactWorkflowView({
       priority: workflow.priority || contact.priority,
       outreachState: workflow.outreachState || contact.outreachState,
       needsFirstOutreach: workflow.needsFirstOutreach || contact.needsFirstOutreach,
+      operationalSummary: buildOperationalSummary({
+        workOrders: relatedWorkOrders,
+        financials: relatedFinancials,
+      }),
+      relatedWorkOrderCount: relatedWorkOrders.length,
+      relatedEstimateCount: relatedFinancials.filter((record) => record.type === 'Estimate').length,
+      relatedPaymentCount: relatedPaymentSnapshots.length,
       isPipelineEligible,
     };
   }), [businessUnitById, contacts, financialsByContactId, workOrdersByContactId]);
