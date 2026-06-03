@@ -1,8 +1,13 @@
 'use client';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
+import {
+  buildContactDirectoryFacetGroups,
+  contactDirectorySignalLabels,
+  filterContactsByDirectoryFacet,
+} from '@/lib/contact-directory-facets';
 import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
@@ -46,6 +51,17 @@ function WorkflowCell({ row }) {
   );
 }
 
+function SignalCell({ row }) {
+  if (!row.signalLabels?.length) return <span className="contacts-signal-empty">—</span>;
+  return (
+    <div className="contacts-signal-list">
+      {row.signalLabels.map((label) => (
+        <span key={label} className="contacts-signal-pill">{label}</span>
+      ))}
+    </div>
+  );
+}
+
 export default function ContactsPage() {
   const {
     contacts,
@@ -71,6 +87,8 @@ export default function ContactsPage() {
   const [statusFilter, setStatusFilter] = useState('All');
   const [workflowFilter, setWorkflowFilter] = useState('all');
   const [ownerFilter, setOwnerFilter] = useState('all');
+  const [directoryFacet, setDirectoryFacet] = useState('all');
+  const [facetNow] = useState(() => Date.now());
 
   const canWrite = access.canWriteCrm;
   const {
@@ -89,6 +107,15 @@ export default function ContactsPage() {
     currentBusinessUnitId,
     currentBusinessUnit,
   });
+  const facetContext = useMemo(() => ({ businessUnitById, now: facetNow }), [businessUnitById, facetNow]);
+  const directoryRows = useMemo(() => contactRows.map((contact) => {
+    const signalLabels = contactDirectorySignalLabels(contact, facetContext);
+    return {
+      ...contact,
+      signalLabels,
+      signalText: signalLabels.join(' '),
+    };
+  }), [contactRows, facetContext]);
   const openNew = () => {
     if (!canWrite) return;
     const defaultStatuses = statusOptionsForBusinessUnitId(defaultBusinessUnitId);
@@ -129,6 +156,7 @@ export default function ContactsPage() {
     { key: 'phone', label: 'Phone', editable: true },
     { key: 'status', label: 'Status', type: 'badge', sortable: true },
     { key: 'workflow', label: 'Next Step', sortable: false, render: (row) => <WorkflowCell row={row} /> },
+    { key: 'signalText', label: 'Signals', sortable: false, render: (row) => <SignalCell row={row} /> },
     { key: 'assignedLabel', label: 'Owner', sortable: true },
     { key: 'divisionLabel', label: scopeLabel, sortable: true },
     { key: 'source', label: 'Source', sortable: true },
@@ -136,7 +164,7 @@ export default function ContactsPage() {
     { key: 'lastEdited', label: 'Last Edited', sortable: true },
   ];
 
-  const filteredContacts = contactRows.filter((contact) => {
+  const baseFilteredContacts = useMemo(() => directoryRows.filter((contact) => {
     const statusMatch = statusFilter === 'All' || contact.status === statusFilter;
     const businessUnit = businessUnitById.get(contact.businessUnitId || contact.primaryBusinessUnitId) || null;
     const workflowMatch =
@@ -149,7 +177,21 @@ export default function ContactsPage() {
       (ownerFilter === 'unassigned' && !contact.assignedTo) ||
       contact.assignedTo === ownerFilter;
     return statusMatch && workflowMatch && ownerMatch;
-  });
+  }), [businessUnitById, directoryRows, ownerFilter, statusFilter, workflowFilter]);
+  const facetGroups = useMemo(
+    () => buildContactDirectoryFacetGroups(baseFilteredContacts, facetContext),
+    [baseFilteredContacts, facetContext],
+  );
+  const visibleFacetCounts = useMemo(
+    () => new Map(facetGroups.flatMap((group) => group.facets.map((facet) => [facet.id, facet.count]))),
+    [facetGroups],
+  );
+  const directoryFacetCount = visibleFacetCounts.get(directoryFacet);
+  const effectiveDirectoryFacet = directoryFacet === 'all' || directoryFacetCount > 0 ? directoryFacet : 'all';
+  const filteredContacts = useMemo(
+    () => filterContactsByDirectoryFacet(baseFilteredContacts, effectiveDirectoryFacet, facetContext),
+    [baseFilteredContacts, effectiveDirectoryFacet, facetContext],
+  );
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
@@ -180,6 +222,35 @@ export default function ContactsPage() {
         </div>
       </div>
 
+      <div className="contacts-facet-panel" aria-label="Contact quick filters">
+        <div className="contacts-facet-summary">
+          <strong>{filteredContacts.length}</strong>
+          <span>matching contacts</span>
+        </div>
+        <div className="contacts-facet-groups">
+          {facetGroups.map((group) => (
+            <div key={group.id} className="contacts-facet-group">
+              <div className="contacts-facet-label">{group.label}</div>
+              <div className="contacts-facet-pills">
+                {group.facets.map((facet) => (
+                  <button
+                    key={facet.id}
+                    type="button"
+                    className={`contacts-facet-pill ${effectiveDirectoryFacet === facet.id ? 'active' : ''} ${facet.count === 0 ? 'is-empty' : ''}`}
+                    onClick={() => setDirectoryFacet(facet.id)}
+                    disabled={facet.count === 0 && directoryFacet !== facet.id}
+                    aria-pressed={effectiveDirectoryFacet === facet.id}
+                  >
+                    <span>{facet.label}</span>
+                    <strong>{facet.count}</strong>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="card" style={{padding:16}}>
         <DataTable
           columns={columns}
@@ -207,7 +278,7 @@ export default function ContactsPage() {
             ] : []),
           ]}
           mobileBadges={['status']}
-          mobileFields={['phone', 'workflow', 'assignedLabel', 'divisionLabel', 'lastTouch', 'lastEdited']}
+          mobileFields={['phone', 'workflow', 'signalText', 'assignedLabel', 'divisionLabel', 'lastTouch', 'lastEdited']}
         />
       </div>
 
