@@ -260,6 +260,9 @@
   overflow-y: hidden;
   scrollbar-width: thin;
 }
+.contentTabs::-webkit-scrollbar {
+  height: 0;
+}
 .contentTab {
   flex: 0 0 auto;
   background: none;
@@ -1186,6 +1189,10 @@
   }
   .contentTabs {
     overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .contentTabs::-webkit-scrollbar {
+    display: none;
   }
   .contentTab {
     flex: 0 0 auto;
@@ -1257,8 +1264,32 @@
 }
 
 @media (max-width: 560px) {
+  .detailLayout {
+    gap: 14px;
+    margin-top: 12px;
+  }
+  .profileCard {
+    padding: 14px;
+  }
   .highlightGrid {
-    grid-template-columns: minmax(0, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+    margin-bottom: 10px;
+  }
+  .highlightItem {
+    padding: 8px;
+  }
+  .profileInfo {
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 12px 0;
+  }
+  .workflowCard {
+    margin-bottom: 12px;
+    padding: 10px;
+  }
+  .profileAssignment {
+    padding: 10px;
   }
   .snapshotStrip {
     grid-template-columns: minmax(0, 1fr);
@@ -1307,9 +1338,27 @@
   }
   .profileHeader {
     align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .profileAvatarLarge {
+    width: 50px;
+    height: 50px;
+    border-radius: var(--radius-lg);
+    font-size: 22px;
   }
   .profileNameRow {
     align-items: flex-start;
     flex-direction: column;
+    gap: 4px;
+  }
+  .profileName {
+    font-size: 22px;
+  }
+  .profileRole {
+    margin-top: 4px;
+  }
+  .profileSource {
+    margin-top: 4px;
   }
 }
