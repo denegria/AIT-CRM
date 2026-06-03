@@ -30,6 +30,7 @@ import { TASK_STATUSES } from './tasks/constants.js';
 import { buildContactTimeline, filterTimelineRowsForBusinessUnit } from './timeline/service.js';
 import { summarizeContactTouch } from './contact-touch.js';
 import { buildAitUsaEnrollmentSignals } from './ait-usa-enrollment-signals.js';
+import { attachPaymentSnapshotContactLinks } from './financial-linkage.js';
 
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const toBootstrapBusinessUnitPayload = (row) => toBusinessUnitPayload(row, { emptyColor: null });
@@ -234,8 +235,8 @@ function mapFinancials(estimateRows, paymentRows, contactLookup) {
     id: row.id,
     number: `REC-${String(index + 1).padStart(3, '0')}`,
     type: 'Receipt',
-    client: '',
-    contactId: '',
+    client: contactLookup.get(row.contactId)?.name || '',
+    contactId: row.contactId || '',
     businessUnitId: row.businessUnitId || '',
     amount: Number(row.amount || 0),
     date: toIsoDate(row.paidAt),
@@ -469,6 +470,10 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       };
     }
 
+    const paymentRowsWithContactLinks = attachPaymentSnapshotContactLinks(paymentRows, eventRows, {
+      estimateRows,
+      workOrderRows,
+    });
     const contacts = mapContacts(
       contactRows,
       leadRows,
@@ -479,13 +484,13 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       {
         workOrders: workOrderRows,
         estimates: estimateRows,
-        paymentSnapshots: paymentRows,
+        paymentSnapshots: paymentRowsWithContactLinks,
         conversationMessages: conversationMessageRows,
       },
     );
     const contactLookup = new Map(contacts.map((contact) => [contact.id, contact]));
     const workOrders = mapWorkOrders(workOrderRows, contactLookup);
-    const financials = mapFinancials(estimateRows, paymentRows, contactLookup);
+    const financials = mapFinancials(estimateRows, paymentRowsWithContactLinks, contactLookup);
     const tasks = mapTasks(taskRows, contactLookup);
     return {
       ...seedData,

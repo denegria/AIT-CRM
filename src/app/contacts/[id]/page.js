@@ -152,10 +152,23 @@ function latestTimelineItem(items, category) {
   return items.find((item) => timelineCategory(item) === category);
 }
 
-function snapshotDetail(items, category) {
+function snapshotDetail(items, category, linkedRecordCount = 0) {
   const latest = latestTimelineItem(items, category);
+  if (!latest && linkedRecordCount > 0 && category !== 'follow_up') {
+    return `${linkedRecordCount} linked ${linkedRecordCount === 1 ? 'record' : 'records'}`;
+  }
   if (!latest) return 'No matching history yet';
+  if (linkedRecordCount > 0 && category !== 'follow_up') {
+    return `${linkedRecordCount} linked ${linkedRecordCount === 1 ? 'record' : 'records'} · Latest ${dateLabel(latest)}`;
+  }
   return `Latest ${dateLabel(latest)}`;
+}
+
+function financialCategory(record = {}) {
+  const type = String(record.type || '').toLowerCase();
+  if (type.includes('estimate')) return 'estimate';
+  if (type.includes('receipt') || type.includes('invoice') || type.includes('payment')) return 'payment';
+  return 'other';
 }
 
 function timelineEmptyText(filterValue) {
@@ -219,6 +232,11 @@ export default function ContactDetailPage() {
   const contact = useMemo(() => contacts.find(c => c.id === params.id), [contacts, params.id]);
   const contactWorkOrders = useMemo(() => workOrders.filter(wo => wo.contactId === params.id), [workOrders, params.id]);
   const contactFinancials = useMemo(() => financials.filter(f => f.contactId === params.id), [financials, params.id]);
+  const contactFinancialCounts = useMemo(() => contactFinancials.reduce((counts, record) => {
+    const category = financialCategory(record);
+    counts[category] = (counts[category] || 0) + 1;
+    return counts;
+  }, {}), [contactFinancials]);
   const contactBusinessUnit = businessUnits.find((unit) => unit.id === contact?.businessUnitId || unit.id === contact?.primaryBusinessUnitId);
   const contactStatusOptions = workflowForBusinessUnit(contactBusinessUnit).statuses;
   const unitLabel = normalizedBusinessLabel(contactBusinessUnit?.name || contactBusinessUnit?.label);
@@ -249,11 +267,20 @@ export default function ContactDetailPage() {
     if (timelineFilter === 'all') return timelineSource;
     return timelineSource.filter((item) => timelineCategory(item) === timelineFilter);
   }, [timelineFilter, timelineSource]);
-  const timelineSnapshot = useMemo(() => SNAPSHOT_ITEMS.map((item) => ({
-    ...item,
-    count: timelineCounts[item.key] || 0,
-    detail: snapshotDetail(timelineSource, item.key),
-  })), [timelineCounts, timelineSource]);
+  const linkedSnapshotCounts = useMemo(() => ({
+    work: contactWorkOrders.length,
+    estimate: contactFinancialCounts.estimate || 0,
+    payment: contactFinancialCounts.payment || 0,
+    follow_up: timelineCounts.follow_up || 0,
+  }), [contactFinancialCounts, contactWorkOrders.length, timelineCounts.follow_up]);
+  const timelineSnapshot = useMemo(() => SNAPSHOT_ITEMS.map((item) => {
+    const linkedCount = linkedSnapshotCounts[item.key] || 0;
+    return {
+      ...item,
+      count: Math.max(timelineCounts[item.key] || 0, linkedCount),
+      detail: snapshotDetail(timelineSource, item.key, linkedCount),
+    };
+  }), [linkedSnapshotCounts, timelineCounts, timelineSource]);
   const hasMatchingServerConversations = serverConversations.contactId === contact?.id && serverConversations.reloadKey === conversationReloadKey;
   const conversationMessages = hasMatchingServerConversations && serverConversations.items ? serverConversations.items : [];
   const conversationStatus = dataSource === 'postgres' && contact?.id && !hasMatchingServerConversations
