@@ -32,6 +32,18 @@ const DUE_OPTIONS = [
   ['all', 'All Statuses'],
 ];
 
+const FOLLOW_UP_OUTCOME_OPTIONS = [
+  ['reached_interested', 'Reached - interested'],
+  ['left_voicemail', 'Left voicemail'],
+  ['no_answer', 'No answer'],
+  ['appointment_scheduled', 'Appointment scheduled'],
+  ['needs_next_follow_up', 'Needs next follow-up'],
+  ['reached_not_interested', 'Reached - not interested'],
+  ['wrong_number', 'Wrong number'],
+  ['do_not_contact', 'Do not contact'],
+  ['enrolled_or_won', 'Enrolled / won'],
+];
+
 const OPEN_STATUSES = new Set(['open', 'in_progress', 'snoozed']);
 const CLOSED_STATUSES = new Set(['completed', 'canceled']);
 
@@ -50,6 +62,13 @@ function addDays(days) {
   const date = new Date();
   date.setDate(date.getDate() + days);
   date.setHours(9, 0, 0, 0);
+  return date.toISOString();
+}
+
+function dateInputToIso(value) {
+  if (!value) return null;
+  const date = new Date(`${value}T09:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
   return date.toISOString();
 }
 
@@ -129,6 +148,8 @@ export default function FollowUpQueuePage() {
   const [loading, setLoading] = useState(dataSource === 'postgres');
   const [error, setError] = useState('');
   const [busyTaskId, setBusyTaskId] = useState('');
+  const [completionTaskId, setCompletionTaskId] = useState('');
+  const [followUpDrafts, setFollowUpDrafts] = useState({});
 
   const fallbackAssignees = useMemo(() => {
     const mappedEmployees = (employees || []).map((employee) => ({
@@ -226,6 +247,9 @@ export default function FollowUpQueuePage() {
         if (!response.ok) throw new Error(result.error || 'Task update failed.');
         const nextTask = normalizeTask(result.task, contacts);
         setQueueTasks((prev) => prev.map((row) => (row.id === task.id ? nextTask : row)));
+        if (result.nextTask) {
+          setQueueTasks((prev) => [normalizeTask(result.nextTask, contacts), ...prev]);
+        }
         updateTask(task.id, {
           taskStatus: nextTask.status,
           status: nextTask.status,
@@ -245,12 +269,50 @@ export default function FollowUpQueuePage() {
         setQueueTasks((prev) => prev.map((row) => (row.id === task.id ? normalizeTask({ ...row, ...localPatch }, contacts) : row)));
       }
       toast(action === 'complete' ? 'Task completed' : action === 'snooze' ? 'Task snoozed' : 'Task assigned');
+      if (action === 'complete') {
+        setCompletionTaskId('');
+        setFollowUpDrafts((prev) => {
+          const next = { ...prev };
+          delete next[task.id];
+          return next;
+        });
+      }
     } catch (err) {
       setError(err.message || 'Task update failed.');
       toast(err.message || 'Task update failed.');
     } finally {
       setBusyTaskId('');
     }
+  }
+
+  function followUpDraft(taskId) {
+    return followUpDrafts[taskId] || {
+      outcome: 'reached_interested',
+      note: '',
+      nextDueDate: '',
+    };
+  }
+
+  function updateFollowUpDraft(taskId, patch) {
+    setFollowUpDrafts((prev) => ({
+      ...prev,
+      [taskId]: {
+        outcome: 'reached_interested',
+        note: '',
+        nextDueDate: '',
+        ...(prev[taskId] || {}),
+        ...patch,
+      },
+    }));
+  }
+
+  async function submitFollowUpCompletion(task) {
+    const draft = followUpDraft(task.id);
+    await applyTaskAction(task, 'complete', {
+      outcome: draft.outcome,
+      note: draft.note,
+      nextDueAt: dateInputToIso(draft.nextDueDate),
+    });
   }
 
   const resetFilters = () => setFilters({
@@ -354,6 +416,8 @@ export default function FollowUpQueuePage() {
             const isOverdue = key && key < todayKey() && !CLOSED_STATUSES.has(task.status);
             const isToday = key === todayKey() && !CLOSED_STATUSES.has(task.status);
             const assignee = visibleAssignees.find((user) => user.id === task.ownerUserId);
+            const draft = followUpDraft(task.id);
+            const showFollowUpCompletion = completionTaskId === task.id && task.taskType === 'follow_up';
             return (
               <article key={task.id} className={`${s.queueItem} ${isOverdue ? s.queueItemOverdue : ''} ${isToday ? s.queueItemToday : ''}`}>
                 <div>
@@ -402,20 +466,73 @@ export default function FollowUpQueuePage() {
                   >
                     <AlarmClock size={14} />
                   </button>
-                  <button
-                    className="btn btn-sm btn-primary"
-                    disabled={!access.canWriteCrm || busyTaskId === task.id || CLOSED_STATUSES.has(task.status)}
-                    onClick={() => applyTaskAction(task, 'complete')}
-                  >
-                    <CheckCircle2 size={14} />
-                    Complete
-                  </button>
+                  {task.taskType === 'follow_up' ? (
+                    <button
+                      className="btn btn-sm btn-primary"
+                      disabled={!access.canWriteCrm || busyTaskId === task.id || CLOSED_STATUSES.has(task.status)}
+                      onClick={() => setCompletionTaskId((current) => (current === task.id ? '' : task.id))}
+                    >
+                      <CheckCircle2 size={14} />
+                      Complete
+                    </button>
+                  ) : (
+                    <button
+                      className="btn btn-sm btn-primary"
+                      disabled={!access.canWriteCrm || busyTaskId === task.id || CLOSED_STATUSES.has(task.status)}
+                      onClick={() => applyTaskAction(task, 'complete')}
+                    >
+                      <CheckCircle2 size={14} />
+                      Complete
+                    </button>
+                  )}
                   {task.contactId && (
                     <Link className={`btn btn-sm ${s.iconButton}`} href={`/contacts/${task.contactId}`} data-tooltip="Open contact" aria-label="Open contact">
                       <ExternalLink size={14} />
                     </Link>
                   )}
                 </div>
+                {showFollowUpCompletion && (
+                  <div className={s.completionPanel}>
+                    <label className={s.filterGroup}>
+                      <span className="form-label">Outcome</span>
+                      <select
+                        className="select"
+                        value={draft.outcome}
+                        disabled={busyTaskId === task.id}
+                        onChange={(event) => updateFollowUpDraft(task.id, { outcome: event.target.value })}
+                      >
+                        {FOLLOW_UP_OUTCOME_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                      </select>
+                    </label>
+                    <label className={s.filterGroup}>
+                      <span className="form-label">Next Due</span>
+                      <input
+                        className="input"
+                        type="date"
+                        value={draft.nextDueDate}
+                        disabled={busyTaskId === task.id}
+                        onChange={(event) => updateFollowUpDraft(task.id, { nextDueDate: event.target.value })}
+                      />
+                    </label>
+                    <label className={s.completionNote}>
+                      <span className="form-label">Note</span>
+                      <textarea
+                        className="textarea"
+                        rows={2}
+                        value={draft.note}
+                        disabled={busyTaskId === task.id}
+                        onChange={(event) => updateFollowUpDraft(task.id, { note: event.target.value })}
+                      />
+                    </label>
+                    <div className={s.completionActions}>
+                      <button className="btn btn-sm" type="button" onClick={() => setCompletionTaskId('')} disabled={busyTaskId === task.id}>Cancel</button>
+                      <button className="btn btn-sm btn-primary" type="button" onClick={() => submitFollowUpCompletion(task)} disabled={busyTaskId === task.id}>
+                        <CheckCircle2 size={14} />
+                        Save Outcome
+                      </button>
+                    </div>
+                  </div>
+                )}
               </article>
             );
           })}

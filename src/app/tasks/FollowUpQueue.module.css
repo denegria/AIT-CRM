@@ -124,6 +124,27 @@
   flex-wrap: wrap;
 }
 
+.completionPanel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(150px, 0.6fr) minmax(240px, 1.2fr) auto;
+  gap: 10px;
+  align-items: end;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.completionNote {
+  min-width: 0;
+}
+
+.completionActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .iconButton {
   min-width: 32px;
   min-height: 32px;
@@ -154,6 +175,15 @@
     grid-column: 1 / -1;
     justify-content: flex-start;
   }
+
+  .completionPanel {
+    grid-template-columns: repeat(2, minmax(160px, 1fr));
+  }
+
+  .completionNote,
+  .completionActions {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 760px) {
@@ -173,8 +203,18 @@
 
   .actions .iconButton,
   .actions a,
-  .actions button {
+  .actions button,
+  .completionActions button {
     flex: 1 1 44px;
     justify-content: center;
+  }
+
+  .completionPanel {
+    grid-template-columns: 1fr;
+  }
+
+  .completionNote,
+  .completionActions {
+    grid-column: auto;
   }
 }

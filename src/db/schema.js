@@ -243,6 +243,7 @@ export const activityEvents = pgTable('activity_events', {
   workOrderId: uuid('work_order_id').references(() => workOrders.id, { onDelete: 'set null' }),
   eventType: text('event_type').notNull(),
   message: text('message'),
+  metadataJson: jsonb('metadata_json').notNull().default({}),
   actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
   sourceSheet: text('source_sheet'),
   sourceRow: integer('source_row'),

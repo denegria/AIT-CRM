@@ -33,6 +33,15 @@ const TIMELINE_TYPE_LABELS = {
 
 const EVENT_TITLE_OVERRIDES = {
   'ait_usa.follow_up': 'Follow-up attempt',
+  'follow_up.reached_interested': 'Follow-up completed',
+  'follow_up.reached_not_interested': 'Follow-up completed',
+  'follow_up.left_voicemail': 'Left voicemail',
+  'follow_up.no_answer': 'No answer',
+  'follow_up.wrong_number': 'Wrong number',
+  'follow_up.do_not_contact': 'Do not contact',
+  'follow_up.appointment_scheduled': 'Appointment scheduled',
+  'follow_up.enrolled_or_won': 'Enrolled / won',
+  'follow_up.needs_next_follow_up': 'Next follow-up needed',
   'import.follow_up': 'Follow-up attempt',
   imported_follow_up: 'Follow-up attempt',
   import_promoted_follow_up: 'Follow-up attempt',
@@ -120,12 +129,13 @@ function businessUnitPayload(businessUnitId, businessUnitLookup) {
 
 function linkedRecordPayload(row, task = null) {
   const links = [];
+  const metadata = row.metadataJson || row.metadata_json || {};
   if (row.contactId) links.push({ type: 'contact', id: row.contactId, label: 'Contact' });
   if (row.leadId) links.push({ type: 'lead', id: row.leadId, label: 'Lead' });
-  if (row.taskId) {
+  if (row.taskId || metadata.taskId) {
     links.push({
       type: 'task',
-      id: row.taskId,
+      id: row.taskId || metadata.taskId,
       label: task?.title ? `Task: ${task.title}` : 'Task',
     });
   }
@@ -583,6 +593,8 @@ export function buildContactTimeline({
     if (hasCanonicalTaskEvents && String(event.eventType || '').startsWith('task.')) continue;
     const entryType = timelineTypeForEvent(event.eventType);
     const source = sourcePayload(event);
+    const metadataJson = event.metadataJson || {};
+    const linkedTask = metadataJson.taskId ? taskLookup.get(metadataJson.taskId) : null;
     const linkedWorkOrder = event.workOrderId ? workOrderLookup.get(event.workOrderId) : null;
     const linkedEstimate = event.estimateId ? estimateLookup.get(event.estimateId) : null;
     const linkedPayment = paymentSnapshotLookup.get(sourceKey(event.sourceSheet, event.sourceRow));
@@ -609,8 +621,9 @@ export function buildContactTimeline({
       actor: userPayload(event.actorUserId, userLookup),
       source,
       businessUnit: businessUnitPayload(event.businessUnitId, businessUnitLookup),
-      linkedRecords: linkedRecordPayload(event),
+      linkedRecords: linkedRecordPayload({ ...event, taskId: metadataJson.taskId }, linkedTask),
       record,
+      metadataJson,
       presentationHint: eventPresentationHint,
     }));
   }

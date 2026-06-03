@@ -78,6 +78,13 @@
       "when": 1780114800000,
       "tag": "0010_import_batch_business_unit",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1780497450155,
+      "tag": "0011_activity_event_metadata",
+      "breakpoints": true
     }
   ]
 }

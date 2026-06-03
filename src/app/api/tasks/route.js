@@ -16,7 +16,15 @@ import {
   resolveContactById,
 } from '@/lib/crm/access.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
+import { evaluateLifecycleTransition } from '@/lib/crm/lifecycle.js';
 import { isUuid } from '@/lib/crm/validation.js';
+import { TASK_STATUSES, TASK_TYPES } from '@/lib/tasks/constants.js';
+import {
+  contactPatchForFollowUpOutcome,
+  followUpActivityMessage,
+  leadStatusForFollowUpOutcome,
+  normalizeFollowUpCompletionPayload,
+} from '@/lib/tasks/follow-up.js';
 import {
   buildTaskTransition,
   normalizeTaskPriority,
@@ -28,6 +36,7 @@ import {
 } from '@/lib/tasks/policy.js';
 import {
   compactTaskPatch,
+  completeFollowUpTaskWithActivity,
   createTaskWithEvents,
   listTasks,
   toTaskPayload,
@@ -36,6 +45,12 @@ import {
 
 function stringParam(value) {
   return String(value || '').trim();
+}
+
+function compactObject(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined && entry !== null && entry !== ''),
+  );
 }
 
 function optionalUuid(value, fieldName) {
@@ -91,6 +106,16 @@ async function resolveLatestLeadForContact(db, organizationId, contactId) {
     .orderBy(desc(leads.createdAt))
     .limit(1);
   return lead || null;
+}
+
+async function resolveBusinessUnitById(db, session, businessUnitId) {
+  if (!businessUnitId) return null;
+  const [businessUnit] = await db
+    .select()
+    .from(businessUnits)
+    .where(and(eq(businessUnits.id, businessUnitId), eq(businessUnits.organizationId, session.user.organizationId)))
+    .limit(1);
+  return businessUnit || null;
 }
 
 async function resolveLeadById(db, session, leadId) {
@@ -343,6 +368,116 @@ export async function PATCH(request) {
     if (!existingTask) return NextResponse.json({ error: 'Task not found.' }, { status: 404 });
     if (!canAccessBusinessUnit(session, existingTask.businessUnitId)) {
       return NextResponse.json({ error: 'Insufficient business-unit access.' }, { status: 403 });
+    }
+
+    if (String(body.action || '').trim() === 'complete' && existingTask.taskType === TASK_TYPES.FOLLOW_UP) {
+      const now = new Date();
+      const completion = normalizeFollowUpCompletionPayload({
+        task: existingTask,
+        payload: body,
+        now,
+      });
+      const businessUnit = await resolveBusinessUnitById(db, session, existingTask.businessUnitId);
+      const [lead] = existingTask.leadId
+        ? await db
+            .select()
+            .from(leads)
+            .where(and(eq(leads.id, existingTask.leadId), eq(leads.organizationId, session.user.organizationId)))
+            .limit(1)
+        : [];
+      const suggestedLeadStatus = leadStatusForFollowUpOutcome(completion.outcome, businessUnit);
+      let leadPatch = null;
+      let leadStatusChange = null;
+      let statusTransitionMeta = null;
+
+      if (lead && suggestedLeadStatus) {
+        const transition = evaluateLifecycleTransition({
+          fromStatus: lead.currentStage || lead.status,
+          toStatus: suggestedLeadStatus,
+          businessUnit,
+          canReopenClosedStatus: session.user.canAccessAllBusinessUnits,
+        });
+        statusTransitionMeta = transition;
+        if (transition.allowed && transition.changed) {
+          leadPatch = {
+            status: transition.toStatus,
+            currentStage: transition.toStatus,
+            updatedAt: now,
+          };
+          leadStatusChange = {
+            ...transition,
+            reason: `Follow-up outcome: ${completion.outcome}`,
+          };
+        }
+      }
+
+      const activityMetadata = compactObject({
+        source: 'manual_follow_up_task',
+        taskId: existingTask.id,
+        outcome: completion.outcome,
+        outcomeLabel: completion.outcomeLabel,
+        channel: completion.channel,
+        contactMethod: completion.contactMethod,
+        note: completion.note,
+        nextDueAt: completion.nextDueAt?.toISOString?.() || null,
+        statusTransition: statusTransitionMeta,
+      });
+      const taskEventMetadata = compactObject({
+        followUpOutcome: completion.outcome,
+        activityEventType: completion.eventType,
+        nextDueAt: completion.nextDueAt?.toISOString?.() || null,
+      });
+      const nextTaskValues = completion.createNextTask && completion.nextDueAt
+        ? {
+            title: stringParam(body.nextTaskTitle) || existingTask.title || 'Follow up',
+            description: stringParam(body.nextTaskDescription) || null,
+            status: TASK_STATUSES.OPEN,
+            dueAt: completion.nextDueAt,
+            snoozedUntil: null,
+            completedAt: null,
+            canceledAt: null,
+            sourceType: 'manual',
+            sourceId: existingTask.id,
+            sourceLabel: 'Follow-up completion',
+            metadataJson: compactObject({
+              createdFromTaskId: existingTask.id,
+              previousOutcome: completion.outcome,
+            }),
+          }
+        : null;
+
+      const { task, nextTask } = await completeFollowUpTaskWithActivity({
+        db,
+        organizationId: session.user.organizationId,
+        actorUserId: session.user.id,
+        existingTask,
+        taskPatch: {
+          updatedAt: now,
+          status: TASK_STATUSES.COMPLETED,
+          completedAt: now,
+          canceledAt: null,
+        },
+        followUpActivity: {
+          eventType: completion.eventType,
+          message: followUpActivityMessage(completion),
+          metadataJson: activityMetadata,
+          occurredAt: completion.occurredAt,
+        },
+        taskEventMetadata,
+        contactPatch: contactPatchForFollowUpOutcome(completion.outcome, now),
+        leadPatch,
+        leadStatusChange,
+        nextTaskValues,
+        nextTaskEventMetadata: compactObject({
+          createdFromTaskId: existingTask.id,
+          followUpOutcome: completion.outcome,
+        }),
+      });
+
+      return NextResponse.json({
+        task: toTaskPayload(task),
+        nextTask: toTaskPayload(nextTask),
+      });
     }
 
     const ownerInput = Object.prototype.hasOwnProperty.call(body, 'ownerUserId')

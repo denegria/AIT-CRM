@@ -148,6 +148,43 @@ test('buildContactTimeline preserves imported AIT USA follow-up provenance', () 
   assert.deepEqual(followUp.linkedRecords.map((record) => record.type), ['contact', 'lead']);
 });
 
+test('buildContactTimeline treats employee follow-up completion as structured activity', () => {
+  const timeline = buildContactTimeline({
+    activityEvents: [{
+      id: 'manual-follow-up-1',
+      contactId: 'contact-1',
+      leadId: 'lead-1',
+      businessUnitId: 'bu-1',
+      eventType: 'follow_up.no_answer',
+      message: 'Follow-up completed: No answer.',
+      metadataJson: {
+        source: 'manual_follow_up_task',
+        taskId: 'task-1',
+        outcome: 'no_answer',
+        outcomeLabel: 'No answer',
+      },
+      occurredAt: new Date('2026-06-03T14:00:00.000Z'),
+    }],
+    tasks: [{
+      id: 'task-1',
+      contactId: 'contact-1',
+      leadId: 'lead-1',
+      businessUnitId: 'bu-1',
+      title: 'Call Hilda',
+    }],
+    businessUnits: [{ id: 'bu-1', name: 'AIT USA Institute', label: 'Divisions' }],
+  });
+
+  const followUp = timeline[0];
+  assert.equal(followUp.type, 'activity');
+  assert.equal(followUp.title, 'No answer');
+  assert.equal(followUp.presentation.category, 'follow_up');
+  assert.equal(followUp.presentation.isImported, false);
+  assert.deepEqual(followUp.linkedRecords.map((record) => record.type), ['contact', 'lead', 'task']);
+  assert.equal(followUp.linkedRecords.find((record) => record.type === 'task').label, 'Task: Call Hilda');
+  assert.equal(followUp.metadataJson.outcome, 'no_answer');
+});
+
 test('buildContactTimeline interprets Wix website imports without raw pipe text', () => {
   const timeline = buildContactTimeline({
     notes: [{
