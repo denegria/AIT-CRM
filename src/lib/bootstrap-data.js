@@ -29,6 +29,7 @@ import { isPipelineEligibleContact, workflowFromLead } from './sales-workflow';
 import { TASK_STATUSES } from './tasks/constants.js';
 import { buildContactTimeline, filterTimelineRowsForBusinessUnit } from './timeline/service.js';
 import { summarizeContactTouch } from './contact-touch.js';
+import { buildAitUsaEnrollmentSignals } from './ait-usa-enrollment-signals.js';
 
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const toBootstrapBusinessUnitPayload = (row) => toBusinessUnitPayload(row, { emptyColor: null });
@@ -145,13 +146,21 @@ function mapContacts(
       estimates: contactEstimates,
       paymentSnapshots: contactPaymentSnapshots,
     });
+    const enrollmentSignals = buildAitUsaEnrollmentSignals({
+      contact,
+      lead,
+      workflow,
+    });
 
     return {
       id: contact.id,
       name: contact.name,
+      companyName: contact.companyName || '',
       email: contact.email || '',
       phone: contact.phone || '',
       address: contact.address || '',
+      isDoNotCall: Boolean(contact.isDoNotCall),
+      isWrongNumber: Boolean(contact.isWrongNumber),
       businessUnitId: contact.primaryBusinessUnitId || '',
       primaryBusinessUnitId: contact.primaryBusinessUnitId || '',
       businessUnitName: businessUnit?.name || '',
@@ -177,6 +186,12 @@ function mapContacts(
       latestCommentDate: touchSummary.latestCommentDate,
       latestCommentLabel: touchSummary.latestCommentLabel,
       lastEdited: touchSummary.lastEdited,
+      enrollmentSignals,
+      inquirySource: enrollmentSignals?.source?.channel || '',
+      programInterest: enrollmentSignals?.inquiry?.programInterest || '',
+      contactabilityStatus: enrollmentSignals?.contactability?.status || '',
+      qualityDisposition: enrollmentSignals?.quality?.disposition || '',
+      processPills: enrollmentSignals?.process?.pills || [],
       notes: noteItems.length ? noteItems : eventItems,
       timeline: timelineItems,
     };
