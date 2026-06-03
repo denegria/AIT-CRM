@@ -10,28 +10,21 @@ import {
   AlertCircle, ArrowLeft, Mail, Phone, MapPin, Calendar, 
   Plus, FileText, ClipboardList, 
   MessageSquare, Edit3, Tag, Activity, CheckSquare, MessageCircle,
-  Inbox, Send, DollarSign, Archive, BriefcaseBusiness, CheckCircle2
+  Inbox, Send, DollarSign, Archive, BriefcaseBusiness, CheckCircle2,
+  GraduationCap
 } from 'lucide-react';
 import { PIPELINE_STATUSES, workflowForBusinessUnit } from '@/lib/sales-workflow';
+import { buildContactDetailViewModel } from '@/lib/contact-detail-view-model';
 
-const TIMELINE_FILTERS = [
-  { value: 'all', label: 'All history', empty: 'No activity recorded yet.' },
-  { value: 'follow_up', label: 'Follow-ups', empty: 'No follow-up attempts recorded yet.' },
-  { value: 'work', label: 'Previous work', empty: 'No previous work recorded yet.' },
-  { value: 'estimate', label: 'Estimates', empty: 'No estimate history recorded yet.' },
-  { value: 'payment', label: 'Payments', empty: 'No payment snapshots recorded yet.' },
-  { value: 'note', label: 'Notes', empty: 'No notes recorded yet.' },
-  { value: 'task', label: 'Tasks', empty: 'No tasks recorded yet.' },
-  { value: 'message', label: 'Messages', empty: 'No messages recorded yet.' },
-  { value: 'import', label: 'Source details', empty: 'No standalone source details recorded yet.' },
-];
-
-const SNAPSHOT_ITEMS = [
-  { key: 'work', label: 'Previous work', icon: ClipboardList, tone: 'work' },
-  { key: 'payment', label: 'Payments', icon: DollarSign, tone: 'payment' },
-  { key: 'estimate', label: 'Estimates', icon: BriefcaseBusiness, tone: 'estimate' },
-  { key: 'follow_up', label: 'Follow-ups', icon: AlertCircle, tone: 'follow_up' },
-];
+const SNAPSHOT_ICONS = {
+  estimate: BriefcaseBusiness,
+  follow_up: AlertCircle,
+  lead: GraduationCap,
+  message: MessageCircle,
+  payment: DollarSign,
+  task: CheckSquare,
+  work: ClipboardList,
+};
 
 function newManualSendRequestId() {
   return crypto.randomUUID();
@@ -152,12 +145,12 @@ function latestTimelineItem(items, category) {
   return items.find((item) => timelineCategory(item) === category);
 }
 
-function snapshotDetail(items, category, linkedRecordCount = 0) {
+function snapshotDetail(items, category, linkedRecordCount = 0, emptyText = 'No matching history yet') {
   const latest = latestTimelineItem(items, category);
   if (!latest && linkedRecordCount > 0 && category !== 'follow_up') {
     return `${linkedRecordCount} linked ${linkedRecordCount === 1 ? 'record' : 'records'}`;
   }
-  if (!latest) return 'No matching history yet';
+  if (!latest) return emptyText;
   if (linkedRecordCount > 0 && category !== 'follow_up') {
     return `${linkedRecordCount} linked ${linkedRecordCount === 1 ? 'record' : 'records'} · Latest ${dateLabel(latest)}`;
   }
@@ -171,12 +164,8 @@ function financialCategory(record = {}) {
   return 'other';
 }
 
-function timelineEmptyText(filterValue) {
-  return TIMELINE_FILTERS.find((filter) => filter.value === filterValue)?.empty || 'No activity recorded yet.';
-}
-
-function normalizedBusinessLabel(value = '') {
-  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, ' ');
+function timelineEmptyText(filterValue, filters) {
+  return filters.find((filter) => filter.value === filterValue)?.empty || 'No activity recorded yet.';
 }
 
 function conversationDateLabel(message) {
@@ -192,6 +181,15 @@ function messageIdentityLabel(message) {
     return message.identities?.recipient ? `To ${message.identities.recipient}` : '';
   }
   return message.identities?.sender ? `From ${message.identities.sender}` : '';
+}
+
+function cleanText(value = '') {
+  return String(value || '').trim();
+}
+
+function phoneHref(value = '') {
+  const digits = cleanText(value).replace(/[^\d+]/g, '');
+  return digits ? `tel:${digits}` : '';
 }
 
 export default function ContactDetailPage() {
@@ -237,13 +235,24 @@ export default function ContactDetailPage() {
     counts[category] = (counts[category] || 0) + 1;
     return counts;
   }, {}), [contactFinancials]);
+  const contactRecordCounts = useMemo(() => ({
+    work: contactWorkOrders.length,
+    estimate: contactFinancialCounts.estimate || 0,
+    payment: contactFinancialCounts.payment || 0,
+  }), [contactFinancialCounts, contactWorkOrders.length]);
   const contactBusinessUnit = businessUnits.find((unit) => unit.id === contact?.businessUnitId || unit.id === contact?.primaryBusinessUnitId);
   const contactStatusOptions = workflowForBusinessUnit(contactBusinessUnit).statuses;
-  const unitLabel = normalizedBusinessLabel(contactBusinessUnit?.name || contactBusinessUnit?.label);
-  const sourceLabel = normalizedBusinessLabel(contact?.source);
-  const isAitUsaContact = unitLabel.includes('ait usa') || sourceLabel.includes('ait usa');
-  const showWorkOrdersTab = !isAitUsaContact;
-  const renderedActiveTab = !showWorkOrdersTab && activeTab === 'workorders' ? 'timeline' : activeTab;
+  const detailView = buildContactDetailViewModel({
+    contact,
+    businessUnit: contactBusinessUnit,
+    counts: contactRecordCounts,
+  });
+  const showWorkOrdersTab = detailView.tabs.showWorkOrders;
+  const showFinancialsTab = detailView.tabs.showFinancials;
+  const renderedActiveTab =
+    (!showWorkOrdersTab && activeTab === 'workorders') || (!showFinancialsTab && activeTab === 'financials')
+      ? 'timeline'
+      : activeTab;
   const assignedEmployee = useMemo(() => employees.find(e => e.id === contact?.assignedTo), [employees, contact]);
   const fallbackTimeline = useMemo(() => {
     if (!contact) return [];
@@ -263,26 +272,30 @@ export default function ContactDetailPage() {
     counts[category] = (counts[category] || 0) + 1;
     return counts;
   }, { all: 0 }), [timelineSource]);
+  const renderedTimelineFilter = detailView.timelineFilters.some((filter) => filter.value === timelineFilter) ? timelineFilter : 'all';
   const timeline = useMemo(() => {
-    if (timelineFilter === 'all') return timelineSource;
-    return timelineSource.filter((item) => timelineCategory(item) === timelineFilter);
-  }, [timelineFilter, timelineSource]);
-  const linkedSnapshotCounts = useMemo(() => ({
+    if (renderedTimelineFilter === 'all') return timelineSource;
+    return timelineSource.filter((item) => timelineCategory(item) === renderedTimelineFilter);
+  }, [renderedTimelineFilter, timelineSource]);
+  const hasMatchingServerConversations = serverConversations.contactId === contact?.id && serverConversations.reloadKey === conversationReloadKey;
+  const conversationMessages = hasMatchingServerConversations && serverConversations.items ? serverConversations.items : [];
+  const linkedSnapshotCounts = {
     work: contactWorkOrders.length,
     estimate: contactFinancialCounts.estimate || 0,
     payment: contactFinancialCounts.payment || 0,
     follow_up: timelineCounts.follow_up || 0,
-  }), [contactFinancialCounts, contactWorkOrders.length, timelineCounts.follow_up]);
-  const timelineSnapshot = useMemo(() => SNAPSHOT_ITEMS.map((item) => {
+    lead: timelineCounts.lead || 0,
+    message: Math.max(timelineCounts.message || 0, conversationMessages.length),
+    task: timelineCounts.task || 0,
+  };
+  const timelineSnapshot = detailView.snapshotItems.map((item) => {
     const linkedCount = linkedSnapshotCounts[item.key] || 0;
     return {
       ...item,
       count: Math.max(timelineCounts[item.key] || 0, linkedCount),
-      detail: snapshotDetail(timelineSource, item.key, linkedCount),
+      detail: snapshotDetail(timelineSource, item.key, linkedCount, item.empty),
     };
-  }), [linkedSnapshotCounts, timelineCounts, timelineSource]);
-  const hasMatchingServerConversations = serverConversations.contactId === contact?.id && serverConversations.reloadKey === conversationReloadKey;
-  const conversationMessages = hasMatchingServerConversations && serverConversations.items ? serverConversations.items : [];
+  });
   const conversationStatus = dataSource === 'postgres' && contact?.id && !hasMatchingServerConversations
     ? 'loading'
     : hasMatchingServerConversations && serverConversations.error
@@ -493,20 +506,21 @@ export default function ContactDetailPage() {
                 <h1 className={s.profileName}>{contact.name}</h1>
                 <span className={`badge badge-${contact.status.toLowerCase().replace(' ', '')}`}>{contact.status}</span>
               </div>
-              {contact.source && <div className={s.profileSource}>Source: {contact.source}</div>}
+              <div className={s.profileRole}>{detailView.profileTitle}</div>
+              {detailView.sourceEyebrow && <div className={s.profileSource}>{detailView.sourceEyebrow}</div>}
             </div>
           </div>
 
-          {(contact.currentStage || contact.nextAction || contact.tags?.length) && (
+          {(detailView.workflowTitle || detailView.workflowNext || detailView.workflowChips?.length) && (
             <div className={s.workflowCard}>
               <div className={s.workflowHeader}>
                 <AlertCircle size={15} />
-                <span>{contact.currentStage || contact.status}</span>
+                <span>{detailView.workflowTitle}</span>
               </div>
-              {contact.nextAction && <div className={s.workflowNext}>{contact.nextAction}</div>}
-              {!!contact.tags?.length && (
+              {detailView.workflowNext && <div className={s.workflowNext}>{detailView.workflowNext}</div>}
+              {!!detailView.workflowChips?.length && (
                 <div className={s.workflowTags}>
-                  {contact.tags.map((tag) => (
+                  {detailView.workflowChips.map((tag) => (
                     <span key={tag} className={s.workflowTag}><Tag size={11} /> {tag.replaceAll('_', ' ')}</span>
                   ))}
                 </div>
@@ -515,12 +529,43 @@ export default function ContactDetailPage() {
           )}
 
           <div className={s.profileInfo}>
-            <div className={s.infoItem}><Mail size={16} /> <span>{contact.email}</span></div>
-            <div className={s.infoItem}><Phone size={16} /> <span>{contact.phone}</span></div>
+            <div className={s.infoItem}>
+              <Mail size={16} />
+              {cleanText(contact.email) ? (
+                <a className={s.infoLink} href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a>
+              ) : (
+                <span className={s.missingInfo}>Missing email</span>
+              )}
+            </div>
+            <div className={s.infoItem}>
+              <Phone size={16} />
+              {cleanText(contact.phone) ? (
+                <a className={s.infoLink} href={phoneHref(contact.phone)}>{contact.phone}</a>
+              ) : (
+                <span className={s.missingInfo}>Missing phone</span>
+              )}
+            </div>
             {contact.address && <div className={s.infoItem}><MapPin size={16} /> <span>{contact.address}</span></div>}
             <div className={s.infoItem}><Calendar size={16} /> <span>Last touch: {contact.lastTouch || contact.lastContact || 'None'}</span></div>
             <div className={s.infoItem}><Edit3 size={16} /> <span>Last edited: {contact.lastEdited || 'None'}</span></div>
+            {detailView.contactability?.status && detailView.contactability.status !== 'reachable' && (
+              <div className={s.infoItem}>
+                <AlertCircle size={16} />
+                <span>{detailView.contactability.reason || detailView.contactability.label}</span>
+              </div>
+            )}
           </div>
+
+          {!!detailView.highlights?.length && (
+            <div className={s.highlightGrid} aria-label={`${detailView.profileTitle} summary`}>
+              {detailView.highlights.map((item) => (
+                <div key={`${item.label}-${item.value}`} className={`${s.highlightItem} ${item.tone ? s[`highlight_${item.tone}`] || '' : ''}`}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                </div>
+              ))}
+            </div>
+          )}
 
           <div className={s.profileAssignment}>
             <div className={s.assignmentLabel}>Assigned To</div>
@@ -543,9 +588,11 @@ export default function ContactDetailPage() {
             <button className={`${s.contentTab} ${renderedActiveTab === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')}>Timeline</button>
             <button className={`${s.contentTab} ${renderedActiveTab === 'conversations' ? s.active : ''}`} onClick={() => setActiveTab('conversations')}>Conversations ({conversationMessages.length})</button>
             {showWorkOrdersTab && (
-              <button className={`${s.contentTab} ${renderedActiveTab === 'workorders' ? s.active : ''}`} onClick={() => setActiveTab('workorders')}>Work Orders ({contactWorkOrders.length})</button>
+              <button className={`${s.contentTab} ${renderedActiveTab === 'workorders' ? s.active : ''}`} onClick={() => setActiveTab('workorders')}>{detailView.tabs.workOrdersLabel} ({contactWorkOrders.length})</button>
             )}
-            <button className={`${s.contentTab} ${renderedActiveTab === 'financials' ? s.active : ''}`} onClick={() => setActiveTab('financials')}>Financials ({contactFinancials.length})</button>
+            {showFinancialsTab && (
+              <button className={`${s.contentTab} ${renderedActiveTab === 'financials' ? s.active : ''}`} onClick={() => setActiveTab('financials')}>{detailView.tabs.financialLabel} ({contactFinancials.length})</button>
+            )}
           </div>
 
           <div className={s.tabContent}>
@@ -567,7 +614,7 @@ export default function ContactDetailPage() {
 
                 <div className={s.snapshotStrip} aria-label="Current contact snapshot">
                   {timelineSnapshot.map((item) => {
-                    const Icon = item.icon;
+                    const Icon = SNAPSHOT_ICONS[item.icon] || Activity;
                     return (
                       <button
                         key={item.key}
@@ -589,18 +636,18 @@ export default function ContactDetailPage() {
 
                 <div className={s.timelineToolbar}>
                   <div className={s.timelineFilters} aria-label="Timeline filters">
-                    {TIMELINE_FILTERS.map((filter) => (
+                    {detailView.timelineFilters.map((filter) => (
                       <button
                         key={filter.value}
-                        className={`${s.timelineFilter} ${timelineFilter === filter.value ? s.active : ''}`}
+                        className={`${s.timelineFilter} ${renderedTimelineFilter === filter.value ? s.active : ''}`}
                         onClick={() => setTimelineFilter(filter.value)}
                         type="button"
-                        aria-pressed={timelineFilter === filter.value}
+                        aria-pressed={renderedTimelineFilter === filter.value}
                         aria-label={`${filter.label}: ${timelineCounts[filter.value] || 0} records`}
                       >
                         {filter.label}
                         <span className={s.timelineFilterCount}>{timelineCounts[filter.value] || 0}</span>
-                        {timelineFilter === filter.value && <span className={s.srOnly}> selected</span>}
+                        {renderedTimelineFilter === filter.value && <span className={s.srOnly}> selected</span>}
                       </button>
                     ))}
                   </div>
@@ -706,7 +753,7 @@ export default function ContactDetailPage() {
                     );
                   })}
                   {timeline.length === 0 && (
-                    <div className={s.timelineEmpty}>{timelineEmptyText(timelineFilter)}</div>
+                    <div className={s.timelineEmpty}>{timelineEmptyText(renderedTimelineFilter, detailView.timelineFilters)}</div>
                   )}
                 </div>
               </div>
