@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  isPipelineEligibleContact,
   pipelineStatusFromLead,
   workflowColumnsForBusinessUnit,
   workflowFromContact,
@@ -64,5 +65,51 @@ test('workflowFromContact derives AIT Signs stage from linked records before lea
       paymentSnapshots: [{ contactId: 'contact-1', amount: 250, paidAt: '2026-06-01' }],
     }).status,
     'Invoice / Payment',
+  );
+});
+
+test('AIT Signs source-only import contacts stay out of the active pipeline', () => {
+  const businessUnit = { id: 'bu-signs', name: 'AIT Signs' };
+  assert.equal(
+    isPipelineEligibleContact(
+      { id: 'contact-1', source: 'archive', hasLeadStatus: false, businessUnitId: 'bu-signs' },
+      { businessUnit },
+    ),
+    false,
+  );
+  assert.equal(
+    isPipelineEligibleContact(
+      { id: 'contact-2', source: 'archive', hasLeadStatus: true, businessUnitId: 'bu-signs' },
+      { businessUnit },
+    ),
+    true,
+  );
+  assert.equal(
+    isPipelineEligibleContact(
+      { id: 'contact-3', source: 'archive', hasLeadStatus: false, businessUnitId: 'bu-signs' },
+      { businessUnit, workOrders: [{ contactId: 'contact-3' }] },
+    ),
+    true,
+  );
+  assert.equal(
+    isPipelineEligibleContact(
+      { id: 'contact-4', source: 'archive', hasLeadStatus: false, businessUnitId: 'bu-usa' },
+      { businessUnit: { id: 'bu-usa', name: 'AIT USA Institute' } },
+    ),
+    true,
+  );
+  assert.equal(
+    isPipelineEligibleContact(
+      { id: 'contact-5', source: 'Estimate request', hasLeadStatus: false, businessUnitId: 'bu-signs' },
+      { businessUnit },
+    ),
+    true,
+  );
+  assert.equal(
+    isPipelineEligibleContact(
+      { id: 'contact-6', hasLeadStatus: false, businessUnitId: 'bu-signs' },
+      { businessUnit, activityEvents: [{ eventType: 'import_promoted_note', sourceSheet: '2. ESTIMADOS' }] },
+    ),
+    false,
   );
 });

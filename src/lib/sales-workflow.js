@@ -58,6 +58,36 @@ function hasRows(rows) {
   return Array.isArray(rows) && rows.length > 0;
 }
 
+function isImportedAitSignsSource(value) {
+  const source = normalized(value);
+  const importedSourceLabels = new Set([
+    'archive',
+    'estimate',
+    'payment snapshot',
+    'spreadsheet',
+    'work order',
+    'xlsx',
+  ]);
+  return source.includes('ait signs import') || importedSourceLabels.has(source);
+}
+
+function isImportedAitSignsArtifactSheet(value) {
+  const sourceSheet = normalized(value);
+  return [
+    'estimados',
+    'terminados',
+    'pagados',
+    'spreadsheet',
+    'work order',
+  ].some((label) => sourceSheet.includes(label));
+}
+
+function isImportedAitSignsArtifactEvent(row = {}) {
+  const eventType = normalized(row.eventType);
+  if (eventType === 'import promoted note') return true;
+  return isImportedAitSignsArtifactSheet(row.sourceSheet);
+}
+
 function aitSignsStatusFromRelated({ workOrders = [], estimates = [], paymentSnapshots = [], financials = [] } = {}) {
   const paymentLikeFinancials = financials.filter((item) => {
     const type = normalized(item.type);
@@ -198,6 +228,31 @@ export function workflowFromContact(contact = {}, options = {}) {
       newestDateValue(options.financials || [], ['date', 'dueDate', 'createdAt', 'updatedAt']),
     ),
   };
+}
+
+export function isPipelineEligibleContact(contact = {}, options = {}) {
+  const businessUnit = options.businessUnit || businessUnitById(
+    options.businessUnits,
+    contact.businessUnitId || contact.primaryBusinessUnitId,
+  );
+  const workflowKey = workflowKeyForBusinessUnit(businessUnit || contact.businessUnitName || contact.divisionLabel || '');
+  if (workflowKey !== WORKFLOW_KEYS.AIT_SIGNS) return true;
+
+  const hasLead = Boolean(contact.hasLeadStatus || contact.leadId);
+  const hasOperationalRecord = hasRows(options.workOrders) ||
+    hasRows(options.estimates) ||
+    hasRows(options.paymentSnapshots) ||
+    hasRows(options.financials);
+  if (hasLead || hasOperationalRecord) return true;
+
+  const importArtifactSignal = [
+    contact.source,
+    contact.sourceLabel,
+    contact.sourceType,
+  ].some(isImportedAitSignsSource) ||
+    hasRows(options.activityEvents?.filter(isImportedAitSignsArtifactEvent)) ||
+    hasRows(options.events?.filter(isImportedAitSignsArtifactEvent));
+  return !importArtifactSignal;
 }
 
 export function isWorkflowStatusClosed(status, businessUnit = null) {

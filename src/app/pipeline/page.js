@@ -73,18 +73,22 @@ export default function PipelinePage() {
     if (!selectedBusinessUnitId) return true;
     return (contact.businessUnitId || contact.primaryBusinessUnitId) === selectedBusinessUnitId;
   }), [contactRows, selectedBusinessUnitId]);
+  const pipelineScopedRows = useMemo(
+    () => scopedRows.filter((contact) => contact.isPipelineEligible !== false),
+    [scopedRows],
+  );
 
   const pipelineStats = useMemo(() => ({
-    needsFirstOutreach: scopedRows.filter((contact) => contact.needsFirstOutreach).length,
-    unassigned: scopedRows.filter((contact) => !contact.assignedTo).length,
-    active: scopedRows.filter((contact) => {
+    needsFirstOutreach: pipelineScopedRows.filter((contact) => contact.needsFirstOutreach).length,
+    unassigned: pipelineScopedRows.filter((contact) => !contact.assignedTo).length,
+    active: pipelineScopedRows.filter((contact) => {
       const businessUnit = businessUnitById.get(contact.businessUnitId || contact.primaryBusinessUnitId) || null;
       return !isWorkflowStatusClosed(contact.status, businessUnit);
     }).length,
-  }), [businessUnitById, scopedRows]);
+  }), [businessUnitById, pipelineScopedRows]);
 
   const normalizedSearch = search.trim().toLowerCase();
-  const pipelineRows = scopedRows.filter((contact) => {
+  const pipelineRows = pipelineScopedRows.filter((contact) => {
     const businessUnit = businessUnitById.get(contact.businessUnitId || contact.primaryBusinessUnitId) || null;
     const workflowMatch =
       workflowFilter === 'all' ||
@@ -141,7 +145,7 @@ export default function PipelinePage() {
       <div className={s.scopeBar}>
         <div className={s.scopeTitle}>
           <strong>{activeWorkflow.label}</strong>
-          <span>{pipelineBusinessUnit?.name || currentBusinessUnit?.name || 'Selected division'} · {pipelineRows.length} shown of {scopedRows.length}</span>
+          <span>{pipelineBusinessUnit?.name || currentBusinessUnit?.name || 'Selected division'} · {pipelineRows.length} shown of {pipelineScopedRows.length}</span>
         </div>
         {!currentScopedBusinessUnitId && accessibleBusinessUnits.length > 1 && (
           <select

@@ -25,7 +25,7 @@ import {
   scopedOrgWhere,
 } from './crm/access.js';
 import { toBusinessUnitPayload } from './crm/payloads.js';
-import { workflowFromLead } from './sales-workflow';
+import { isPipelineEligibleContact, workflowFromLead } from './sales-workflow';
 import { TASK_STATUSES } from './tasks/constants.js';
 import { buildContactTimeline, filterTimelineRowsForBusinessUnit } from './timeline/service.js';
 import { summarizeContactTouch } from './contact-touch.js';
@@ -91,11 +91,14 @@ function mapContacts(
   return contactRows.map((contact, index) => {
     const lead = leadByContactId.get(contact.id);
     const businessUnit = businessUnitById.get(contact.primaryBusinessUnitId) || null;
+    const contactWorkOrders = workOrdersByContactId.get(contact.id) || [];
+    const contactEstimates = estimatesByContactId.get(contact.id) || [];
+    const contactPaymentSnapshots = paymentSnapshotsByContactId.get(contact.id) || [];
     const workflow = workflowFromLead(lead, {
       businessUnit,
-      workOrders: workOrdersByContactId.get(contact.id) || [],
-      estimates: estimatesByContactId.get(contact.id) || [],
-      paymentSnapshots: paymentSnapshotsByContactId.get(contact.id) || [],
+      workOrders: contactWorkOrders,
+      estimates: contactEstimates,
+      paymentSnapshots: contactPaymentSnapshots,
     });
     const contactNotes = filterTimelineRowsForBusinessUnit(notesByContactId.get(contact.id) || [], businessUnitIds);
     const contactEvents = filterTimelineRowsForBusinessUnit(eventsByContactId.get(contact.id) || [], businessUnitIds);
@@ -103,9 +106,19 @@ function mapContacts(
       conversationMessagesByContactId.get(contact.id) || [],
       businessUnitIds,
     );
-    const contactWorkOrders = workOrdersByContactId.get(contact.id) || [];
-    const contactEstimates = estimatesByContactId.get(contact.id) || [];
-    const contactPaymentSnapshots = paymentSnapshotsByContactId.get(contact.id) || [];
+    const source = lead?.sourceName || lead?.sourceType || contact.sourceLabel || seedData.SOURCES[index % seedData.SOURCES.length];
+    const isPipelineEligible = isPipelineEligibleContact({
+      ...contact,
+      source,
+      hasLeadStatus: Boolean(lead),
+      leadId: lead?.id || '',
+    }, {
+      businessUnit,
+      workOrders: contactWorkOrders,
+      estimates: contactEstimates,
+      paymentSnapshots: contactPaymentSnapshots,
+      activityEvents: contactEvents,
+    });
     const noteItems = contactNotes.map((note) => ({
       id: note.id,
       text: note.body,
@@ -143,6 +156,7 @@ function mapContacts(
       primaryBusinessUnitId: contact.primaryBusinessUnitId || '',
       businessUnitName: businessUnit?.name || '',
       hasLeadStatus: Boolean(lead),
+      isPipelineEligible,
       workflowKey: workflow.workflowKey,
       workflowLabel: workflow.workflowLabel,
       status: workflow.status,
@@ -152,7 +166,8 @@ function mapContacts(
       priority: workflow.priority,
       outreachState: workflow.outreachState,
       needsFirstOutreach: workflow.needsFirstOutreach,
-      source: lead?.sourceName || lead?.sourceType || contact.sourceLabel || seedData.SOURCES[index % seedData.SOURCES.length],
+      source,
+      sourceLabel: contact.sourceLabel || '',
       assignedTo: lead?.assignedUserId || '',
       lastContact: touchSummary.lastTouch,
       lastTouch: touchSummary.lastTouch,

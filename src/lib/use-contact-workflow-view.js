@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import {
   PIPELINE_STATUSES,
   isWorkflowStatusClosed,
+  isPipelineEligibleContact,
   workflowColumnsForBusinessUnit,
   workflowForBusinessUnit,
   workflowFromContact,
@@ -89,12 +90,22 @@ export function useContactWorkflowView({
   const contactsWithWorkflow = useMemo(() => contacts.map((contact) => {
     const businessUnit = businessUnitById.get(contact.businessUnitId || contact.primaryBusinessUnitId) || null;
     const relatedFinancials = financialsByContactId.get(contact.id) || [];
+    const relatedWorkOrders = workOrdersByContactId.get(contact.id) || [];
+    const relatedPaymentSnapshots = relatedFinancials.filter((record) => ['Receipt', 'Invoice'].includes(record.type));
     const workflow = workflowFromContact(contact, {
       businessUnit,
-      workOrders: workOrdersByContactId.get(contact.id) || [],
+      workOrders: relatedWorkOrders,
       financials: relatedFinancials,
-      paymentSnapshots: relatedFinancials.filter((record) => ['Receipt', 'Invoice'].includes(record.type)),
+      paymentSnapshots: relatedPaymentSnapshots,
     });
+    const isPipelineEligible = typeof contact.isPipelineEligible === 'boolean'
+      ? contact.isPipelineEligible
+      : isPipelineEligibleContact(contact, {
+        businessUnit,
+        workOrders: relatedWorkOrders,
+        financials: relatedFinancials,
+        paymentSnapshots: relatedPaymentSnapshots,
+      });
     return {
       ...contact,
       workflowKey: workflow.workflowKey,
@@ -106,6 +117,7 @@ export function useContactWorkflowView({
       priority: workflow.priority || contact.priority,
       outreachState: workflow.outreachState || contact.outreachState,
       needsFirstOutreach: workflow.needsFirstOutreach || contact.needsFirstOutreach,
+      isPipelineEligible,
     };
   }), [businessUnitById, contacts, financialsByContactId, workOrdersByContactId]);
 
