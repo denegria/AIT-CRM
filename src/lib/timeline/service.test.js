@@ -291,11 +291,16 @@ test('buildContactTimeline demotes raw imported notes behind source details', ()
       id: 'note-cleanup-1',
       body: 'AIT Signs cleanup merged duplicate customer contacts into this account.\nMerged duplicate contacts:\n- FELIX | company: BLUE MOUNTAIN | linked rows: 3',
       createdAt: new Date('2026-06-02T02:22:29.828Z'),
+    }, {
+      id: 'note-mis97-cleanup-1',
+      body: 'MIS-97 staging duplicate cleanup (mis97_blue_contacts_confirmed_staging_apply).\nCanonical contact retained as: BLUE MOUNTAIN.\nMerged contact rows and preserved source contact details:\n- name=MARK BLUE MOUNTAIN | company=MARK BLUE MOUNTAIN | phone=908 642 3020',
+      createdAt: new Date('2026-06-04T23:55:46.644Z'),
     }],
   });
 
   const rawNote = timeline.find((entry) => entry.id === 'note:note-raw-1');
   const cleanupNote = timeline.find((entry) => entry.id === 'note:note-cleanup-1');
+  const mis97CleanupNote = timeline.find((entry) => entry.id === 'note:note-mis97-cleanup-1');
 
   assert.equal(rawNote.title, 'Imported workbook note');
   assert.equal(rawNote.text, 'Workbook note captured for audit. Expand source details for the original imported row.');
@@ -305,6 +310,10 @@ test('buildContactTimeline demotes raw imported notes behind source details', ()
   assert.equal(cleanupNote.title, 'Source cleanup note');
   assert.equal(cleanupNote.presentation.category, 'import');
   assert.equal(cleanupNote.presentation.provenance.sourceKind, 'Cleanup provenance');
+  assert.equal(mis97CleanupNote.title, 'Source cleanup note');
+  assert.equal(mis97CleanupNote.text, 'Duplicate customer/contact rows were folded into this account. Expand source details for preserved aliases and linked-row counts.');
+  assert.equal(mis97CleanupNote.presentation.category, 'import');
+  assert.equal(mis97CleanupNote.presentation.provenance.sourceKind, 'Cleanup provenance');
 });
 
 test('filterTimelineRowsForBusinessUnit preserves unassigned rows and allowed divisions only', () => {

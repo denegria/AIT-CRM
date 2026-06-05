@@ -314,7 +314,11 @@ function workbookLikeText(value = '') {
 }
 
 function cleanupMergeNoteText(value = '') {
-  return String(value || '').startsWith('AIT Signs cleanup merged duplicate customer contacts');
+  const text = String(value || '').trim();
+  return (
+    text.startsWith('AIT Signs cleanup merged duplicate customer contacts') ||
+    text.startsWith('MIS-97 staging duplicate cleanup')
+  );
 }
 
 function importedNoteInterpretation(value = '') {

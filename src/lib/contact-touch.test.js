@@ -77,6 +77,29 @@ test('summarizeContactTouch uses AIT Signs job history dates and exposes edit se
   assert.match(summary.latestComment, /EL PALACIO/);
 });
 
+test('summarizeContactTouch ignores MIS-97 cleanup notes as customer comments', () => {
+  const summary = summarizeContactTouch({
+    contact: {
+      updatedAt: new Date('2026-06-05T00:00:00.000Z'),
+      createdAt: new Date('2026-06-01T15:00:00.000Z'),
+    },
+    businessUnit: { name: 'AIT Signs' },
+    referenceTime: new Date('2026-06-05T00:00:00.000Z').getTime(),
+    notes: [{
+      body: 'MIS-97 staging duplicate cleanup (mis97_blue_contacts_confirmed_staging_apply).\nCanonical contact retained as: BLUE MOUNTAIN.\nMerged contact rows and preserved source contact details:\n- name=MARK BLUE MOUNTAIN | phone=908 642 3020',
+      createdAt: new Date('2026-06-04T23:55:46.644Z'),
+    }],
+    activityEvents: [{
+      eventType: 'import_promoted_work_order',
+      message: '1527 | SI | NO | 45315.0 | BLUE MOUNTAIN | FELIX | (20) YARD SIGN 24 X 18 | ENTREGADO',
+      createdAt: new Date('2026-05-30T13:05:44.087Z'),
+    }],
+  });
+
+  assert.match(summary.latestComment, /BLUE MOUNTAIN/);
+  assert.doesNotMatch(summary.latestComment, /MIS-97 staging duplicate cleanup/);
+});
+
 test('summarizeContactTouch ignores future AIT Signs date artifacts', () => {
   const summary = summarizeContactTouch({
     contact: {

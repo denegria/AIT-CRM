@@ -60,7 +60,11 @@ function businessTimeFromText(value, fallback, referenceTime, { allowFallback = 
 }
 
 function isCleanupNote(text = '') {
-  return cleanText(text).toLowerCase().startsWith('ait signs cleanup merged duplicate customer contacts');
+  const normalized = cleanText(text).toLowerCase();
+  return (
+    normalized.startsWith('ait signs cleanup merged duplicate customer contacts') ||
+    normalized.startsWith('mis-97 staging duplicate cleanup')
+  );
 }
 
 function isImportedHistoryText(text = '') {
