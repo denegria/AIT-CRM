@@ -20,6 +20,7 @@ PHONE_RE = re.compile(r"(?<!\d)(?:\+?\d[\d\s().-]{5,}\d)(?!\d)")
 EMAIL_RE = re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE)
 MONEY_RE = re.compile(r"(?<!\w)\$?\s*\d[\d,]*(?:\.\d+)?(?!\w)")
 EXCEL_SERIAL_RE = re.compile(r"^4[0-9]{4}(?:\.0)?$")
+DATE_LIKE_RE = re.compile(r"^\d{1,2}[./-]\d{1,2}[./-]\d{2,4}$")
 
 
 def col_to_number(col: str) -> int:
@@ -202,12 +203,30 @@ def extract_first_phone(values: list[str]) -> str | None:
             continue
         for match in PHONE_RE.finditer(text):
             phone = normalize_text(match.group(0))
+            if DATE_LIKE_RE.match(phone):
+                continue
             digits = re.sub(r"\D", "", phone)
             if 7 <= len(digits) <= 15:
                 candidates.append((len(digits), digits))
     if not candidates:
         return None
     return max(candidates, key=lambda item: item[0])[1]
+
+
+def normalize_phone_hint(value: object) -> str | None:
+    text = normalize_text(value)
+    if not text:
+        return None
+    lower = text.lower()
+    if "sin telefono" in lower or "sin teléfono" in lower or "no phone" in lower:
+        return None
+    compact = text.replace(",", "")
+    if "." in compact and compact.replace(".", "", 1).isdigit():
+        return None
+    if EXCEL_SERIAL_RE.match(compact) or DATE_LIKE_RE.match(compact):
+        return None
+    digits = re.sub(r"\D", "", text)
+    return digits if 7 <= len(digits) <= 15 else None
 
 
 def extract_first_email(values: list[str]) -> str | None:
@@ -399,13 +418,13 @@ def structured_proposal_hints(values: list[str], family: str) -> dict:
     balance_amount = structured_money(values, COL_BALANCE)
     customer = structured_cell(values, COL_CUSTOMER)
     contact = structured_cell(values, COL_CONTACT)
-    phone = structured_cell(values, COL_PHONE)
+    phone = normalize_phone_hint(structured_cell(values, COL_PHONE))
 
     return {
         "customerName": customer,
         "contactName": contact,
         "contactHint": customer or contact or None,
-        "phoneHint": normalize_text(re.sub(r"\D", "", phone)) if phone else None,
+        "phoneHint": phone,
         "emailHint": extract_first_email(values),
         "workDescription": structured_cell(values, COL_WORK_DESCRIPTION),
         "statusText": structured_cell(values, COL_STATUS),

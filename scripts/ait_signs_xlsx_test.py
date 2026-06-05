@@ -135,6 +135,31 @@ class AitSignsWorkbookMappingTest(unittest.TestCase):
 
         self.assertIsNone(extract_first_phone(values))
 
+    def test_date_like_values_are_not_phone_numbers(self):
+        values = row_with(
+            {
+                7: "05.03.2023",
+                13: "12/28/2023 NO CONTESTA LINA",
+            }
+        )
+
+        hints = structured_proposal_hints(values, "completed_paid")
+        self.assertIsNone(hints["phoneHint"])
+        self.assertIsNone(extract_first_phone(values))
+
+    def test_no_phone_marker_is_not_a_phone_number(self):
+        values = row_with(
+            {
+                5: "BLUE OCEAN POOL",
+                7: "SIN TELEFONO",
+                13: "READY 05.03.2023",
+            }
+        )
+
+        hints = structured_proposal_hints(values, "completed_paid")
+        self.assertIsNone(hints["phoneHint"])
+        self.assertEqual(hints["customerName"], "BLUE OCEAN POOL")
+
     def test_identityless_rows_do_not_create_normalized_records(self):
         report = {
             "sheets": [
