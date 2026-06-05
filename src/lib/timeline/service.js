@@ -317,8 +317,36 @@ function cleanupMergeNoteText(value = '') {
   const text = String(value || '').trim();
   return (
     text.startsWith('AIT Signs cleanup merged duplicate customer contacts') ||
-    text.startsWith('MIS-97 staging duplicate cleanup')
+    text.startsWith('MIS-97 staging duplicate cleanup') ||
+    text.startsWith('MIS-125 approved invalid-phone collision merge') ||
+    text.startsWith('MIS-125 approved multi-phone primary correction') ||
+    text.startsWith('MIS-125 staging phone backfill')
   );
+}
+
+function cleanupAuditSummary(value = '') {
+  const text = String(value || '').trim();
+  const canonical = text.match(/Canonical retained as:\s*([^\n.]+)/i)?.[1];
+  const contact = text.match(/Contact retained as:\s*([^\n.]+)/i)?.[1];
+  const primaryPhone = text.match(/Primary phone set (?:from|to):\s*([^\n.]+)/i)?.[1];
+  const alternatePhones = text.match(/Alternate source phone\(s\)[^:]*:\s*([^\n.]+)/i)?.[1];
+  const mergedNames = [...text.matchAll(/(?:^|\n)-\s*name=([^|\n]+)/g)]
+    .map((match) => readableLine(match[1]))
+    .filter(Boolean);
+  const legacyMergedNames = mergedNames.length ? [] : [...text.matchAll(/(?:^|\n)-\s*([^|\n]+)/g)]
+    .map((match) => readableLine(match[1]))
+    .filter((value) => value && !value.includes(':'));
+
+  const retained = canonical || contact;
+  const lines = compactArray([
+    retained ? `Retained ${retained}.` : '',
+    primaryPhone ? `Primary phone ${primaryPhone}.` : '',
+    alternatePhones ? `Alternate source phone(s): ${alternatePhones}.` : '',
+    (mergedNames.length || legacyMergedNames.length)
+      ? `Merged aliases: ${(mergedNames.length ? mergedNames : legacyMergedNames).slice(0, 4).join(', ')}${(mergedNames.length || legacyMergedNames.length) > 4 ? ', ...' : ''}.`
+      : '',
+  ]);
+  return lines.join(' ');
 }
 
 function importedNoteInterpretation(value = '') {
@@ -328,14 +356,14 @@ function importedNoteInterpretation(value = '') {
   if (websiteDetails) return websiteDetails;
   if (cleanupMergeNoteText(text)) {
     return {
-      title: 'Source cleanup note',
-      text: 'Duplicate customer/contact rows were folded into this account. Expand source details for preserved aliases and linked-row counts.',
+      title: 'Audit / Source Cleanup',
+      text: cleanupAuditSummary(text) || 'Duplicate customer/contact rows were folded into this account.',
       hint: {
-        category: TIMELINE_CATEGORIES.IMPORT,
-        categoryLabel: 'Source details',
-        priority: 'secondary',
-        isImported: true,
-        sourceKind: 'Cleanup provenance',
+        category: TIMELINE_CATEGORIES.NOTE,
+        categoryLabel: 'Audit / Source Cleanup',
+        priority: 'primary',
+        isImported: false,
+        sourceKind: 'Cleanup audit',
         rawText: text,
       },
     };
@@ -506,13 +534,15 @@ export function presentationForTimelineEntry(entry) {
   const importedOverride = hint.isImported || false;
   const finalCategory = categoryOverride || category;
 
-  return {
+  const presentation = {
     category: finalCategory,
     categoryLabel: categoryLabelOverride || TIMELINE_CATEGORY_LABELS[finalCategory],
     priority: priorityOverride || (finalCategory === TIMELINE_CATEGORIES.IMPORT ? 'secondary' : 'primary'),
     provenance: Object.keys(provenance).length ? provenance : null,
     isImported: importedOverride || isImport,
   };
+  if (hint.sourceGroupLabel) presentation.sourceGroupLabel = hint.sourceGroupLabel;
+  return presentation;
 }
 
 function withPresentation(entry) {
@@ -570,6 +600,12 @@ export function buildContactTimeline({
       .map((row) => [sourceKey(row.sourceSheet, row.sourceRow), row])
       .filter(([key]) => key),
   );
+  const importedSourceCounts = new Map();
+  for (const row of activityRows) {
+    const key = sourceKey(row.sourceSheet, row.sourceRow);
+    if (!key || !String(row.eventType || '').toLowerCase().startsWith('import_promoted_')) continue;
+    importedSourceCounts.set(key, (importedSourceCounts.get(key) || 0) + 1);
+  }
   const hasCanonicalTaskEvents = taskEventRows.length > 0;
 
   const entries = [];
@@ -609,9 +645,14 @@ export function buildContactTimeline({
       ? event.message || ''
       : '';
     const importedWorkbookNote = String(event.eventType || '').toLowerCase() === 'import_promoted_note' && workbookLikeText(rawImportedText);
-    const eventPresentationHint = rawImportedText && (record || workbookLikeText(rawImportedText))
-      ? { rawText: rawImportedText }
-      : null;
+    const eventSourceKey = sourceKey(event.sourceSheet, event.sourceRow);
+    const sourceGroupCount = eventSourceKey ? importedSourceCounts.get(eventSourceKey) || 0 : 0;
+    const eventPresentationHint = compactObject({
+      rawText: rawImportedText && (record || workbookLikeText(rawImportedText)) ? rawImportedText : '',
+      sourceGroupLabel: sourceGroupCount > 1 && event.sourceRow
+        ? `Workbook row ${event.sourceRow}: ${sourceGroupCount} imported records`
+        : '',
+    });
     entries.push(withPresentation({
       id: `activity:${event.id}`,
       type: entryType,
@@ -619,7 +660,7 @@ export function buildContactTimeline({
       eventType: event.eventType,
       title: record?.title || (importedWorkbookNote ? 'Imported workbook note' : titleCaseEventType(event.eventType)),
       text: interpretedImportText(event, record),
-      rawText: eventPresentationHint?.rawText || '',
+      rawText: eventPresentationHint.rawText || '',
       timestamp: isoTimestamp(event.occurredAt || event.createdAt),
       date: isoDate(event.occurredAt || event.createdAt),
       actor: userPayload(event.actorUserId, userLookup),
@@ -628,7 +669,7 @@ export function buildContactTimeline({
       linkedRecords: linkedRecordPayload({ ...event, taskId: metadataJson.taskId }, linkedTask),
       record,
       metadataJson,
-      presentationHint: eventPresentationHint,
+      presentationHint: Object.keys(eventPresentationHint).length ? eventPresentationHint : null,
     }));
   }
 

@@ -232,7 +232,7 @@ test('buildContactTimeline makes AIT Signs promoted work and financial history r
         workOrderId: 'work-order-1',
         eventType: 'import_promoted_work_order',
         message: 'INSTALAR LETRERO - ENTREGADO PENDIENTE DE COBRO',
-        sourceSheet: '3. 15 SIGNS WORK ORDER',
+        sourceSheet: 'WORK ORDER TERMINADOS Y PAGADOS',
         sourceRow: 45,
         occurredAt: new Date('2026-04-01T13:00:00.000Z'),
       },
@@ -242,7 +242,7 @@ test('buildContactTimeline makes AIT Signs promoted work and financial history r
         eventType: 'import_promoted_payment_snapshot',
         message: '$500 balance captured from workbook.',
         sourceSheet: 'WORK ORDER TERMINADOS Y PAGADOS',
-        sourceRow: 90,
+        sourceRow: 45,
         occurredAt: new Date('2026-04-02T13:00:00.000Z'),
       },
     ],
@@ -258,7 +258,7 @@ test('buildContactTimeline makes AIT Signs promoted work and financial history r
       amount: '500.00',
       balanceAfter: '54.45',
       sourceSheet: 'WORK ORDER TERMINADOS Y PAGADOS',
-      sourceRow: 90,
+      sourceRow: 45,
     }],
   });
 
@@ -272,13 +272,15 @@ test('buildContactTimeline makes AIT Signs promoted work and financial history r
   assert.equal(work.record.stageLabel, 'Completed');
   assert.deepEqual(work.record.stages.map((stage) => stage.label), ['Work order', 'Delivered', 'Completed']);
   assert.equal(work.presentation.category, 'work');
-  assert.equal(work.presentation.provenance.sourceKind, 'Active work source');
+  assert.equal(work.presentation.provenance.sourceKind, 'Completed work source');
   assert.equal(work.presentation.provenance.rawText, 'INSTALAR LETRERO - ENTREGADO PENDIENTE DE COBRO');
+  assert.equal(work.presentation.sourceGroupLabel, 'Workbook row 45: 2 imported records');
   assert.equal(payment.title, 'Payment snapshot $500');
   assert.equal(payment.text, '$500 · Balance $54.45');
   assert.equal(payment.record.kind, 'payment_snapshot');
   assert.equal(payment.presentation.category, 'payment');
   assert.equal(payment.presentation.provenance.sourceKind, 'Completed work source');
+  assert.equal(payment.presentation.sourceGroupLabel, 'Workbook row 45: 2 imported records');
 });
 
 test('buildContactTimeline demotes raw imported notes behind source details', () => {
@@ -295,25 +297,36 @@ test('buildContactTimeline demotes raw imported notes behind source details', ()
       id: 'note-mis97-cleanup-1',
       body: 'MIS-97 staging duplicate cleanup (mis97_blue_contacts_confirmed_staging_apply).\nCanonical contact retained as: BLUE MOUNTAIN.\nMerged contact rows and preserved source contact details:\n- name=MARK BLUE MOUNTAIN | company=MARK BLUE MOUNTAIN | phone=908 642 3020',
       createdAt: new Date('2026-06-04T23:55:46.644Z'),
+    }, {
+      id: 'note-mis125-cleanup-1',
+      body: 'MIS-125 approved invalid-phone collision merge.\nCanonical retained as: BRENMA TREE SERVICE.\nApproval: Alvaro #2/#3: Brenma Tree Service / same as 2.\nSource: WORK ORDER TERMINADOS Y PAGADOS rows 1445, 1518, 1697 plus existing BREMMA/BRENMA tree-service collision.\nMerged contact rows and preserved aliases/contact context:\n- name=BREMMA LANDSCAPING | company=BREMMA LANDSCAPING | phone=15460625 | links=6\n- name=BRENMA LANDSCAPING | company=BRENMA LANDSCAPING | phone=10129375 | links=3',
+      createdAt: new Date('2026-06-05T04:22:55.000Z'),
     }],
   });
 
   const rawNote = timeline.find((entry) => entry.id === 'note:note-raw-1');
   const cleanupNote = timeline.find((entry) => entry.id === 'note:note-cleanup-1');
   const mis97CleanupNote = timeline.find((entry) => entry.id === 'note:note-mis97-cleanup-1');
+  const mis125CleanupNote = timeline.find((entry) => entry.id === 'note:note-mis125-cleanup-1');
 
   assert.equal(rawNote.title, 'Imported workbook note');
   assert.equal(rawNote.text, 'Workbook note captured for audit. Expand source details for the original imported row.');
   assert.equal(rawNote.presentation.category, 'import');
   assert.equal(rawNote.presentation.provenance.sourceKind, 'Imported workbook note');
   assert.match(rawNote.presentation.provenance.rawText, /BLUE MOUNTAIN/);
-  assert.equal(cleanupNote.title, 'Source cleanup note');
-  assert.equal(cleanupNote.presentation.category, 'import');
-  assert.equal(cleanupNote.presentation.provenance.sourceKind, 'Cleanup provenance');
-  assert.equal(mis97CleanupNote.title, 'Source cleanup note');
-  assert.equal(mis97CleanupNote.text, 'Duplicate customer/contact rows were folded into this account. Expand source details for preserved aliases and linked-row counts.');
-  assert.equal(mis97CleanupNote.presentation.category, 'import');
-  assert.equal(mis97CleanupNote.presentation.provenance.sourceKind, 'Cleanup provenance');
+  assert.equal(cleanupNote.title, 'Audit / Source Cleanup');
+  assert.equal(cleanupNote.presentation.category, 'note');
+  assert.equal(cleanupNote.presentation.categoryLabel, 'Audit / Source Cleanup');
+  assert.equal(cleanupNote.presentation.provenance.sourceKind, 'Cleanup audit');
+  assert.equal(mis97CleanupNote.title, 'Audit / Source Cleanup');
+  assert.match(mis97CleanupNote.text, /Retained BLUE MOUNTAIN/);
+  assert.match(mis97CleanupNote.text, /Merged aliases: MARK BLUE MOUNTAIN/);
+  assert.equal(mis97CleanupNote.presentation.category, 'note');
+  assert.equal(mis97CleanupNote.presentation.provenance.sourceKind, 'Cleanup audit');
+  assert.equal(mis125CleanupNote.title, 'Audit / Source Cleanup');
+  assert.match(mis125CleanupNote.text, /Retained BRENMA TREE SERVICE/);
+  assert.match(mis125CleanupNote.text, /Merged aliases: BREMMA LANDSCAPING, BRENMA LANDSCAPING/);
+  assert.equal(mis125CleanupNote.presentation.categoryLabel, 'Audit / Source Cleanup');
 });
 
 test('filterTimelineRowsForBusinessUnit preserves unassigned rows and allowed divisions only', () => {

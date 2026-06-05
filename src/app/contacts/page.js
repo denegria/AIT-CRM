@@ -192,6 +192,18 @@ export default function ContactsPage() {
     () => filterContactsByDirectoryFacet(baseFilteredContacts, effectiveDirectoryFacet, facetContext),
     [baseFilteredContacts, effectiveDirectoryFacet, facetContext],
   );
+  const invalidPhoneScopeSummary = useMemo(() => {
+    if (effectiveDirectoryFacet !== 'invalid_phone') return '';
+    const counts = new Map();
+    for (const contact of filteredContacts) {
+      const label = contact.divisionLabel || businessUnitById.get(contact.businessUnitId || contact.primaryBusinessUnitId)?.name || 'Unassigned';
+      counts.set(label, (counts.get(label) || 0) + 1);
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([label, count]) => `${label}: ${count}`)
+      .join(' · ');
+  }, [businessUnitById, effectiveDirectoryFacet, filteredContacts]);
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
@@ -226,6 +238,9 @@ export default function ContactsPage() {
         <div className="contacts-facet-summary">
           <strong>{filteredContacts.length}</strong>
           <span>matching contacts</span>
+          {invalidPhoneScopeSummary && (
+            <small>{invalidPhoneScopeSummary}</small>
+          )}
         </div>
         <div className="contacts-facet-groups">
           {facetGroups.map((group) => (

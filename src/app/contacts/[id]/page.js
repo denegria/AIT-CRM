@@ -168,6 +168,30 @@ function timelineEmptyText(filterValue, filters) {
   return filters.find((filter) => filter.value === filterValue)?.empty || 'No activity recorded yet.';
 }
 
+function timelineCleanupAudit(item = {}) {
+  const provenance = item.presentation?.provenance;
+  if (provenance?.sourceKind !== 'Cleanup audit') return null;
+  const rawText = provenance.rawText || item.text || '';
+  const mergedNames = [...String(rawText).matchAll(/(?:^|\n)-\s*name=([^|\n]+)/g)]
+    .map((match) => cleanText(match[1]))
+    .filter(Boolean);
+  const legacyMergedNames = mergedNames.length ? [] : [...String(rawText).matchAll(/(?:^|\n)-\s*([^|\n]+)/g)]
+    .map((match) => cleanText(match[1]))
+    .filter((value) => value && !value.includes(':'));
+  const aliases = mergedNames.length ? mergedNames : legacyMergedNames;
+  const retained = String(rawText).match(/Canonical (?:contact )?retained as:\s*([^\n.]+)/i)?.[1]
+    || String(rawText).match(/Contact retained as:\s*([^\n.]+)/i)?.[1]
+    || '';
+  const phone = String(rawText).match(/Primary phone set (?:from|to):\s*([^\n.]+)/i)?.[1] || '';
+  return {
+    id: item.id,
+    title: retained ? `Retained ${retained}` : item.title || 'Cleanup audit',
+    detail: aliases.length
+      ? `Merged ${aliases.slice(0, 3).join(', ')}${aliases.length > 3 ? ', ...' : ''}`
+      : (phone ? `Primary phone ${phone}` : item.text || 'Cleanup provenance recorded'),
+  };
+}
+
 function conversationDateLabel(message) {
   return dateLabel({ timestamp: message.timestamp || message.createdAt });
 }
@@ -266,6 +290,7 @@ export default function ContactDetailPage() {
       ? 'error'
       : 'idle';
   const timelineSource = hasMatchingServerTimeline && serverTimeline.items ? serverTimeline.items : fallbackTimeline;
+  const cleanupAudits = useMemo(() => timelineSource.map(timelineCleanupAudit).filter(Boolean).slice(0, 3), [timelineSource]);
   const timelineCounts = useMemo(() => timelineSource.reduce((counts, item) => {
     counts.all += 1;
     const category = timelineCategory(item);
@@ -528,6 +553,21 @@ export default function ContactDetailPage() {
             </div>
           )}
 
+          {!!cleanupAudits.length && (
+            <div className={s.cleanupSummary} aria-label="Cleanup provenance">
+              <div className={s.cleanupSummaryHeader}>
+                <Archive size={15} />
+                <span>Cleanup provenance</span>
+              </div>
+              {cleanupAudits.map((audit) => (
+                <div key={audit.id} className={s.cleanupSummaryItem}>
+                  <strong>{audit.title}</strong>
+                  <span>{audit.detail}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className={s.profileInfo}>
             <div className={s.infoItem}>
               <Mail size={16} />
@@ -663,6 +703,7 @@ export default function ContactDetailPage() {
                     const visibleDetails = [
                       item.actor?.name ? `By ${item.actor.name}` : '',
                       item.businessUnit?.name || '',
+                      item.presentation?.sourceGroupLabel || '',
                       ...(item.linkedRecords || [])
                         .filter((linkedRecord) => {
                           if (linkedRecord.type === 'contact') return false;
