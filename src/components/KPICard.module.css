@@ -28,3 +28,23 @@
 }
 .up { color:var(--success); }
 .down { color:var(--danger); }
+
+@media (max-width: 640px) {
+  .card {
+    min-height: 92px;
+    padding: 12px;
+  }
+
+  .label {
+    line-height: 1.15;
+  }
+
+  .value {
+    font-size: var(--text-xl);
+  }
+
+  .change {
+    align-items: flex-start;
+    line-height: 1.2;
+  }
+}

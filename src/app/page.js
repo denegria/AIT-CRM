@@ -144,14 +144,14 @@ export default function Dashboard() {
       )}
 
       {role === 'admin' ? (
-        <div className="grid-4" style={{marginBottom:20}}>
+        <div className="dashboard-kpi-grid" style={{marginBottom:20}}>
           <KPICard label="Total Revenue" value={`$${kpis.totalRevenue.toLocaleString()}`} change="12% vs last month" trend="up" />
           <KPICard label="Pipeline Value" value={`$${kpis.pipeline.toLocaleString()}`} change={`${financials.filter(f=>f.type==='Estimate'&&f.status==='Pending').length} estimates`} trend="up" />
           <KPICard label="Active Work Orders" value={kpis.activeWOs} change={`${workOrders.filter(w=>w.status==='In Progress').length} in progress`} trend="up" />
           <KPICard label="New Leads" value={kpis.newLeads} change="This week" trend="up" />
         </div>
       ) : (
-        <div className="grid-4" style={{marginBottom:20}}>
+        <div className="dashboard-kpi-grid" style={{marginBottom:20}}>
           <KPICard label="My Active Tasks" value={kpis.myTasksCount} change="Due soon" trend="up" />
           <KPICard label="Needs Follow Up" value={kpis.needsFollowUp} change="Active leads" trend="up" />
           <KPICard label="Invoices Pending" value={kpis.pendingInvoices} change="Action required" trend="down" />
@@ -159,7 +159,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="card" style={{marginBottom:20, padding:16}}>
+      <div className="card dashboard-action-card" style={{marginBottom:20, padding:16}}>
         <div className="flex-between" style={{alignItems:'flex-start', gap:16}}>
           <div>
             <div className="card-title" style={{marginBottom:4}}>Follow-up queue</div>
@@ -173,7 +173,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid-2" style={{marginBottom:20}}>
+      <div className="dashboard-panel-grid" style={{marginBottom:20}}>
         <div className="card">
           <div className="card-title">Tasks</div>
           <TaskList tasks={myTasks} onToggle={(id, u) => updateTask(id, u)} onAdd={addTask} employees={employees} />
@@ -185,7 +185,7 @@ export default function Dashboard() {
       </div>
 
       {role === 'admin' && (
-        <div className="grid-2" style={{marginBottom:20}}>
+        <div className="dashboard-panel-grid" style={{marginBottom:20}}>
           <div className="card">
             <div className="card-title">Revenue Trend</div>
             <BarChart data={revenueByMonth} width={400} height={200} />
