@@ -45,10 +45,24 @@ const CORE_FORM_FIELD_KEY_NAMES = new Set([
   'source',
   'sourcename',
   'firstname',
+  'first-name',
+  'first_name',
+  'contactfirstname',
+  'contact-first-name',
+  'contact_first_name',
   'lastname',
+  'last-name',
+  'last_name',
+  'contactlastname',
+  'contact-last-name',
+  'contact_last_name',
   'name',
   'fullname',
+  'full-name',
+  'full_name',
   'contactname',
+  'contact-name',
+  'contact_name',
   'company',
   'companyname',
   'businessname',
@@ -242,6 +256,16 @@ function firstText(...values) {
   return '';
 }
 
+function firstFieldText(body, ...keys) {
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(body, key)) {
+      const text = normalizeText(body[key]);
+      if (text) return text;
+    }
+  }
+  return '';
+}
+
 function sourceKeyForBody(body) {
   return firstText(
     body.sourceKey,
@@ -284,10 +308,44 @@ function collectAdditionalFormFields(body) {
 }
 
 export function normalizeWebsiteLeadBody(body) {
-  const firstName = normalizeText(body.firstName);
-  const lastName = normalizeText(body.lastName);
+  const firstName = firstFieldText(
+    body,
+    'firstName',
+    'first_name',
+    'first name',
+    'First Name',
+    'contactFirstName',
+    'contact_first_name',
+    'contact first name',
+    'Contact first name',
+    'Contact First Name',
+  );
+  const lastName = firstFieldText(
+    body,
+    'lastName',
+    'last_name',
+    'last name',
+    'Last Name',
+    'contactLastName',
+    'contact_last_name',
+    'contact last name',
+    'Contact last name',
+    'Contact Last Name',
+  );
   const combinedName = [firstName, lastName].filter(Boolean).join(' ');
-  const name = firstText(body.name, body.fullName, combinedName, body.contactName, body.email, body.phone, 'Website Lead');
+  const fullName = firstFieldText(
+    body,
+    'fullName',
+    'full_name',
+    'full name',
+    'Full Name',
+    'contactName',
+    'contact_name',
+    'contact name',
+    'Contact name',
+    'Contact Name',
+  );
+  const name = firstText(combinedName, fullName, body.name, body.email, body.phone, 'Website Lead');
   const sourceKey = sourceKeyForBody(body);
   const status = normalizeLifecycleStatus(body.status) || 'New Lead';
   const currentStage = normalizeLifecycleStatus(

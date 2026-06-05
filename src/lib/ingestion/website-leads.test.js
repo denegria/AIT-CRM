@@ -49,6 +49,29 @@ test('unwraps Wix-style data payloads before normalization', () => {
   assert.equal(lead.externalId, 'wix-001');
 });
 
+test('prefers split Wix contact names over a legacy concatenated name field', () => {
+  const { lead } = normalizeWebsiteLeadSubmission({
+    name: 'HildaRodriguez',
+    firstName: 'Hilda',
+    lastName: 'Rodriguez',
+    email: 'hilda@example.com',
+  });
+
+  assert.equal(lead.name, 'Hilda Rodriguez');
+  assert.deepEqual(lead.formFields, {});
+});
+
+test('accepts common spaced and snake_case Wix name keys', () => {
+  const { lead } = normalizeWebsiteLeadSubmission({
+    'Contact first name': 'Hilda',
+    contact_last_name: 'Rodriguez',
+    email: 'hilda@example.com',
+  });
+
+  assert.equal(lead.name, 'Hilda Rodriguez');
+  assert.deepEqual(lead.formFields, {});
+});
+
 test('normalizes website lead lifecycle status fields', () => {
   const { lead } = normalizeWebsiteLeadSubmission({
     email: 'qualified@example.com',
