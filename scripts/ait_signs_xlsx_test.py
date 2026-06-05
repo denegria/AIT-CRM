@@ -160,6 +160,31 @@ class AitSignsWorkbookMappingTest(unittest.TestCase):
         self.assertIsNone(hints["phoneHint"])
         self.assertEqual(hints["customerName"], "BLUE OCEAN POOL")
 
+    def test_multiple_us_numbers_in_one_cell_use_first_real_phone(self):
+        values = row_with(
+            {
+                5: "BREMMA TREE SERVICE",
+                6: "OLGER BREMMAN MILEDY",
+                7: "908 421 94 04\n732 357 54 38",
+                10: "(1000) BUSSINES CARD",
+            }
+        )
+
+        hints = structured_proposal_hints(values, "completed_paid")
+        self.assertEqual(hints["phoneHint"], "9084219404")
+        self.assertEqual(extract_first_phone(values), "9084219404")
+
+    def test_invalid_non_us_phone_length_is_not_identity(self):
+        values = row_with(
+            {
+                5: "BAD PHONE CUSTOMER",
+                7: "908 421 94040",
+            }
+        )
+
+        hints = structured_proposal_hints(values, "completed_paid")
+        self.assertIsNone(hints["phoneHint"])
+
     def test_identityless_rows_do_not_create_normalized_records(self):
         report = {
             "sheets": [

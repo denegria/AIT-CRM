@@ -39,6 +39,19 @@ function hasPhone(contact = {}) {
   return Boolean(clean(contact.phone));
 }
 
+function phoneDigits(contact = {}) {
+  return clean(contact.phone).replace(/\D+/g, '');
+}
+
+function hasValidUsPhone(contact = {}) {
+  const digits = phoneDigits(contact);
+  return digits.length === 10 || (digits.length === 11 && digits.startsWith('1'));
+}
+
+function hasInvalidPhone(contact = {}) {
+  return hasPhone(contact) && !hasValidUsPhone(contact);
+}
+
 function hasEmail(contact = {}) {
   return Boolean(clean(contact.email));
 }
@@ -150,6 +163,7 @@ export const CONTACT_DIRECTORY_FACET_GROUPS = [
       { id: 'unassigned', label: 'Unassigned', matches: (contact) => !contact.assignedTo },
       { id: 'no_recent_touch', label: 'No Recent Touch', matches: (contact, options = {}) => isNoRecentTouch(contact, options.now) },
       { id: 'missing_phone', label: 'Missing Phone', matches: (contact) => !hasPhone(contact) },
+      { id: 'invalid_phone', label: 'Invalid Phone', matches: hasInvalidPhone },
       { id: 'missing_email', label: 'Missing Email', matches: (contact) => !hasEmail(contact) },
       { id: 'closed', label: 'Closed / Completed', matches: isClosed },
     ],
@@ -224,6 +238,7 @@ export function labelForContactProcessPill(value = '') {
     active_work: 'Active Work',
     balance_due: 'Balance Due',
     do_not_contact: 'Do Not Contact',
+    invalid_phone: 'Invalid Phone',
     missing_email: 'Missing Email',
     missing_phone: 'Missing Phone',
     needs_first_outreach: 'First Outreach',
@@ -252,6 +267,7 @@ export function contactDirectorySignalLabels(contact = {}, options = {}) {
 
   if (contact.needsFirstOutreach) add('First Outreach');
   if (!hasPhone(contact)) add('Missing Phone');
+  if (hasInvalidPhone(contact)) add('Invalid Phone');
   if (!hasEmail(contact)) add('Missing Email');
   if (doNotContact(contact)) add('Do Not Contact');
   if (contact.isWrongNumber) add('Wrong Number');

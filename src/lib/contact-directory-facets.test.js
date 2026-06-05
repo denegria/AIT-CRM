@@ -33,7 +33,7 @@ test('contact directory facets expose counted division-aware buckets', () => {
       businessUnitId: 'signs',
       workflowKey: 'ait_signs',
       status: 'Work Order',
-      phone: '9085553434',
+      phone: '90855534340',
       email: 'shop@example.com',
       relatedWorkOrderCount: 1,
       lastTouch: '2026-05-25',
@@ -67,6 +67,7 @@ test('contact directory facets expose counted division-aware buckets', () => {
   assert.equal(facetCount(groups, 'active'), 3);
   assert.equal(facetCount(groups, 'no_recent_touch'), 2);
   assert.equal(facetCount(groups, 'missing_phone'), 2);
+  assert.equal(facetCount(groups, 'invalid_phone'), 1);
   assert.equal(facetCount(groups, 'signs_source_review'), 1);
   assert.equal(facetCount(groups, 'signs_active_work'), 1);
   assert.equal(facetCount(groups, 'usa_ready_follow_up'), 1);
@@ -118,5 +119,17 @@ test('contact directory signal labels summarize useful row context', () => {
       processPills: ['ready_for_follow_up', 'missing_phone'],
     }),
     ['First Outreach', 'Missing Phone', 'Ready Follow-up'],
+  );
+});
+
+test('contact directory signal labels flag invalid phone formats', () => {
+  assert.deepEqual(
+    contactDirectorySignalLabels({
+      workflowKey: 'ait_signs',
+      status: 'Work Order',
+      phone: '90855534340',
+      email: 'shop@example.com',
+    }),
+    ['Invalid Phone'],
   );
 });

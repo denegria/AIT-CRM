@@ -190,43 +190,51 @@ PAYMENT_AMOUNT_COLUMNS = (22, 25, 28, 31)
 PRIMARY_TOTAL_COLUMNS = (COL_TOTAL, COL_NET)
 
 
+def is_valid_us_phone_digits(digits: str) -> bool:
+    return len(digits) == 10 or (len(digits) == 11 and digits.startswith("1"))
+
+
+def phone_candidates_from_text(value: object) -> list[str]:
+    text = normalize_text(value)
+    if not text:
+        return []
+    lower = text.lower()
+    if "sin telefono" in lower or "sin teléfono" in lower or "no phone" in lower:
+        return []
+    compact = text.replace(",", "")
+    if "." in compact and compact.replace(".", "", 1).isdigit():
+        return []
+    if EXCEL_SERIAL_RE.match(compact) or DATE_LIKE_RE.match(compact):
+        return []
+
+    candidates: list[str] = []
+    for match in PHONE_RE.finditer(text):
+        phone = normalize_text(match.group(0))
+        if DATE_LIKE_RE.match(phone):
+            continue
+        digits = re.sub(r"\D", "", phone)
+        if is_valid_us_phone_digits(digits):
+            candidates.append(digits)
+            continue
+        if len(digits) > 11 and len(digits) % 10 == 0:
+            chunks = [digits[index : index + 10] for index in range(0, len(digits), 10)]
+            if all(is_valid_us_phone_digits(chunk) for chunk in chunks):
+                candidates.extend(chunks)
+    return candidates
+
+
 def extract_first_phone(values: list[str]) -> str | None:
-    candidates: list[tuple[int, str]] = []
+    candidates: list[str] = []
     for value in values:
-        text = normalize_text(value)
-        if not text:
-            continue
-        compact = text.replace(",", "")
-        if "." in compact and compact.replace(".", "", 1).isdigit():
-            continue
-        if EXCEL_SERIAL_RE.match(compact):
-            continue
-        for match in PHONE_RE.finditer(text):
-            phone = normalize_text(match.group(0))
-            if DATE_LIKE_RE.match(phone):
-                continue
-            digits = re.sub(r"\D", "", phone)
-            if 7 <= len(digits) <= 15:
-                candidates.append((len(digits), digits))
+        candidates.extend(phone_candidates_from_text(value))
     if not candidates:
         return None
-    return max(candidates, key=lambda item: item[0])[1]
+    return candidates[0]
 
 
 def normalize_phone_hint(value: object) -> str | None:
-    text = normalize_text(value)
-    if not text:
-        return None
-    lower = text.lower()
-    if "sin telefono" in lower or "sin teléfono" in lower or "no phone" in lower:
-        return None
-    compact = text.replace(",", "")
-    if "." in compact and compact.replace(".", "", 1).isdigit():
-        return None
-    if EXCEL_SERIAL_RE.match(compact) or DATE_LIKE_RE.match(compact):
-        return None
-    digits = re.sub(r"\D", "", text)
-    return digits if 7 <= len(digits) <= 15 else None
+    candidates = phone_candidates_from_text(value)
+    return candidates[0] if candidates else None
 
 
 def extract_first_email(values: list[str]) -> str | None:
