@@ -1,12 +1,12 @@
 'use client';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useCRM } from '@/lib/store';
-import { useToast } from '@/components/Toast';
 import s from './Sidebar.module.css';
 
-import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3 } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal } from 'lucide-react';
 
 const nav = [
   { href: '/', label: 'Dashboard', Icon: LayoutDashboard },
@@ -21,8 +21,11 @@ const nav = [
   { href: '/settings', label: 'Settings', Icon: Settings },
 ];
 
+const mobilePrimaryPriority = ['/', '/contacts', '/pipeline', '/tasks'];
+
 export default function Sidebar() {
   const pathname = usePathname();
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
   const {
     role,
     theme,
@@ -36,7 +39,6 @@ export default function Sidebar() {
     canUseConsolidatedScope,
     scopeLabel,
   } = useCRM();
-  const { toast } = useToast();
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
@@ -45,6 +47,41 @@ export default function Sidebar() {
     localStorage.removeItem('ait-crm-scope-user-id');
     window.location.reload();
   };
+
+  const visibleNav = useMemo(() => nav.filter(({ href }) => {
+    if (href === '/settings' && !access.canReadSettings) return false;
+    if (href === '/comms-ops' && !access.canReadSettings) return false;
+    if (href === '/import-review' && !access.canReadImportReview) return false;
+    if ((href === '/reports' || href === '/financials') && role !== 'admin') return false;
+    return true;
+  }), [access.canReadImportReview, access.canReadSettings, role]);
+
+  const mobileNav = useMemo(() => {
+    if (visibleNav.length <= 5) {
+      return { primary: visibleNav, overflow: [] };
+    }
+
+    const priority = new Set(mobilePrimaryPriority);
+    const primary = visibleNav.filter((item) => priority.has(item.href)).slice(0, 4);
+
+    for (const item of visibleNav) {
+      if (primary.length >= 4) break;
+      if (!primary.some((primaryItem) => primaryItem.href === item.href)) {
+        primary.push(item);
+      }
+    }
+
+    return {
+      primary,
+      overflow: visibleNav.filter((item) => !primary.some((primaryItem) => primaryItem.href === item.href)),
+    };
+  }, [visibleNav]);
+
+  const renderNavLink = ({ href, label, Icon }, className = s.navItem) => (
+    <Link key={href} href={href} className={`${className} ${pathname === href ? s.active : ''}`} aria-label={label} title={label} onClick={() => setIsMoreOpen(false)}>
+      <Icon /><span>{label}</span>
+    </Link>
+  );
 
   return (
     <aside className={s.sidebar}>
@@ -74,17 +111,35 @@ export default function Sidebar() {
           </div>
         )}
         <div className={s.navLabel}>Menu</div>
-        {nav.map(({ href, label, Icon }) => {
-          if (href === '/settings' && !access.canReadSettings) return null;
-          if (href === '/comms-ops' && !access.canReadSettings) return null;
-          if (href === '/import-review' && !access.canReadImportReview) return null;
-          if ((href === '/reports' || href === '/financials') && role !== 'admin') return null;
-          return (
-            <Link key={href} href={href} className={`${s.navItem} ${pathname === href ? s.active : ''}`} aria-label={label} title={label}>
-              <Icon /><span>{label}</span>
-            </Link>
-          );
-        })}
+        <div className={s.desktopNav}>
+          {visibleNav.map((item) => renderNavLink(item))}
+        </div>
+        <div className={s.mobileNav}>
+          {mobileNav.primary.map((item) => renderNavLink(item, s.mobileNavItem))}
+          {mobileNav.overflow.length > 0 && (
+            <div className={s.moreWrap}>
+              <button
+                type="button"
+                className={`${s.mobileNavItem} ${mobileNav.overflow.some((item) => pathname === item.href) ? s.active : ''}`}
+                aria-label="More navigation"
+                aria-expanded={isMoreOpen}
+                aria-haspopup="menu"
+                onClick={() => setIsMoreOpen((open) => !open)}
+              >
+                <MoreHorizontal /><span>More</span>
+              </button>
+              {isMoreOpen && (
+                <div className={s.moreMenu} role="menu" aria-label="More navigation">
+                  {mobileNav.overflow.map(({ href, label, Icon }) => (
+                    <Link key={href} href={href} className={s.moreMenuItem} role="menuitem" onClick={() => setIsMoreOpen(false)}>
+                      <Icon /><span>{label}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </nav>
       <div className={s.bottom}>
         <div className={s.themeToggle}>
