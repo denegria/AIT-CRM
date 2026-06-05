@@ -57,6 +57,23 @@ function crmWriteAccessError() {
   return new Error('Insufficient CRM write access.');
 }
 
+function resetMobileViewportFocus() {
+  if (typeof window === 'undefined') return;
+  const activeElement = document.activeElement;
+  if (activeElement && typeof activeElement.blur === 'function') {
+    activeElement.blur();
+  }
+  window.scrollTo(0, 0);
+}
+
+function waitForViewportReset() {
+  return new Promise((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(resolve);
+    });
+  });
+}
+
 function LoginGate({ authError }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -65,6 +82,7 @@ function LoginGate({ authError }) {
 
   async function handleSubmit(event) {
     event.preventDefault();
+    resetMobileViewportFocus();
     setSubmitting(true);
     setError('');
     try {
@@ -75,6 +93,8 @@ function LoginGate({ authError }) {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Sign-in failed.');
+      resetMobileViewportFocus();
+      await waitForViewportReset();
       window.location.reload();
     } catch (err) {
       setError(err.message || 'Sign-in failed.');
