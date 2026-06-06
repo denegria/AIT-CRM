@@ -10,6 +10,12 @@ export const metadata = {
   description: 'AIT Signs Operational CRM — Lead management, work orders, and financials.',
 };
 
+export const viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+};
+
 export default async function RootLayout({ children }) {
   const session = await getCurrentSession();
   const bootstrapData = await getBootstrapData(session);
