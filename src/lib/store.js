@@ -1,6 +1,6 @@
 'use client';
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import * as defaults from './data';
 
 const CRMContext = createContext(null);
@@ -58,6 +58,7 @@ function crmWriteAccessError() {
 }
 
 function LoginGate({ authError }) {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(authError || '');
@@ -75,7 +76,7 @@ function LoginGate({ authError }) {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Sign-in failed.');
-      window.location.reload();
+      router.refresh();
     } catch (err) {
       setError(err.message || 'Sign-in failed.');
     } finally {

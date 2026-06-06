@@ -23,7 +23,7 @@ export default async function RootLayout({ children }) {
     <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning>
         <ToastProvider>
-          <CRMProvider initialData={bootstrapData}>
+          <CRMProvider key={bootstrapData.currentUser?.id || 'signed-out'} initialData={bootstrapData}>
             <AppShell>{children}</AppShell>
           </CRMProvider>
         </ToastProvider>
