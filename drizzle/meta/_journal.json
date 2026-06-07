@@ -85,6 +85,13 @@
       "when": 1780497450155,
       "tag": "0011_activity_event_metadata",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1780854203958,
+      "tag": "0012_client_account_layer",
+      "breakpoints": true
     }
   ]
 }
