@@ -146,6 +146,7 @@ export function buildClientAccountResult({
   accountWorkOrders = [],
   accountEstimates = [],
   query = '',
+  includeDetail = false,
 } = {}) {
   const normalizedQuery = normalizeAccountSearchText(query);
   const queryDigits = normalizeAccountSearchDigits(query);
@@ -212,8 +213,9 @@ export function buildClientAccountResult({
   const primaryContactValue = cleanText(primaryContactMethod?.value);
   const primaryLocationText = primaryLocation ? locationText(primaryLocation) : '';
 
-  return {
+  const result = {
     id: account?.id,
+    href: account?.id ? `/client-accounts/${account.id}` : '',
     title: displayName,
     displayName,
     status,
@@ -255,6 +257,73 @@ export function buildClientAccountResult({
     matchReasons,
     matchReasonCodes: matchReasons.map((reason) => reason.code),
   };
+
+  if (includeDetail) {
+    result.people = people.map((person) => ({
+      id: person.id,
+      name: person.name,
+      role: person.role || null,
+      notes: person.notes || null,
+      isPrimary: Boolean(person.isPrimary),
+      sourceLabel: person.sourceLabel || null,
+    }));
+    result.contactMethods = contactMethods.map((method) => ({
+      id: method.id,
+      type: method.methodType,
+      label: contactMethodLabel(method),
+      value: method.value,
+      status: method.status,
+      isPrimary: Boolean(method.isPrimary),
+      sourceLabel: method.sourceLabel || null,
+    }));
+    result.locations = locations.map((location) => ({
+      id: location.id,
+      label: location.label || null,
+      address: location.address || null,
+      city: location.city || null,
+      state: location.state || null,
+      postalCode: location.postalCode || null,
+      text: locationText(location),
+      isPrimary: Boolean(location.isPrimary),
+      sourceLabel: location.sourceLabel || null,
+    }));
+    result.linkedContacts = linkedContacts.map((contact) => ({
+      id: contact.id,
+      name: contact.name,
+      phone: contact.phone || null,
+      email: contact.email || null,
+      sourceLabel: contact.sourceLabel || null,
+    }));
+    result.workOrders = accountWorkOrders.map((workOrder) => ({
+      id: workOrder.id,
+      contactId: workOrder.contactId || null,
+      workOrderNumber: workOrder.workOrderNumber || null,
+      title: workOrder.title || null,
+      status: workOrder.status || null,
+      createdAt: workOrder.createdAt || null,
+      updatedAt: workOrder.updatedAt || null,
+    }));
+    result.estimates = accountEstimates.map((estimate) => ({
+      id: estimate.id,
+      contactId: estimate.contactId || null,
+      estimateNumber: estimate.estimateNumber || null,
+      status: estimate.status || null,
+      total: estimate.total || null,
+      createdAt: estimate.createdAt || null,
+      updatedAt: estimate.updatedAt || null,
+    }));
+    result.provenanceAliases = hiddenAliases.map((alias) => ({
+      id: alias.id,
+      value: alias.value,
+      type: alias.type,
+      sourceLabel: alias.sourceLabel || null,
+      sourceSheet: alias.sourceSheet || null,
+      sourceRow: alias.sourceRow || null,
+      confidence: alias.confidence || null,
+    }));
+  }
+
+  return result;
 }
 
 export function filterAndRankClientAccountResults(results, query = '', limit = 50) {
@@ -295,14 +364,19 @@ export async function listClientAccountResults({
   db,
   organizationId,
   businessUnitIds = null,
+  accountId = '',
   query = '',
   limit = 50,
+  includeDetail = false,
 } = {}) {
   if (!db) throw new Error('db is required.');
   if (!organizationId) throw new Error('organizationId is required.');
   if (Array.isArray(businessUnitIds) && !businessUnitIds.length) return [];
 
   const accountWhere = [eq(clientAccounts.organizationId, organizationId)];
+  if (accountId) {
+    accountWhere.push(eq(clientAccounts.id, accountId));
+  }
   if (Array.isArray(businessUnitIds)) {
     accountWhere.push(inArray(clientAccounts.businessUnitId, businessUnitIds));
   }
@@ -444,5 +518,6 @@ export async function listClientAccountResults({
     accountWorkOrders: workOrdersByAccount.get(account.id) || [],
     accountEstimates: estimatesByAccount.get(account.id) || [],
     query,
+    includeDetail,
   })), query, limit);
 }

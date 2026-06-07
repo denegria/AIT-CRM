@@ -50,6 +50,31 @@ describe('client account read model', () => {
     assert.equal(JSON.stringify(result).includes('Wold Supermarket'), false);
   });
 
+  it('keeps hidden aliases in the detail-only provenance payload', () => {
+    const result = buildClientAccountResult({
+      account,
+      aliases: [
+        {
+          id: 'alias-1',
+          clientAccountId: account.id,
+          value: 'Wold Supermarket',
+          normalizedValue: 'wold supermarket',
+          visibility: 'hidden',
+          searchable: true,
+          type: 'misspelling',
+          sourceSheet: 'OLD CUSTOMERS',
+          sourceRow: 42,
+        },
+      ],
+      query: 'wold',
+      includeDetail: true,
+    });
+
+    assert.deepEqual(result.visibleAliases, []);
+    assert.equal(result.provenanceAliases[0].value, 'Wold Supermarket');
+    assert.equal(result.provenanceAliases[0].sourceSheet, 'OLD CUSTOMERS');
+  });
+
   it('matches visible aliases as employee-facing aliases', () => {
     const result = buildClientAccountResult({
       account,
