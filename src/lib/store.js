@@ -25,6 +25,29 @@ function withBusinessUnitDefaults(record, businessUnitId, includePrimary = false
   };
 }
 
+function preferredContactsBusinessUnitId(contacts = [], businessUnits = []) {
+  const activeUnitIds = new Set((businessUnits || []).map((unit) => unit.id).filter(Boolean));
+  if (!activeUnitIds.size) return '';
+
+  const counts = new Map();
+  for (const contact of contacts || []) {
+    const businessUnitId = getBusinessUnitId(contact);
+    if (!activeUnitIds.has(businessUnitId)) continue;
+    counts.set(businessUnitId, (counts.get(businessUnitId) || 0) + 1);
+  }
+
+  let bestId = businessUnits[0]?.id || '';
+  let bestCount = -1;
+  for (const unit of businessUnits || []) {
+    const count = counts.get(unit.id) || 0;
+    if (count > bestCount) {
+      bestId = unit.id;
+      bestCount = count;
+    }
+  }
+  return bestId;
+}
+
 function loadStorage() {
   if (typeof window === 'undefined') return null;
   try { const r = localStorage.getItem(STORAGE_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
@@ -153,8 +176,8 @@ export function CRMProvider({ children, initialData }) {
     }
     return localStorage.getItem(SCOPE_STORAGE_KEY) || ALL_BUSINESS_UNITS;
   });
+  const [scopeHydrated, setScopeHydrated] = useState(!isPostgres);
   const [storageReady, setStorageReady] = useState(isPostgres);
-  const loaded = true;
 
   const accessibleBusinessUnits = useMemo(() => {
     const activeUnits = (businessUnits || []).filter((unit) => unit.isActive !== false);
@@ -164,13 +187,19 @@ export function CRMProvider({ children, initialData }) {
   }, [businessUnits, currentUser]);
 
   const canUseConsolidatedScope = Boolean(!currentUser || currentUser.canAccessAllBusinessUnits);
+  const contactsRequireDivisionScope = pathname === '/contacts';
+  const canUseCurrentPageConsolidatedScope = canUseConsolidatedScope && !contactsRequireDivisionScope;
+  const preferredContactsScopeId = useMemo(
+    () => preferredContactsBusinessUnitId(contacts, accessibleBusinessUnits),
+    [accessibleBusinessUnits, contacts],
+  );
   const effectiveBusinessUnitId = useMemo(() => {
-    if (currentBusinessUnitId === ALL_BUSINESS_UNITS && canUseConsolidatedScope) return ALL_BUSINESS_UNITS;
+    if (currentBusinessUnitId === ALL_BUSINESS_UNITS && canUseCurrentPageConsolidatedScope) return ALL_BUSINESS_UNITS;
     if (currentBusinessUnitId === UNASSIGNED_BUSINESS_UNIT) return UNASSIGNED_BUSINESS_UNIT;
     const allowedIds = new Set(accessibleBusinessUnits.map((unit) => unit.id));
     if (allowedIds.has(currentBusinessUnitId)) return currentBusinessUnitId;
-    return canUseConsolidatedScope ? ALL_BUSINESS_UNITS : accessibleBusinessUnits[0]?.id || ALL_BUSINESS_UNITS;
-  }, [accessibleBusinessUnits, canUseConsolidatedScope, currentBusinessUnitId]);
+    return canUseCurrentPageConsolidatedScope ? ALL_BUSINESS_UNITS : preferredContactsScopeId || accessibleBusinessUnits[0]?.id || ALL_BUSINESS_UNITS;
+  }, [accessibleBusinessUnits, canUseCurrentPageConsolidatedScope, currentBusinessUnitId, preferredContactsScopeId]);
   const currentBusinessUnit = useMemo(() => {
     if (effectiveBusinessUnitId === UNASSIGNED_BUSINESS_UNIT) {
       return { id: UNASSIGNED_BUSINESS_UNIT, name: 'No Division', label: businessUnits?.[0]?.label || 'Divisions' };
@@ -178,6 +207,69 @@ export function CRMProvider({ children, initialData }) {
     return accessibleBusinessUnits.find((unit) => unit.id === effectiveBusinessUnitId) || null;
   }, [accessibleBusinessUnits, businessUnits, effectiveBusinessUnitId]);
   const scopeLabel = currentBusinessUnit?.label || businessUnits?.[0]?.label || 'Divisions';
+
+  useEffect(() => {
+    if (!isPostgres) return;
+    if (typeof window === 'undefined') return;
+
+    let cancelled = false;
+    const allowedIds = new Set(accessibleBusinessUnits.map((unit) => unit.id));
+    const currentUserId = currentUser?.id || '';
+    const storedUserId = localStorage.getItem(SCOPE_USER_KEY) || '';
+    let storedScopeId = localStorage.getItem(SCOPE_STORAGE_KEY) || '';
+    let nextScopeId = storedScopeId || currentBusinessUnitId || ALL_BUSINESS_UNITS;
+
+    if (currentUserId && storedUserId && storedUserId !== currentUserId) {
+      localStorage.removeItem(SCOPE_STORAGE_KEY);
+      localStorage.removeItem(SCOPE_USER_KEY);
+      storedScopeId = '';
+      nextScopeId = currentBusinessUnitId || ALL_BUSINESS_UNITS;
+    }
+
+    if (contactsRequireDivisionScope && nextScopeId === ALL_BUSINESS_UNITS) {
+      nextScopeId = preferredContactsScopeId || accessibleBusinessUnits[0]?.id || ALL_BUSINESS_UNITS;
+    }
+
+    if (nextScopeId === ALL_BUSINESS_UNITS && !canUseCurrentPageConsolidatedScope) {
+      nextScopeId = preferredContactsScopeId || accessibleBusinessUnits[0]?.id || ALL_BUSINESS_UNITS;
+    }
+
+    if (
+      nextScopeId !== ALL_BUSINESS_UNITS &&
+      nextScopeId !== UNASSIGNED_BUSINESS_UNIT &&
+      !allowedIds.has(nextScopeId)
+    ) {
+      nextScopeId = canUseCurrentPageConsolidatedScope
+        ? ALL_BUSINESS_UNITS
+        : preferredContactsScopeId || accessibleBusinessUnits[0]?.id || ALL_BUSINESS_UNITS;
+    }
+
+    if (nextScopeId !== ALL_BUSINESS_UNITS || storedScopeId === ALL_BUSINESS_UNITS) {
+      localStorage.setItem(SCOPE_STORAGE_KEY, nextScopeId);
+      if (currentUserId) localStorage.setItem(SCOPE_USER_KEY, currentUserId);
+    }
+    queueMicrotask(() => {
+      if (cancelled) return;
+      if (nextScopeId !== currentBusinessUnitId) {
+        setCurrentBusinessUnitIdState(nextScopeId);
+      }
+      setScopeHydrated(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    accessibleBusinessUnits,
+    canUseCurrentPageConsolidatedScope,
+    contactsRequireDivisionScope,
+    currentBusinessUnitId,
+    currentUser?.id,
+    isPostgres,
+    preferredContactsScopeId,
+  ]);
+
+  const loaded = !isPostgres || scopeHydrated;
 
   const setCurrentBusinessUnitId = useCallback((nextId) => {
     const selectedId = nextId || ALL_BUSINESS_UNITS;
@@ -190,14 +282,14 @@ export function CRMProvider({ children, initialData }) {
       return;
     }
     if (selectedId !== ALL_BUSINESS_UNITS && !allowedIds.has(selectedId)) return;
-    if (selectedId === ALL_BUSINESS_UNITS && !canUseConsolidatedScope) return;
+    if (selectedId === ALL_BUSINESS_UNITS && !canUseCurrentPageConsolidatedScope) return;
     setCurrentBusinessUnitIdState(selectedId);
     if (typeof window !== 'undefined') {
       localStorage.setItem(SCOPE_STORAGE_KEY, selectedId);
       const userId = currentUser?.id;
       if (userId) localStorage.setItem(SCOPE_USER_KEY, userId);
     }
-  }, [accessibleBusinessUnits, canUseConsolidatedScope, currentUser?.id]);
+  }, [accessibleBusinessUnits, canUseCurrentPageConsolidatedScope, currentUser?.id]);
 
   const inCurrentBusinessUnitScope = useCallback((record) => {
     if (effectiveBusinessUnitId === ALL_BUSINESS_UNITS) return true;
@@ -446,7 +538,7 @@ export function CRMProvider({ children, initialData }) {
     businessUnits, setBusinessUnits,
     accessibleBusinessUnits,
     currentBusinessUnitId: effectiveBusinessUnitId, currentBusinessUnit, setCurrentBusinessUnitId,
-    canUseConsolidatedScope,
+    canUseConsolidatedScope: canUseCurrentPageConsolidatedScope,
     scopeLabel,
     contacts: scopedContacts, allContacts: contacts, addContact, updateContact, deleteContact,
     workOrders: scopedWorkOrders, allWorkOrders: workOrders, addWorkOrder, updateWorkOrder, deleteWorkOrder,
