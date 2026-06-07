@@ -187,8 +187,11 @@ export function CRMProvider({ children, initialData }) {
   }, [businessUnits, currentUser]);
 
   const canUseConsolidatedScope = Boolean(!currentUser || currentUser.canAccessAllBusinessUnits);
-  const contactsRequireDivisionScope = pathname === '/contacts';
-  const canUseCurrentPageConsolidatedScope = canUseConsolidatedScope && !contactsRequireDivisionScope;
+  const routeRequiresDivisionScope =
+    pathname === '/contacts' ||
+    pathname === '/client-accounts' ||
+    pathname.startsWith('/client-accounts/');
+  const canUseCurrentPageConsolidatedScope = canUseConsolidatedScope && !routeRequiresDivisionScope;
   const preferredContactsScopeId = useMemo(
     () => preferredContactsBusinessUnitId(contacts, accessibleBusinessUnits),
     [accessibleBusinessUnits, contacts],
@@ -226,7 +229,7 @@ export function CRMProvider({ children, initialData }) {
       nextScopeId = currentBusinessUnitId || ALL_BUSINESS_UNITS;
     }
 
-    if (contactsRequireDivisionScope && nextScopeId === ALL_BUSINESS_UNITS) {
+    if (routeRequiresDivisionScope && nextScopeId === ALL_BUSINESS_UNITS) {
       nextScopeId = preferredContactsScopeId || accessibleBusinessUnits[0]?.id || ALL_BUSINESS_UNITS;
     }
 
@@ -262,11 +265,11 @@ export function CRMProvider({ children, initialData }) {
   }, [
     accessibleBusinessUnits,
     canUseCurrentPageConsolidatedScope,
-    contactsRequireDivisionScope,
     currentBusinessUnitId,
     currentUser?.id,
     isPostgres,
     preferredContactsScopeId,
+    routeRequiresDivisionScope,
   ]);
 
   const loaded = !isPostgres || scopeHydrated;

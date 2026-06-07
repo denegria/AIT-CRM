@@ -15,7 +15,7 @@ function stringParam(value) {
 function parseLimit(value) {
   const parsed = Number.parseInt(String(value || ''), 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return 50;
-  return Math.min(parsed, 100);
+  return Math.min(parsed, 1000);
 }
 
 function accessibleBusinessUnitIds(session) {
