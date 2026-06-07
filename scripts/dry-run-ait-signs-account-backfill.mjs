@@ -3,9 +3,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import { Client } from 'pg';
 
-const DEFAULT_BUSINESS_UNIT = 'AIT Signs';
+export const DEFAULT_BUSINESS_UNIT = 'AIT Signs';
 const CONTACT_LINK_TABLES = [
   'leads',
   'lead_status_history',
@@ -114,7 +115,7 @@ function cleanText(value) {
   return String(value || '').trim().replace(/\s+/g, ' ');
 }
 
-function normalizeText(value) {
+export function normalizeText(value) {
   return cleanText(value)
     .toLowerCase()
     .normalize('NFKD')
@@ -125,11 +126,11 @@ function normalizeText(value) {
     .replace(/\s+/g, ' ');
 }
 
-function compactKey(value) {
+export function compactKey(value) {
   return normalizeText(value).replace(/[^a-z0-9]/g, '');
 }
 
-function displayNameForContact(row) {
+export function displayNameForContact(row) {
   return cleanText(row.company_name) || cleanText(row.name);
 }
 
@@ -254,7 +255,7 @@ function collectNearDuplicateClusters(singletonGroups) {
   return [...clusters.values()].filter((cluster) => cluster.length > 1);
 }
 
-function safeDbFingerprint() {
+export function safeDbFingerprint() {
   const url = process.env.DATABASE_URL ? new URL(process.env.DATABASE_URL) : null;
   const hostParts = url?.hostname ? url.hostname.split('.') : [];
   return {
@@ -266,7 +267,7 @@ function safeDbFingerprint() {
   };
 }
 
-async function columnExists(client, tableName, columnName) {
+export async function columnExists(client, tableName, columnName) {
   const result = await client.query(
     `
       select exists (
@@ -282,7 +283,7 @@ async function columnExists(client, tableName, columnName) {
   return Boolean(result.rows[0]?.exists);
 }
 
-async function loadAitSignsContacts(client, businessUnit) {
+export async function loadAitSignsContacts(client, businessUnit) {
   const result = await client.query(
     `
       select
@@ -309,7 +310,7 @@ async function loadAitSignsContacts(client, businessUnit) {
   return result.rows;
 }
 
-async function loadLinkCounts(client, contactIds) {
+export async function loadLinkCounts(client, contactIds) {
   const linkCounts = new Map();
   if (!contactIds.length) return linkCounts;
 
@@ -350,7 +351,7 @@ function contactSummary(row, linkBreakdown) {
   };
 }
 
-function buildReport(rows, linkCounts, options, dbState) {
+export function buildReport(rows, linkCounts, options, dbState) {
   const groups = new Map();
   const reviewContacts = [];
 
@@ -501,7 +502,7 @@ function markdownList(items, formatter, emptyText = 'None in sample.') {
   return items.map(formatter);
 }
 
-function toMarkdown(report) {
+export function toMarkdown(report) {
   const lines = [
     '# MIS-130 AIT Signs Account Backfill Dry Run',
     '',
@@ -568,12 +569,12 @@ function toMarkdown(report) {
   return lines.join('\n');
 }
 
-function writeJson(filePath, value) {
+export function writeJson(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`);
 }
 
-function writeText(filePath, value) {
+export function writeText(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, value);
 }
@@ -613,7 +614,9 @@ async function main() {
   }
 }
 
-main().catch((error) => {
-  console.error(error.message);
-  process.exitCode = 1;
-});
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch((error) => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}
