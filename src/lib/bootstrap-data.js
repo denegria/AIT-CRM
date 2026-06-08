@@ -43,6 +43,10 @@ function toIsoDate(value) {
   return dt.toISOString().slice(0, 10);
 }
 
+function clean(value) {
+  return String(value || '').trim();
+}
+
 function rowsByContactId(rows = []) {
   const lookup = new Map();
   for (const row of rows) {
