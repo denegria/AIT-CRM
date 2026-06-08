@@ -1,0 +1,180 @@
+{
+  "generatedAt": "2026-06-08T21:29:21.823Z",
+  "issue": "MIS-152",
+  "businessUnit": "AIT Signs",
+  "safeFingerprint": {
+    "targetBaseUrl": "https://ait-crm-git-staging-alvaros-projects-efb8ae58.vercel.app",
+    "expectedNeonBranchId": "br-broad-hill-aptjpyea",
+    "hostPrefix": "ep-muddy-frost-apgwqat1-pooler",
+    "hostSuffix": "aws.neon.tech",
+    "databaseParam": "neondb",
+    "currentDatabase": "neondb"
+  },
+  "inputs": {
+    "exactCurrent": "docs/mis-152-ait-signs-exact-linked-people-current-idempotence.json",
+    "pass1Current": "docs/mis-152-ait-signs-pass1-current-idempotence.json",
+    "remainingSpellingCurrent": "docs/mis-152-ait-signs-remaining-spelling-current-idempotence.json",
+    "businessHeldCurrent": "docs/mis-151-ait-signs-business-held-linked-people-idempotence.json",
+    "sharedCurrent": "docs/mis-152-ait-signs-shared-contact-current-review.json",
+    "remainingSpellingApprovalCurrent": "docs/mis-152-ait-signs-remaining-spelling-current-approval.json"
+  },
+  "verdict": {
+    "missingLatestSourceLinkedPeople": 0,
+    "heldRowsWithPeopleAtStake": 0,
+    "remainingNoPersonBusinessNameHolds": 64,
+    "recommendedNextAction": "Stop linked-person data writes and return to MIS-124 account/client-layer design work."
+  },
+  "sourcePasses": {
+    "exactCurrent": {
+      "mode": "dry-run",
+      "summary": {
+        "safeExactCandidates": 826,
+        "plannedInserts": 0,
+        "appliedInserts": 0,
+        "skippedExisting": 637,
+        "distinctContactsAffected": 0,
+        "primaryRows": 0
+      },
+      "safeFingerprint": {
+        "targetBaseUrl": "https://ait-crm-git-staging-alvaros-projects-efb8ae58.vercel.app",
+        "expectedNeonBranchId": "br-broad-hill-aptjpyea",
+        "hostPrefix": "ep-muddy-frost-apgwqat1-pooler",
+        "hostSuffix": "aws.neon.tech",
+        "databaseParam": "neondb",
+        "currentDatabase": "neondb"
+      }
+    },
+    "pass1Current": {
+      "mode": "dry-run",
+      "summary": {
+        "approvedUniquePeople": 5,
+        "plannedInserts": 0,
+        "appliedInserts": 0,
+        "skippedExisting": 5,
+        "blocked": 0,
+        "distinctContactsAffected": 0
+      },
+      "safeFingerprint": {
+        "targetBaseUrl": "https://ait-crm-git-staging-alvaros-projects-efb8ae58.vercel.app",
+        "expectedNeonBranchId": "br-broad-hill-aptjpyea",
+        "hostPrefix": "ep-muddy-frost-apgwqat1-pooler",
+        "hostSuffix": "aws.neon.tech",
+        "databaseParam": "neondb",
+        "currentDatabase": "neondb"
+      }
+    },
+    "remainingSpellingCurrent": {
+      "mode": "dry-run",
+      "summary": {
+        "approvedUniquePeople": 6,
+        "plannedInserts": 0,
+        "appliedInserts": 0,
+        "skippedExisting": 6,
+        "blocked": 0,
+        "distinctContactsAffected": 0
+      },
+      "safeFingerprint": {
+        "targetBaseUrl": "https://ait-crm-git-staging-alvaros-projects-efb8ae58.vercel.app",
+        "expectedNeonBranchId": "br-broad-hill-aptjpyea",
+        "hostPrefix": "ep-muddy-frost-apgwqat1-pooler",
+        "hostSuffix": "aws.neon.tech",
+        "databaseParam": "neondb",
+        "currentDatabase": "neondb"
+      }
+    },
+    "businessHeldCurrent": {
+      "mode": "dry-run",
+      "summary": {
+        "approvedUniquePeople": 15,
+        "skippedDecisions": 0,
+        "plannedInserts": 0,
+        "appliedInserts": 0,
+        "skippedExisting": 15,
+        "blockedPeople": 0,
+        "plannedNameCorrections": 0,
+        "appliedNameCorrections": 0,
+        "skippedNameCorrections": 1,
+        "blockedNameCorrections": 0,
+        "distinctContactsAffected": 0
+      },
+      "safeFingerprint": {
+        "targetBaseUrl": "https://ait-crm-git-staging-alvaros-projects-efb8ae58.vercel.app",
+        "expectedNeonBranchId": "br-broad-hill-aptjpyea",
+        "hostPrefix": "ep-muddy-frost-apgwqat1-pooler",
+        "hostSuffix": "aws.neon.tech",
+        "databaseParam": "neondb",
+        "currentDatabase": "neondb"
+      }
+    },
+    "sharedCurrent": {
+      "mode": "dry-run",
+      "summary": {
+        "reviewedCandidates": 261,
+        "decisionCounts": {
+          "hold_spelling_variant_review": 103,
+          "hold_shared_contact_separate_business": 158
+        },
+        "plannedInserts": 0,
+        "appliedInserts": 0,
+        "skippedExisting": 0,
+        "distinctContactsAffected": 0
+      },
+      "safeFingerprint": {
+        "targetBaseUrl": "https://ait-crm-git-staging-alvaros-projects-efb8ae58.vercel.app",
+        "expectedNeonBranchId": "br-broad-hill-aptjpyea",
+        "hostPrefix": "ep-muddy-frost-apgwqat1-pooler",
+        "hostSuffix": "aws.neon.tech",
+        "databaseParam": "neondb",
+        "currentDatabase": "neondb"
+      }
+    },
+    "remainingSpellingApprovalCurrent": {
+      "summary": {
+        "sourceReviewedCandidates": 261,
+        "remainingSpellingRows": 85,
+        "distinctCanonicalClients": 76,
+        "recommendedApplyRows": 0,
+        "recommendedNoWriteRows": 21,
+        "heldBusinessReviewRows": 64,
+        "potentialLinkedPeopleAfterDedupe": 0,
+        "heldPotentialPeopleAfterDedupe": 0,
+        "recommendationCounts": {
+          "hold_needs_business_review": 64,
+          "approve_no_write_existing_or_superseded": 21
+        },
+        "dbWritesPlannedByThisPacket": 0
+      }
+    }
+  },
+  "db": {
+    "sourceLabelCounts": {
+      "ait_signs_estimate_exact_backfill": {
+        "rows": 636,
+        "contacts": 549,
+        "primaryRows": 549
+      },
+      "ait_signs_pass1_latest_source_linked_people": {
+        "rows": 5,
+        "contacts": 5,
+        "primaryRows": 0
+      },
+      "ait_signs_remaining_spelling_latest_source_linked_people": {
+        "rows": 6,
+        "contacts": 6,
+        "primaryRows": 0
+      },
+      "ait_signs_business_held_latest_source_linked_people": {
+        "rows": 15,
+        "contacts": 14,
+        "primaryRows": 0
+      }
+    },
+    "totalTaggedRows": 662,
+    "jclState": [
+      {
+        "id": "3a67a554-f5d0-4793-b96f-8ca80d87b231",
+        "name": "JC AND L LANDSCAPING"
+      }
+    ]
+  }
+}

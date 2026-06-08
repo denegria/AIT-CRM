@@ -1,0 +1,238 @@
+{
+  "generatedAt": "2026-06-08T21:27:52.494Z",
+  "issue": "MIS-149",
+  "mode": "dry-run",
+  "businessUnit": "AIT Signs",
+  "sourceLabel": "ait_signs_pass1_latest_source_linked_people",
+  "safeFingerprint": {
+    "targetBaseUrl": "https://ait-crm-git-staging-alvaros-projects-efb8ae58.vercel.app",
+    "expectedNeonBranchId": "br-broad-hill-aptjpyea",
+    "hostPrefix": "ep-muddy-frost-apgwqat1-pooler",
+    "hostSuffix": "aws.neon.tech",
+    "databaseParam": "neondb",
+    "currentDatabase": "neondb"
+  },
+  "summary": {
+    "approvedUniquePeople": 5,
+    "plannedInserts": 0,
+    "appliedInserts": 0,
+    "skippedExisting": 5,
+    "blocked": 0,
+    "distinctContactsAffected": 0
+  },
+  "samples": {
+    "plannedInserts": [],
+    "skipped": [
+      {
+        "contactId": "3b0f21df-f8e2-4b91-8225-b21bffde498d",
+        "contactName": "G&R TREE SERVICE",
+        "name": "GERARD",
+        "reason": "Existing linked person with same normalized name.",
+        "existingSourceLabel": "ait_signs_pass1_latest_source_linked_people"
+      },
+      {
+        "contactId": "4d74a98a-4ca3-473b-92ac-cf17be4ad0f2",
+        "contactName": "BLUE MOUNTAIN",
+        "name": "JEFF",
+        "reason": "Existing linked person with same normalized name.",
+        "existingSourceLabel": "ait_signs_pass1_latest_source_linked_people"
+      },
+      {
+        "contactId": "d347429c-cb46-47f1-900e-8e1799b76855",
+        "contactName": "GREEN 714",
+        "name": "EDIGAN",
+        "reason": "Existing linked person with same normalized name.",
+        "existingSourceLabel": "ait_signs_pass1_latest_source_linked_people"
+      },
+      {
+        "contactId": "5fef8fcc-3bff-45ae-a345-b69bfa415f15",
+        "contactName": "JCE CONTRACTOR",
+        "name": "CLAUDIO",
+        "reason": "Existing linked person with same normalized name.",
+        "existingSourceLabel": "ait_signs_pass1_latest_source_linked_people"
+      },
+      {
+        "contactId": "69439431-ce5a-4fdc-9150-ff462e2104ab",
+        "contactName": "BLUE OCEAN POOL LLC",
+        "name": "JOSE",
+        "reason": "Existing linked person with same normalized name.",
+        "existingSourceLabel": "ait_signs_pass1_latest_source_linked_people"
+      }
+    ],
+    "blocked": [],
+    "applied": []
+  },
+  "approvedPeople": [
+    {
+      "canonicalClient": "G&R TREE SERVICE",
+      "name": "GERARD",
+      "evidenceCount": 10,
+      "phone": "9082744942",
+      "phoneHints": [
+        "9082744942",
+        "9087632509",
+        "9087622509"
+      ],
+      "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "sourceRow": 1709,
+      "sourceRef": "WORK ORDER TERMINADOS Y PAGADOS#1709",
+      "latestSourceReference": "9082744942: GERARD from WORK ORDER TERMINADOS Y PAGADOS#1709; 9087632509: GERARD from WORK ORDER TERMINADOS Y PAGADOS#1709",
+      "candidateClientNames": [
+        "G&R FREE SERVICE",
+        "GERALD TREE SERVICE",
+        "GR FREE SERVICE",
+        "GR TREE SERVICE"
+      ],
+      "sourceRows": [
+        "WORK ORDER TERMINADOS Y PAGADOS#949",
+        "WORK ORDER TERMINADOS Y PAGADOS#1126",
+        "WORK ORDER TERMINADOS Y PAGADOS#917",
+        "WORK ORDER TERMINADOS Y PAGADOS#678",
+        "WORK ORDER TERMINADOS Y PAGADOS#898",
+        "WORK ORDER TERMINADOS Y PAGADOS#964",
+        "WORK ORDER TERMINADOS Y PAGADOS#1106",
+        "WORK ORDER TERMINADOS Y PAGADOS#1187",
+        "WORK ORDER TERMINADOS Y PAGADOS#805",
+        "WORK ORDER TERMINADOS Y PAGADOS#1157",
+        "WORK ORDER TERMINADOS Y PAGADOS#806",
+        "3. 15 SIGNS WORK ORDER#37",
+        "3. 15 SIGNS WORK ORDER#197",
+        "3. 15 SIGNS WORK ORDER#198",
+        "WORK ORDER TERMINADOS Y PAGADOS#1052",
+        "WORK ORDER TERMINADOS Y PAGADOS#1412",
+        "WORK ORDER TERMINADOS Y PAGADOS#720",
+        "WORK ORDER TERMINADOS Y PAGADOS#1402",
+        "WORK ORDER TERMINADOS Y PAGADOS#1709"
+      ]
+    },
+    {
+      "canonicalClient": "BLUE MOUNTAIN",
+      "name": "JEFF",
+      "evidenceCount": 1,
+      "phone": "5714550553",
+      "phoneHints": [
+        "5714550553"
+      ],
+      "sourceSheet": "3. 15 SIGNS WORK ORDER",
+      "sourceRow": 156,
+      "sourceRef": "3. 15 SIGNS WORK ORDER#156",
+      "latestSourceReference": "5714550553: JEFF from 3. 15 SIGNS WORK ORDER#156; 7328038578: FELIX from WORK ORDER TERMINADOS Y PAGADOS#1094",
+      "candidateClientNames": [
+        "BLUE MONTAIN"
+      ],
+      "sourceRows": [
+        "3. 15 SIGNS WORK ORDER#106",
+        "3. 15 SIGNS WORK ORDER#138",
+        "3. 15 SIGNS WORK ORDER#156"
+      ]
+    },
+    {
+      "canonicalClient": "GREEN 714",
+      "name": "EDIGAN",
+      "evidenceCount": 5,
+      "phone": "9085468462",
+      "phoneHints": [
+        "9085468462"
+      ],
+      "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "sourceRow": 1584,
+      "sourceRef": "WORK ORDER TERMINADOS Y PAGADOS#1584",
+      "latestSourceReference": "9085468462: EDIGAN from WORK ORDER TERMINADOS Y PAGADOS#1584",
+      "candidateClientNames": [
+        "GREEN 7/14",
+        "GREEN 7/15"
+      ],
+      "sourceRows": [
+        "WORK ORDER TERMINADOS Y PAGADOS#1464",
+        "WORK ORDER TERMINADOS Y PAGADOS#1508",
+        "WORK ORDER TERMINADOS Y PAGADOS#1583",
+        "WORK ORDER TERMINADOS Y PAGADOS#1584",
+        "WORK ORDER TERMINADOS Y PAGADOS#1509"
+      ]
+    },
+    {
+      "canonicalClient": "JCE CONTRACTOR",
+      "name": "CLAUDIO",
+      "evidenceCount": 4,
+      "phone": "9086987793",
+      "phoneHints": [
+        "9086987793"
+      ],
+      "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "sourceRow": 1671,
+      "sourceRef": "WORK ORDER TERMINADOS Y PAGADOS#1671",
+      "latestSourceReference": "9086987793: CLAUDIO from WORK ORDER TERMINADOS Y PAGADOS#1671",
+      "candidateClientNames": [
+        "JCE CONTRACTOR LLC"
+      ],
+      "sourceRows": [
+        "WORK ORDER TERMINADOS Y PAGADOS#1668",
+        "WORK ORDER TERMINADOS Y PAGADOS#1669",
+        "WORK ORDER TERMINADOS Y PAGADOS#1670",
+        "WORK ORDER TERMINADOS Y PAGADOS#1671"
+      ]
+    },
+    {
+      "canonicalClient": "BLUE OCEAN POOL LLC",
+      "name": "JOSE",
+      "evidenceCount": 3,
+      "phone": "6092559965",
+      "phoneHints": [
+        "6092559965",
+        "9084205571"
+      ],
+      "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "sourceRow": 1174,
+      "sourceRef": "WORK ORDER TERMINADOS Y PAGADOS#1174",
+      "latestSourceReference": "6092559965: JOSE from WORK ORDER TERMINADOS Y PAGADOS#1174; 9084205571: JOSE from WORK ORDER TERMINADOS Y PAGADOS#1174",
+      "candidateClientNames": [
+        "BLUE OCEAN POOL"
+      ],
+      "sourceRows": [
+        "WORK ORDER TERMINADOS Y PAGADOS#1154",
+        "WORK ORDER TERMINADOS Y PAGADOS#1173",
+        "WORK ORDER TERMINADOS Y PAGADOS#1174"
+      ]
+    }
+  ],
+  "plannedInserts": [],
+  "skipped": [
+    {
+      "contactId": "3b0f21df-f8e2-4b91-8225-b21bffde498d",
+      "contactName": "G&R TREE SERVICE",
+      "name": "GERARD",
+      "reason": "Existing linked person with same normalized name.",
+      "existingSourceLabel": "ait_signs_pass1_latest_source_linked_people"
+    },
+    {
+      "contactId": "4d74a98a-4ca3-473b-92ac-cf17be4ad0f2",
+      "contactName": "BLUE MOUNTAIN",
+      "name": "JEFF",
+      "reason": "Existing linked person with same normalized name.",
+      "existingSourceLabel": "ait_signs_pass1_latest_source_linked_people"
+    },
+    {
+      "contactId": "d347429c-cb46-47f1-900e-8e1799b76855",
+      "contactName": "GREEN 714",
+      "name": "EDIGAN",
+      "reason": "Existing linked person with same normalized name.",
+      "existingSourceLabel": "ait_signs_pass1_latest_source_linked_people"
+    },
+    {
+      "contactId": "5fef8fcc-3bff-45ae-a345-b69bfa415f15",
+      "contactName": "JCE CONTRACTOR",
+      "name": "CLAUDIO",
+      "reason": "Existing linked person with same normalized name.",
+      "existingSourceLabel": "ait_signs_pass1_latest_source_linked_people"
+    },
+    {
+      "contactId": "69439431-ce5a-4fdc-9150-ff462e2104ab",
+      "contactName": "BLUE OCEAN POOL LLC",
+      "name": "JOSE",
+      "reason": "Existing linked person with same normalized name.",
+      "existingSourceLabel": "ait_signs_pass1_latest_source_linked_people"
+    }
+  ],
+  "blocked": [],
+  "applied": []
+}
