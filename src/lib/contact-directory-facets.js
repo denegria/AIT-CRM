@@ -110,6 +110,10 @@ function hasBalanceOrPayment(contact = {}) {
   );
 }
 
+function hasLinkedPeople(contact = {}) {
+  return isAitSigns(contact) && Number(contact.linkedPeopleCount || 0) > 0;
+}
+
 function readyForFollowUp(contact = {}) {
   return isAitUsa(contact) && hasToken(contactTokens(contact), ['ready_for_follow_up']);
 }
@@ -179,6 +183,7 @@ export const CONTACT_DIRECTORY_FACET_GROUPS = [
       { id: 'signs_fulfillment', label: 'Fulfillment', matches: (contact) => isAitSigns(contact) && hasStatus(contact, 'Fulfillment') },
       { id: 'signs_invoice_payment', label: 'Invoice / Payment', matches: (contact) => isAitSigns(contact) && hasStatus(contact, 'Invoice / Payment') },
       { id: 'signs_source_review', label: 'Source Review', matches: isSourceReview },
+      { id: 'signs_linked_people', label: 'Has Linked People', matches: hasLinkedPeople },
       { id: 'signs_active_work', label: 'Has Active Work', matches: hasActiveWork },
       { id: 'signs_payment_balance', label: 'Balance / Payment', matches: hasBalanceOrPayment },
     ],
@@ -272,6 +277,7 @@ export function contactDirectorySignalLabels(contact = {}, options = {}) {
   if (doNotContact(contact)) add('Do Not Contact');
   if (contact.isWrongNumber) add('Wrong Number');
   if (isSourceReview(contact)) add('Source Review');
+  if (hasLinkedPeople(contact)) add('Linked People');
   if (hasActiveWork(contact, options)) add('Active Work');
   if (hasBalanceOrPayment(contact)) add('Balance / Payment');
   for (const pill of contact.processPills || []) add(labelForContactProcessPill(pill));

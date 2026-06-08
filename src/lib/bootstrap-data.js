@@ -6,6 +6,7 @@ import { hasPermission, isAuthEnabled, PERMISSIONS, SESSION_SECRET_ENV } from '.
 import {
   businessUnits as businessUnitsTable,
   contacts as contactsTable,
+  contactPeople as contactPeopleTable,
   workOrders as workOrdersTable,
   estimates as estimatesTable,
   paymentSnapshots as paymentSnapshotsTable,
@@ -89,6 +90,7 @@ function mapContacts(
   const estimatesByContactId = rowsByContactId(relatedRows.estimates || []);
   const paymentSnapshotsByContactId = rowsByContactId(relatedRows.paymentSnapshots || []);
   const conversationMessagesByContactId = rowsByContactId(relatedRows.conversationMessages || []);
+  const peopleByContactId = rowsByContactId(relatedRows.contactPeople || []);
 
   return contactRows.map((contact, index) => {
     const lead = leadByContactId.get(contact.id);
@@ -96,6 +98,9 @@ function mapContacts(
     const contactWorkOrders = workOrdersByContactId.get(contact.id) || [];
     const contactEstimates = estimatesByContactId.get(contact.id) || [];
     const contactPaymentSnapshots = paymentSnapshotsByContactId.get(contact.id) || [];
+    const contactPeople = (peopleByContactId.get(contact.id) || [])
+      .slice()
+      .sort((left, right) => Number(right.isPrimary) - Number(left.isPrimary) || clean(left.name).localeCompare(clean(right.name)));
     const workflow = workflowFromLead(lead, {
       businessUnit,
       workOrders: contactWorkOrders,
@@ -193,6 +198,9 @@ function mapContacts(
       contactabilityStatus: enrollmentSignals?.contactability?.status || '',
       qualityDisposition: enrollmentSignals?.quality?.disposition || '',
       processPills: enrollmentSignals?.process?.pills || [],
+      linkedPeopleCount: contactPeople.length,
+      linkedPeoplePreview: contactPeople.slice(0, 3).map((person) => person.name).filter(Boolean).join(', '),
+      primaryLinkedPerson: contactPeople.find((person) => person.isPrimary)?.name || contactPeople[0]?.name || '',
       notes: noteItems.length ? noteItems : eventItems,
       timeline: timelineItems,
     };
@@ -446,6 +454,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       noteRows,
       eventRows,
       conversationMessageRows,
+      contactPeopleRows,
       taskRows,
       importStaging,
     ] = await Promise.all([
@@ -458,6 +467,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       db.select().from(notesTable).where(scopedOrgWhere(notesTable, session)).orderBy(desc(notesTable.createdAt)),
       db.select().from(activityEventsTable).where(scopedOrgWhere(activityEventsTable, session)).orderBy(desc(activityEventsTable.createdAt)),
       db.select().from(conversationMessagesTable).where(scopedOrgWhere(conversationMessagesTable, session)).orderBy(desc(conversationMessagesTable.occurredAt)),
+      db.select().from(contactPeopleTable).where(scopedOrgWhere(contactPeopleTable, session)).orderBy(desc(contactPeopleTable.isPrimary), asc(contactPeopleTable.name)),
       db.select().from(tasksTable).where(scopedBusinessUnitWhere(tasksTable, session)).orderBy(asc(tasksTable.dueAt), desc(tasksTable.createdAt)),
       access.canReadImportReview ? getImportStagingSummary(db) : Promise.resolve(null),
     ]);
@@ -486,6 +496,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
         estimates: estimateRows,
         paymentSnapshots: paymentRowsWithContactLinks,
         conversationMessages: conversationMessageRows,
+        contactPeople: contactPeopleRows,
       },
     );
     const contactLookup = new Map(contacts.map((contact) => [contact.id, contact]));

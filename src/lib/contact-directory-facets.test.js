@@ -35,6 +35,7 @@ test('contact directory facets expose counted division-aware buckets', () => {
       status: 'Work Order',
       phone: '90855534340',
       email: 'shop@example.com',
+      linkedPeopleCount: 2,
       relatedWorkOrderCount: 1,
       lastTouch: '2026-05-25',
     },
@@ -69,6 +70,7 @@ test('contact directory facets expose counted division-aware buckets', () => {
   assert.equal(facetCount(groups, 'missing_phone'), 2);
   assert.equal(facetCount(groups, 'invalid_phone'), 1);
   assert.equal(facetCount(groups, 'signs_source_review'), 1);
+  assert.equal(facetCount(groups, 'signs_linked_people'), 1);
   assert.equal(facetCount(groups, 'signs_active_work'), 1);
   assert.equal(facetCount(groups, 'usa_ready_follow_up'), 1);
   assert.equal(facetCount(groups, 'usa_needs_review'), 1);
@@ -95,6 +97,7 @@ test('contact directory facet filtering isolates sales-cycle buckets', () => {
       businessUnitId: 'signs',
       workflowKey: 'ait_signs',
       status: 'Estimate',
+      linkedPeopleCount: 1,
       relatedEstimateCount: 1,
     },
   ];
@@ -105,6 +108,10 @@ test('contact directory facet filtering isolates sales-cycle buckets', () => {
   );
   assert.deepEqual(
     filterContactsByDirectoryFacet(contacts, 'signs_estimate', { businessUnitById }).map((contact) => contact.id),
+    ['estimate'],
+  );
+  assert.deepEqual(
+    filterContactsByDirectoryFacet(contacts, 'signs_linked_people', { businessUnitById }).map((contact) => contact.id),
     ['estimate'],
   );
 });
@@ -129,7 +136,8 @@ test('contact directory signal labels flag invalid phone formats', () => {
       status: 'Work Order',
       phone: '90855534340',
       email: 'shop@example.com',
+      linkedPeopleCount: 2,
     }),
-    ['Invalid Phone'],
+    ['Invalid Phone', 'Linked People'],
   );
 });

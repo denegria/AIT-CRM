@@ -62,6 +62,29 @@ function SignalCell({ row }) {
   );
 }
 
+function PeopleCell({ row }) {
+  if (!row.linkedPeopleCount) return <span className="contacts-signal-empty">—</span>;
+  return (
+    <div className="workflow-cell">
+      <div className="workflow-line">
+        <UserRoundCheck size={13} />
+        <span>{row.linkedPeopleCount} {row.linkedPeopleCount === 1 ? 'person' : 'people'}</span>
+      </div>
+      {row.linkedPeoplePreview && <div className="workflow-next">{row.linkedPeoplePreview}</div>}
+    </div>
+  );
+}
+
+function AccountActivityCell({ row }) {
+  const parts = [
+    Number(row.relatedWorkOrderCount || 0) ? `${row.relatedWorkOrderCount} work` : '',
+    Number(row.relatedEstimateCount || 0) ? `${row.relatedEstimateCount} est.` : '',
+    Number(row.relatedPaymentCount || 0) ? `${row.relatedPaymentCount} pay` : '',
+  ].filter(Boolean);
+  if (!parts.length) return <span className="contacts-signal-empty">—</span>;
+  return <span>{parts.join(' · ')}</span>;
+}
+
 function businessUnitIdForRecord(record) {
   return record?.businessUnitId || record?.primaryBusinessUnitId || '';
 }
@@ -155,8 +178,19 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const facetContext = useMemo(() => ({ businessUnitById, now: facetNow }), [businessUnitById, facetNow]);
   const directoryRows = useMemo(() => contactRows.map((contact) => {
     const signalLabels = contactDirectorySignalLabels(contact, facetContext);
+    const accountActivityText = [
+      contact.linkedPeopleCount ? `${contact.linkedPeopleCount} people` : '',
+      Number(contact.relatedWorkOrderCount || 0) ? `${contact.relatedWorkOrderCount} work` : '',
+      Number(contact.relatedEstimateCount || 0) ? `${contact.relatedEstimateCount} estimates` : '',
+      Number(contact.relatedPaymentCount || 0) ? `${contact.relatedPaymentCount} payments` : '',
+    ].filter(Boolean).join(' ');
     return {
       ...contact,
+      accountActivityText,
+      linkedPeopleSummary: [
+        contact.linkedPeopleCount ? `${contact.linkedPeopleCount} people` : '',
+        contact.linkedPeoplePreview || '',
+      ].filter(Boolean).join(' '),
       signalLabels,
       signalText: signalLabels.join(' '),
     };
@@ -199,6 +233,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     { key: 'name', label: isClientsMode ? 'Client' : 'Name', sortable: true, editable: true },
     { key: 'email', label: 'Email', sortable: true, editable: true },
     { key: 'phone', label: 'Phone', editable: true },
+    ...(isClientsMode ? [
+      { key: 'linkedPeopleSummary', label: 'People', sortable: true, render: (row) => <PeopleCell row={row} /> },
+      { key: 'accountActivityText', label: 'Activity', sortable: false, render: (row) => <AccountActivityCell row={row} /> },
+    ] : []),
     { key: 'status', label: 'Status', type: 'badge', sortable: true },
     { key: 'workflow', label: 'Next Step', sortable: false, render: (row) => <WorkflowCell row={row} /> },
     { key: 'signalText', label: 'Signals', sortable: false, render: (row) => <SignalCell row={row} /> },
@@ -339,7 +377,9 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
             ] : []),
           ]}
           mobileBadges={['status']}
-          mobileFields={['phone', 'workflow', 'signalText', 'assignedLabel', 'divisionLabel', 'lastTouch', 'lastEdited']}
+          mobileFields={isClientsMode
+            ? ['phone', 'linkedPeopleSummary', 'accountActivityText', 'workflow', 'signalText', 'lastTouch', 'lastEdited']
+            : ['phone', 'workflow', 'signalText', 'assignedLabel', 'divisionLabel', 'lastTouch', 'lastEdited']}
         />
       </div>
 
