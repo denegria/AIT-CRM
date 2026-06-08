@@ -1,0 +1,25 @@
+{
+  "generatedAt": "2026-06-08T18:26:58.591Z",
+  "issue": "MIS-148",
+  "mode": "dry-run",
+  "businessUnit": "AIT Signs",
+  "sourceLabel": "ait_signs_shared_contact_variant_backfill",
+  "safeFingerprint": {
+    "targetBaseUrl": "https://ait-crm-git-staging-alvaros-projects-efb8ae58.vercel.app",
+    "expectedNeonBranchId": "br-broad-hill-aptjpyea",
+    "hostPrefix": "ep-muddy-frost-apgwqat1-pooler",
+    "hostSuffix": "aws.neon.tech",
+    "databaseParam": "neondb",
+    "currentDatabase": "neondb"
+  },
+  "summary": {
+    "rowsBefore": 0,
+    "rowsDeleted": 0,
+    "rowsAfter": 0,
+    "distinctContactsBefore": 0
+  },
+  "samples": {
+    "beforeRows": [],
+    "afterRows": []
+  }
+}

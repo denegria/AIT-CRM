@@ -226,9 +226,9 @@ function classifySharedContactCandidate(candidate) {
   );
   if (highConfidence) {
     return {
-      decision: 'apply_to_existing_spelling_variant',
-      confidence: 'high',
-      reason: 'Workbook candidate appears to be a spelling/format variant of the current cleaned client name.',
+      decision: 'hold_spelling_variant_review',
+      confidence: 'review',
+      reason: 'Workbook candidate appears to be a spelling/format variant; spelling variants stay review/provenance-only and do not auto-write linked people.',
       similarity,
     };
   }
@@ -399,7 +399,7 @@ function renderMarkdown(report) {
     '## Summary',
     '',
     `- Phone/shared-contact candidates reviewed: ${report.summary.reviewedCandidates}`,
-    `- Spelling variants eligible for existing-client linked people: ${report.summary.decisionCounts.apply_to_existing_spelling_variant || 0}`,
+    `- Auto-applied spelling variants: ${report.summary.decisionCounts.apply_to_existing_spelling_variant || 0}`,
     `- Spelling variants held for review: ${report.summary.decisionCounts.hold_spelling_variant_review || 0}`,
     `- Separate-business/shared-contact holds: ${report.summary.decisionCounts.hold_shared_contact_separate_business || 0}`,
     `- Planned linked people inserts: ${report.summary.plannedInserts}`,
@@ -410,6 +410,7 @@ function renderMarkdown(report) {
     '## Guardrails',
     '',
     '- Same phone is treated as shared contact-point evidence, not client identity evidence.',
+    '- Spelling/format variants are review/provenance-only and are not automatically applied.',
     '- This script does not merge, rename, remap, create, archive, delete, or consolidate contacts.',
     '- Current cleaned CRM names remain canonical.',
     `- Rows inserted by apply mode are tagged with source_label=${SOURCE_LABEL}.`,
