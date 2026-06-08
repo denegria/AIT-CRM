@@ -6,17 +6,18 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   Archive,
   ArrowLeft,
+  BriefcaseBusiness,
   Building2,
+  Calendar,
   ClipboardList,
-  Clock3,
+  FileText,
   Link2,
   Mail,
-  MapPin,
   Phone,
   ReceiptText,
   UserRound,
 } from 'lucide-react';
-import s from './AccountDetail.module.css';
+import s from '../../contacts/[id]/ContactDetail.module.css';
 
 function cleanText(value) {
   return String(value || '').trim();
@@ -47,12 +48,8 @@ function money(value) {
 function formatPhone(value) {
   const raw = cleanText(value);
   const digits = raw.replace(/\D+/g, '');
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-  }
-  if (digits.length === 11 && digits.startsWith('1')) {
-    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-  }
+  if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
   return raw;
 }
 
@@ -61,7 +58,7 @@ function methodDisplayValue(method) {
   return method.type === 'phone' ? formatPhone(method.value) : method.value;
 }
 
-function contactHref(method) {
+function methodHref(method) {
   if (!method?.value) return '';
   if (method.type === 'email') return `mailto:${method.value}`;
   if (method.type === 'phone') return `tel:${method.value.replace(/[^\d+]/g, '')}`;
@@ -76,35 +73,51 @@ function contactSummary(contact) {
   ].filter(Boolean).join(' · ');
 }
 
-function Panel({ title, icon: Icon, children, count }) {
+function timelineDateParts(item) {
+  const label = dateLabel(item.date);
+  return { date: label, time: '' };
+}
+
+function EmptyState({ children }) {
+  return <div className={s.timelineEmpty}>{children}</div>;
+}
+
+function ContactMethod({ method }) {
+  const href = methodHref(method);
+  const Icon = method.type === 'email' ? Mail : Phone;
+  const value = methodDisplayValue(method);
   return (
-    <section className={s.panel}>
-      <div className={s.panelHeader}>
-        <div className={s.panelTitle}>
-          <Icon size={17} />
-          <span>{title}</span>
-        </div>
-        {Number.isFinite(count) && <span className={s.count}>{count}</span>}
-      </div>
-      <div className={s.panelBody}>{children}</div>
-    </section>
+    <div className={s.infoItem}>
+      <Icon size={16} />
+      {href ? <a className={s.infoLink} href={href}>{value}</a> : <span>{value}</span>}
+    </div>
   );
 }
 
-function EmptyRow({ children }) {
-  return <div className={s.emptyRow}>{children}</div>;
-}
-
-function TimelineIcon({ type }) {
-  if (type === 'estimate') return <ReceiptText size={15} />;
-  if (type === 'contact') return <Link2 size={15} />;
-  return <ClipboardList size={15} />;
+function RecordCard({ icon: Icon, title, subtitle, badge, href }) {
+  const content = (
+    <>
+      <div className={s.recordMain}>
+        <div className={s.recordIcon}><Icon size={20} /></div>
+        <div>
+          <div className={s.recordTitle}>{title}</div>
+          <div className={s.recordSubtitle}>{subtitle}</div>
+        </div>
+      </div>
+      {badge && <span className={`badge badge-${String(badge).toLowerCase().replace(/\s+/g, '')}`}>{badge}</span>}
+    </>
+  );
+  if (href) {
+    return <Link className={`${s.recordCard} ${s.recordLinkCard}`} href={href}>{content}</Link>;
+  }
+  return <div className={s.recordCard}>{content}</div>;
 }
 
 export default function ClientAccountPage() {
   const params = useParams();
   const router = useRouter();
   const [account, setAccount] = useState(null);
+  const [activeTab, setActiveTab] = useState('timeline');
   const [state, setState] = useState({ loading: true, error: '' });
 
   useEffect(() => {
@@ -139,25 +152,30 @@ export default function ClientAccountPage() {
     return [
       ...(account.workOrders || []).map((record) => ({
         id: `work:${record.id}`,
-        type: 'work',
+        type: 'Work Order',
         title: record.workOrderNumber || record.title || 'Work order',
-        detail: [record.status, record.title].filter(Boolean).join(' · '),
+        text: record.title || '',
         date: record.updatedAt || record.createdAt,
+        icon: ClipboardList,
+        toneClass: s.tone_work,
       })),
       ...(account.estimates || []).map((record) => ({
         id: `estimate:${record.id}`,
-        type: 'estimate',
+        type: 'Estimate',
         title: record.estimateNumber || 'Estimate',
-        detail: [record.status, money(record.total)].filter(Boolean).join(' · '),
+        text: [record.status, money(record.total)].filter(Boolean).join(' · '),
         date: record.updatedAt || record.createdAt,
+        icon: ReceiptText,
+        toneClass: s.tone_estimate,
       })),
       ...(account.linkedContacts || []).map((record) => ({
         id: `contact:${record.id}`,
-        type: 'contact',
-        title: record.name || 'Linked contact',
-        detail: [formatPhone(record.phone), record.email].filter(Boolean).join(' · '),
+        type: 'Linked Contact',
+        title: record.name || 'Contact',
+        text: contactSummary(record),
+        date: record.updatedAt || record.createdAt,
+        icon: Link2,
         href: `/contacts/${record.id}`,
-        date: '',
       })),
     ].sort((left, right) => new Date(right.date || 0).getTime() - new Date(left.date || 0).getTime());
   }, [account]);
@@ -166,192 +184,234 @@ export default function ClientAccountPage() {
 
   if (state.error || !account) {
     return (
-      <div className={s.accountPage + ' fade-in'}>
-        <button className="btn btn-ghost" type="button" onClick={() => router.back()}>
-          <ArrowLeft size={16} />
-          Back
-        </button>
+      <div className={s.detailPage + ' fade-in'}>
+        <div className="page-header">
+          <button className={s.btnBack} type="button" onClick={() => router.back()}>
+            <ArrowLeft size={18} /> Back to Clients
+          </button>
+        </div>
         <div className="empty-state">{state.error || 'Client account not found.'}</div>
       </div>
     );
   }
 
-  const primaryMethodHref = contactHref(account.primaryContactMethod);
+  const primaryMethod = account.primaryContactMethod;
+  const primaryMethodText = methodDisplayValue(primaryMethod);
+  const firstLetter = cleanText(account.displayName).charAt(0) || 'C';
+  const activeTabValue = ['timeline', 'contacts', 'workorders', 'estimates', 'source'].includes(activeTab)
+    ? activeTab
+    : 'timeline';
 
   return (
-    <div className={s.accountPage + ' fade-in'}>
-      <div className={s.topBar}>
-        <button className="btn btn-ghost" type="button" onClick={() => router.back()}>
-          <ArrowLeft size={16} />
-          Back
+    <div className={s.detailPage + ' fade-in'}>
+      <div className="page-header">
+        <button className={s.btnBack} type="button" onClick={() => router.push('/client-accounts')}>
+          <ArrowLeft size={18} /> Back to Clients
         </button>
-        <Link className="btn btn-secondary" href="/client-accounts">
-          <Building2 size={16} />
-          Clients
-        </Link>
       </div>
 
-      <header className={s.hero}>
-        <div className={s.heroMain}>
-          <div className={s.eyebrow}>{account.businessUnitName || 'Client account'}</div>
-          <h1>{account.displayName}</h1>
-          <div className={s.metaLine}>
-            <span className={s.status}>{account.status}</span>
-            {account.primaryPersonName && <span>{account.primaryPersonName}</span>}
-            {account.primaryContactMethod && (
-              primaryMethodHref
-                ? <a href={primaryMethodHref}>{methodDisplayValue(account.primaryContactMethod)}</a>
-                : <span>{methodDisplayValue(account.primaryContactMethod)}</span>
+      <div className={s.detailLayout}>
+        <aside className={s.profileCard}>
+          <div className={s.profileHeader}>
+            <div className={s.profileAvatarLarge}>{firstLetter}</div>
+            <div className={s.profileTitleBlock}>
+              <div className={s.profileNameRow}>
+                <h1 className={s.profileName}>{account.displayName}</h1>
+                <span className={`badge badge-${String(account.status || 'active').toLowerCase().replace(/\s+/g, '')}`}>
+                  {account.status || 'active'}
+                </span>
+              </div>
+              <div className={s.profileRole}>Client</div>
+              <div className={s.profileSource}>{account.businessUnitName || 'AIT Signs'}</div>
+            </div>
+          </div>
+
+          <div className={s.profileInfo}>
+            {primaryMethod ? (
+              <ContactMethod method={primaryMethod} />
+            ) : (
+              <div className={s.infoItem}>
+                <Phone size={16} />
+                <span className={s.missingInfo}>Missing primary contact method</span>
+              </div>
             )}
-            {account.primaryLocation?.text && <span>{account.primaryLocation.text}</span>}
+            {!!account.contactMethods?.length && account.contactMethods
+              .filter((method) => method.id !== primaryMethod?.id)
+              .slice(0, 2)
+              .map((method) => <ContactMethod method={method} key={method.id} />)}
+            <div className={s.infoItem}>
+              <Building2 size={16} />
+              <span>{account.businessUnitName || 'AIT Signs'}</span>
+            </div>
+            <div className={s.infoItem}>
+              <Calendar size={16} />
+              <span>Latest: {timeline[0] ? dateLabel(timeline[0].date) : 'No activity yet'}</span>
+            </div>
           </div>
-        </div>
-        <div className={s.snapshotGrid} aria-label={`${account.displayName} snapshot`}>
-          <div>
-            <strong>{account.linkedContactCount}</strong>
-            <span>Contacts</span>
+
+          <div className={s.highlightGrid} aria-label={`${account.displayName} summary`}>
+            <div className={s.highlightItem}>
+              <span>Contacts</span>
+              <strong>{account.linkedContactCount}</strong>
+            </div>
+            <div className={`${s.highlightItem} ${s.highlight_warning}`}>
+              <span>Work Orders</span>
+              <strong>{account.workOrderCount}</strong>
+            </div>
+            <div className={`${s.highlightItem} ${s.highlight_success}`}>
+              <span>Estimates</span>
+              <strong>{account.estimateCount}</strong>
+            </div>
+            <div className={s.highlightItem}>
+              <span>People</span>
+              <strong>{account.peopleCount || 0}</strong>
+            </div>
           </div>
-          <div>
-            <strong>{account.workOrderCount}</strong>
-            <span>Work Orders</span>
+        </aside>
+
+        <main className={s.contentSection}>
+          <div className={s.contentTabs}>
+            <button className={`${s.contentTab} ${activeTabValue === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')} type="button">Timeline</button>
+            <button className={`${s.contentTab} ${activeTabValue === 'contacts' ? s.active : ''}`} onClick={() => setActiveTab('contacts')} type="button">Contacts ({(account.people?.length || 0) + (account.linkedContacts?.length || 0)})</button>
+            <button className={`${s.contentTab} ${activeTabValue === 'workorders' ? s.active : ''}`} onClick={() => setActiveTab('workorders')} type="button">Work Orders ({account.workOrders?.length || 0})</button>
+            <button className={`${s.contentTab} ${activeTabValue === 'estimates' ? s.active : ''}`} onClick={() => setActiveTab('estimates')} type="button">Estimates ({account.estimates?.length || 0})</button>
+            <button className={`${s.contentTab} ${activeTabValue === 'source' ? s.active : ''}`} onClick={() => setActiveTab('source')} type="button">Source</button>
           </div>
-          <div>
-            <strong>{account.estimateCount}</strong>
-            <span>Estimates</span>
-          </div>
-        </div>
-      </header>
 
-      {!!account.visibleAliases?.length && (
-        <div className={s.aliasStrip}>
-          {account.visibleAliases.map((alias) => (
-            <span key={alias}>{alias}</span>
-          ))}
-        </div>
-      )}
-
-      <div className={s.workspaceGrid}>
-        <div className={s.workspaceColumn}>
-          <Panel title="Contact Methods" icon={Phone} count={account.contactMethods?.length || 0}>
-            {account.contactMethods?.length ? account.contactMethods.map((method) => {
-              const href = contactHref(method);
-              const Icon = method.type === 'email' ? Mail : Phone;
-              const displayValue = methodDisplayValue(method);
-              return (
-                <div className={s.listRow} key={method.id}>
-                  <div className={s.iconLine}>
-                    <Icon size={15} />
-                    <div>
-                      <strong>{href ? <a href={href}>{displayValue}</a> : displayValue}</strong>
-                      <span>{method.label}</span>
-                    </div>
-                  </div>
-                  {method.isPrimary && <span className={s.pill}>Primary</span>}
-                </div>
-              );
-            }) : <EmptyRow>No contact methods yet.</EmptyRow>}
-          </Panel>
-
-          <Panel title="Linked Contacts" icon={Link2} count={account.linkedContacts?.length || 0}>
-            {account.linkedContacts?.length ? account.linkedContacts.map((contact) => (
-              <div className={s.listRow} key={contact.id}>
-                <div>
-                  <strong>{contact.name}</strong>
-                  <span>{contactSummary(contact)}</span>
-                </div>
-                <Link className={s.iconButton} href={`/contacts/${contact.id}`} aria-label={`Open ${contact.name}`}>
-                  <Link2 size={15} />
-                </Link>
-              </div>
-            )) : <EmptyRow>No linked contacts yet.</EmptyRow>}
-          </Panel>
-
-          {!!account.people?.length && (
-            <Panel title="People" icon={UserRound} count={account.people.length}>
-              {account.people.map((person) => (
-                <div className={s.listRow} key={person.id}>
-                  <div>
-                    <strong>{person.name}</strong>
-                    <span>{person.role || 'Contact'}</span>
-                  </div>
-                  {person.isPrimary && <span className={s.pill}>Primary</span>}
-                </div>
-              ))}
-            </Panel>
-          )}
-
-          {!!account.locations?.length && (
-            <Panel title="Locations" icon={MapPin} count={account.locations.length}>
-              {account.locations.map((location) => (
-                <div className={s.listRow} key={location.id}>
-                  <div>
-                    <strong>{location.label || location.address || 'Location'}</strong>
-                    <span>{location.text || 'No address'}</span>
-                  </div>
-                  {location.isPrimary && <span className={s.pill}>Primary</span>}
-                </div>
-              ))}
-            </Panel>
-          )}
-        </div>
-
-        <div className={s.workspaceColumn}>
-          <Panel title="Work & Estimates" icon={ClipboardList} count={(account.workOrders?.length || 0) + (account.estimates?.length || 0)}>
-            {(account.workOrders?.length || account.estimates?.length) ? (
+          <div className={s.tabContent}>
+            {activeTabValue === 'timeline' && (
               <>
-                {(account.workOrders || []).slice(0, 5).map((record) => (
-                  <div className={s.listRow} key={`work-${record.id}`}>
-                    <div>
-                      <strong>{record.workOrderNumber || record.title || 'Work order'}</strong>
-                      <span>{[record.status, dateLabel(record.updatedAt || record.createdAt)].filter(Boolean).join(' · ')}</span>
-                    </div>
-                  </div>
-                ))}
-                {(account.estimates || []).slice(0, 5).map((record) => (
-                  <div className={s.listRow} key={`estimate-${record.id}`}>
-                    <div>
-                      <strong>{record.estimateNumber || 'Estimate'}</strong>
-                      <span>{[record.status, money(record.total), dateLabel(record.updatedAt || record.createdAt)].filter(Boolean).join(' · ')}</span>
-                    </div>
-                  </div>
-                ))}
-              </>
-            ) : <EmptyRow>No work history yet.</EmptyRow>}
-          </Panel>
-
-          <Panel title="Timeline" icon={Clock3} count={timeline.length}>
-            {timeline.length ? timeline.slice(0, 12).map((item) => (
-              <div className={s.timelineRow} key={item.id}>
-                <div className={s.timelineIcon}><TimelineIcon type={item.type} /></div>
-                <div>
-                  <strong>{item.href ? <Link href={item.href}>{item.title}</Link> : item.title}</strong>
-                  <span>{[item.detail, dateLabel(item.date)].filter(Boolean).join(' · ')}</span>
+                <div className={s.snapshotStrip} aria-label="Current client snapshot">
+                  <button className={`${s.snapshotItem} ${s.snapshot_work}`} onClick={() => setActiveTab('workorders')} type="button">
+                    <span className={s.snapshotIcon}><ClipboardList size={15} /></span>
+                    <span className={s.snapshotCopy}><span>Work Orders</span><strong>{account.workOrderCount}</strong></span>
+                    <small>{account.latestWorkOrderNumber || 'No work order yet'}</small>
+                  </button>
+                  <button className={`${s.snapshotItem} ${s.snapshot_estimate}`} onClick={() => setActiveTab('estimates')} type="button">
+                    <span className={s.snapshotIcon}><BriefcaseBusiness size={15} /></span>
+                    <span className={s.snapshotCopy}><span>Estimates</span><strong>{account.estimateCount}</strong></span>
+                    <small>{account.latestEstimateNumber || 'No estimate yet'}</small>
+                  </button>
+                  <button className={`${s.snapshotItem} ${s.snapshot_lead}`} onClick={() => setActiveTab('contacts')} type="button">
+                    <span className={s.snapshotIcon}><UserRound size={15} /></span>
+                    <span className={s.snapshotCopy}><span>Contacts</span><strong>{account.linkedContactCount}</strong></span>
+                    <small>{primaryMethodText || 'No contact method'}</small>
+                  </button>
+                  <button className={s.snapshotItem} onClick={() => setActiveTab('source')} type="button">
+                    <span className={s.snapshotIcon}><Archive size={15} /></span>
+                    <span className={s.snapshotCopy}><span>Source</span><strong>{account.provenanceAliases?.length || 0}</strong></span>
+                    <small>Provenance aliases</small>
+                  </button>
                 </div>
-              </div>
-            )) : <EmptyRow>No account timeline yet.</EmptyRow>}
-          </Panel>
-        </div>
-      </div>
 
-      <details className={s.provenance}>
-        <summary>
-          <Archive size={16} />
-          <span>Source Provenance</span>
-          <span>{account.provenanceAliases?.length || 0}</span>
-        </summary>
-        {account.provenanceAliases?.length ? (
-          <div className={s.provenanceList}>
-            {account.provenanceAliases.map((alias) => (
-              <div className={s.provenanceRow} key={alias.id}>
-                <strong>{alias.value}</strong>
-                <span>{[alias.type, alias.sourceSheet, alias.sourceRow ? `row ${alias.sourceRow}` : ''].filter(Boolean).join(' · ')}</span>
+                <div className={s.timeline}>
+                  {timeline.map((item) => {
+                    const Icon = item.icon;
+                    const dateParts = timelineDateParts(item);
+                    return (
+                      <div key={item.id} className={`${s.timelineItem} ${item.toneClass || ''}`}>
+                        <div className={s.timelineIcon}><Icon size={16} /></div>
+                        <div className={s.timelineBody}>
+                          <div className={s.timelineMeta}>
+                            <div className={s.timelineTypeGroup}>
+                              <span className={s.timelineType}>{item.type}</span>
+                            </div>
+                            <time className={s.timelineDateStack} dateTime={item.date || undefined}>
+                              <span>{dateParts.date}</span>
+                            </time>
+                          </div>
+                          <div className={s.timelineTitle}>
+                            {item.href ? <Link href={item.href}>{item.title}</Link> : item.title}
+                          </div>
+                          {item.text && <div className={s.timelineText}>{item.text}</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {timeline.length === 0 && <EmptyState>No client activity recorded yet.</EmptyState>}
+                </div>
+              </>
+            )}
+
+            {activeTabValue === 'contacts' && (
+              <div className={s.recordsList}>
+                {!!account.people?.length && account.people.map((person) => (
+                  <RecordCard
+                    key={person.id}
+                    icon={UserRound}
+                    title={person.name}
+                    subtitle={person.role || 'Contact person'}
+                    badge={person.isPrimary ? 'Primary' : ''}
+                  />
+                ))}
+                {!!account.linkedContacts?.length && account.linkedContacts.map((contact) => (
+                  <RecordCard
+                    key={contact.id}
+                    icon={Link2}
+                    title={contact.name}
+                    subtitle={contactSummary(contact) || 'Linked source contact'}
+                    href={`/contacts/${contact.id}`}
+                  />
+                ))}
+                {!account.people?.length && !account.linkedContacts?.length && (
+                  <EmptyState>No contacts linked to this client yet.</EmptyState>
+                )}
+                {!account.people?.length && !!account.linkedContacts?.length && (
+                  <EmptyState>Named contact-person extraction is pending review; linked source contacts are shown above.</EmptyState>
+                )}
               </div>
-            ))}
+            )}
+
+            {activeTabValue === 'workorders' && (
+              <div className={s.recordsList}>
+                {!!account.workOrders?.length ? account.workOrders.map((record) => (
+                  <RecordCard
+                    key={record.id}
+                    icon={ClipboardList}
+                    title={record.workOrderNumber || record.title || 'Work order'}
+                    subtitle={[record.title, dateLabel(record.updatedAt || record.createdAt)].filter(Boolean).join(' · ')}
+                    badge={record.status}
+                  />
+                )) : <EmptyState>No work orders linked.</EmptyState>}
+              </div>
+            )}
+
+            {activeTabValue === 'estimates' && (
+              <div className={s.recordsList}>
+                {!!account.estimates?.length ? account.estimates.map((record) => (
+                  <RecordCard
+                    key={record.id}
+                    icon={FileText}
+                    title={record.estimateNumber || 'Estimate'}
+                    subtitle={[money(record.total), dateLabel(record.updatedAt || record.createdAt)].filter(Boolean).join(' · ')}
+                    badge={record.status}
+                  />
+                )) : <EmptyState>No estimates linked.</EmptyState>}
+              </div>
+            )}
+
+            {activeTabValue === 'source' && (
+              <div className={s.recordsList}>
+                {!!account.visibleAliases?.length && (
+                  <RecordCard
+                    icon={Building2}
+                    title="Visible aliases"
+                    subtitle={account.visibleAliases.join(' · ')}
+                  />
+                )}
+                {!!account.provenanceAliases?.length ? account.provenanceAliases.map((alias) => (
+                  <RecordCard
+                    key={alias.id}
+                    icon={Archive}
+                    title={alias.value}
+                    subtitle={[alias.type, alias.sourceSheet, alias.sourceRow ? `row ${alias.sourceRow}` : ''].filter(Boolean).join(' · ')}
+                  />
+                )) : <EmptyState>No source provenance aliases yet.</EmptyState>}
+              </div>
+            )}
           </div>
-        ) : (
-          <EmptyRow>No source provenance yet.</EmptyRow>
-        )}
-      </details>
+        </main>
+      </div>
     </div>
   );
 }

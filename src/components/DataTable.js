@@ -24,6 +24,7 @@ export default function DataTable({
   onSelect,
   mobileFields,
   mobileBadges,
+  searchFields = [],
 }) {
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState(null);
@@ -36,7 +37,10 @@ export default function DataTable({
     let rows = data;
     if (search) {
       const q = search.toLowerCase();
-      rows = rows.filter(r => columns.some(c => String(r[c.key] || '').toLowerCase().includes(q)));
+      rows = rows.filter(r => (
+        columns.some(c => String(r[c.key] || '').toLowerCase().includes(q)) ||
+        searchFields.some((key) => String(r[key] || '').toLowerCase().includes(q))
+      ));
     }
     if (sortKey) {
       rows = [...rows].sort((a, b) => {
@@ -46,7 +50,7 @@ export default function DataTable({
       });
     }
     return rows;
-  }, [data, search, sortKey, sortDir, columns]);
+  }, [data, search, sortKey, sortDir, columns, searchFields]);
 
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');

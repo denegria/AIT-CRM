@@ -1,20 +1,10 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import {
-  Building2,
-  ClipboardList,
-  ExternalLink,
-  Mail,
-  Phone,
-  ReceiptText,
-  Search,
-  UserRound,
-} from 'lucide-react';
+import { Building2 } from 'lucide-react';
+import DataTable from '@/components/DataTable';
 import { useCRM } from '@/lib/store';
-import s from './ClientAccounts.module.css';
 
 const ACCOUNT_LIMIT = 1000;
 
@@ -22,65 +12,63 @@ function cleanText(value) {
   return String(value || '').trim();
 }
 
-function countLabel(count, singular, plural = `${singular}s`) {
-  return `${count} ${count === 1 ? singular : plural}`;
-}
-
 function formatPhone(value) {
-  const raw = String(value || '').trim();
+  const raw = cleanText(value);
   const digits = raw.replace(/\D+/g, '');
-  if (digits.length === 10) {
-    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
-  }
-  if (digits.length === 11 && digits.startsWith('1')) {
-    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
-  }
+  if (digits.length === 10) return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  if (digits.length === 11 && digits.startsWith('1')) return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
   return raw;
 }
 
-function AccountContact({ account }) {
+function contactValue(account) {
   if (account.primaryContactMethod?.value) {
-    const methodValue = account.primaryContactMethod.type === 'phone'
+    return account.primaryContactMethod.type === 'phone'
       ? formatPhone(account.primaryContactMethod.value)
       : account.primaryContactMethod.value;
-    return (
-      <span className={s.iconLine}>
-        {account.primaryContactMethod.type === 'email' ? <Mail size={14} /> : <Phone size={14} />}
-        {methodValue}
-      </span>
-    );
   }
-  if (account.primaryPersonName) {
-    return (
-      <span className={s.iconLine}>
-        <UserRound size={14} />
-        {account.primaryPersonName}
-      </span>
-    );
-  }
-  return <span className={s.muted}>No contact method</span>;
+  return account.primaryPersonName || '';
 }
 
-function accountActivity(account) {
-  const parts = [
-    countLabel(account.linkedContactCount || 0, 'contact'),
-    countLabel(account.workOrderCount || 0, 'work order'),
-    countLabel(account.estimateCount || 0, 'estimate'),
-  ];
-  return parts.join(' · ');
+function latestActivity(account) {
+  return account.latestWorkOrderNumber || account.latestEstimateNumber || '';
 }
 
-function MatchReasons({ account }) {
-  if (account.matchReasons?.length) {
-    return (
-      <div className={s.reasonList}>
-        {account.matchReasons.slice(0, 2).map((reason) => (
-          <span key={reason.code}>{reason.label}</span>
-        ))}
-      </div>
-    );
-  }
-  return <span className={s.muted}>{account.businessUnitName || 'Account'}</span>;
+function countText(count, singular, plural = `${singular}s`) {
+  const value = Number(count || 0);
+  return `${value} ${value === 1 ? singular : plural}`;
+}
+
+function clientRows(accounts) {
+  return accounts.map((account) => {
+    const contactsText = countText(account.linkedContactCount, 'contact');
+    const workOrdersText = countText(account.workOrderCount, 'work order');
+    const estimatesText = countText(account.estimateCount, 'estimate');
+    const primaryContact = contactValue(account);
+    const lastActivity = latestActivity(account);
+    return {
+      ...account,
+      name: account.displayName,
+      phone: primaryContact,
+      contactsText,
+      workOrdersText,
+      estimatesText,
+      lastActivity,
+      divisionLabel: account.businessUnitName || 'AIT Signs',
+      source: account.visibleAliases?.length ? account.visibleAliases.join(' ') : account.businessUnitName || 'AIT Signs',
+      statusLabel: account.status || 'active',
+      searchText: [
+        account.displayName,
+        primaryContact,
+        contactsText,
+        workOrdersText,
+        estimatesText,
+        lastActivity,
+        account.businessUnitName,
+        ...(account.visibleAliases || []),
+        ...(account.matchReasons || []).map((reason) => reason.label),
+      ].filter(Boolean).join(' '),
+    };
+  });
 }
 
 export default function ClientAccountsPage() {
@@ -91,7 +79,6 @@ export default function ClientAccountsPage() {
     currentBusinessUnit,
     accessibleBusinessUnits,
   } = useCRM();
-  const [search, setSearch] = useState('');
   const [accounts, setAccounts] = useState([]);
   const [requestState, setRequestState] = useState({ loading: true, error: '' });
 
@@ -103,9 +90,7 @@ export default function ClientAccountsPage() {
   );
 
   useEffect(() => {
-    if (isNonAccountDivision) {
-      router.replace('/contacts');
-    }
+    if (isNonAccountDivision) router.replace('/contacts');
   }, [isNonAccountDivision, router]);
 
   const activeBusinessUnitId = useMemo(() => {
@@ -117,14 +102,11 @@ export default function ClientAccountsPage() {
   useEffect(() => {
     if (!loaded || isNonAccountDivision) return undefined;
     let cancelled = false;
-    const timeout = setTimeout(async () => {
+
+    async function loadAccounts() {
       setRequestState({ loading: true, error: '' });
       try {
-        const params = new URLSearchParams({
-          limit: String(ACCOUNT_LIMIT),
-        });
-        const query = cleanText(search);
-        if (query) params.set('q', query);
+        const params = new URLSearchParams({ limit: String(ACCOUNT_LIMIT) });
         if (activeBusinessUnitId) params.set('businessUnitId', activeBusinessUnitId);
         const response = await fetch(`/api/client-accounts?${params.toString()}`);
         const payload = await response.json().catch(() => ({}));
@@ -139,108 +121,93 @@ export default function ClientAccountsPage() {
           setRequestState({ loading: false, error: err.message || 'Client accounts failed to load.' });
         }
       }
-    }, 180);
+    }
 
+    loadAccounts();
     return () => {
       cancelled = true;
-      clearTimeout(timeout);
     };
-  }, [activeBusinessUnitId, isNonAccountDivision, loaded, search]);
+  }, [activeBusinessUnitId, isNonAccountDivision, loaded]);
 
-  const summary = useMemo(() => {
-    const linkedContacts = accounts.reduce((sum, account) => sum + (account.linkedContactCount || 0), 0);
-    const workOrders = accounts.reduce((sum, account) => sum + (account.workOrderCount || 0), 0);
-    const estimates = accounts.reduce((sum, account) => sum + (account.estimateCount || 0), 0);
-    return { linkedContacts, workOrders, estimates };
-  }, [accounts]);
+  const rows = useMemo(() => clientRows(accounts), [accounts]);
+  const summary = useMemo(() => rows.reduce((totals, account) => ({
+    contacts: totals.contacts + Number(account.linkedContactCount || 0),
+    workOrders: totals.workOrders + Number(account.workOrderCount || 0),
+    estimates: totals.estimates + Number(account.estimateCount || 0),
+  }), { contacts: 0, workOrders: 0, estimates: 0 }), [rows]);
+
+  const columns = [
+    { key: 'name', label: 'Name', sortable: true },
+    { key: 'phone', label: 'Phone', sortable: true },
+    { key: 'contactsText', label: 'Contacts', sortable: true },
+    { key: 'workOrdersText', label: 'Work Orders', sortable: true },
+    { key: 'estimatesText', label: 'Estimates', sortable: true },
+    { key: 'lastActivity', label: 'Last Activity', sortable: true },
+    { key: 'divisionLabel', label: 'Division', sortable: true },
+    { key: 'statusLabel', label: 'Status', type: 'badge', sortable: true },
+  ];
 
   if (!loaded || isNonAccountDivision) return <div className="empty-state">Loading...</div>;
 
   return (
-    <div className={s.page + ' fade-in'}>
+    <div className="fade-in">
       <div className="page-header">
         <div>
           <h1 className="page-title">Clients</h1>
           <p className="page-subtitle">
-            {accounts.length} accounts in {currentBusinessUnit?.name || 'available divisions'}
+            {accounts.length} clients in {currentBusinessUnit?.name || 'available divisions'}
           </p>
-        </div>
-        <div className={s.headerMetrics} aria-label="Client account summary">
-          <div>
-            <strong>{summary.linkedContacts}</strong>
-            <span>Contacts</span>
-          </div>
-          <div>
-            <strong>{summary.workOrders}</strong>
-            <span>Work Orders</span>
-          </div>
-          <div>
-            <strong>{summary.estimates}</strong>
-            <span>Estimates</span>
-          </div>
         </div>
       </div>
 
-      <div className={s.toolbar}>
-        <div className={s.searchWrap}>
-          <Search size={16} />
-          <input
-            className={s.search}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            aria-label="Search client accounts"
-            placeholder="Search accounts, people, phone, work orders..."
-          />
+      <div className="contacts-facet-panel" aria-label="Client summary">
+        <div className="contacts-facet-summary">
+          <strong>{rows.length}</strong>
+          <span>matching clients</span>
         </div>
-        <div className={s.scopeHint}>
-          <Building2 size={14} />
-          <span>{currentBusinessUnit?.name || `${accessibleBusinessUnits.length} divisions`}</span>
+        <div className="contacts-facet-groups">
+          <div className="contacts-facet-group">
+            <div className="contacts-facet-label">Activity</div>
+            <div className="contacts-facet-pills">
+              <span className="contacts-facet-pill active">
+                <span>Contacts</span>
+                <strong>{summary.contacts}</strong>
+              </span>
+              <span className="contacts-facet-pill">
+                <span>Work Orders</span>
+                <strong>{summary.workOrders}</strong>
+              </span>
+              <span className="contacts-facet-pill">
+                <span>Estimates</span>
+                <strong>{summary.estimates}</strong>
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
       {requestState.error && <div className="empty-state">{requestState.error}</div>}
+      {!requestState.error && requestState.loading && <div className="empty-state">Loading...</div>}
 
-      {!requestState.error && requestState.loading && (
-        <div className="empty-state">Loading...</div>
-      )}
-
-      {!requestState.error && !requestState.loading && accounts.length === 0 && (
-        <div className="empty-state">No records found</div>
-      )}
-
-      {!requestState.error && !requestState.loading && accounts.length > 0 && (
-        <div className={s.directory}>
-          <div className={s.tableHeader}>
-            <span>Account</span>
-            <span>Contact</span>
-            <span>Activity</span>
-            <span>Match</span>
-            <span />
-          </div>
-          {accounts.map((account) => (
-            <Link className={s.row} href={`/client-accounts/${account.id}`} key={account.id}>
-              <div className={s.accountCell}>
-                <strong>{account.displayName}</strong>
-                {!!account.visibleAliases?.length && (
-                  <span>{account.visibleAliases.slice(0, 2).join(' · ')}</span>
-                )}
+      {!requestState.error && !requestState.loading && (
+        <div className="card" style={{ padding: 16 }}>
+          <DataTable
+            columns={columns}
+            data={rows}
+            searchPlaceholder="Search clients..."
+            searchFields={['searchText']}
+            toolbarExtra={(
+              <div className="contacts-facet-pill" aria-label="Client division scope">
+                <Building2 size={14} />
+                <span>{currentBusinessUnit?.name || `${accessibleBusinessUnits.length} divisions`}</span>
               </div>
-              <div><AccountContact account={account} /></div>
-              <div className={s.activityCell}>
-                <span><ClipboardList size={14} /> {accountActivity(account)}</span>
-                {(account.latestWorkOrderNumber || account.latestEstimateNumber) && (
-                  <small>
-                    {account.latestWorkOrderNumber || account.latestEstimateNumber}
-                    {account.latestEstimateNumber && <ReceiptText size={12} />}
-                  </small>
-                )}
-              </div>
-              <div><MatchReasons account={account} /></div>
-              <div className={s.openCell} aria-hidden="true">
-                <ExternalLink size={16} />
-              </div>
-            </Link>
-          ))}
+            )}
+            actions={[
+              { label: 'View', onClick: (row) => router.push(`/client-accounts/${row.id}`) },
+            ]}
+            mobileBadges={['statusLabel']}
+            mobileFields={['contactsText', 'workOrdersText', 'estimatesText', 'lastActivity', 'divisionLabel']}
+          />
         </div>
       )}
     </div>
