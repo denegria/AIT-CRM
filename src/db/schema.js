@@ -141,6 +141,29 @@ export const contacts = pgTable('contacts', {
   updatedAt,
 });
 
+export const contactPeople = pgTable('contact_people', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').references(() => businessUnits.id, { onDelete: 'set null' }),
+  contactId: uuid('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
+  name: text('name').notNull(),
+  role: text('role'),
+  phone: text('phone'),
+  email: text('email'),
+  notes: text('notes'),
+  isPrimary: boolean('is_primary').notNull().default(false),
+  sourceLabel: text('source_label'),
+  sourceSheet: text('source_sheet'),
+  sourceRow: integer('source_row'),
+  metadataJson: jsonb('metadata_json').notNull().default({}),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  contactIdx: index('contact_people_contact_idx').on(table.contactId),
+  orgNameIdx: index('contact_people_org_name_idx').on(table.organizationId, table.name),
+  sourceIdx: index('contact_people_source_idx').on(table.sourceSheet, table.sourceRow),
+}));
+
 export const leads = pgTable('leads', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
@@ -643,6 +666,7 @@ export const allTables = {
   userRoles,
   businessUnitMemberships,
   contacts,
+  contactPeople,
   leads,
   leadStatusHistory,
   estimates,

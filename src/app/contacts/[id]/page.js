@@ -26,6 +26,16 @@ const SNAPSHOT_ICONS = {
   work: ClipboardList,
 };
 
+const emptyPersonForm = {
+  id: '',
+  name: '',
+  role: '',
+  phone: '',
+  email: '',
+  notes: '',
+  isPrimary: false,
+};
+
 function newManualSendRequestId() {
   return crypto.randomUUID();
 }
@@ -245,6 +255,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [serverConversations, setServerConversations] = useState({ contactId: '', reloadKey: -1, items: null, error: false });
   const [conversationReloadKey, setConversationReloadKey] = useState(0);
   const [messageTemplates, setMessageTemplates] = useState([]);
+  const [linkedPeople, setLinkedPeople] = useState({ contactId: '', items: [], loading: false, error: '' });
+  const [personModal, setPersonModal] = useState(null);
+  const [personForm, setPersonForm] = useState(emptyPersonForm);
   const [manualSend, setManualSend] = useState({
     channel: 'messenger',
     templateId: '',
@@ -371,6 +384,41 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   }, [contact?.id, dataSource, timelineReloadKey]);
 
   useEffect(() => {
+    if (!isClientMode || !contact?.id || dataSource !== 'postgres') {
+      return undefined;
+    }
+    let cancelled = false;
+    const requestContactId = contact.id;
+    fetch(`/api/contacts/${contact.id}/people`, { cache: 'no-store' })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Linked people load failed.');
+        if (!cancelled) {
+          setLinkedPeople({
+            contactId: requestContactId,
+            items: Array.isArray(payload.people) ? payload.people : [],
+            loading: false,
+            error: '',
+          });
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+        if (!cancelled) {
+          setLinkedPeople({
+            contactId: requestContactId,
+            items: [],
+            loading: false,
+            error: error.message || 'Linked people load failed.',
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [contact?.id, dataSource, isClientMode]);
+
+  useEffect(() => {
     if (!contact?.id || dataSource !== 'postgres') return undefined;
     let cancelled = false;
     const requestContactId = contact.id;
@@ -435,6 +483,61 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     if (!access.canWriteCrm) return;
     setEditForm({ ...contact });
     setIsEditModalOpen(true);
+  };
+
+  const openPersonModal = (person = null) => {
+    if (!access.canWriteCrm) return;
+    setPersonForm(person ? { ...emptyPersonForm, ...person } : emptyPersonForm);
+    setPersonModal(person ? 'edit' : 'new');
+  };
+
+  const closePersonModal = () => {
+    setPersonModal(null);
+    setPersonForm(emptyPersonForm);
+  };
+
+  const savePerson = () => {
+    if (!contact?.id || !personForm.name.trim()) return;
+    const isEdit = personModal === 'edit';
+    fetch(`/api/contacts/${contact.id}/people`, {
+      method: isEdit ? 'PATCH' : 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(personForm),
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Linked person save failed.');
+        setLinkedPeople({
+          contactId: contact.id,
+          items: Array.isArray(payload.people) ? payload.people : [],
+          loading: false,
+          error: '',
+        });
+        closePersonModal();
+        toast(isEdit ? 'Linked person updated' : 'Linked person added');
+      })
+      .catch((error) => toast(error.message || 'Linked person save failed.', 'error'));
+  };
+
+  const deletePerson = (person) => {
+    if (!contact?.id || !person?.id || !access.canWriteCrm) return;
+    fetch(`/api/contacts/${contact.id}/people`, {
+      method: 'DELETE',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ id: person.id }),
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Linked person delete failed.');
+        setLinkedPeople({
+          contactId: contact.id,
+          items: Array.isArray(payload.people) ? payload.people : [],
+          loading: false,
+          error: '',
+        });
+        toast('Linked person removed', 'error');
+      })
+      .catch((error) => toast(error.message || 'Linked person delete failed.', 'error'));
   };
 
   const handleEditSave = () => {
@@ -604,6 +707,48 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               </div>
             )}
           </div>
+
+          {isClientMode && (
+            <div className={s.peoplePanel} aria-label="Linked people">
+              <div className={s.peopleHeader}>
+                <div>
+                  <strong>Linked People</strong>
+                  <span>{linkedPeople.loading ? 'Loading' : `${linkedPeople.items.length} saved`}</span>
+                </div>
+                {access.canWriteCrm && (
+                  <button className="btn btn-sm" type="button" onClick={() => openPersonModal()}>
+                    <Plus size={14} /> Add
+                  </button>
+                )}
+              </div>
+              {linkedPeople.error && <div className={s.peopleEmpty}>{linkedPeople.error}</div>}
+              {!linkedPeople.error && linkedPeople.items.length === 0 && !linkedPeople.loading && (
+                <div className={s.peopleEmpty}>No linked people yet.</div>
+              )}
+              <div className={s.peopleList}>
+                {linkedPeople.items.map((person) => (
+                  <div key={person.id} className={s.personCard}>
+                    <div className={s.personTopline}>
+                      <strong>{person.name}</strong>
+                      {person.isPrimary && <span>Primary</span>}
+                    </div>
+                    {person.role && <div className={s.personRole}>{person.role}</div>}
+                    <div className={s.personMethods}>
+                      {person.phone && <a href={phoneHref(person.phone)}><Phone size={13} /> {person.phone}</a>}
+                      {person.email && <a href={`mailto:${person.email}`}><Mail size={13} /> {person.email}</a>}
+                    </div>
+                    {person.notes && <div className={s.personNotes}>{person.notes}</div>}
+                    {access.canWriteCrm && (
+                      <div className={s.personActions}>
+                        <button type="button" onClick={() => openPersonModal(person)}>Edit</button>
+                        <button type="button" onClick={() => deletePerson(person)}>Remove</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {!!detailView.highlights?.length && (
             <div className={s.highlightGrid} aria-label={`${detailView.profileTitle} summary`}>
@@ -1032,6 +1177,44 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
             </select>
           </div>
+        </Modal>
+      )}
+
+      {personModal && (
+        <Modal
+          open={!!personModal}
+          onClose={closePersonModal}
+          title={personModal === 'new' ? 'Add Linked Person' : 'Edit Linked Person'}
+          footer={<><button className="btn" onClick={closePersonModal}>Cancel</button><button className="btn btn-primary" onClick={savePerson}>Save</button></>}
+        >
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">Name</label>
+              <input className="input" value={personForm.name} onChange={e => setPersonForm({...personForm, name: e.target.value})} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Role</label>
+              <input className="input" value={personForm.role} onChange={e => setPersonForm({...personForm, role: e.target.value})} />
+            </div>
+          </div>
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">Phone</label>
+              <input className="input" value={personForm.phone} onChange={e => setPersonForm({...personForm, phone: e.target.value})} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Email</label>
+              <input className="input" value={personForm.email} onChange={e => setPersonForm({...personForm, email: e.target.value})} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Notes</label>
+            <textarea className="input" rows={3} value={personForm.notes} onChange={e => setPersonForm({...personForm, notes: e.target.value})} />
+          </div>
+          <label className={s.primaryToggle}>
+            <input type="checkbox" checked={personForm.isPrimary} onChange={e => setPersonForm({...personForm, isPrimary: e.target.checked})} />
+            Primary person for this client
+          </label>
         </Modal>
       )}
     </div>

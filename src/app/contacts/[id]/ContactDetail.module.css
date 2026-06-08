@@ -209,6 +209,129 @@
   margin-top: 2px;
 }
 
+.peoplePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border-subtle));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent-muted) 28%, var(--bg-secondary));
+}
+.peopleHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+.peopleHeader strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+}
+.peopleHeader span {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+}
+.peopleEmpty {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+.peopleList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.personCard {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+.personTopline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+.personTopline strong {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.personTopline span {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--success-muted);
+  color: var(--success);
+  font-size: 10px;
+  font-weight: 800;
+}
+.personRole,
+.personNotes {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.personMethods {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 7px;
+}
+.personMethods a {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.personMethods a:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.personActions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+.personActions button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: var(--text-xs);
+  font-weight: 800;
+}
+.personActions button:last-child {
+  color: var(--danger);
+}
+.primaryToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+.primaryToggle input {
+  width: 16px;
+  height: 16px;
+}
+
 .highlightGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
