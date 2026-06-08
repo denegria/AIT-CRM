@@ -1,0 +1,181 @@
+{
+  "generatedAt": "2026-06-08T05:43:17.015Z",
+  "issue": "MIS-146",
+  "mode": "dry-run",
+  "businessUnit": "AIT Signs",
+  "safeFingerprint": {
+    "targetBaseUrl": "https://ait-crm-git-staging-alvaros-projects-efb8ae58.vercel.app",
+    "expectedNeonBranchId": "br-broad-hill-aptjpyea",
+    "hostPrefix": "ep-muddy-frost-apgwqat1-pooler",
+    "hostSuffix": "aws.neon.tech",
+    "databaseParam": "neondb",
+    "currentDatabase": "neondb"
+  },
+  "workbook": {
+    "path": "/root/.openclaw/giuseppe-workspace/tmp/ait-usa-profile/AiT.15.SIGNS.WORK-ESTIMATES.1.xlsx",
+    "hash": "5018f3b48e294eef670f1937958aaac6714b6aafe45b799b020d1249d238aa06"
+  },
+  "summary": {
+    "safeExactCandidates": 825,
+    "plannedInserts": 0,
+    "appliedInserts": 0,
+    "skippedExisting": 636,
+    "distinctContactsAffected": 0,
+    "primaryRows": 0
+  },
+  "samples": {
+    "appliedOrPlanned": [],
+    "skippedExisting": [
+      {
+        "contactId": "4d74a98a-4ca3-473b-92ac-cf17be4ad0f2",
+        "contactName": "BLUE MOUNTAIN",
+        "personName": "FELIX",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "4d74a98a-4ca3-473b-92ac-cf17be4ad0f2",
+        "contactName": "BLUE MOUNTAIN",
+        "personName": "FELIZ",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "4d74a98a-4ca3-473b-92ac-cf17be4ad0f2",
+        "contactName": "BLUE MOUNTAIN",
+        "personName": "FELIX - JEFF",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "personName": "RUDY",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "personName": "SRA. EDY",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "personName": "MR JESUS - BOUND BROOK",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "personName": "MRS. EDY - PLAINFIELD",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "personName": "DON JESUS",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "personName": "FELIX/RUDY",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "personName": "FRANKIE (NEW OWNER)",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "personName": "RUDDY",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "personName": "RUDY/ JESUS",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "personName": "RUDYY",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "personName": "SRA EDDY",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "25c58413-c4a5-409e-9196-73e2dd1e04de",
+        "contactName": "IGLESIA DE DIOS VINO NUEVO",
+        "personName": "OSCAR",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "25c58413-c4a5-409e-9196-73e2dd1e04de",
+        "contactName": "IGLESIA DE DIOS VINO NUEVO",
+        "personName": "HERCILIA",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "25c58413-c4a5-409e-9196-73e2dd1e04de",
+        "contactName": "IGLESIA DE DIOS VINO NUEVO",
+        "personName": "ERCILIA",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "ae4ebd9d-6028-4714-9568-9d3d4def2e3d",
+        "contactName": "DNC GUTTERS",
+        "personName": "DANNY",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "ae4ebd9d-6028-4714-9568-9d3d4def2e3d",
+        "contactName": "DNC GUTTERS",
+        "personName": "DANY",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "dc731d6f-05fb-4bc7-b823-9f50afb1a1d8",
+        "contactName": "MR. HOODS",
+        "personName": "PERCY",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "9ed6a93e-564b-41b1-9dda-b3a40b7fde95",
+        "contactName": "3G CONSTRUCTION",
+        "personName": "JOEL",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "9ed6a93e-564b-41b1-9dda-b3a40b7fde95",
+        "contactName": "3G CONSTRUCTION",
+        "personName": "JOEL GOMEZ",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "9ed6a93e-564b-41b1-9dda-b3a40b7fde95",
+        "contactName": "3G CONSTRUCTION",
+        "personName": "OMAR",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "30b2a1a4-d1c7-4748-ac14-b6b9d7bce788",
+        "contactName": "DURABLE CONSTRUCTION",
+        "personName": "DAVID ACUNA",
+        "reason": "Existing linked person with same normalized name."
+      },
+      {
+        "contactId": "30b2a1a4-d1c7-4748-ac14-b6b9d7bce788",
+        "contactName": "DURABLE CONSTRUCTION",
+        "personName": "DAVID",
+        "reason": "Existing linked person with same normalized name."
+      }
+    ]
+  }
+}

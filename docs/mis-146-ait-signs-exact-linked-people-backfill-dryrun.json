@@ -1,0 +1,739 @@
+{
+  "generatedAt": "2026-06-08T05:42:33.981Z",
+  "issue": "MIS-146",
+  "mode": "dry-run",
+  "businessUnit": "AIT Signs",
+  "safeFingerprint": {
+    "targetBaseUrl": "https://ait-crm-git-staging-alvaros-projects-efb8ae58.vercel.app",
+    "expectedNeonBranchId": "br-broad-hill-aptjpyea",
+    "hostPrefix": "ep-muddy-frost-apgwqat1-pooler",
+    "hostSuffix": "aws.neon.tech",
+    "databaseParam": "neondb",
+    "currentDatabase": "neondb"
+  },
+  "workbook": {
+    "path": "/root/.openclaw/giuseppe-workspace/tmp/ait-usa-profile/AiT.15.SIGNS.WORK-ESTIMATES.1.xlsx",
+    "hash": "5018f3b48e294eef670f1937958aaac6714b6aafe45b799b020d1249d238aa06"
+  },
+  "summary": {
+    "safeExactCandidates": 825,
+    "plannedInserts": 636,
+    "appliedInserts": 0,
+    "skippedExisting": 0,
+    "distinctContactsAffected": 549,
+    "primaryRows": 549
+  },
+  "samples": {
+    "appliedOrPlanned": [
+      {
+        "contactId": "4d74a98a-4ca3-473b-92ac-cf17be4ad0f2",
+        "contactName": "BLUE MOUNTAIN",
+        "businessUnitId": null,
+        "name": "FELIX",
+        "phone": "7328038578",
+        "email": null,
+        "notes": null,
+        "isPrimary": true,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "2. ESTIMADOS",
+        "sourceRow": 54,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "BLUE MOUNTAIN",
+          "evidenceCount": 49,
+          "sourceRows": [
+            "2. ESTIMADOS#54",
+            "3. 15 SIGNS WORK ORDER#51",
+            "3. 15 SIGNS WORK ORDER#52",
+            "3. 15 SIGNS WORK ORDER#53",
+            "3. 15 SIGNS WORK ORDER#54",
+            "3. 15 SIGNS WORK ORDER#55",
+            "3. 15 SIGNS WORK ORDER#56",
+            "3. 15 SIGNS WORK ORDER#57",
+            "3. 15 SIGNS WORK ORDER#161",
+            "3. 15 SIGNS WORK ORDER#162",
+            "3. 15 SIGNS WORK ORDER#199",
+            "WORK ORDER TERMINADOS Y PAGADOS#317"
+          ],
+          "phoneHints": [
+            "7328038578",
+            "7329400590"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "4d74a98a-4ca3-473b-92ac-cf17be4ad0f2",
+        "contactName": "BLUE MOUNTAIN",
+        "businessUnitId": null,
+        "name": "FELIZ",
+        "phone": "7328038578",
+        "email": null,
+        "notes": null,
+        "isPrimary": false,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 753,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "BLUE MOUNTAIN",
+          "evidenceCount": 2,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#753",
+            "WORK ORDER TERMINADOS Y PAGADOS#1249"
+          ],
+          "phoneHints": [
+            "7328038578"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "4d74a98a-4ca3-473b-92ac-cf17be4ad0f2",
+        "contactName": "BLUE MOUNTAIN",
+        "businessUnitId": null,
+        "name": "FELIX - JEFF",
+        "phone": "5714550553",
+        "email": null,
+        "notes": null,
+        "isPrimary": false,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 1465,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "BLUE MOUNTAIN",
+          "evidenceCount": 1,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#1465"
+          ],
+          "phoneHints": [
+            "5714550553"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "businessUnitId": null,
+        "name": "RUDY",
+        "phone": "7324701825",
+        "email": null,
+        "notes": null,
+        "isPrimary": true,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "3. 15 SIGNS WORK ORDER",
+        "sourceRow": 164,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "WORLD SUPERMARKET",
+          "evidenceCount": 14,
+          "sourceRows": [
+            "3. 15 SIGNS WORK ORDER#164",
+            "3. 15 SIGNS WORK ORDER#237",
+            "WORK ORDER TERMINADOS Y PAGADOS#518",
+            "WORK ORDER TERMINADOS Y PAGADOS#799",
+            "WORK ORDER TERMINADOS Y PAGADOS#968",
+            "WORK ORDER TERMINADOS Y PAGADOS#1099",
+            "WORK ORDER TERMINADOS Y PAGADOS#1100",
+            "WORK ORDER TERMINADOS Y PAGADOS#1101",
+            "WORK ORDER TERMINADOS Y PAGADOS#1128",
+            "WORK ORDER TERMINADOS Y PAGADOS#1129",
+            "WORK ORDER TERMINADOS Y PAGADOS#1332",
+            "WORK ORDER TERMINADOS Y PAGADOS#1348"
+          ],
+          "phoneHints": [
+            "7324701825"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "businessUnitId": null,
+        "name": "SRA. EDY",
+        "phone": "9084829841",
+        "email": null,
+        "notes": null,
+        "isPrimary": false,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 377,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "WORLD SUPERMARKET",
+          "evidenceCount": 3,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#377",
+            "WORK ORDER TERMINADOS Y PAGADOS#743",
+            "WORK ORDER TERMINADOS Y PAGADOS#744"
+          ],
+          "phoneHints": [
+            "9084829841"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "businessUnitId": null,
+        "name": "MR JESUS - BOUND BROOK",
+        "phone": "7326489269",
+        "email": null,
+        "notes": null,
+        "isPrimary": false,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 1666,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "WORLD SUPERMARKET",
+          "evidenceCount": 2,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#1666",
+            "WORK ORDER TERMINADOS Y PAGADOS#1667"
+          ],
+          "phoneHints": [
+            "7326489269"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "businessUnitId": null,
+        "name": "MRS. EDY - PLAINFIELD",
+        "phone": "9084829841",
+        "email": null,
+        "notes": null,
+        "isPrimary": false,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 1601,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "WORLD SUPERMARKET",
+          "evidenceCount": 2,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#1601",
+            "WORK ORDER TERMINADOS Y PAGADOS#1665"
+          ],
+          "phoneHints": [
+            "9084829841"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "businessUnitId": null,
+        "name": "DON JESUS",
+        "phone": null,
+        "email": null,
+        "notes": null,
+        "isPrimary": false,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 1415,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "WORLD SUPERMARKET",
+          "evidenceCount": 1,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#1415"
+          ],
+          "phoneHints": [],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "businessUnitId": null,
+        "name": "FELIX/RUDY",
+        "phone": null,
+        "email": null,
+        "notes": null,
+        "isPrimary": false,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 1081,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "WORLD SUPERMARKET",
+          "evidenceCount": 1,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#1081"
+          ],
+          "phoneHints": [],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "businessUnitId": null,
+        "name": "FRANKIE (NEW OWNER)",
+        "phone": null,
+        "email": null,
+        "notes": null,
+        "isPrimary": false,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "2. ESTIMADOS",
+        "sourceRow": 79,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "WORLD SUPERMARKET",
+          "evidenceCount": 1,
+          "sourceRows": [
+            "2. ESTIMADOS#79"
+          ],
+          "phoneHints": [],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "businessUnitId": null,
+        "name": "RUDDY",
+        "phone": "7324701825",
+        "email": null,
+        "notes": null,
+        "isPrimary": false,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 1354,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "WORLD SUPERMARKET",
+          "evidenceCount": 1,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#1354"
+          ],
+          "phoneHints": [
+            "7324701825"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "businessUnitId": null,
+        "name": "RUDY/ JESUS",
+        "phone": null,
+        "email": null,
+        "notes": null,
+        "isPrimary": false,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 1370,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "WORLD SUPERMARKET",
+          "evidenceCount": 1,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#1370"
+          ],
+          "phoneHints": [],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "businessUnitId": null,
+        "name": "RUDYY",
+        "phone": null,
+        "email": null,
+        "notes": null,
+        "isPrimary": false,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 1416,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "WORLD SUPERMARKET",
+          "evidenceCount": 1,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#1416"
+          ],
+          "phoneHints": [],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "cfb3f13e-7a96-45e9-a5c4-a9b07f67ea7a",
+        "contactName": "WORLD SUPERMARKET",
+        "businessUnitId": null,
+        "name": "SRA EDDY",
+        "phone": "9084829841",
+        "email": null,
+        "notes": null,
+        "isPrimary": false,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 837,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "WORLD SUPERMARKET",
+          "evidenceCount": 1,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#837"
+          ],
+          "phoneHints": [
+            "9084829841"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "25c58413-c4a5-409e-9196-73e2dd1e04de",
+        "contactName": "IGLESIA DE DIOS VINO NUEVO",
+        "businessUnitId": null,
+        "name": "OSCAR",
+        "phone": "9084348374",
+        "email": null,
+        "notes": null,
+        "isPrimary": true,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "3. 15 SIGNS WORK ORDER",
+        "sourceRow": 36,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "IGLESIA DE DIOS VINO NUEVO",
+          "evidenceCount": 14,
+          "sourceRows": [
+            "3. 15 SIGNS WORK ORDER#36",
+            "3. 15 SIGNS WORK ORDER#213",
+            "3. 15 SIGNS WORK ORDER#243",
+            "WORK ORDER TERMINADOS Y PAGADOS#775",
+            "WORK ORDER TERMINADOS Y PAGADOS#776",
+            "WORK ORDER TERMINADOS Y PAGADOS#777",
+            "WORK ORDER TERMINADOS Y PAGADOS#914",
+            "WORK ORDER TERMINADOS Y PAGADOS#993",
+            "WORK ORDER TERMINADOS Y PAGADOS#1119",
+            "WORK ORDER TERMINADOS Y PAGADOS#1425",
+            "WORK ORDER TERMINADOS Y PAGADOS#1426",
+            "WORK ORDER TERMINADOS Y PAGADOS#1451"
+          ],
+          "phoneHints": [
+            "9084348374",
+            "9089348374"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "25c58413-c4a5-409e-9196-73e2dd1e04de",
+        "contactName": "IGLESIA DE DIOS VINO NUEVO",
+        "businessUnitId": null,
+        "name": "HERCILIA",
+        "phone": "9086598518",
+        "email": null,
+        "notes": null,
+        "isPrimary": false,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "3. 15 SIGNS WORK ORDER",
+        "sourceRow": 18,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "IGLESIA DE DIOS VINO NUEVO",
+          "evidenceCount": 5,
+          "sourceRows": [
+            "3. 15 SIGNS WORK ORDER#18",
+            "WORK ORDER TERMINADOS Y PAGADOS#1555",
+            "WORK ORDER TERMINADOS Y PAGADOS#1683",
+            "WORK ORDER TERMINADOS Y PAGADOS#1706",
+            "WORK ORDER TERMINADOS Y PAGADOS#1714"
+          ],
+          "phoneHints": [
+            "9086598518"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "25c58413-c4a5-409e-9196-73e2dd1e04de",
+        "contactName": "IGLESIA DE DIOS VINO NUEVO",
+        "businessUnitId": null,
+        "name": "ERCILIA",
+        "phone": "9086598518",
+        "email": null,
+        "notes": null,
+        "isPrimary": false,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 1266,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "IGLESIA DE DIOS VINO NUEVO",
+          "evidenceCount": 1,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#1266"
+          ],
+          "phoneHints": [
+            "9086598518"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "ae4ebd9d-6028-4714-9568-9d3d4def2e3d",
+        "contactName": "DNC GUTTERS",
+        "businessUnitId": null,
+        "name": "DANNY",
+        "phone": "9083338210",
+        "email": null,
+        "notes": null,
+        "isPrimary": true,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 523,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "DNC GUTTERs",
+          "evidenceCount": 16,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#523",
+            "WORK ORDER TERMINADOS Y PAGADOS#709",
+            "WORK ORDER TERMINADOS Y PAGADOS#745",
+            "WORK ORDER TERMINADOS Y PAGADOS#746",
+            "WORK ORDER TERMINADOS Y PAGADOS#957",
+            "WORK ORDER TERMINADOS Y PAGADOS#996",
+            "WORK ORDER TERMINADOS Y PAGADOS#1008",
+            "WORK ORDER TERMINADOS Y PAGADOS#1066",
+            "WORK ORDER TERMINADOS Y PAGADOS#1074",
+            "WORK ORDER TERMINADOS Y PAGADOS#1108",
+            "WORK ORDER TERMINADOS Y PAGADOS#1109",
+            "WORK ORDER TERMINADOS Y PAGADOS#1113"
+          ],
+          "phoneHints": [
+            "9083338210",
+            "9087257444"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "ae4ebd9d-6028-4714-9568-9d3d4def2e3d",
+        "contactName": "DNC GUTTERS",
+        "businessUnitId": null,
+        "name": "DANY",
+        "phone": "9087257444",
+        "email": null,
+        "notes": null,
+        "isPrimary": false,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 508,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "DNC GUTTERs",
+          "evidenceCount": 4,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#508",
+            "WORK ORDER TERMINADOS Y PAGADOS#509",
+            "WORK ORDER TERMINADOS Y PAGADOS#976",
+            "WORK ORDER TERMINADOS Y PAGADOS#1227"
+          ],
+          "phoneHints": [
+            "9087257444"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "dc731d6f-05fb-4bc7-b823-9f50afb1a1d8",
+        "contactName": "MR. HOODS",
+        "businessUnitId": null,
+        "name": "PERCY",
+        "phone": "7326484363",
+        "email": null,
+        "notes": null,
+        "isPrimary": true,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 499,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "MR.HOODS",
+          "evidenceCount": 16,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#499",
+            "WORK ORDER TERMINADOS Y PAGADOS#536",
+            "WORK ORDER TERMINADOS Y PAGADOS#566",
+            "WORK ORDER TERMINADOS Y PAGADOS#569",
+            "WORK ORDER TERMINADOS Y PAGADOS#717",
+            "WORK ORDER TERMINADOS Y PAGADOS#821",
+            "WORK ORDER TERMINADOS Y PAGADOS#952",
+            "WORK ORDER TERMINADOS Y PAGADOS#963",
+            "WORK ORDER TERMINADOS Y PAGADOS#1030",
+            "WORK ORDER TERMINADOS Y PAGADOS#1031",
+            "WORK ORDER TERMINADOS Y PAGADOS#1050",
+            "WORK ORDER TERMINADOS Y PAGADOS#1090"
+          ],
+          "phoneHints": [
+            "7326484363",
+            "7326488835"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "9ed6a93e-564b-41b1-9dda-b3a40b7fde95",
+        "contactName": "3G CONSTRUCTION",
+        "businessUnitId": null,
+        "name": "JOEL",
+        "phone": "3014559340",
+        "email": null,
+        "notes": null,
+        "isPrimary": true,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 1077,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "3G CONSTRUCTION",
+          "evidenceCount": 13,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#1077",
+            "WORK ORDER TERMINADOS Y PAGADOS#1078",
+            "WORK ORDER TERMINADOS Y PAGADOS#1114",
+            "WORK ORDER TERMINADOS Y PAGADOS#1121",
+            "WORK ORDER TERMINADOS Y PAGADOS#1122",
+            "WORK ORDER TERMINADOS Y PAGADOS#1123",
+            "WORK ORDER TERMINADOS Y PAGADOS#1195",
+            "WORK ORDER TERMINADOS Y PAGADOS#1311",
+            "WORK ORDER TERMINADOS Y PAGADOS#1339",
+            "WORK ORDER TERMINADOS Y PAGADOS#1356",
+            "WORK ORDER TERMINADOS Y PAGADOS#1531",
+            "WORK ORDER TERMINADOS Y PAGADOS#1672"
+          ],
+          "phoneHints": [
+            "3014559340",
+            "9084487559"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "9ed6a93e-564b-41b1-9dda-b3a40b7fde95",
+        "contactName": "3G CONSTRUCTION",
+        "businessUnitId": null,
+        "name": "JOEL GOMEZ",
+        "phone": "3014554340",
+        "email": null,
+        "notes": null,
+        "isPrimary": false,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 1482,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "3G CONSTRUCTION",
+          "evidenceCount": 1,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#1482"
+          ],
+          "phoneHints": [
+            "3014554340"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "9ed6a93e-564b-41b1-9dda-b3a40b7fde95",
+        "contactName": "3G CONSTRUCTION",
+        "businessUnitId": null,
+        "name": "OMAR",
+        "phone": null,
+        "email": null,
+        "notes": null,
+        "isPrimary": false,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 1204,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "3G CONSTRUCTION",
+          "evidenceCount": 1,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#1204"
+          ],
+          "phoneHints": [],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "30b2a1a4-d1c7-4748-ac14-b6b9d7bce788",
+        "contactName": "DURABLE CONSTRUCTION",
+        "businessUnitId": null,
+        "name": "DAVID ACUNA",
+        "phone": "9085076553",
+        "email": null,
+        "notes": null,
+        "isPrimary": true,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 262,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "DURABLE CONSTRUCTION",
+          "evidenceCount": 9,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#262",
+            "WORK ORDER TERMINADOS Y PAGADOS#263",
+            "WORK ORDER TERMINADOS Y PAGADOS#264",
+            "WORK ORDER TERMINADOS Y PAGADOS#265",
+            "WORK ORDER TERMINADOS Y PAGADOS#266",
+            "WORK ORDER TERMINADOS Y PAGADOS#340",
+            "WORK ORDER TERMINADOS Y PAGADOS#514",
+            "WORK ORDER TERMINADOS Y PAGADOS#579",
+            "WORK ORDER TERMINADOS Y PAGADOS#1492"
+          ],
+          "phoneHints": [
+            "9085076553",
+            "9085076563"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      },
+      {
+        "contactId": "30b2a1a4-d1c7-4748-ac14-b6b9d7bce788",
+        "contactName": "DURABLE CONSTRUCTION",
+        "businessUnitId": null,
+        "name": "DAVID",
+        "phone": "9085076553",
+        "email": null,
+        "notes": null,
+        "isPrimary": false,
+        "sourceLabel": "ait_signs_estimate_exact_backfill",
+        "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+        "sourceRow": 1115,
+        "metadataJson": {
+          "issue": "MIS-146",
+          "candidateClientName": "DURABLE CONSTRUCTION",
+          "evidenceCount": 4,
+          "sourceRows": [
+            "WORK ORDER TERMINADOS Y PAGADOS#1115",
+            "WORK ORDER TERMINADOS Y PAGADOS#1262",
+            "WORK ORDER TERMINADOS Y PAGADOS#1550",
+            "WORK ORDER TERMINADOS Y PAGADOS#1551"
+          ],
+          "phoneHints": [
+            "9085076553"
+          ],
+          "classification": "safe_reuse_existing_contact"
+        }
+      }
+    ],
+    "skippedExisting": []
+  }
+}

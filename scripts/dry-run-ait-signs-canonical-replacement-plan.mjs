@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Client } from 'pg';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -654,7 +654,22 @@ async function main() {
   }, null, 2));
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}
+
+export {
+  buildWorkbookCandidates,
+  cleanText,
+  compareCandidatesToContacts,
+  loadCurrentContacts,
+  loadExistingPeople,
+  loadWorkbookArtifact,
+  normalizeName,
+  phoneDigits,
+  resolveWorkbook,
+  safeDbFingerprint,
+};
