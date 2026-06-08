@@ -83,12 +83,42 @@ function unique(values) {
   return [...new Set(values.filter(Boolean))];
 }
 
+function countBy(items, key) {
+  return items.reduce((acc, item) => {
+    const value = item[key] || 'unknown';
+    acc[value] = (acc[value] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+function normalizePersonName(value) {
+  return String(value || '').trim().toUpperCase().replace(/\s+/g, ' ');
+}
+
 function peopleSummary(people) {
   return people.map((person) => `${person.name} x${person.evidenceCount}`).join('; ');
 }
 
 function sourceRowsSummary(people) {
   return unique(people.flatMap((person) => person.sourceRows || [])).join('; ');
+}
+
+function sheetPriority(sheetName) {
+  const normalized = String(sheetName || '').toUpperCase();
+  if (normalized.includes('WORK ORDER TERMINADOS Y PAGADOS')) return 30;
+  if (normalized.includes('SIGNS WORK ORDER')) return 20;
+  if (normalized.includes('ESTIMADOS')) return 10;
+  return 0;
+}
+
+function sourceRowPosition(sourceRow) {
+  const [sheet, rowValue] = String(sourceRow || '').split('#');
+  const row = Number(rowValue);
+  return (sheetPriority(sheet) * 100000) + (Number.isFinite(row) ? row : 0);
+}
+
+function latestSourceRow(sourceRows) {
+  return [...(sourceRows || [])].sort((left, right) => sourceRowPosition(right) - sourceRowPosition(left))[0] || '';
 }
 
 function potentialInsertPeople(item) {
@@ -110,20 +140,67 @@ function aggregatePersonEvidence(rows) {
     .map(([name, count]) => `${name} x${count}`);
 }
 
-function buildApprovalRow(item, cluster) {
-  const insertPeople = potentialInsertPeople(item);
+function phoneKeysForPerson(item, person) {
+  const phones = person.phoneHints?.length ? person.phoneHints : item.phoneHints;
+  return phones.length ? phones.map((phone) => `${item.matchedCurrentContact}|${phone}`) : [`${item.matchedCurrentContact}|unknown`];
+}
+
+function buildLatestPersonByPhone(items) {
+  const latestByPhone = new Map();
+  for (const item of items) {
+    for (const person of item.plannedPeople || []) {
+      const latestRow = latestSourceRow(person.sourceRows || []);
+      const position = sourceRowPosition(latestRow);
+      for (const key of phoneKeysForPerson(item, person)) {
+        const current = latestByPhone.get(key);
+        if (!current || position > current.position) {
+          latestByPhone.set(key, {
+            name: person.name,
+            normalizedName: normalizePersonName(person.name),
+            sourceRow: latestRow,
+            position,
+          });
+        }
+      }
+    }
+  }
+  return latestByPhone;
+}
+
+function latestReferencesForItem(item, latestByPhone) {
+  const refs = [];
+  const phones = item.phoneHints?.length ? item.phoneHints : ['unknown'];
+  for (const phone of phones) {
+    const ref = latestByPhone.get(`${item.matchedCurrentContact}|${phone}`);
+    if (ref) refs.push(`${phone}: ${ref.name} from ${ref.sourceRow}`);
+  }
+  return unique(refs);
+}
+
+function isLatestPersonForAnyPhone(item, person, latestByPhone) {
+  const normalized = normalizePersonName(person.name);
+  return phoneKeysForPerson(item, person).some((key) => latestByPhone.get(key)?.normalizedName === normalized);
+}
+
+function buildApprovalRow(item, cluster, latestByPhone) {
+  const rawInsertPeople = potentialInsertPeople(item);
+  const insertPeople = rawInsertPeople.filter((person) => isLatestPersonForAnyPhone(item, person, latestByPhone));
+  const supersededPeople = rawInsertPeople.filter((person) => !isLatestPersonForAnyPhone(item, person, latestByPhone));
+  const defaultRecommendation = insertPeople.length ? 'approve_listed_people' : 'approve_no_write';
   return {
     approvalDecision: '',
     allowedValues: 'approve_listed_people | approve_no_write | reject | needs_research',
     canonicalClient: item.matchedCurrentContact,
     candidateClientName: item.candidateClientName,
     currentDecision: item.decision,
-    defaultRecommendation: 'needs_alvaro_approval',
+    defaultRecommendation,
     proposedApplyAction: insertPeople.length
       ? 'later_apply_may_insert_listed_people_only_after_dedupe'
       : 'no_db_write_existing_people_only',
     candidatePeople: peopleSummary(item.plannedPeople || []),
     potentialLinkedPeopleToInsert: peopleSummary(insertPeople),
+    supersededPotentialPeople: peopleSummary(supersededPeople),
+    latestSourceReference: latestReferencesForItem(item, latestByPhone).join('; '),
     phoneHints: (item.phoneHints || []).join('; '),
     sourceRowCount: item.sourceRowCount,
     linkedOperationalRows: item.linkedOperationalRows,
@@ -145,9 +222,12 @@ function buildPacket(sourceReport) {
       if (clusterDiff) return clusterDiff;
       return a.candidateClientName.localeCompare(b.candidateClientName);
     });
+  const pass1ApprovalCandidates = pass1SourceRows
+    .filter((item) => item.decision === 'hold_spelling_variant_review');
+  const latestByPhone = buildLatestPersonByPhone(pass1ApprovalCandidates);
   const approvalRows = pass1SourceRows
     .filter((item) => item.decision === 'hold_spelling_variant_review')
-    .map((item) => buildApprovalRow(item, clusterByName.get(item.matchedCurrentContact)));
+    .map((item) => buildApprovalRow(item, clusterByName.get(item.matchedCurrentContact), latestByPhone));
   const excludedRows = pass1SourceRows
     .filter((item) => item.decision !== 'hold_spelling_variant_review')
     .map((item) => ({
@@ -194,6 +274,7 @@ function buildPacket(sourceReport) {
       approvalRows: approvalRows.length,
       excludedRows: excludedRows.length,
       potentialLinkedPeopleAfterDedupe,
+      approvalDecisionCounts: countBy(approvalRows, 'defaultRecommendation'),
       dbWritesPlannedByThisPacket: 0,
     },
     guardrails: [
@@ -201,7 +282,8 @@ function buildPacket(sourceReport) {
       'Each row requires explicit approval before any later apply script may insert linked people.',
       'Approved apply scope is linked-person insertion only, for the listed people only.',
       'Any later apply script must de-dupe by contact plus normalized person name before inserting rows.',
-      'If a listed person name looks misspelled, mark that row needs_research instead of approving it.',
+      'When person names conflict, the latest Pass 1 work-item/contact-point source row is the temporary source of truth until a newer edit/input replaces it.',
+      'Older typo-looking person names are kept as evidence but should not be inserted when superseded by newer source evidence.',
       'Do not rename, merge, remap, create, archive, delete, consolidate, or add aliases from this packet.',
       'Separate-business/shared-contact rows stay excluded unless Alvaro explicitly opens a later review.',
     ],
@@ -222,6 +304,8 @@ function renderCsv(packet) {
     'proposed_apply_action',
     'candidate_people',
     'potential_linked_people_to_insert',
+    'superseded_potential_people',
+    'latest_source_reference',
     'phone_hints',
     'source_row_count',
     'linked_operational_rows',
@@ -251,6 +335,8 @@ function renderMarkdown(packet) {
     `- Approval rows: ${packet.summary.approvalRows}`,
     `- Excluded same-cluster rows: ${packet.summary.excludedRows}`,
     `- Potential linked people after de-dupe: ${packet.summary.potentialLinkedPeopleAfterDedupe}`,
+    `- Recommended approve_listed_people rows: ${packet.summary.approvalDecisionCounts.approve_listed_people || 0}`,
+    `- Recommended approve_no_write rows: ${packet.summary.approvalDecisionCounts.approve_no_write || 0}`,
     `- DB writes planned by this packet: ${packet.summary.dbWritesPlannedByThisPacket}`,
     '',
     '## Guardrails',
@@ -284,10 +370,13 @@ function renderMarkdown(packet) {
   for (const row of packet.approvalRows) {
     lines.push(`- ${row.candidateClientName} -> ${row.canonicalClient}`);
     lines.push(`  - Decision: ${row.approvalDecision || '(blank)'}`);
+    lines.push(`  - Recommended decision: ${row.defaultRecommendation}`);
     lines.push(`  - Allowed values: ${row.allowedValues}`);
     lines.push(`  - Proposed apply action: ${row.proposedApplyAction}`);
     lines.push(`  - Candidate people: ${row.candidatePeople || 'none'}`);
     lines.push(`  - Potential linked people to insert: ${row.potentialLinkedPeopleToInsert || 'none'}`);
+    lines.push(`  - Superseded potential people: ${row.supersededPotentialPeople || 'none'}`);
+    lines.push(`  - Latest source reference: ${row.latestSourceReference || 'none'}`);
     lines.push(`  - Phones: ${row.phoneHints || 'none'}`);
     lines.push(`  - Source rows: ${row.sourceRows || 'none'}`);
     lines.push('');
