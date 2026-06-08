@@ -1,0 +1,34 @@
+{
+  "issue": "MIS-151",
+  "approvedAt": "2026-06-08T21:08:11.000Z",
+  "approvedBy": "Alvaro via Telegram audio",
+  "sourcePacket": "docs/mis-151-ait-signs-business-held-people-approval.json",
+  "summary": {
+    "approvedBusinessMatchRows": 14,
+    "approvedLinkedPeopleAfterDedupe": 15,
+    "approvedContactNameCorrections": 1
+  },
+  "guardrails": [
+    "Insert only non-primary linked people from latest source evidence.",
+    "De-dupe by contact plus normalized person name.",
+    "Do not merge, remap, create, archive, delete, consolidate, or add aliases.",
+    "For all held business-direction rows except JCL, keep the current canonical client name and let users edit fields later if needed.",
+    "For JCL, correct only the existing contact display name from JCL LANSCAPING to JC AND L LANDSCAPING; do not create a new contact."
+  ],
+  "decisions": [
+    { "canonicalClient": "BRENMA TREE SERVICE", "candidateClientName": "BREMMA TREE SERVICE", "approvalDecision": "approve_business_match_link_latest_people" },
+    { "canonicalClient": "CESI \u00b4S CLEANING SERVICE", "candidateClientName": "CECI'S CLEANING SERVICES", "approvalDecision": "approve_business_match_link_latest_people" },
+    { "canonicalClient": "COLIBRI LANDSCAPING", "candidateClientName": "CALIBRI LANDSCAPING", "approvalDecision": "approve_business_match_link_latest_people" },
+    { "canonicalClient": "LOCKSMITH THE WIZARD", "candidateClientName": "LOCK SMITH THE WIZARD", "approvalDecision": "approve_business_match_link_latest_people" },
+    { "canonicalClient": "BEST AMERICAN ROOFING", "candidateClientName": "AMERICAN ROOFING", "approvalDecision": "approve_business_match_link_latest_people" },
+    { "canonicalClient": "GALAN PLUMBING AND HEATING", "candidateClientName": "GALAN PLUMBING", "approvalDecision": "approve_business_match_link_latest_people" },
+    { "canonicalClient": "IGLESIA NUEVO NACIMIENTO", "candidateClientName": "NUEVO NACIMIENTO", "approvalDecision": "approve_business_match_link_latest_people" },
+    { "canonicalClient": "PINEBERRY JUICE", "candidateClientName": "PINEBERRY", "approvalDecision": "approve_business_match_link_latest_people" },
+    { "canonicalClient": "SUMMITVILLE", "candidateClientName": "SUMMITVILLE TREE SERVICE", "approvalDecision": "approve_business_match_link_latest_people" },
+    { "canonicalClient": "GUTO CONTRACTORS", "candidateClientName": "GUTTO CONTTRACTORS LLC", "approvalDecision": "approve_business_match_link_latest_people", "nameHandling": "keep_canonical_client_name" },
+    { "canonicalClient": "JCL LANSCAPING", "candidateClientName": "JC&L LANDSCAPING", "approvalDecision": "approve_business_match_link_latest_people", "nameHandling": "rename_existing_contact", "preferredClientName": "JC AND L LANDSCAPING" },
+    { "canonicalClient": "PERALTA AND SON CONSTRUCTION", "candidateClientName": "PERALTA CONSTRUCTION", "approvalDecision": "approve_business_match_link_latest_people", "nameHandling": "keep_canonical_client_name" },
+    { "canonicalClient": "RUIZ HOME IMPROVEMENT", "candidateClientName": "RUIZ HOME IMPROVEMT", "approvalDecision": "approve_business_match_link_latest_people", "nameHandling": "keep_canonical_client_name" },
+    { "canonicalClient": "RV LANDSCAPING", "candidateClientName": "RU LANSCAPING", "approvalDecision": "approve_business_match_link_latest_people", "nameHandling": "keep_canonical_client_name" }
+  ]
+}
