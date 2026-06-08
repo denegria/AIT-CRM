@@ -43,8 +43,8 @@
 .hero h1 {
   margin: 6px 0 12px;
   color: var(--text-primary);
-  font-size: clamp(1.85rem, 3vw, 3rem);
-  line-height: 1.05;
+  font-size: clamp(1.75rem, 2.4vw, 2.5rem);
+  line-height: 1.08;
   letter-spacing: 0;
 }
 
@@ -131,6 +131,13 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
   align-items: start;
+}
+
+.workspaceColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
 }
 
 .panel,
@@ -340,12 +347,21 @@
     padding: 18px;
   }
 
-  .snapshotGrid,
   .workspaceGrid {
     grid-template-columns: 1fr;
   }
 
+  .snapshotGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .snapshotGrid > div {
+    min-height: 78px;
+    padding: 11px;
+  }
+
   .hero h1 {
-    font-size: 2rem;
+    font-size: 1.9rem;
   }
 }

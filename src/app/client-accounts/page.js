@@ -26,12 +26,27 @@ function countLabel(count, singular, plural = `${singular}s`) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
+function formatPhone(value) {
+  const raw = String(value || '').trim();
+  const digits = raw.replace(/\D+/g, '');
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  return raw;
+}
+
 function AccountContact({ account }) {
   if (account.primaryContactMethod?.value) {
+    const methodValue = account.primaryContactMethod.type === 'phone'
+      ? formatPhone(account.primaryContactMethod.value)
+      : account.primaryContactMethod.value;
     return (
       <span className={s.iconLine}>
         {account.primaryContactMethod.type === 'email' ? <Mail size={14} /> : <Phone size={14} />}
-        {account.primaryContactMethod.value}
+        {methodValue}
       </span>
     );
   }
@@ -173,6 +188,7 @@ export default function ClientAccountsPage() {
             className={s.search}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
+            aria-label="Search client accounts"
             placeholder="Search accounts, people, phone, work orders..."
           />
         </div>

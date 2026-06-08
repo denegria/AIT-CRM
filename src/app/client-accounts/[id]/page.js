@@ -44,11 +44,36 @@ function money(value) {
   }).format(number);
 }
 
+function formatPhone(value) {
+  const raw = cleanText(value);
+  const digits = raw.replace(/\D+/g, '');
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+  }
+  return raw;
+}
+
+function methodDisplayValue(method) {
+  if (!method?.value) return '';
+  return method.type === 'phone' ? formatPhone(method.value) : method.value;
+}
+
 function contactHref(method) {
   if (!method?.value) return '';
   if (method.type === 'email') return `mailto:${method.value}`;
   if (method.type === 'phone') return `tel:${method.value.replace(/[^\d+]/g, '')}`;
   return '';
+}
+
+function contactSummary(contact) {
+  return [
+    formatPhone(contact.phone),
+    contact.email,
+    contact.sourceLabel,
+  ].filter(Boolean).join(' · ');
 }
 
 function Panel({ title, icon: Icon, children, count }) {
@@ -130,7 +155,7 @@ export default function ClientAccountPage() {
         id: `contact:${record.id}`,
         type: 'contact',
         title: record.name || 'Linked contact',
-        detail: [record.phone, record.email].filter(Boolean).join(' · '),
+        detail: [formatPhone(record.phone), record.email].filter(Boolean).join(' · '),
         href: `/contacts/${record.id}`,
         date: '',
       })),
@@ -160,9 +185,9 @@ export default function ClientAccountPage() {
           <ArrowLeft size={16} />
           Back
         </button>
-        <Link className="btn btn-secondary" href="/contacts">
+        <Link className="btn btn-secondary" href="/client-accounts">
           <Building2 size={16} />
-          Contacts
+          Clients
         </Link>
       </div>
 
@@ -175,8 +200,8 @@ export default function ClientAccountPage() {
             {account.primaryPersonName && <span>{account.primaryPersonName}</span>}
             {account.primaryContactMethod && (
               primaryMethodHref
-                ? <a href={primaryMethodHref}>{account.primaryContactMethod.value}</a>
-                : <span>{account.primaryContactMethod.value}</span>
+                ? <a href={primaryMethodHref}>{methodDisplayValue(account.primaryContactMethod)}</a>
+                : <span>{methodDisplayValue(account.primaryContactMethod)}</span>
             )}
             {account.primaryLocation?.text && <span>{account.primaryLocation.text}</span>}
           </div>
@@ -206,97 +231,106 @@ export default function ClientAccountPage() {
       )}
 
       <div className={s.workspaceGrid}>
-        <Panel title="People" icon={UserRound} count={account.people?.length || 0}>
-          {account.people?.length ? account.people.map((person) => (
-            <div className={s.listRow} key={person.id}>
-              <div>
-                <strong>{person.name}</strong>
-                <span>{person.role || 'Contact'}</span>
-              </div>
-              {person.isPrimary && <span className={s.pill}>Primary</span>}
-            </div>
-          )) : <EmptyRow>No people yet.</EmptyRow>}
-        </Panel>
-
-        <Panel title="Contact Methods" icon={Phone} count={account.contactMethods?.length || 0}>
-          {account.contactMethods?.length ? account.contactMethods.map((method) => {
-            const href = contactHref(method);
-            const Icon = method.type === 'email' ? Mail : Phone;
-            return (
-              <div className={s.listRow} key={method.id}>
-                <div className={s.iconLine}>
-                  <Icon size={15} />
-                  <div>
-                    <strong>{href ? <a href={href}>{method.value}</a> : method.value}</strong>
-                    <span>{method.label}</span>
+        <div className={s.workspaceColumn}>
+          <Panel title="Contact Methods" icon={Phone} count={account.contactMethods?.length || 0}>
+            {account.contactMethods?.length ? account.contactMethods.map((method) => {
+              const href = contactHref(method);
+              const Icon = method.type === 'email' ? Mail : Phone;
+              const displayValue = methodDisplayValue(method);
+              return (
+                <div className={s.listRow} key={method.id}>
+                  <div className={s.iconLine}>
+                    <Icon size={15} />
+                    <div>
+                      <strong>{href ? <a href={href}>{displayValue}</a> : displayValue}</strong>
+                      <span>{method.label}</span>
+                    </div>
                   </div>
+                  {method.isPrimary && <span className={s.pill}>Primary</span>}
                 </div>
-                {method.isPrimary && <span className={s.pill}>Primary</span>}
-              </div>
-            );
-          }) : <EmptyRow>No contact methods yet.</EmptyRow>}
-        </Panel>
+              );
+            }) : <EmptyRow>No contact methods yet.</EmptyRow>}
+          </Panel>
 
-        <Panel title="Locations" icon={MapPin} count={account.locations?.length || 0}>
-          {account.locations?.length ? account.locations.map((location) => (
-            <div className={s.listRow} key={location.id}>
-              <div>
-                <strong>{location.label || location.address || 'Location'}</strong>
-                <span>{location.text || 'No address'}</span>
+          <Panel title="Linked Contacts" icon={Link2} count={account.linkedContacts?.length || 0}>
+            {account.linkedContacts?.length ? account.linkedContacts.map((contact) => (
+              <div className={s.listRow} key={contact.id}>
+                <div>
+                  <strong>{contact.name}</strong>
+                  <span>{contactSummary(contact)}</span>
+                </div>
+                <Link className={s.iconButton} href={`/contacts/${contact.id}`} aria-label={`Open ${contact.name}`}>
+                  <Link2 size={15} />
+                </Link>
               </div>
-              {location.isPrimary && <span className={s.pill}>Primary</span>}
-            </div>
-          )) : <EmptyRow>No locations yet.</EmptyRow>}
-        </Panel>
+            )) : <EmptyRow>No linked contacts yet.</EmptyRow>}
+          </Panel>
 
-        <Panel title="Work And Estimates" icon={ClipboardList} count={(account.workOrders?.length || 0) + (account.estimates?.length || 0)}>
-          {(account.workOrders?.length || account.estimates?.length) ? (
-            <>
-              {(account.workOrders || []).slice(0, 5).map((record) => (
-                <div className={s.listRow} key={`work-${record.id}`}>
+          {!!account.people?.length && (
+            <Panel title="People" icon={UserRound} count={account.people.length}>
+              {account.people.map((person) => (
+                <div className={s.listRow} key={person.id}>
                   <div>
-                    <strong>{record.workOrderNumber || record.title || 'Work order'}</strong>
-                    <span>{[record.status, dateLabel(record.updatedAt || record.createdAt)].filter(Boolean).join(' · ')}</span>
+                    <strong>{person.name}</strong>
+                    <span>{person.role || 'Contact'}</span>
                   </div>
+                  {person.isPrimary && <span className={s.pill}>Primary</span>}
                 </div>
               ))}
-              {(account.estimates || []).slice(0, 5).map((record) => (
-                <div className={s.listRow} key={`estimate-${record.id}`}>
+            </Panel>
+          )}
+
+          {!!account.locations?.length && (
+            <Panel title="Locations" icon={MapPin} count={account.locations.length}>
+              {account.locations.map((location) => (
+                <div className={s.listRow} key={location.id}>
                   <div>
-                    <strong>{record.estimateNumber || 'Estimate'}</strong>
-                    <span>{[record.status, money(record.total), dateLabel(record.updatedAt || record.createdAt)].filter(Boolean).join(' · ')}</span>
+                    <strong>{location.label || location.address || 'Location'}</strong>
+                    <span>{location.text || 'No address'}</span>
                   </div>
+                  {location.isPrimary && <span className={s.pill}>Primary</span>}
                 </div>
               ))}
-            </>
-          ) : <EmptyRow>No work history yet.</EmptyRow>}
-        </Panel>
+            </Panel>
+          )}
+        </div>
 
-        <Panel title="Linked Contacts" icon={Link2} count={account.linkedContacts?.length || 0}>
-          {account.linkedContacts?.length ? account.linkedContacts.map((contact) => (
-            <div className={s.listRow} key={contact.id}>
-              <div>
-                <strong>{contact.name}</strong>
-                <span>{[contact.phone, contact.email, contact.sourceLabel].filter(Boolean).join(' · ')}</span>
-              </div>
-              <Link className={s.iconButton} href={`/contacts/${contact.id}`} aria-label={`Open ${contact.name}`}>
-                <Link2 size={15} />
-              </Link>
-            </div>
-          )) : <EmptyRow>No linked contacts yet.</EmptyRow>}
-        </Panel>
+        <div className={s.workspaceColumn}>
+          <Panel title="Work & Estimates" icon={ClipboardList} count={(account.workOrders?.length || 0) + (account.estimates?.length || 0)}>
+            {(account.workOrders?.length || account.estimates?.length) ? (
+              <>
+                {(account.workOrders || []).slice(0, 5).map((record) => (
+                  <div className={s.listRow} key={`work-${record.id}`}>
+                    <div>
+                      <strong>{record.workOrderNumber || record.title || 'Work order'}</strong>
+                      <span>{[record.status, dateLabel(record.updatedAt || record.createdAt)].filter(Boolean).join(' · ')}</span>
+                    </div>
+                  </div>
+                ))}
+                {(account.estimates || []).slice(0, 5).map((record) => (
+                  <div className={s.listRow} key={`estimate-${record.id}`}>
+                    <div>
+                      <strong>{record.estimateNumber || 'Estimate'}</strong>
+                      <span>{[record.status, money(record.total), dateLabel(record.updatedAt || record.createdAt)].filter(Boolean).join(' · ')}</span>
+                    </div>
+                  </div>
+                ))}
+              </>
+            ) : <EmptyRow>No work history yet.</EmptyRow>}
+          </Panel>
 
-        <Panel title="Timeline" icon={Clock3} count={timeline.length}>
-          {timeline.length ? timeline.slice(0, 12).map((item) => (
-            <div className={s.timelineRow} key={item.id}>
-              <div className={s.timelineIcon}><TimelineIcon type={item.type} /></div>
-              <div>
-                <strong>{item.href ? <Link href={item.href}>{item.title}</Link> : item.title}</strong>
-                <span>{[item.detail, dateLabel(item.date)].filter(Boolean).join(' · ')}</span>
+          <Panel title="Timeline" icon={Clock3} count={timeline.length}>
+            {timeline.length ? timeline.slice(0, 12).map((item) => (
+              <div className={s.timelineRow} key={item.id}>
+                <div className={s.timelineIcon}><TimelineIcon type={item.type} /></div>
+                <div>
+                  <strong>{item.href ? <Link href={item.href}>{item.title}</Link> : item.title}</strong>
+                  <span>{[item.detail, dateLabel(item.date)].filter(Boolean).join(' · ')}</span>
+                </div>
               </div>
-            </div>
-          )) : <EmptyRow>No account timeline yet.</EmptyRow>}
-        </Panel>
+            )) : <EmptyRow>No account timeline yet.</EmptyRow>}
+          </Panel>
+        </div>
       </div>
 
       <details className={s.provenance}>
