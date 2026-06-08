@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
@@ -107,18 +107,6 @@ export default function ContactsPage() {
     currentBusinessUnitId,
     currentBusinessUnit,
   });
-  const isAitSignsContactScope = Boolean(
-    loaded &&
-    currentBusinessUnitId !== 'all' &&
-    currentBusinessUnit?.name === 'AIT Signs',
-  );
-
-  useEffect(() => {
-    if (isAitSignsContactScope) {
-      router.replace('/client-accounts');
-    }
-  }, [isAitSignsContactScope, router]);
-
   const facetContext = useMemo(() => ({ businessUnitById, now: facetNow }), [businessUnitById, facetNow]);
   const directoryRows = useMemo(() => contactRows.map((contact) => {
     const signalLabels = contactDirectorySignalLabels(contact, facetContext);
@@ -217,7 +205,7 @@ export default function ContactsPage() {
       .join(' · ');
   }, [businessUnitById, effectiveDirectoryFacet, filteredContacts]);
 
-  if (!loaded || isAitSignsContactScope) return <div className="empty-state">Loading...</div>;
+  if (!loaded) return <div className="empty-state">Loading...</div>;
 
   return (
     <div className="fade-in">

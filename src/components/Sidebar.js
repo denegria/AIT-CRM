@@ -21,12 +21,7 @@ const nav = [
   { href: '/settings', label: 'Settings', Icon: Settings },
 ];
 
-const mobilePrimaryPriority = ['/', '/client-accounts', '/contacts', '/pipeline', '/tasks'];
-
-function isRouteActive(pathname, href) {
-  if (href === '/') return pathname === '/';
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
+const mobilePrimaryPriority = ['/', '/contacts', '/pipeline', '/tasks'];
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -40,7 +35,6 @@ export default function Sidebar() {
     dataSource,
     accessibleBusinessUnits,
     currentBusinessUnitId,
-    currentBusinessUnit,
     setCurrentBusinessUnitId,
     canUseConsolidatedScope,
     scopeLabel,
@@ -54,21 +48,13 @@ export default function Sidebar() {
     window.location.reload();
   };
 
-  const isAitSignsScope = currentBusinessUnitId !== 'all' && currentBusinessUnit?.name === 'AIT Signs';
-  const scopedNav = useMemo(() => nav.map((item) => {
-    if (item.href === '/contacts' && isAitSignsScope) {
-      return { href: '/client-accounts', label: 'Clients', Icon: Building2 };
-    }
-    return item;
-  }), [isAitSignsScope]);
-
-  const visibleNav = useMemo(() => scopedNav.filter(({ href }) => {
+  const visibleNav = useMemo(() => nav.filter(({ href }) => {
     if (href === '/settings' && !access.canReadSettings) return false;
     if (href === '/comms-ops' && !access.canReadSettings) return false;
     if (href === '/import-review' && !access.canReadImportReview) return false;
     if ((href === '/reports' || href === '/financials') && role !== 'admin') return false;
     return true;
-  }), [access.canReadImportReview, access.canReadSettings, role, scopedNav]);
+  }), [access.canReadImportReview, access.canReadSettings, role]);
 
   const mobileNav = useMemo(() => {
     if (visibleNav.length <= 5) {
@@ -92,7 +78,7 @@ export default function Sidebar() {
   }, [visibleNav]);
 
   const renderNavLink = ({ href, label, Icon }, className = s.navItem) => (
-    <Link key={href} href={href} className={`${className} ${isRouteActive(pathname, href) ? s.active : ''}`} aria-label={label} title={label} onClick={() => setIsMoreOpen(false)}>
+    <Link key={href} href={href} className={`${className} ${pathname === href ? s.active : ''}`} aria-label={label} title={label} onClick={() => setIsMoreOpen(false)}>
       <Icon /><span>{label}</span>
     </Link>
   );
@@ -134,7 +120,7 @@ export default function Sidebar() {
             <div className={s.moreWrap}>
               <button
                 type="button"
-                className={`${s.mobileNavItem} ${mobileNav.overflow.some((item) => isRouteActive(pathname, item.href)) ? s.active : ''}`}
+                className={`${s.mobileNavItem} ${mobileNav.overflow.some((item) => pathname === item.href) ? s.active : ''}`}
                 aria-label="More navigation"
                 aria-expanded={isMoreOpen}
                 aria-haspopup="menu"

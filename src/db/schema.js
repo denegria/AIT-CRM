@@ -125,31 +125,10 @@ export const businessUnitMemberships = pgTable('business_unit_memberships', {
   membershipIdx: uniqueIndex('business_unit_memberships_unique_idx').on(table.businessUnitId, table.userId),
 }));
 
-export const clientAccounts = pgTable('client_accounts', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
-  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
-  displayName: text('display_name').notNull(),
-  normalizedName: text('normalized_name').notNull(),
-  status: text('status').notNull().default('active'),
-  tagsJson: jsonb('tags_json').notNull().default([]),
-  metadataJson: jsonb('metadata_json').notNull().default({}),
-  createdAt,
-  updatedAt,
-}, (table) => ({
-  orgBusinessUnitNameIdx: index('client_accounts_org_business_unit_name_idx').on(
-    table.organizationId,
-    table.businessUnitId,
-    table.normalizedName,
-  ),
-  businessUnitStatusIdx: index('client_accounts_business_unit_status_idx').on(table.businessUnitId, table.status),
-}));
-
 export const contacts = pgTable('contacts', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
   primaryBusinessUnitId: uuid('primary_business_unit_id').references(() => businessUnits.id, { onDelete: 'set null' }),
-  clientAccountId: uuid('client_account_id').references(() => clientAccounts.id, { onDelete: 'set null' }),
   name: text('name').notNull(),
   companyName: text('company_name'),
   phone: text('phone'),
@@ -160,115 +139,7 @@ export const contacts = pgTable('contacts', {
   isWrongNumber: boolean('is_wrong_number').notNull().default(false),
   createdAt,
   updatedAt,
-}, (table) => ({
-  clientAccountIdx: index('contacts_client_account_idx').on(table.clientAccountId),
-}));
-
-export const clientAccountAliases = pgTable('client_account_aliases', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  clientAccountId: uuid('client_account_id').notNull().references(() => clientAccounts.id, { onDelete: 'cascade' }),
-  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
-  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
-  value: text('value').notNull(),
-  normalizedValue: text('normalized_value').notNull(),
-  type: text('type').notNull().default('source_alias'),
-  visibility: text('visibility').notNull().default('hidden'),
-  searchable: boolean('searchable').notNull().default(true),
-  sourceLabel: text('source_label'),
-  sourceSheet: text('source_sheet'),
-  sourceRow: integer('source_row'),
-  confidence: numeric('confidence', { precision: 5, scale: 2 }),
-  verifiedByUserId: uuid('verified_by_user_id').references(() => users.id, { onDelete: 'set null' }),
-  verifiedAt: timestamp('verified_at', { withTimezone: true }),
-  metadataJson: jsonb('metadata_json').notNull().default({}),
-  createdAt,
-  updatedAt,
-}, (table) => ({
-  accountIdx: index('client_account_aliases_account_idx').on(table.clientAccountId),
-  orgSearchIdx: index('client_account_aliases_org_search_idx').on(table.organizationId, table.normalizedValue),
-  businessUnitVisibilityIdx: index('client_account_aliases_business_unit_visibility_idx').on(
-    table.businessUnitId,
-    table.visibility,
-  ),
-  sourceIdx: index('client_account_aliases_source_idx').on(table.sourceSheet, table.sourceRow),
-}));
-
-export const clientPeople = pgTable('client_people', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  clientAccountId: uuid('client_account_id').notNull().references(() => clientAccounts.id, { onDelete: 'cascade' }),
-  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
-  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
-  name: text('name').notNull(),
-  role: text('role'),
-  notes: text('notes'),
-  isPrimary: boolean('is_primary').notNull().default(false),
-  sourceLabel: text('source_label'),
-  sourceSheet: text('source_sheet'),
-  sourceRow: integer('source_row'),
-  metadataJson: jsonb('metadata_json').notNull().default({}),
-  createdAt,
-  updatedAt,
-}, (table) => ({
-  accountIdx: index('client_people_account_idx').on(table.clientAccountId),
-  orgNameIdx: index('client_people_org_name_idx').on(table.organizationId, table.name),
-  sourceIdx: index('client_people_source_idx').on(table.sourceSheet, table.sourceRow),
-}));
-
-export const clientContactMethods = pgTable('client_contact_methods', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  clientAccountId: uuid('client_account_id').notNull().references(() => clientAccounts.id, { onDelete: 'cascade' }),
-  clientPersonId: uuid('client_person_id').references(() => clientPeople.id, { onDelete: 'set null' }),
-  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
-  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
-  methodType: text('method_type').notNull(),
-  value: text('value').notNull(),
-  normalizedValue: text('normalized_value'),
-  label: text('label'),
-  status: text('status').notNull().default('active'),
-  isPrimary: boolean('is_primary').notNull().default(false),
-  sourceLabel: text('source_label'),
-  sourceSheet: text('source_sheet'),
-  sourceRow: integer('source_row'),
-  metadataJson: jsonb('metadata_json').notNull().default({}),
-  createdAt,
-  updatedAt,
-}, (table) => ({
-  accountIdx: index('client_contact_methods_account_idx').on(table.clientAccountId),
-  personIdx: index('client_contact_methods_person_idx').on(table.clientPersonId),
-  orgNormalizedIdx: index('client_contact_methods_org_normalized_idx').on(
-    table.organizationId,
-    table.methodType,
-    table.normalizedValue,
-  ),
-  businessUnitStatusIdx: index('client_contact_methods_business_unit_status_idx').on(
-    table.businessUnitId,
-    table.status,
-  ),
-  sourceIdx: index('client_contact_methods_source_idx').on(table.sourceSheet, table.sourceRow),
-}));
-
-export const clientLocations = pgTable('client_locations', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  clientAccountId: uuid('client_account_id').notNull().references(() => clientAccounts.id, { onDelete: 'cascade' }),
-  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
-  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
-  label: text('label'),
-  address: text('address'),
-  city: text('city'),
-  state: text('state'),
-  postalCode: text('postal_code'),
-  isPrimary: boolean('is_primary').notNull().default(false),
-  sourceLabel: text('source_label'),
-  sourceSheet: text('source_sheet'),
-  sourceRow: integer('source_row'),
-  metadataJson: jsonb('metadata_json').notNull().default({}),
-  createdAt,
-  updatedAt,
-}, (table) => ({
-  accountIdx: index('client_locations_account_idx').on(table.clientAccountId),
-  orgCityIdx: index('client_locations_org_city_idx').on(table.organizationId, table.city),
-  sourceIdx: index('client_locations_source_idx').on(table.sourceSheet, table.sourceRow),
-}));
+});
 
 export const leads = pgTable('leads', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -771,12 +642,7 @@ export const allTables = {
   rolePermissions,
   userRoles,
   businessUnitMemberships,
-  clientAccounts,
   contacts,
-  clientAccountAliases,
-  clientPeople,
-  clientContactMethods,
-  clientLocations,
   leads,
   leadStatusHistory,
   estimates,
