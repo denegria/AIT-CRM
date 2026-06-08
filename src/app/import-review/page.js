@@ -282,6 +282,7 @@ export default function ImportReviewPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [authRequired, setAuthRequired] = useState(false);
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
   const [adminToken, setAdminToken] = useState('');
   const [batch, setBatch] = useState(null);
   const [batches, setBatches] = useState([]);
@@ -293,6 +294,9 @@ export default function ImportReviewPage() {
 
   useEffect(() => {
     if (!loaded || dataSource !== 'postgres') return;
+    if (!access.canReadImportReview && !adminUnlocked) {
+      return;
+    }
 
     const controller = new AbortController();
     const timer = setTimeout(async () => {
@@ -346,7 +350,7 @@ export default function ImportReviewPage() {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [dataSource, filters, loaded, reloadKey]);
+  }, [access.canReadImportReview, adminUnlocked, dataSource, filters, loaded, reloadKey]);
 
   const activeRow = useMemo(
     () => rows.find((row) => row.id === activeId) || rows[0] || null,
@@ -390,6 +394,7 @@ export default function ImportReviewPage() {
 
       setAdminToken('');
       setAuthRequired(false);
+      setAdminUnlocked(true);
       setError('');
       setReloadKey((key) => key + 1);
       toast('Import review unlocked for this browser session.', 'success');
@@ -453,7 +458,7 @@ export default function ImportReviewPage() {
     );
   }
 
-  if (authRequired) {
+  if (authRequired || (!access.canReadImportReview && !adminUnlocked)) {
     return (
       <div className="fade-in">
         <div className="page-header">
