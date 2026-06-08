@@ -62,11 +62,18 @@ function SignalCell({ row }) {
   );
 }
 
-export default function ContactsPage() {
+function businessUnitIdForRecord(record) {
+  return record?.businessUnitId || record?.primaryBusinessUnitId || '';
+}
+
+export default function ContactsPage({ mode = 'contacts' } = {}) {
   const {
     contacts,
+    allContacts,
     workOrders,
+    allWorkOrders,
     financials,
+    allFinancials,
     addContact,
     updateContact,
     deleteContact,
@@ -89,6 +96,44 @@ export default function ContactsPage() {
   const [ownerFilter, setOwnerFilter] = useState('all');
   const [directoryFacet, setDirectoryFacet] = useState('all');
   const [facetNow] = useState(() => Date.now());
+  const isClientsMode = mode === 'clients';
+  const singularLabel = isClientsMode ? 'Client' : 'Contact';
+  const pluralLabel = isClientsMode ? 'Clients' : 'Contacts';
+  const routeBase = isClientsMode ? '/clients' : '/contacts';
+  const forcedBusinessUnit = useMemo(
+    () => (isClientsMode ? accessibleBusinessUnits.find((unit) => unit.name === 'AIT Signs') || null : null),
+    [accessibleBusinessUnits, isClientsMode],
+  );
+  const directoryContacts = useMemo(() => {
+    if (!isClientsMode) return contacts;
+    const source = allContacts || contacts;
+    if (!forcedBusinessUnit?.id) return [];
+    return source.filter((contact) => businessUnitIdForRecord(contact) === forcedBusinessUnit.id);
+  }, [allContacts, contacts, forcedBusinessUnit, isClientsMode]);
+  const directoryContactIds = useMemo(
+    () => new Set(directoryContacts.map((contact) => contact.id)),
+    [directoryContacts],
+  );
+  const directoryWorkOrders = useMemo(() => {
+    if (!isClientsMode) return workOrders;
+    const source = allWorkOrders || workOrders;
+    if (!forcedBusinessUnit?.id) return [];
+    return source.filter((order) => (
+      businessUnitIdForRecord(order) === forcedBusinessUnit.id ||
+      directoryContactIds.has(order.contactId)
+    ));
+  }, [allWorkOrders, directoryContactIds, forcedBusinessUnit, isClientsMode, workOrders]);
+  const directoryFinancials = useMemo(() => {
+    if (!isClientsMode) return financials;
+    const source = allFinancials || financials;
+    if (!forcedBusinessUnit?.id) return [];
+    return source.filter((record) => (
+      businessUnitIdForRecord(record) === forcedBusinessUnit.id ||
+      directoryContactIds.has(record.contactId)
+    ));
+  }, [allFinancials, directoryContactIds, financials, forcedBusinessUnit, isClientsMode]);
+  const directoryBusinessUnitId = forcedBusinessUnit?.id || currentBusinessUnitId;
+  const directoryBusinessUnit = forcedBusinessUnit || currentBusinessUnit;
 
   const canWrite = access.canWriteCrm;
   const {
@@ -99,13 +144,13 @@ export default function ContactsPage() {
     statusOptions,
     statusOptionsForBusinessUnitId,
   } = useContactWorkflowView({
-    contacts,
-    workOrders,
-    financials,
+    contacts: directoryContacts,
+    workOrders: directoryWorkOrders,
+    financials: directoryFinancials,
     employees,
     accessibleBusinessUnits,
-    currentBusinessUnitId,
-    currentBusinessUnit,
+    currentBusinessUnitId: directoryBusinessUnitId,
+    currentBusinessUnit: directoryBusinessUnit,
   });
   const facetContext = useMemo(() => ({ businessUnitById, now: facetNow }), [businessUnitById, facetNow]);
   const directoryRows = useMemo(() => contactRows.map((contact) => {
@@ -136,22 +181,22 @@ export default function ContactsPage() {
     if (drawer === 'new') {
       addContact(form)
         .then(() => {
-          toast('Contact created successfully');
+          toast(`${singularLabel} created successfully`);
           close();
         })
-        .catch((error) => toast(error?.message || 'Contact create failed.', 'error'));
+        .catch((error) => toast(error?.message || `${singularLabel} create failed.`, 'error'));
     } else {
       updateContact(drawer.id, form)
         .then(() => {
-          toast('Contact updated successfully');
+          toast(`${singularLabel} updated successfully`);
           close();
         })
-        .catch((error) => toast(error?.message || 'Contact update failed.', 'error'));
+        .catch((error) => toast(error?.message || `${singularLabel} update failed.`, 'error'));
     }
   };
 
   const columns = [
-    { key: 'name', label: 'Name', sortable: true, editable: true },
+    { key: 'name', label: isClientsMode ? 'Client' : 'Name', sortable: true, editable: true },
     { key: 'email', label: 'Email', sortable: true, editable: true },
     { key: 'phone', label: 'Phone', editable: true },
     { key: 'status', label: 'Status', type: 'badge', sortable: true },
@@ -206,13 +251,14 @@ export default function ContactsPage() {
   }, [businessUnitById, effectiveDirectoryFacet, filteredContacts]);
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
+  if (isClientsMode && !forcedBusinessUnit) return <div className="empty-state">Clients unavailable for this user.</div>;
 
   return (
     <div className="fade-in">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Contacts</h1>
-          <p className="page-subtitle">{contacts.length} contacts in {currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}</p>
+          <h1 className="page-title">{pluralLabel}</h1>
+          <p className="page-subtitle">{directoryContacts.length} {pluralLabel.toLowerCase()} in {directoryBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}</p>
         </div>
         <div className="flex-gap contacts-header-actions">
           <select className="input select contacts-filter" style={{width:130, padding:'4px 8px'}} value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
@@ -230,14 +276,14 @@ export default function ContactsPage() {
             <option value="unassigned">Unassigned</option>
             {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
           </select>
-          {canWrite && <button className="btn btn-primary" onClick={openNew}>+ Add Contact</button>}
+          {canWrite && <button className="btn btn-primary" onClick={openNew}>+ Add {singularLabel}</button>}
         </div>
       </div>
 
       <div className="contacts-facet-panel" aria-label="Contact quick filters">
         <div className="contacts-facet-summary">
           <strong>{filteredContacts.length}</strong>
-          <span>matching contacts</span>
+          <span>matching {pluralLabel.toLowerCase()}</span>
           {invalidPhoneScopeSummary && (
             <small>{invalidPhoneScopeSummary}</small>
           )}
@@ -270,26 +316,26 @@ export default function ContactsPage() {
         <DataTable
           columns={columns}
           data={filteredContacts}
-          searchPlaceholder="Search contacts..."
+          searchPlaceholder={`Search ${pluralLabel.toLowerCase()}...`}
           onEdit={canWrite ? (id, u) => {
             updateContact(id, u)
               .then(() => toast('Field updated'))
               .catch((error) => toast(error?.message || 'Update failed.', 'error'));
           } : undefined}
           actions={[
-            { label: 'View', onClick: (r) => router.push(`/contacts/${r.id}`) },
+            { label: 'View', onClick: (r) => router.push(`${routeBase}/${r.id}`) },
             ...(canWrite ? [
               ...(currentUser?.id ? [{
                 label: 'Assign to me',
                 icon: <UserPlus size={14} />,
                 onClick: (r) => {
                   updateContact(r.id, { assignedTo: currentUser.id })
-                    .then(() => toast('Contact assigned'))
+                    .then(() => toast(`${singularLabel} assigned`))
                     .catch((error) => toast(error?.message || 'Assignment failed.', 'error'));
                 },
               }] : []),
               { label: 'Edit', onClick: openEdit },
-              { label: 'Delete', onClick: (r) => { deleteContact(r.id); toast('Contact deleted', 'error'); }, danger: true },
+              { label: 'Delete', onClick: (r) => { deleteContact(r.id); toast(`${singularLabel} deleted`, 'error'); }, danger: true },
             ] : []),
           ]}
           mobileBadges={['status']}
@@ -297,7 +343,7 @@ export default function ContactsPage() {
         />
       </div>
 
-      <Modal open={!!drawer} onClose={close} title={drawer === 'new' ? 'New Contact' : 'Edit Contact'}
+      <Modal open={!!drawer} onClose={close} title={drawer === 'new' ? `New ${singularLabel}` : `Edit ${singularLabel}`}
         footer={<><button className="btn" onClick={close}>Cancel</button><button className="btn btn-primary" onClick={save}>Save</button></>}>
         <div className="form-group">
           <label className="form-label">Name</label>

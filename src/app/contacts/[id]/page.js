@@ -216,14 +216,20 @@ function phoneHref(value = '') {
   return digits ? `tel:${digits}` : '';
 }
 
-export default function ContactDetailPage() {
+export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const params = useParams();
   const router = useRouter();
   const { toast } = useToast();
+  const isClientMode = mode === 'clients';
+  const singularLabel = isClientMode ? 'Client' : 'Contact';
+  const pluralLabel = isClientMode ? 'Clients' : 'Contacts';
   const {
     contacts,
+    allContacts,
     workOrders,
+    allWorkOrders,
     financials,
+    allFinancials,
     updateContact,
     loaded,
     employees,
@@ -251,9 +257,12 @@ export default function ContactDetailPage() {
   const [noteInput, setNoteInput] = useState('');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-  const contact = useMemo(() => contacts.find(c => c.id === params.id), [contacts, params.id]);
-  const contactWorkOrders = useMemo(() => workOrders.filter(wo => wo.contactId === params.id), [workOrders, params.id]);
-  const contactFinancials = useMemo(() => financials.filter(f => f.contactId === params.id), [financials, params.id]);
+  const contactSource = isClientMode ? (allContacts || contacts) : contacts;
+  const workOrderSource = isClientMode ? (allWorkOrders || workOrders) : workOrders;
+  const financialSource = isClientMode ? (allFinancials || financials) : financials;
+  const contact = useMemo(() => contactSource.find(c => c.id === params.id), [contactSource, params.id]);
+  const contactWorkOrders = useMemo(() => workOrderSource.filter(wo => wo.contactId === params.id), [workOrderSource, params.id]);
+  const contactFinancials = useMemo(() => financialSource.filter(f => f.contactId === params.id), [financialSource, params.id]);
   const contactFinancialCounts = useMemo(() => contactFinancials.reduce((counts, record) => {
     const category = financialCategory(record);
     counts[category] = (counts[category] || 0) + 1;
@@ -440,8 +449,8 @@ export default function ContactDetailPage() {
       });
   };
 
-  if (loaded && !contact) {
-    return <div className="empty-state">Contact not found</div>;
+  if (loaded && (!contact || (isClientMode && contactBusinessUnit?.name !== 'AIT Signs'))) {
+    return <div className="empty-state">{singularLabel} not found</div>;
   }
 
   const addNote = () => {
@@ -516,8 +525,8 @@ export default function ContactDetailPage() {
   return (
     <div className={s.detailPage + " fade-in"}>
       <div className="page-header">
-        <button className={s.btnBack} onClick={() => router.back()}>
-          <ArrowLeft size={18} /> Back to Contacts
+        <button className={s.btnBack} onClick={() => (isClientMode ? router.push('/clients') : router.back())}>
+          <ArrowLeft size={18} /> Back to {pluralLabel}
         </button>
       </div>
 
@@ -652,7 +661,7 @@ export default function ContactDetailPage() {
                   </div>
                 </div>
 
-                <div className={s.snapshotStrip} aria-label="Current contact snapshot">
+                <div className={s.snapshotStrip} aria-label={`Current ${singularLabel.toLowerCase()} snapshot`}>
                   {timelineSnapshot.map((item) => {
                     const Icon = SNAPSHOT_ICONS[item.icon] || Activity;
                     return (
