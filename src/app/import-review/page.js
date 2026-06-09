@@ -281,6 +281,16 @@ function summarizeJson(value) {
     .map(([key, v]) => [key, Array.isArray(v) ? `${v.length} items` : typeof v === 'object' ? JSON.stringify(v) : String(v)]);
 }
 
+function decisionMetadataForRow(row) {
+  const proposal = row?.proposedResolution || row?.proposed_contact_json || {};
+  return proposal.mis171ReviewMetadata || {};
+}
+
+function formatList(values) {
+  if (!Array.isArray(values) || values.length === 0) return 'None';
+  return values.join(', ');
+}
+
 function formatDate(value) {
   if (!value) return '—';
   const dt = new Date(value);
@@ -1084,6 +1094,39 @@ export default function ImportReviewPage() {
                       <span>Review reason</span>
                       <strong>{activeRow.decisionReason || 'Needs operator decision'}</strong>
                     </div>
+                    {decisionMetadataForRow(activeRow).sourceKey && (
+                      <>
+                        <div>
+                          <span>Source identity</span>
+                          <strong>
+                            {formatList(decisionMetadataForRow(activeRow).sourceClientNames)}
+                            {' · '}
+                            {formatList(decisionMetadataForRow(activeRow).sourcePhones)}
+                            {' · '}
+                            {formatList(decisionMetadataForRow(activeRow).sourceEmails)}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>Match signal</span>
+                          <strong>
+                            {decisionMetadataForRow(activeRow).roughMatchBucket || 'No rough-match bucket'}
+                            {decisionMetadataForRow(activeRow).topRoughMatch ? ` · ${decisionMetadataForRow(activeRow).topRoughMatch}` : ''}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>Exact evidence</span>
+                          <strong>
+                            Clients: {formatList(decisionMetadataForRow(activeRow).exactClientMatches)}
+                            {' · '}
+                            Emails: {formatList(decisionMetadataForRow(activeRow).exactEmailMatches)}
+                          </strong>
+                        </div>
+                        <div>
+                          <span>Next action</span>
+                          <strong>{decisionMetadataForRow(activeRow).futureAction || 'Keep pending for operator review.'}</strong>
+                        </div>
+                      </>
+                    )}
                     <div>
                       <span>Candidate data</span>
                       <strong>
