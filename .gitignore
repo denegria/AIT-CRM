@@ -22,6 +22,18 @@ __pycache__/
 /docs/ait-signs-staging-preview.json
 /src/lib/ait-signs-seed.js
 
+# generated AIT Signs review/audit packets should be archived outside the app repo
+/docs/mis-*-ait-signs-*.json
+/docs/mis-*-ait-signs-*.csv
+/docs/mis-*-ait-signs-*.md
+/docs/mis-*-contact-people-*.json
+/docs/mis-*-contact-people-*.md
+!/docs/mis-171-ait-signs-import-review-page-set-aside.csv
+!/docs/mis-171-ait-signs-import-review-page-set-aside.json
+!/docs/mis-171-ait-signs-after-final-rough-review-remaining.csv
+!/docs/mis-171-ait-signs-after-final-rough-review-remaining.json
+!/docs/mis-171-ait-signs-after-final-rough-review-remaining.md
+
 # next.js
 /.next/
 /out/
