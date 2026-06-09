@@ -1,0 +1,79 @@
+{
+  "generatedAt": "2026-06-09T06:04:29.525Z",
+  "mode": "dry-run",
+  "businessUnit": "AIT Signs",
+  "safeFingerprint": {
+    "expectedNeonBranchId": "br-broad-hill-aptjpyea",
+    "targetBaseUrl": "https://ait-crm-git-staging-alvaros-projects-efb8ae58.vercel.app",
+    "hostSuffix": "ep-muddy-frost-apgwqat1-pooler.c-7",
+    "currentDatabase": "neondb"
+  },
+  "summary": {
+    "totalRows": 3,
+    "byDecision": {
+      "hold_for_human": 2,
+      "promote_note_candidate": 1
+    },
+    "updatedRows": 0
+  },
+  "rows": [
+    {
+      "decision": "hold_for_human",
+      "reason": "Promoted parent evidence points to DOWN TOWN PLAINFIELD, while the workbook row says PAVEMENT SPECIAL / JHON.",
+      "sourceSheet": "2. ESTIMADOS",
+      "sourceRowNumber": 52,
+      "normalizedRecordId": "c20698fd-fbe6-4f66-b9c9-c58ff4c069e8",
+      "sourceRowId": "a4731df0-e9d6-4da0-87bb-04d3849fbef1",
+      "targetContactId": null,
+      "targetContact": "",
+      "targetPhone": "",
+      "targetWorkOrderId": null,
+      "targetWorkOrder": "",
+      "targetWorkOrderTitle": "",
+      "parentActivityEventId": null,
+      "customerName": "PAVEMENT SPECIAL",
+      "contactName": "JHON",
+      "workDescription": "100 INVOICE ORIGINAL Y COPIA FULL COLOR CON LA INFORMACION QUE ESTA EN SU BUSSINESS CAR WASHINGTON",
+      "rawText": "42 | SI | NO | 45379.0 | PAVEMENT SPECIAL | JHON | 100 INVOICE ORIGINAL Y COPIA FULL COLOR CON LA INFORMACION QUE ESTA EN SU BUSSINESS CAR WASHINGTON | SE ENVIO DISENO, NO CONTESTA MENSAJES NI LLAMADAS | $ | 135.0 | 8.94375 | 143.94375 |"
+    },
+    {
+      "decision": "promote_note_candidate",
+      "reason": "Useful operational note beyond parent work order; requires separate note creation approval.",
+      "sourceSheet": "3. 15 SIGNS WORK ORDER",
+      "sourceRowNumber": 122,
+      "normalizedRecordId": "c256631c-53a3-4f23-888d-0191c4400685",
+      "sourceRowId": "fa1cff6b-3773-4591-8946-6c8c276b24fb",
+      "targetContactId": "a0fe3a59-8cc7-40e5-b998-fef1214fb401",
+      "targetContact": "PHT CONTRACTOR",
+      "targetPhone": "7328902573",
+      "targetWorkOrderId": "a66c2455-eebe-4b0a-9555-2a2e95cb8620",
+      "targetWorkOrder": "AIT-WO-ACT-122",
+      "targetWorkOrderTitle": "12 YARD 24\" X 16\" + 12 STEPS STICK, CAMBIO DE COLOR",
+      "parentActivityEventId": "d6397298-64b0-4435-bde0-6e8f3afb5933",
+      "customerName": "PHT CONTRACTOR",
+      "contactName": "MARIO",
+      "workDescription": "12 YARD 24\" X 16\" + 12 STEPS STICK, CAMBIO DE COLOR",
+      "rawText": "105 | 45810.0 | PHT CONTRACTOR | MARIO | 12 YARD 24\" X 16\" + 12 STEPS STICK, CAMBIO DE COLOR | 6/2/25 HABLE PARA PEDIRLE, $ 100, DIJO QUE ESTA NOCHE ENVIARE SU ESPOSA POR ZELLE, 6/10/25 FRANK DICE A JULIO ENVIAR DISENO AL GRUPO | ACT"
+    },
+    {
+      "decision": "hold_for_human",
+      "reason": "Operational instruction text should be reviewed for attach-vs-ignore direction before note creation or status cleanup.",
+      "sourceSheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "sourceRowNumber": 1538,
+      "normalizedRecordId": "44520534-fa43-43da-a834-a86c48faf506",
+      "sourceRowId": "4afdec4a-6034-4db1-8445-17c419c9ce41",
+      "targetContactId": "4d74a98a-4ca3-473b-92ac-cf17be4ad0f2",
+      "targetContact": "BLUE MOUNTAIN",
+      "targetPhone": "7328038578",
+      "targetWorkOrderId": "8dfe23f5-1c94-4c34-880b-4264fe2eded5",
+      "targetWorkOrder": "AIT-WO-ARCH-1538",
+      "targetWorkOrderTitle": "BANER 10 FT X 4 FT IGUAL A LA FOTO ENVIADA PERO AGREGAR NOW OFFERING POOL SERVICES Y UNA FORTP PISCINAS AL LADO",
+      "parentActivityEventId": "0496b693-4378-4983-9ad9-0d637844e7c0",
+      "customerName": "BLUE MOUNTAIN",
+      "contactName": "FELIX",
+      "workDescription": "BANER 10 FT X 4 FT IGUAL A LA FOTO ENVIADA PERO AGREGAR NOW OFFERING POOL SERVICES Y UNA FORTP PISCINAS AL LADO",
+      "rawText": "1526 | SI | NO | 45316.0 | BLUE MOUNTAIN | FELIX | BANER 10 FT X 4 FT IGUAL A LA FOTO ENVIADA PERO AGREGAR NOW OFFERING POOL SERVICES Y UNA FORTP PISCINAS AL LADO | ENTREGADO | FRANK | $ | 625.0 | 41.40625 | 666.40625 | 666.40625 | 666.4"
+    }
+  ],
+  "updatedRows": []
+}
