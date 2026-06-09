@@ -1,0 +1,252 @@
+{
+  "generatedAt": "2026-06-09T03:59:16.212Z",
+  "mode": "dry-run",
+  "businessUnit": "AIT Signs",
+  "safeFingerprint": {
+    "expectedNeonBranchId": "br-broad-hill-aptjpyea",
+    "targetBaseUrl": "https://ait-crm-git-staging-alvaros-projects-efb8ae58.vercel.app",
+    "hostSuffix": "ep-muddy-frost-apgwqat1-pooler.c-7",
+    "currentDatabase": "neondb"
+  },
+  "summary": {
+    "candidates": 2221,
+    "updatedRows": 0,
+    "byRecordType": {
+      "lead": 65,
+      "estimate": 63,
+      "note": 30,
+      "payment_snapshot": 277,
+      "work_order": 1786
+    },
+    "byEvidence": {
+      "exact_activity_event": 2221
+    }
+  },
+  "samples": [
+    {
+      "id": "5b4f67be-434c-42e2-a7a5-64635bf83dc5",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 9,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "85e00700-3b7e-4cd4-9307-419f01c433f1",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 11,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "cf72f315-8460-43e9-8219-4de723649b89",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 13,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "1758ffb2-fa27-42e6-8337-bfdddb785844",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 15,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "9bf0b89b-dc51-435e-83ad-5e742f794d37",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 17,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "da602373-bbf0-4397-8c8e-ecc1f34e8179",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 18,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "5ed801a5-b311-4a64-a6d4-89675253baeb",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 20,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "7c3f6686-e75a-49c9-811b-b71eb04a06c1",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 22,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "ac43e481-48be-422d-bef5-2d2af3784bae",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 23,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "4e7316cd-0365-44c2-bbb8-817e68cd7d1f",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 24,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "89d265ec-669d-45d2-82e2-40091d52e8f5",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 26,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "3b491300-797a-402a-8a0d-18e8b994c23a",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 27,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "d8f7d783-4756-473d-9768-990e03558d44",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 29,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "24423865-a905-41ca-896d-949a84a5327f",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 30,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "14caceae-8afd-48b4-a7d2-fb0d6272036f",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 31,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "5eb41852-f322-4c56-9455-234156e7e487",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 33,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "4d02ee93-c5e1-41fc-bc4b-7ebf3043b6fd",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 34,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "e0d6fc4a-1066-464a-b684-c9544c7cf4fd",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 36,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "be87ae85-1ee4-4a02-8f33-ca8f0e914e33",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 37,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "fac0e0d7-f755-4bb3-a648-8bc65ea51c0f",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 38,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "e9dbd644-60b4-40c4-b3b0-7ef0b04e1fdd",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 39,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "b618484a-5cea-4805-90a0-b4602a6119cd",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 40,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "5eb85b70-8fd1-4f1f-b0e1-32376c4c7a6e",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 43,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "bfa2d3b3-8d0a-48a6-9506-81ce6d8e10d3",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 44,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    },
+    {
+      "id": "fd7f53de-d125-4b67-a2bb-83ecefb14adb",
+      "record_type": "lead",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 45,
+      "entity_key": null,
+      "has_exact_event": true,
+      "has_entity": false
+    }
+  ]
+}
