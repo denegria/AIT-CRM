@@ -316,6 +316,41 @@ test('review-item decisions update only import review items', async () => {
   assert.deepEqual(reviewUpdate.params, ['rejected', 'batch-1', ['review-item-1'], null, 'org-1']);
 });
 
+test('review-item decisions cannot be marked approved without a CRM action', async () => {
+  const { client, calls } = createClient();
+
+  await assert.rejects(
+    () => updateImportReviewStatus(client, {
+      batchId: 'batch-1',
+      status: 'approved',
+      reviewItemIds: ['review-item-1'],
+      organizationId: 'org-1',
+    }),
+    /cannot be marked approved without an explicit CRM attach, create, or promotion action/,
+  );
+
+  assert.equal(calls.length, 0);
+});
+
+test('review-item decisions persist explicit operator action metadata', async () => {
+  const { client, calls } = createClient();
+
+  await updateImportReviewStatus(client, {
+    batchId: 'batch-1',
+    status: 'needs_review',
+    reviewItemIds: ['review-item-1'],
+    operatorDecisionAction: 'hold_for_future_action',
+    organizationId: 'org-1',
+  });
+
+  const reviewUpdate = calls.find((call) => call.sql.startsWith('update import_review_items iri set'));
+  const metadata = JSON.parse(reviewUpdate.params[3]);
+  assert.deepEqual(metadata.operatorDecision.action, 'hold_for_future_action');
+  assert.deepEqual(metadata.operatorDecision.status, 'needs_review');
+  assert.match(metadata.operatorDecision.recordedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(calls.some((call) => call.sql.startsWith('update import_normalized_records set status = $1')), false);
+});
+
 test('approving staged Facebook leads promotes them into CRM records', async () => {
   const { client, calls } = createClient();
 

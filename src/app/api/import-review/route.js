@@ -18,6 +18,14 @@ import {
   updateImportReviewStatus,
 } from '@/lib/import-review/service.js';
 
+const VALID_DECISION_ACTIONS = new Set([
+  'discard_source_row',
+  'hold_for_future_action',
+  'attach_existing_later',
+  'create_crm_record_later',
+  'promote_import_later',
+]);
+
 async function withClient(handler) {
   if (!process.env.DATABASE_URL) {
     return NextResponse.json(
@@ -167,12 +175,23 @@ export async function PATCH(request) {
       if (reviewItemIds.some((reviewItemId) => !isUuid(reviewItemId))) {
         return NextResponse.json({ error: 'reviewItemIds must contain only valid UUIDs.' }, { status: 400 });
       }
+      if (reviewItemIds.length && status === 'approved') {
+        return NextResponse.json(
+          { error: 'Source-row decisions cannot be marked approved without an explicit CRM attach, create, or promotion action.' },
+          { status: 400 },
+        );
+      }
+      const operatorDecisionAction = body.operatorDecisionAction ? String(body.operatorDecisionAction) : null;
+      if (operatorDecisionAction && !VALID_DECISION_ACTIONS.has(operatorDecisionAction)) {
+        return NextResponse.json({ error: 'Invalid source-row decision action.' }, { status: 400 });
+      }
 
       const result = await updateImportReviewStatus(client, {
         batchId,
         status,
         recordIds,
         reviewItemIds,
+        operatorDecisionAction,
         organizationId: auth.organizationId,
       });
 

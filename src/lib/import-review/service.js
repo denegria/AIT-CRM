@@ -779,10 +779,14 @@ export async function updateImportReviewStatus(client, {
   reviewItemIds = [],
   rowSelector = null,
   reason = null,
+  operatorDecisionAction = null,
   organizationId = null,
 }) {
   if (!VALID_IMPORT_REVIEW_STATUSES.has(status)) {
     throw new Error('Invalid review status.');
+  }
+  if (status === 'approved' && reviewItemIds.length) {
+    throw new Error('Source-row decisions cannot be marked approved without an explicit CRM attach, create, or promotion action.');
   }
 
   const resolvedBatchId = await resolveImportReviewBatchId(client, batchId, { organizationId });
@@ -799,6 +803,7 @@ export async function updateImportReviewStatus(client, {
         status,
         reviewItemIds,
         reason,
+        operatorDecisionAction,
         organizationId,
       });
 
@@ -892,13 +897,15 @@ async function updateImportReviewItemsOnly(client, batchId, {
   status,
   reviewItemIds = [],
   reason = null,
+  operatorDecisionAction = null,
   organizationId = null,
 }) {
+  const reviewPatch = buildOperatorReviewPatch({ reason, operatorDecisionAction, status });
   const params = [
     status,
     batchId,
     reviewItemIds,
-    reason ? JSON.stringify({ operatorReason: reason }) : null,
+    reviewPatch ? JSON.stringify(reviewPatch) : null,
   ];
   const organizationClause = organizationId ? `and ib.organization_id = $${params.push(organizationId)}` : '';
   const result = await client.query(
@@ -925,6 +932,19 @@ async function updateImportReviewItemsOnly(client, batchId, {
     updatedIds: result.rows.map((row) => row.id),
     sourceRowIds: [...new Set(result.rows.map((row) => row.source_row_id).filter(Boolean))],
   };
+}
+
+function buildOperatorReviewPatch({ reason = null, operatorDecisionAction = null, status = null } = {}) {
+  const patch = {};
+  if (reason) patch.operatorReason = reason;
+  if (operatorDecisionAction) {
+    patch.operatorDecision = {
+      action: operatorDecisionAction,
+      status,
+      recordedAt: new Date().toISOString(),
+    };
+  }
+  return Object.keys(patch).length ? patch : null;
 }
 
 function isPendingFacebookLeadRecord(record) {

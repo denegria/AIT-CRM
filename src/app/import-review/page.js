@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, Check, Database, Eye, Filter, HelpCircle, Lock, RefreshCw, Search, X } from 'lucide-react';
+import { AlertTriangle, Check, Database, Eye, Filter, HelpCircle, Link2, Lock, RefreshCw, Search, Upload, UserPlus, X } from 'lucide-react';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 
@@ -391,7 +391,8 @@ export default function ImportReviewPage() {
   const isDecisionMode = reviewMode === 'decisions';
   const canReview = access.canWriteImportReview;
   const batchHasBusinessUnit = Boolean(batch?.businessUnitId || batch?.businessUnitName);
-  const canApproveRows = canReview && (isDecisionMode || batchHasBusinessUnit);
+  const canApproveRows = canReview && !isDecisionMode && batchHasBusinessUnit;
+  const canHoldDecisions = canReview && isDecisionMode;
   const pageStart = pagination.totalCount > 0 ? pagination.offset + 1 : 0;
   const pageEnd = Math.min(pagination.offset + rows.length, pagination.totalCount);
   const totalRowsLabel = pagination.totalCount.toLocaleString();
@@ -434,7 +435,7 @@ export default function ImportReviewPage() {
     }
   }
 
-  async function updateRows(rowUpdateIds, status) {
+  async function updateRows(rowUpdateIds, status, operatorDecisionAction = null) {
     if (!rowUpdateIds.length) return;
     setSaving(true);
     try {
@@ -444,6 +445,7 @@ export default function ImportReviewPage() {
       };
       if (isDecisionMode) updateBody.reviewItemIds = rowUpdateIds;
       else updateBody.recordIds = rowUpdateIds;
+      if (operatorDecisionAction) updateBody.operatorDecisionAction = operatorDecisionAction;
 
       const response = await fetch('/api/import-review', {
         method: 'PATCH',
@@ -456,7 +458,18 @@ export default function ImportReviewPage() {
       }
 
       const objectLabel = isDecisionMode ? 'decision' : 'row';
-      toast(`${rowUpdateIds.length} ${objectLabel}${rowUpdateIds.length === 1 ? '' : 's'} marked ${status.replace('_', ' ')}`, 'success');
+      const actionLabel = operatorDecisionAction === 'discard_source_row'
+        ? 'discarded'
+        : operatorDecisionAction === 'hold_for_future_action'
+          ? 'held for action'
+          : operatorDecisionAction === 'attach_existing_later'
+            ? 'marked for attach'
+            : operatorDecisionAction === 'create_crm_record_later'
+              ? 'marked for create'
+              : operatorDecisionAction === 'promote_import_later'
+                ? 'marked for import'
+          : `marked ${status.replace('_', ' ')}`;
+      toast(`${rowUpdateIds.length} ${objectLabel}${rowUpdateIds.length === 1 ? '' : 's'} ${actionLabel}`, 'success');
       setSelectedIds((prev) => prev.filter((id) => !rowUpdateIds.includes(id)));
       setActiveId((prev) => (rowUpdateIds.includes(prev) ? null : prev));
       setReloadKey((key) => key + 1);
@@ -814,11 +827,18 @@ export default function ImportReviewPage() {
               <Filter size={16} />
               {allVisibleSelected ? 'Clear selection' : 'Select all visible'}
             </button>
-            <button className="btn btn-primary" disabled={!canApproveRows || selectedCount === 0 || saving} onClick={() => updateRows(selectedIds, 'approved')}>
-              <Check size={16} />
-              {isDecisionMode ? 'Mark approved' : 'Approve selected'} ({selectedCount})
-            </button>
-            <button className="btn btn-danger" disabled={!canReview || selectedCount === 0 || saving} onClick={() => updateRows(selectedIds, 'rejected')}>
+            {isDecisionMode ? (
+              <button className="btn btn-primary" disabled={!canHoldDecisions || selectedCount === 0 || saving} onClick={() => updateRows(selectedIds, 'needs_review', 'hold_for_future_action')}>
+                <HelpCircle size={16} />
+                Hold for action ({selectedCount})
+              </button>
+            ) : (
+              <button className="btn btn-primary" disabled={!canApproveRows || selectedCount === 0 || saving} onClick={() => updateRows(selectedIds, 'approved')}>
+                <Check size={16} />
+                Approve selected ({selectedCount})
+              </button>
+            )}
+            <button className="btn btn-danger" disabled={!canReview || selectedCount === 0 || saving} onClick={() => updateRows(selectedIds, 'rejected', isDecisionMode ? 'discard_source_row' : null)}>
               <X size={16} />
               {isDecisionMode ? 'Discard selected' : 'Reject selected'} ({selectedCount})
             </button>
@@ -1209,11 +1229,32 @@ export default function ImportReviewPage() {
               </div>
 
               <div className="review-detail-actions">
-                <button className="btn btn-primary" disabled={!canApproveRows || saving} onClick={() => updateRows([activeRow.id], 'approved')}>
-                  <Check size={16} />
-                  {isDecisionMode ? 'Mark decision approved' : 'Approve row'}
-                </button>
-                <button className="btn btn-danger" disabled={!canReview || saving} onClick={() => updateRows([activeRow.id], 'rejected')}>
+                {isDecisionMode ? (
+                  <>
+                    <button className="btn btn-primary" disabled={!canHoldDecisions || saving} onClick={() => updateRows([activeRow.id], 'needs_review', 'hold_for_future_action')}>
+                      <HelpCircle size={16} />
+                      Hold
+                    </button>
+                    <button className="btn" disabled={!canHoldDecisions || saving} onClick={() => updateRows([activeRow.id], 'needs_review', 'attach_existing_later')}>
+                      <Link2 size={16} />
+                      Attach later
+                    </button>
+                    <button className="btn" disabled={!canHoldDecisions || saving} onClick={() => updateRows([activeRow.id], 'needs_review', 'create_crm_record_later')}>
+                      <UserPlus size={16} />
+                      Create later
+                    </button>
+                    <button className="btn" disabled={!canHoldDecisions || saving} onClick={() => updateRows([activeRow.id], 'needs_review', 'promote_import_later')}>
+                      <Upload size={16} />
+                      Promote later
+                    </button>
+                  </>
+                ) : (
+                  <button className="btn btn-primary" disabled={!canApproveRows || saving} onClick={() => updateRows([activeRow.id], 'approved')}>
+                    <Check size={16} />
+                    Approve row
+                  </button>
+                )}
+                <button className="btn btn-danger" disabled={!canReview || saving} onClick={() => updateRows([activeRow.id], 'rejected', isDecisionMode ? 'discard_source_row' : null)}>
                   <X size={16} />
                   {isDecisionMode ? 'Discard row' : 'Reject row'}
                 </button>
