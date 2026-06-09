@@ -1,0 +1,350 @@
+{
+  "issue": "MIS-170",
+  "generatedAt": "2026-06-09T16:02:00.653Z",
+  "mode": "apply",
+  "businessUnit": "AIT Signs",
+  "safeFingerprint": {
+    "expectedNeonBranchId": "br-broad-hill-aptjpyea",
+    "targetBaseUrl": "https://ait-crm-git-staging-alvaros-projects-efb8ae58.vercel.app",
+    "hostSuffix": "ep-muddy-frost-apgwqat1-pooler.c-7",
+    "currentDatabase": "neondb"
+  },
+  "input": "docs/mis-169-ait-signs-post-approval-remaining-review.json",
+  "summary": {
+    "approvedRows": 14,
+    "heldRows": 1,
+    "byDecision": {
+      "resolved_existing_contact": 14
+    },
+    "updatedRows": 14
+  },
+  "rows": [
+    {
+      "decision": "resolved_existing_contact",
+      "key": "3. 15 SIGNS WORK ORDER#142",
+      "target": "PINAS LOCAS",
+      "approval": "high rough approved",
+      "reviewItemId": "236a4b92-0bdd-45ee-8251-10b4fda0d07a",
+      "resolvedContactId": "c65c0c89-11bd-4d8a-a5de-bbdc9f743cfd",
+      "resolvedContact": "PINAS LOCAS",
+      "resolvedPhone": "8482377564",
+      "matchType": "exact_client_name",
+      "sourceClientNames": [
+        "PINAS LOCAS"
+      ],
+      "sourcePhones": [],
+      "workbookOriginalText": "125 | PINAS LOCAS | SANDY | 10 QR DE 2.5X2.5 | 45.0 | 2.49 | 48.0 | 48.0 | 0 | 0",
+      "matches": []
+    },
+    {
+      "decision": "resolved_existing_contact",
+      "key": "3. 15 SIGNS WORK ORDER#208",
+      "target": "FONSE",
+      "approval": "high rough approved",
+      "reviewItemId": "4eb3a627-cd7b-4721-bca7-bdf2b0ece196",
+      "resolvedContactId": "83e21607-01d6-40cf-aba9-d3c761e52eff",
+      "resolvedContact": "FONSE",
+      "resolvedPhone": "9083356380",
+      "matchType": "exact_client_name",
+      "sourceClientNames": [
+        "FONSE"
+      ],
+      "sourcePhones": [],
+      "workbookOriginalText": "191 | 46096.0 | FONSE | GARY | 2 PUERTAS SIGNS | 0 | 0 | 0 | 0",
+      "matches": []
+    },
+    {
+      "decision": "resolved_existing_contact",
+      "key": "3. 15 SIGNS WORK ORDER#235",
+      "target": "CENTRAL FRESH SUPERMARKET",
+      "approval": "high rough approved",
+      "reviewItemId": "96aad442-1864-4614-90f2-f0bb41c7a0f5",
+      "resolvedContactId": "4f0ab9da-de3d-4e05-8ff2-37fdf34c20f3",
+      "resolvedContact": "CENTRAL FRESH SUPERMARKET",
+      "resolvedPhone": "9088845884",
+      "matchType": "exact_client_name",
+      "sourceClientNames": [
+        "CENTRAL FRESH SUPERMARKET"
+      ],
+      "sourcePhones": [],
+      "workbookOriginalText": "218 | 46160.0 | CENTRAL FRESH SUPERMARKET | FRANKIE | 8 ESTAMPADOS EN COLOR SOLO LOGO | JULIO | 40.0 | 2.65 | 42.65 | 43.0 | -0.35 | -0.35",
+      "matches": []
+    },
+    {
+      "decision": "resolved_existing_contact",
+      "key": "3. 15 SIGNS WORK ORDER#258",
+      "target": "PATRICIA SABOR CASERO",
+      "approval": "high rough approved",
+      "reviewItemId": "f69ab794-db10-4b33-9be9-5fa0f17458a0",
+      "resolvedContactId": "4bfeda66-2a00-4433-8725-fdf111c986cd",
+      "resolvedContact": "PATRICIA SABOR CASERO",
+      "resolvedPhone": "9092305301",
+      "matchType": "exact_client_name",
+      "sourceClientNames": [
+        "PATRICIA SABOR CASERO"
+      ],
+      "sourcePhones": [],
+      "workbookOriginalText": "241 | 46169.0 | PATRICIA SABOR CASERO | PATRICIA | 100 STICKERS | JULIO | 0 | 0 | 0 | 0",
+      "matches": []
+    },
+    {
+      "decision": "resolved_existing_contact",
+      "key": "WORK ORDER TERMINADOS Y PAGADOS#41",
+      "target": "GREEN WORLD",
+      "approval": "high rough approved",
+      "reviewItemId": "16789317-6b75-448d-b274-49f3f24a8aa5",
+      "resolvedContactId": "7d64a8ed-3568-4677-b053-7db530645625",
+      "resolvedContact": "GREEN WORLD",
+      "resolvedPhone": "9084104402",
+      "matchType": "exact_client_name",
+      "sourceClientNames": [
+        "GREEN WORLD"
+      ],
+      "sourcePhones": [],
+      "workbookOriginalText": "29 | SI | NO | 41255.0 | GREEN WORLD | stamp | 29 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "matches": []
+    },
+    {
+      "decision": "resolved_existing_contact",
+      "key": "WORK ORDER TERMINADOS Y PAGADOS#52",
+      "target": "JOSE CAICEDO",
+      "approval": "high rough approved",
+      "reviewItemId": "13b888a4-2098-47d1-ad31-51c74fb80e95",
+      "resolvedContactId": "d3ccb5ce-cdb0-4304-bb31-fd297833ec76",
+      "resolvedContact": "JOSE CAICEDO",
+      "resolvedPhone": "9082107122",
+      "matchType": "exact_client_name",
+      "sourceClientNames": [
+        "JOSE CAICERO"
+      ],
+      "sourcePhones": [],
+      "workbookOriginalText": "40 | SI | NO | 41310.0 | JOSE CAICERO | bussines card | 40 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "matches": []
+    },
+    {
+      "decision": "resolved_existing_contact",
+      "key": "WORK ORDER TERMINADOS Y PAGADOS#53",
+      "target": "DIEGO",
+      "approval": "high rough approved",
+      "reviewItemId": "87b2b660-a8ea-4cba-a2b2-4a1a7b5ff9e5",
+      "resolvedContactId": "0c6202e4-8047-4f11-8c60-468ab0d3241a",
+      "resolvedContact": "DIEGO",
+      "resolvedPhone": "9086982526",
+      "matchType": "exact_client_name",
+      "sourceClientNames": [
+        "DIEGO"
+      ],
+      "sourcePhones": [],
+      "workbookOriginalText": "41 | SI | NO | 41314.0 | DIEGO | logos | 41 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "matches": []
+    },
+    {
+      "decision": "resolved_existing_contact",
+      "key": "WORK ORDER TERMINADOS Y PAGADOS#57",
+      "target": "TONY",
+      "approval": "high rough approved",
+      "reviewItemId": "2e3098c3-2279-45ea-bbe3-2620d9cd53fe",
+      "resolvedContactId": "5eed1ed7-adee-4da6-9c58-8f8bec8b0634",
+      "resolvedContact": "TONY",
+      "resolvedPhone": "9083611211",
+      "matchType": "exact_client_name",
+      "sourceClientNames": [
+        "TONY"
+      ],
+      "sourcePhones": [],
+      "workbookOriginalText": "45 | SI | NO | 41316.0 | TONY | diseno | 45 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "matches": []
+    },
+    {
+      "decision": "resolved_existing_contact",
+      "key": "WORK ORDER TERMINADOS Y PAGADOS#67",
+      "target": "VALVERDE LANDSCAPING",
+      "approval": "high rough approved",
+      "reviewItemId": "02df4ce2-70bf-4830-903a-77aea02861e7",
+      "resolvedContactId": "3dfe9868-88b7-4e61-8f4d-7e9084584a0a",
+      "resolvedContact": "VALVERDE LANDSCAPING",
+      "resolvedPhone": "9083973228",
+      "matchType": "exact_client_name",
+      "sourceClientNames": [
+        "VALUERDE LANDSCOPING"
+      ],
+      "sourcePhones": [],
+      "workbookOriginalText": "55 | SI | NO | 41389.0 | VALUERDE LANDSCOPING | sign | 55 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "matches": []
+    },
+    {
+      "decision": "resolved_existing_contact",
+      "key": "WORK ORDER TERMINADOS Y PAGADOS#75",
+      "target": "GREEN WORLD",
+      "approval": "high rough approved",
+      "reviewItemId": "dfef6c37-ddfa-420f-a32b-29edc94758fa",
+      "resolvedContactId": "7d64a8ed-3568-4677-b053-7db530645625",
+      "resolvedContact": "GREEN WORLD",
+      "resolvedPhone": "9084104402",
+      "matchType": "exact_client_name",
+      "sourceClientNames": [
+        "GREEN WORLD"
+      ],
+      "sourcePhones": [],
+      "workbookOriginalText": "63 | SI | NO | 41479.0 | GREEN WORLD | stamp | 63 | S | 0 | 0 | 42084.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "matches": []
+    },
+    {
+      "decision": "resolved_existing_contact",
+      "key": "WORK ORDER TERMINADOS Y PAGADOS#86",
+      "target": "GLOBAL",
+      "approval": "high rough approved",
+      "reviewItemId": "9d01c3c5-9aa4-4f64-a429-08bc79199b6e",
+      "resolvedContactId": "39d6f960-e6a5-41b2-8f73-2f14c4f6282f",
+      "resolvedContact": "GLOBAL",
+      "resolvedPhone": "9084001174",
+      "matchType": "exact_client_name",
+      "sourceClientNames": [
+        "GLOBAL"
+      ],
+      "sourcePhones": [],
+      "workbookOriginalText": "74 | SI | NO | 41593.0 | GLOBAL | sign | 74 | S | 0 | 0 | 42084.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "matches": []
+    },
+    {
+      "decision": "resolved_existing_contact",
+      "key": "WORK ORDER TERMINADOS Y PAGADOS#91",
+      "target": "PASTOR SILVIO",
+      "approval": "high rough approved",
+      "reviewItemId": "af7a4182-6e1e-44fc-95bc-a8aed0f400d1",
+      "resolvedContactId": "44242cff-4ac9-4058-8ec8-3076c4a1b990",
+      "resolvedContact": "PASTOR SILVIO",
+      "resolvedPhone": "9084720049",
+      "matchType": "exact_client_name",
+      "sourceClientNames": [
+        "PASTOR SILVIO"
+      ],
+      "sourcePhones": [],
+      "workbookOriginalText": "79 | SI | NO | 41706.0 | PASTOR SILVIO | signs bairo | 79 | S | 0 | 0 | 42084.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "matches": []
+    },
+    {
+      "decision": "resolved_existing_contact",
+      "key": "WORK ORDER TERMINADOS Y PAGADOS#104",
+      "target": "FRANKY'S",
+      "approval": "high rough corrected from Frank to Franky/Franky's",
+      "reviewItemId": "43ae8a95-70f0-414d-8097-2907fd3e5c4f",
+      "resolvedContactId": "43762fec-1958-406c-9bbc-eb6651feb5a3",
+      "resolvedContact": "FRANKY'S",
+      "resolvedPhone": "8487022015",
+      "matchType": "exact_client_name",
+      "sourceClientNames": [
+        "FRANKY"
+      ],
+      "sourcePhones": [],
+      "workbookOriginalText": "92 | SI | NO | 41757.0 | FRANKY | vandada 24x9 | 92 | S | 0 | 0 | 42084.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "matches": []
+    },
+    {
+      "decision": "resolved_existing_contact",
+      "key": "2. ESTIMADOS#85",
+      "target": "JBP CONTRACTOR",
+      "approval": "medium rough approved",
+      "reviewItemId": "c5b4782e-a127-48ab-be4a-c82720f922cb",
+      "resolvedContactId": "950021da-5339-4043-a374-17ee3e16fa16",
+      "resolvedContact": "JBP CONTRACTOR",
+      "resolvedPhone": "5709821790",
+      "matchType": "exact_client_name",
+      "sourceClientNames": [
+        "JBP CONSTRUCTION"
+      ],
+      "sourcePhones": [],
+      "workbookOriginalText": "75 | 46110.0 | JBP CONSTRUCTION | JAIME | 0 | 0 | 0",
+      "matches": []
+    }
+  ],
+  "heldRows": [
+    {
+      "decision": "held_for_human_confirmation",
+      "key": "3. 15 SIGNS WORK ORDER#109",
+      "originalTarget": "GK BROTHERS HOME IMPROVEMENT",
+      "reviewedTarget": "4 BOTHERS IMPROVEMENT",
+      "reason": "Alvaro rejected GK Brothers; staging has no 9083338110 contact/person phone match, so hold for explicit target confirmation.",
+      "sourceClientNames": [
+        "4 BROTHERS HOME IMPROVENT"
+      ],
+      "sourcePhones": [
+        "9083338110"
+      ],
+      "workbookOriginalText": "92 | 45794.0 | 4 BROTHERS HOME IMPROVENT | 908 333 8110 | 2 YARD SINGS | 0 | 0 | 0 | 0",
+      "phoneEvidence": []
+    }
+  ],
+  "updatedRows": [
+    {
+      "id": "c5b4782e-a127-48ab-be4a-c82720f922cb",
+      "review_status": "imported",
+      "review_type": "misc_text"
+    },
+    {
+      "id": "236a4b92-0bdd-45ee-8251-10b4fda0d07a",
+      "review_status": "imported",
+      "review_type": "misc_text"
+    },
+    {
+      "id": "4eb3a627-cd7b-4721-bca7-bdf2b0ece196",
+      "review_status": "imported",
+      "review_type": "misc_text"
+    },
+    {
+      "id": "96aad442-1864-4614-90f2-f0bb41c7a0f5",
+      "review_status": "imported",
+      "review_type": "misc_text"
+    },
+    {
+      "id": "f69ab794-db10-4b33-9be9-5fa0f17458a0",
+      "review_status": "imported",
+      "review_type": "misc_text"
+    },
+    {
+      "id": "16789317-6b75-448d-b274-49f3f24a8aa5",
+      "review_status": "imported",
+      "review_type": "misc_text"
+    },
+    {
+      "id": "13b888a4-2098-47d1-ad31-51c74fb80e95",
+      "review_status": "imported",
+      "review_type": "misc_text"
+    },
+    {
+      "id": "87b2b660-a8ea-4cba-a2b2-4a1a7b5ff9e5",
+      "review_status": "imported",
+      "review_type": "misc_text"
+    },
+    {
+      "id": "2e3098c3-2279-45ea-bbe3-2620d9cd53fe",
+      "review_status": "imported",
+      "review_type": "misc_text"
+    },
+    {
+      "id": "02df4ce2-70bf-4830-903a-77aea02861e7",
+      "review_status": "imported",
+      "review_type": "misc_text"
+    },
+    {
+      "id": "dfef6c37-ddfa-420f-a32b-29edc94758fa",
+      "review_status": "imported",
+      "review_type": "misc_text"
+    },
+    {
+      "id": "9d01c3c5-9aa4-4f64-a429-08bc79199b6e",
+      "review_status": "imported",
+      "review_type": "misc_text"
+    },
+    {
+      "id": "af7a4182-6e1e-44fc-95bc-a8aed0f400d1",
+      "review_status": "imported",
+      "review_type": "misc_text"
+    },
+    {
+      "id": "43ae8a95-70f0-414d-8097-2907fd3e5c4f",
+      "review_status": "imported",
+      "review_type": "misc_text"
+    }
+  ]
+}
