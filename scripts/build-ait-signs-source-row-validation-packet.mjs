@@ -362,6 +362,22 @@ function classify(row, evidence) {
   };
 }
 
+function exclusionReason(row) {
+  if (row.sourceSheet === 'Sheet12') {
+    return 'excluded_sheet12_non_authoritative_debris';
+  }
+  if (Number(row.sourceRowNumber) <= 7) {
+    return 'excluded_workbook_header_or_above_header_row';
+  }
+  if (
+    row.validationBucket === 'approve_reject_or_ignore_source_checked'
+    || row.validationBucket === 'manual_rejectable_noise_review'
+  ) {
+    return 'excluded_source_checked_header_internal_or_numeric_noise';
+  }
+  return '';
+}
+
 function toCsv(rows) {
   const columns = [
     'alvaro_decision',
@@ -370,6 +386,7 @@ function toCsv(rows) {
     'validationConfidence',
     'validationBasis',
     'reviewerAction',
+    'exclusionReason',
     'sourceKey',
     'sourceSheet',
     'sourceRowNumber',
@@ -409,7 +426,9 @@ function renderMarkdown(report) {
     '',
     '## Summary',
     '',
-    `- Total rows: ${report.summary.totalRows}`,
+    `- Review rows: ${report.summary.reviewRows}`,
+    `- Excluded rows: ${report.summary.excludedRows}`,
+    `- Original rows considered: ${report.summary.originalRows}`,
     '',
     '### By Validation Bucket',
     '',
@@ -426,6 +445,7 @@ function renderMarkdown(report) {
     '- Exact phone/email matches are contact-point evidence, not automatic client-merge evidence.',
     '- Contact/person-name-only matches stay manual.',
     '- Create-note/create-record candidates are kept out of cleanup writes.',
+    '- Sheet12, top/header rows, and source-checked header/internal/numeric noise are excluded from the main review packet and preserved in the excluded audit CSV.',
   ];
   return `${lines.join('\n')}\n`;
 }
@@ -444,7 +464,7 @@ async function main() {
   const db = await loadDbEvidence(client, refined.rows);
   await client.end();
 
-  const rows = refined.rows.map((row) => {
+  const allRows = refined.rows.map((row) => {
     const rowKey = sourceKey(row);
     const heldRow = heldByKey.get(rowKey);
     const evidence = buildEvidence(row, heldRow, db.contacts, db.activitiesByKey.get(rowKey));
@@ -473,6 +493,11 @@ async function main() {
       workbookNextRowText: row.workbookNextRowText,
     };
   });
+  const excludedRows = allRows
+    .map((row) => ({ ...row, exclusionReason: exclusionReason(row) }))
+    .filter((row) => row.exclusionReason);
+  const excludedKeys = new Set(excludedRows.map((row) => row.sourceKey));
+  const rows = allRows.filter((row) => !excludedKeys.has(row.sourceKey));
 
   const report = {
     issue: 'MIS-167',
@@ -484,19 +509,27 @@ async function main() {
       held: HELD_INPUT,
     },
     summary: {
-      totalRows: rows.length,
+      originalRows: allRows.length,
+      reviewRows: rows.length,
+      excludedRows: excludedRows.length,
       byValidationBucket: by(rows, 'validationBucket'),
       byWorkflowRecommendation: by(rows, 'workflowRecommendation'),
       byValidationConfidence: by(rows, 'validationConfidence'),
       byMis166Bucket: by(rows, 'mis166Bucket'),
+      byExcludedReason: by(excludedRows, 'exclusionReason'),
     },
     rows,
+    excludedRows,
   };
 
   const jsonPath = options.output.replace(/\.csv$/, '.json');
   const mdPath = options.output.replace(/\.csv$/, '.md');
+  const excludedCsvPath = options.output.replace(/\.csv$/, '-excluded_from_review.csv');
+  const excludedJsonPath = options.output.replace(/\.csv$/, '-excluded_from_review.json');
   await mkdir(path.dirname(options.output), { recursive: true });
   await writeFile(options.output, `${toCsv(rows)}\n`);
+  await writeFile(excludedCsvPath, `${toCsv(excludedRows)}\n`);
+  await writeFile(excludedJsonPath, `${JSON.stringify({ ...report, rows: excludedRows }, null, 2)}\n`);
   await writeFile(jsonPath, `${JSON.stringify(report, null, 2)}\n`);
   await writeFile(mdPath, renderMarkdown(report));
   for (const bucket of Object.keys(report.summary.byValidationBucket).sort()) {
