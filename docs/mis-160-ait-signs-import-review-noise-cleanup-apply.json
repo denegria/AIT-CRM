@@ -1,0 +1,373 @@
+{
+  "generatedAt": "2026-06-09T04:27:43.153Z",
+  "mode": "apply",
+  "businessUnit": "AIT Signs",
+  "safeFingerprint": {
+    "expectedNeonBranchId": "br-broad-hill-aptjpyea",
+    "targetBaseUrl": "https://ait-crm-git-staging-alvaros-projects-efb8ae58.vercel.app",
+    "hostSuffix": "ep-muddy-frost-apgwqat1-pooler.c-7",
+    "currentDatabase": "neondb"
+  },
+  "summary": {
+    "candidates": 25,
+    "updatedRows": 25,
+    "byReviewType": {
+      "section_header": 21,
+      "header": 4
+    }
+  },
+  "candidates": [
+    {
+      "id": "82d62e05-cc54-42a9-a006-f1a01c6bc882",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "PROSPECTOS O INTERESADOS | (CLIENTES QUE ENTRARON POR ALGUNA PROMOCION O SIMPLEMENTE  NECESITAN  CONTACTAR LOS SERVICIO )",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 5,
+      "raw_text": "PROSPECTOS O INTERESADOS | (CLIENTES QUE ENTRARON POR ALGUNA PROMOCION O SIMPLEMENTE  NECESITAN  CONTACTAR LOS SERVICIO )"
+    },
+    {
+      "id": "685bcf39-71dc-482c-b6aa-6336f1c16eb0",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "NOTA  :    CUANDO CLIENTE,  DEBE MOVER A    \"15 WORK ORDER\" | OPERATION | MONTO PACTADO Y AVANCE | COBRANZAS | BALANCE | SEGUIMIENTO 1 | SEGUIMIENTO 2 | SEGUIMIENTO 3 | SEGUIMIENTO 4 | SEGUIMIENTO 5",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 6,
+      "raw_text": "NOTA  :    CUANDO CLIENTE,  DEBE MOVER A    \"15 WORK ORDER\" | OPERATION | MONTO PACTADO Y AVANCE | COBRANZAS | BALANCE | SEGUIMIENTO 1 | SEGUIMIENTO 2 | SEGUIMIENTO 3 | SEGUIMIENTO 4 | SEGUIMIENTO 5"
+    },
+    {
+      "id": "7524f6fa-6e6d-4494-81a0-97adc98813c9",
+      "review_type": "header",
+      "review_status": "pending",
+      "reason": "ACTIVO  ? | TEXT ? | FECHA | CUSTOMER | CONTACTO | Phone | ADDRESS | E-MAIL | TRABAJO A REALIZAR | STATUS | OBSERVACIONES | DESIGNER | CHIEF | ACTIVO | MONTO | TAX | TOTAL | AVANZE | BALANCE | PAGOS 1 | DATE1 | Pagos 2 | DATE2 | PAGOS 3 | DATE3 | A LA FECHA | FECHA | HORA | MENSAJE | COORD | FECHA | HORA | MENSAJE | COORD | FECHA | HORA | MENSAJE | COORD | FECHA | HORA | MENSAJE | COORD | FECHA | HORA | MENSAJE | COORD",
+      "source_sheet": "1. INTERESADOS",
+      "source_row_number": 7,
+      "raw_text": "ACTIVO  ? | TEXT ? | FECHA | CUSTOMER | CONTACTO | Phone | ADDRESS | E-MAIL | TRABAJO A REALIZAR | STATUS | OBSERVACIONES | DESIGNER | CHIEF | ACTIVO | MONTO | TAX | TOTAL | AVANZE | BALANCE | PAGOS 1 | DATE1 | Pagos 2 | DATE2 | PAGOS 3 | DATE3 | A LA FECHA | FECHA | HORA | MENSAJE | COORD | FECHA | HORA | MENSAJE | COORD | FECHA | HORA | MENSAJE | COORD | FECHA | HORA | MENSAJE | COORD | FECHA | HORA | MENSAJE | COORD"
+    },
+    {
+      "id": "1ae8c42a-701a-473b-9dff-444b65dbafd9",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "WEB PAGE & DIGITAL ADS | DEBE PASAR DE  ESTIMADO A  15 WORK ORDER",
+      "source_sheet": "2. ESTIMADOS",
+      "source_row_number": 3,
+      "raw_text": "WEB PAGE & DIGITAL ADS | DEBE PASAR DE  ESTIMADO A  15 WORK ORDER"
+    },
+    {
+      "id": "5b44fcfe-43c8-4cec-8b3c-b4a5ba3d5078",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "NOTA  :    CUANDO CLIENTE APRUEBA   EL ESTIMADO  SE  DEBE MOVER A    \"15 WORK ORDER\" | OPERATION | MONTO PACTADO Y AVANCE | COBRANZAS | BALANCE | SEGUIMIENTO 1 | SEGUIMIENTO 2 | SEGUIMIENTO 3 | SEGUIMIENTO 4 | SEGUIMIENTO 5",
+      "source_sheet": "2. ESTIMADOS",
+      "source_row_number": 8,
+      "raw_text": "NOTA  :    CUANDO CLIENTE APRUEBA   EL ESTIMADO  SE  DEBE MOVER A    \"15 WORK ORDER\" | OPERATION | MONTO PACTADO Y AVANCE | COBRANZAS | BALANCE | SEGUIMIENTO 1 | SEGUIMIENTO 2 | SEGUIMIENTO 3 | SEGUIMIENTO 4 | SEGUIMIENTO 5"
+    },
+    {
+      "id": "93db276f-e730-447a-b815-f9d98bcfbc7e",
+      "review_type": "header",
+      "review_status": "pending",
+      "reason": "ACTIVO  ? | TEXT ? | FECHA | CUSTOMER | CONTACTO | Phone | ADDRESS | E-MAIL | TRABAJO A REALIZAR | STATUS | OBSERVACIONES | DESIGNER | CHIEF | ACTIVO | MONTO | TAX | TOTAL | AVANZE | BALANCE | PAGOS 1 | CHK | DATE1 | Pagos 2 | CHK | DATE2 | PAGOS 3 | CHK | DATE3 | PAGO 4 | CHK | DATE 4 | A LA FECHA | FECHA | HORA | MENSAJE | COORD | FECHA | HORA | MENSAJE | COORD | FECHA | HORA | MENSAJE | COORD | FECHA | HORA | MENSAJE | COORD | FECHA | HORA | MENSAJE | COORD",
+      "source_sheet": "2. ESTIMADOS",
+      "source_row_number": 9,
+      "raw_text": "ACTIVO  ? | TEXT ? | FECHA | CUSTOMER | CONTACTO | Phone | ADDRESS | E-MAIL | TRABAJO A REALIZAR | STATUS | OBSERVACIONES | DESIGNER | CHIEF | ACTIVO | MONTO | TAX | TOTAL | AVANZE | BALANCE | PAGOS 1 | CHK | DATE1 | Pagos 2 | CHK | DATE2 | PAGOS 3 | CHK | DATE3 | PAGO 4 | CHK | DATE 4 | A LA FECHA | FECHA | HORA | MENSAJE | COORD | FECHA | HORA | MENSAJE | COORD | FECHA | HORA | MENSAJE | COORD | FECHA | HORA | MENSAJE | COORD | FECHA | HORA | MENSAJE | COORD"
+    },
+    {
+      "id": "9b3bd01d-8c58-4f0e-a149-88b1fdbc4e13",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "29 | SI | NO | 45346.0 | LIAMS TREE SERVICE | BRYAN | 908 5484307 | CREAR LOGO  $ 55\nPOST CARD 2500 UNI  $ 685\nT SHIRT $ 259\nESTAMPADO $ 199\nBUSINESS CARD  $ 165\nESTIMADOS $ 75 \nRECIBOS $ 75\nROTULACION TRUCK $ 645 | 29 | FRANK | $ | 2158.0 | 142.9675 | 2300.9675 | 2300.9675",
+      "source_sheet": "2. ESTIMADOS",
+      "source_row_number": 39,
+      "raw_text": "29 | SI | NO | 45346.0 | LIAMS TREE SERVICE | BRYAN | 908 5484307 | CREAR LOGO  $ 55\nPOST CARD 2500 UNI  $ 685\nT SHIRT $ 259\nESTAMPADO $ 199\nBUSINESS CARD  $ 165\nESTIMADOS $ 75 \nRECIBOS $ 75\nROTULACION TRUCK $ 645 | 29 | FRANK | $ | 2158.0 | 142.9675 | 2300.9675 | 2300.9675"
+    },
+    {
+      "id": "82c769bf-3dd3-4961-b8ca-e69b6ed311c7",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "49 | SI | 45544.0 | C&V LANDSCAPING | IGNACIO ORTIZ | 908 240 8794 | BUSINESS CARD  SE ENVIO   ESTIMADOS | 0 | 0 | 45554.0 | 8.pm | envie texto, para ver su decision | frank",
+      "source_sheet": "2. ESTIMADOS",
+      "source_row_number": 59,
+      "raw_text": "49 | SI | 45544.0 | C&V LANDSCAPING | IGNACIO ORTIZ | 908 240 8794 | BUSINESS CARD  SE ENVIO   ESTIMADOS | 0 | 0 | 45554.0 | 8.pm | envie texto, para ver su decision | frank"
+    },
+    {
+      "id": "3b3dc185-3260-4232-8dc5-37090f51646f",
+      "review_type": "header",
+      "review_status": "pending",
+      "reason": "ACTIVO  ? | PRIOR | FECHA | CUSTOMER | CONTACTO | Phone | ADDRESS | E-MAIL | TRABAJO A REALIZAR | ACTUAL STATUS | OBSERVACIONES | DESIGNER | FEHCA DE ENTREGA | ACTIVO | NETO | TAX | TOTAL.VTA | AVANCE | BALANCE | PAGOS 1 | CHK # | DATE1 | Pagos 2 | CHK | DATE2 | PAGOS 3 | CHK | DATE3 | PAGO 4 | CHK | DATE 4 | A LA FECHA",
+      "source_sheet": "3. 15 SIGNS WORK ORDER",
+      "source_row_number": 13,
+      "raw_text": "ACTIVO  ? | PRIOR | FECHA | CUSTOMER | CONTACTO | Phone | ADDRESS | E-MAIL | TRABAJO A REALIZAR | ACTUAL STATUS | OBSERVACIONES | DESIGNER | FEHCA DE ENTREGA | ACTIVO | NETO | TAX | TOTAL.VTA | AVANCE | BALANCE | PAGOS 1 | CHK # | DATE1 | Pagos 2 | CHK | DATE2 | PAGOS 3 | CHK | DATE3 | PAGO 4 | CHK | DATE 4 | A LA FECHA"
+    },
+    {
+      "id": "ebcf2653-caa3-408b-861c-399873405094",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "151 | 45917.0 | GREEN HEAVEN | ELENA    908 821 5606   BRYAN  908 589 0690 | 1. CREAR LOGO $ 75    2. BUSINESS CARD 1000 UND (FREE)  3.  100 ESTIMADOS  $ 157  4.  100 RECIBOS  $  157     5.   TSHIRT MANGA LARGA 6  Y SWETERS  6    $  143     CON ESTAMPAGO A COLOR   $ 143    6.  WEB SITE  $ 1395 | 2060.0 | 136.475 | 2196.475 | 1000.0 | 1196.475 | 1196.48 | t/c | 45941.0 | -0.005",
+      "source_sheet": "3. 15 SIGNS WORK ORDER",
+      "source_row_number": 168,
+      "raw_text": "151 | 45917.0 | GREEN HEAVEN | ELENA    908 821 5606   BRYAN  908 589 0690 | 1. CREAR LOGO $ 75    2. BUSINESS CARD 1000 UND (FREE)  3.  100 ESTIMADOS  $ 157  4.  100 RECIBOS  $  157     5.   TSHIRT MANGA LARGA 6  Y SWETERS  6    $  143     CON ESTAMPAGO A COLOR   $ 143    6.  WEB SITE  $ 1395 | 2060.0 | 136.475 | 2196.475 | 1000.0 | 1196.475 | 1196.48 | t/c | 45941.0 | -0.005"
+    },
+    {
+      "id": "f4598dba-b4a6-463c-9d7c-800ff4a057db",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "WORK ORDER - CENTRAL - OFICIAL | 290",
+      "source_sheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "source_row_number": 6,
+      "raw_text": "WORK ORDER - CENTRAL - OFICIAL | 290"
+    },
+    {
+      "id": "a1ecd211-881e-4f09-854c-95ed5c090076",
+      "review_type": "header",
+      "review_status": "pending",
+      "reason": "ACTIVO  ? | TEXT ? | FECHA | CUSTOMER | CONTACTO | Phone | ADDRESS | E-MAIL | TRABAJO A REALIZAR | STATUS | OBSERVACIONES | DESIGNER | CHIEF | ACTIVO | MONTO | TAX | TOTAL | AVANZE | BALANCE | PAGOS 1 | CHK | DATE1 | Pagos 2 | CHK | DATE2 | PAGOS 3 | CHK | DATE3 | PAGO # 4 | CHK | DATE 4 | A LA FECHA | FECHA | MENSAJE | COORD | FECHA | MENSAJE | COORD | FECHA | MENSAJE | COORD | FECHA | MENSAJE | COORD | FECHA | MENSAJE | COORD",
+      "source_sheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "source_row_number": 11,
+      "raw_text": "ACTIVO  ? | TEXT ? | FECHA | CUSTOMER | CONTACTO | Phone | ADDRESS | E-MAIL | TRABAJO A REALIZAR | STATUS | OBSERVACIONES | DESIGNER | CHIEF | ACTIVO | MONTO | TAX | TOTAL | AVANZE | BALANCE | PAGOS 1 | CHK | DATE1 | Pagos 2 | CHK | DATE2 | PAGOS 3 | CHK | DATE3 | PAGO # 4 | CHK | DATE 4 | A LA FECHA | FECHA | MENSAJE | COORD | FECHA | MENSAJE | COORD | FECHA | MENSAJE | COORD | FECHA | MENSAJE | COORD | FECHA | MENSAJE | COORD"
+    },
+    {
+      "id": "695d1d27-1a9d-4d7a-9036-879a5aa36a79",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "240 | SI | SI | 43206.0 | VALVERDE LONDSCOPRIND | RANOLD | 908 397 3238 | 50 ESTAMPADOS - 50 INVOICE | 240 | FRANK | S | 20.0 | 20 | 20 | 45041.0 | VIENE MANANA PARA HACER UNOS ESTIMADOS | ANDREA",
+      "source_sheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "source_row_number": 252,
+      "raw_text": "240 | SI | SI | 43206.0 | VALVERDE LONDSCOPRIND | RANOLD | 908 397 3238 | 50 ESTAMPADOS - 50 INVOICE | 240 | FRANK | S | 20.0 | 20 | 20 | 45041.0 | VIENE MANANA PARA HACER UNOS ESTIMADOS | ANDREA"
+    },
+    {
+      "id": "7f43a6ae-1bb5-4d91-a29b-3cc086d50e09",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "241 | SI | SI | 43206.0 | VALVERDE LONDSCOPRIND | RANOLD | 908 397 3238 | 22 ESTAMPADOS | 241 | FRANK | S | 175.0 | 175 | 100.0 | 75 | 45041.0 | VIENE MANANA PARA HACER UNOS ESTIMADOS | ANDREA",
+      "source_sheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "source_row_number": 253,
+      "raw_text": "241 | SI | SI | 43206.0 | VALVERDE LONDSCOPRIND | RANOLD | 908 397 3238 | 22 ESTAMPADOS | 241 | FRANK | S | 175.0 | 175 | 100.0 | 75 | 45041.0 | VIENE MANANA PARA HACER UNOS ESTIMADOS | ANDREA"
+    },
+    {
+      "id": "52974465-4f31-4546-894b-2acf04fcf1a8",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "242 | SI | SI | 43206.0 | VALVERDE LONDSCOPRIND | RANOLD | 908 397 3238 | 20 24X9 YARD SIGN  20 STICK | 242 | FRANK | S | 230.0 | 230 | 230 | 45041.0 | VIENE MANANA PARA HACER UNOS ESTIMADOS | ANDREA",
+      "source_sheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "source_row_number": 254,
+      "raw_text": "242 | SI | SI | 43206.0 | VALVERDE LONDSCOPRIND | RANOLD | 908 397 3238 | 20 24X9 YARD SIGN  20 STICK | 242 | FRANK | S | 230.0 | 230 | 230 | 45041.0 | VIENE MANANA PARA HACER UNOS ESTIMADOS | ANDREA"
+    },
+    {
+      "id": "8ccfdc0e-4ee8-4cbc-af32-b5d7042b7121",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "243 | SI | SI | 43206.0 | VALVERDE LONDSCOPRIND | RANOLD | 908 397 3238 | B/C 2500 UNIDADES | 243 | FRANK | S | 100.0 | 100 | 100 | 45041.0 | VIENE MANANA PARA HACER UNOS ESTIMADOS | ANDREA",
+      "source_sheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "source_row_number": 255,
+      "raw_text": "243 | SI | SI | 43206.0 | VALVERDE LONDSCOPRIND | RANOLD | 908 397 3238 | B/C 2500 UNIDADES | 243 | FRANK | S | 100.0 | 100 | 100 | 45041.0 | VIENE MANANA PARA HACER UNOS ESTIMADOS | ANDREA"
+    },
+    {
+      "id": "b73308c2-dab2-42de-9d10-6cdc066fd7c3",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "244 | SI | SI | 43206.0 | VALVERDE LONDSCOPRIND | RANOLD | 908 397 3238 | 22 ESTAMPADOS  DE POLOS | 244 | FRANK | S | 175.0 | 175 | 100.0 | 75 | 45041.0 | VIENE MANANA PARA HACER UNOS ESTIMADOS | ANDREA",
+      "source_sheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "source_row_number": 256,
+      "raw_text": "244 | SI | SI | 43206.0 | VALVERDE LONDSCOPRIND | RANOLD | 908 397 3238 | 22 ESTAMPADOS  DE POLOS | 244 | FRANK | S | 175.0 | 175 | 100.0 | 75 | 45041.0 | VIENE MANANA PARA HACER UNOS ESTIMADOS | ANDREA"
+    },
+    {
+      "id": "15265e9f-eb7a-422d-bb40-c5f285adbe60",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "402 | SI | SI | 43604.0 | JBR CONSTRUCTION | JUAN ROMERO | 908 822 3752 | 100 INSVOINS 100 ESTIMADOS | 402 | FRANK | S | 275.0 | 275 | 200.0 | 75 | 45052.0 | EQUIVOCADO | ANDREA",
+      "source_sheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "source_row_number": 414,
+      "raw_text": "402 | SI | SI | 43604.0 | JBR CONSTRUCTION | JUAN ROMERO | 908 822 3752 | 100 INSVOINS 100 ESTIMADOS | 402 | FRANK | S | 275.0 | 275 | 200.0 | 75 | 45052.0 | EQUIVOCADO | ANDREA"
+    },
+    {
+      "id": "f8bad820-380b-44b0-b0c9-8f9e7448db57",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "807 | SI | NO | 44602.0 | GR TREE SERVICE | GERARDO | 30 ESTIMADOS | 807 | READY | JOEL | DIEGO | $ | GARANTIA",
+      "source_sheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "source_row_number": 819,
+      "raw_text": "807 | SI | NO | 44602.0 | GR TREE SERVICE | GERARDO | 30 ESTIMADOS | 807 | READY | JOEL | DIEGO | $ | GARANTIA"
+    },
+    {
+      "id": "0a9cd922-d3b8-4015-8008-8a0e4623e565",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "1033 | SI | NO | 44644.0 | DINOS TREE SERVICE | DINO | 908 963 2364 | 100 ESTIMADOS | 1033 | READY | $ | 135.0 | 8.94 | 143.94 | 143.0 | 0.0 | 06.07.2023 | ENVIE MENSAJE WATHSAP | LINA",
+      "source_sheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "source_row_number": 1045,
+      "raw_text": "1033 | SI | NO | 44644.0 | DINOS TREE SERVICE | DINO | 908 963 2364 | 100 ESTIMADOS | 1033 | READY | $ | 135.0 | 8.94 | 143.94 | 143.0 | 0.0 | 06.07.2023 | ENVIE MENSAJE WATHSAP | LINA"
+    },
+    {
+      "id": "c5984f4d-5490-450c-aa28-e610b8ec957a",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "1165 | SI | NO | 44771.0 | BREHMA LANDSCAPING AND FREE SERVICE | BREMMA | 908 421 9404 | 100 ESTIMADOS | 1165 | READY | $ | 135.0 | 8.94 | 143.94 | 100.0 | 43.94 | 04.25.2023 | LLAMARA PARA AGENDAR CITA | LINA",
+      "source_sheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "source_row_number": 1177,
+      "raw_text": "1165 | SI | NO | 44771.0 | BREHMA LANDSCAPING AND FREE SERVICE | BREMMA | 908 421 9404 | 100 ESTIMADOS | 1165 | READY | $ | 135.0 | 8.94 | 143.94 | 100.0 | 43.94 | 04.25.2023 | LLAMARA PARA AGENDAR CITA | LINA"
+    },
+    {
+      "id": "77219cf8-bfe8-4e76-986a-76f5d4c68972",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "1243 | SI | NO | 03//02/23 | NEW LAND GARAGE DOOR | JOSE ALVARENGA | 732 357 6196 | CREAR UN WEB SITE / BUSINNES CARD/ ESTIMADOS | 1243 | READY | $ | 1740.0 | 115.28 | 1835.28 | 950.0 | 905.0",
+      "source_sheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "source_row_number": 1255,
+      "raw_text": "1243 | SI | NO | 03//02/23 | NEW LAND GARAGE DOOR | JOSE ALVARENGA | 732 357 6196 | CREAR UN WEB SITE / BUSINNES CARD/ ESTIMADOS | 1243 | READY | $ | 1740.0 | 115.28 | 1835.28 | 950.0 | 905.0"
+    },
+    {
+      "id": "5317e248-858e-48f5-a773-ae411c1a7db4",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "1392 | SI | NO | 45128.0 | WOODLAND | JUAN JOSE | 100 ESTIMADOS | 1392 | READY | $ | 145.0 | 9.6 | 154.6 | 100.0 | 54.6",
+      "source_sheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "source_row_number": 1404,
+      "raw_text": "1392 | SI | NO | 45128.0 | WOODLAND | JUAN JOSE | 100 ESTIMADOS | 1392 | READY | $ | 145.0 | 9.6 | 154.6 | 100.0 | 54.6"
+    },
+    {
+      "id": "7aba8779-2b1c-47c1-ba70-f3a6f379e8de",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "1534 | SI | NO | 45328.0 | CUEVA CONSTRUCTION | ALEX | 973 652 5368 | 1. $ 45 LOGO\n 2. B/CARD 1000 $ 175  \n3. POST CARD DM  2500 $ 695  \n4. MAGNETICO 2 UND. $ 150  \n 5. SWETERS  $ 17.95   \n6.  T-SHIRT  $ 6.95   \n7.  ESTAMPADO  $  9.95 CADA UNO  \n8.  ESTIMADOS  100 UND.  $ 145 | ENTREGADO | MIRAR ACTUAL STATUS | JOEL | $ | 1329.0 | 88.04625 | 1417.04625 | 700.0 | 717.04625 | 700.0 | 17.04625",
+      "source_sheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "source_row_number": 1546,
+      "raw_text": "1534 | SI | NO | 45328.0 | CUEVA CONSTRUCTION | ALEX | 973 652 5368 | 1. $ 45 LOGO\n 2. B/CARD 1000 $ 175  \n3. POST CARD DM  2500 $ 695  \n4. MAGNETICO 2 UND. $ 150  \n 5. SWETERS  $ 17.95   \n6.  T-SHIRT  $ 6.95   \n7.  ESTAMPADO  $  9.95 CADA UNO  \n8.  ESTIMADOS  100 UND.  $ 145 | ENTREGADO | MIRAR ACTUAL STATUS | JOEL | $ | 1329.0 | 88.04625 | 1417.04625 | 700.0 | 717.04625 | 700.0 | 17.04625"
+    },
+    {
+      "id": "641acc9c-4b10-4cc0-a705-4b174edc7571",
+      "review_type": "section_header",
+      "review_status": "pending",
+      "reason": "1690 | SI | NO | 45524.0 | ADRIAN GARBANZO | 732 648 5861 | 100 ESTIMADOS ORIGINAL / COPIA | ENTREGADO, PERO NO PAGO NADA, SE DESCONTARA DE UN  TRABAJO PROXIMO | S | 135.0 | 8.94375 | 143.94375 | 143.94375 | 143.94375",
+      "source_sheet": "WORK ORDER TERMINADOS Y PAGADOS",
+      "source_row_number": 1702,
+      "raw_text": "1690 | SI | NO | 45524.0 | ADRIAN GARBANZO | 732 648 5861 | 100 ESTIMADOS ORIGINAL / COPIA | ENTREGADO, PERO NO PAGO NADA, SE DESCONTARA DE UN  TRABAJO PROXIMO | S | 135.0 | 8.94375 | 143.94375 | 143.94375 | 143.94375"
+    }
+  ],
+  "updatedRows": [
+    {
+      "id": "82d62e05-cc54-42a9-a006-f1a01c6bc882",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "685bcf39-71dc-482c-b6aa-6336f1c16eb0",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "7524f6fa-6e6d-4494-81a0-97adc98813c9",
+      "review_type": "header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "1ae8c42a-701a-473b-9dff-444b65dbafd9",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "5b44fcfe-43c8-4cec-8b3c-b4a5ba3d5078",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "93db276f-e730-447a-b815-f9d98bcfbc7e",
+      "review_type": "header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "9b3bd01d-8c58-4f0e-a149-88b1fdbc4e13",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "82c769bf-3dd3-4961-b8ca-e69b6ed311c7",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "3b3dc185-3260-4232-8dc5-37090f51646f",
+      "review_type": "header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "ebcf2653-caa3-408b-861c-399873405094",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "f4598dba-b4a6-463c-9d7c-800ff4a057db",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "a1ecd211-881e-4f09-854c-95ed5c090076",
+      "review_type": "header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "695d1d27-1a9d-4d7a-9036-879a5aa36a79",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "7f43a6ae-1bb5-4d91-a29b-3cc086d50e09",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "52974465-4f31-4546-894b-2acf04fcf1a8",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "8ccfdc0e-4ee8-4cbc-af32-b5d7042b7121",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "b73308c2-dab2-42de-9d10-6cdc066fd7c3",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "15265e9f-eb7a-422d-bb40-c5f285adbe60",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "f8bad820-380b-44b0-b0c9-8f9e7448db57",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "0a9cd922-d3b8-4015-8008-8a0e4623e565",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "c5984f4d-5490-450c-aa28-e610b8ec957a",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "77219cf8-bfe8-4e76-986a-76f5d4c68972",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "5317e248-858e-48f5-a773-ae411c1a7db4",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "7aba8779-2b1c-47c1-ba70-f3a6f379e8de",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    },
+    {
+      "id": "641acc9c-4b10-4cc0-a705-4b174edc7571",
+      "review_type": "section_header",
+      "review_status": "rejected"
+    }
+  ]
+}
