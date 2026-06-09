@@ -83,6 +83,7 @@ function labelForType(value) {
 }
 
 function proposalForRow(row) {
+  if (row?.isDecisionRow) return row.proposedResolution || row.proposed_contact_json || {};
   if (row?.record_type === 'lead') return row.proposed_lead_json || {};
   if (row?.record_type === 'estimate') return row.proposed_estimate_json || {};
   if (row?.record_type === 'work_order') return row.proposed_work_order_json || {};
@@ -187,6 +188,13 @@ function batchLabel(batch) {
 }
 
 function sheetContextForRow(row) {
+  if (row?.isDecisionRow) {
+    return {
+      label: 'Import decision',
+      detail: 'Source-row decision. Review the original workbook evidence before changing status.',
+    };
+  }
+
   const sourceSheet = String(row?.source_sheet || '').toLowerCase();
   const proposal = proposalForRow(row);
   const sourceType = proposal.sourceType;
@@ -228,6 +236,12 @@ function sheetContextForRow(row) {
 }
 
 function interpretationForRow(row) {
+  if (row?.isDecisionRow) {
+    const evidenceCount = Number(row.normalizedEvidence?.length || 0);
+    const evidenceLabel = evidenceCount === 1 ? '1 normalized evidence row' : `${evidenceCount} normalized evidence rows`;
+    return `Pending import decision: ${row.decisionReason || 'operator review required'}. Spreadsheet decision status changes do not create CRM records. ${evidenceLabel} linked as context.`;
+  }
+
   const context = sheetContextForRow(row);
   const proposal = proposalForRow(row);
   const recordLabel = labelForType(row?.record_type || 'note');
@@ -246,6 +260,7 @@ function interpretationForRow(row) {
 function badgeClassForStatus(status) {
   const value = String(status || '').toLowerCase();
   if (value === 'approved') return 'badge-won';
+  if (value === 'imported' || value === 'promoted') return 'badge-won';
   if (value === 'rejected') return 'badge-lost';
   if (value === 'needs_review') return 'badge-medium';
   return 'badge-pending';
@@ -288,6 +303,7 @@ export default function ImportReviewPage() {
   const [batches, setBatches] = useState([]);
   const [summary, setSummary] = useState(null);
   const [rows, setRows] = useState([]);
+  const [reviewMode, setReviewMode] = useState('normalized_records');
   const [pagination, setPagination] = useState({ totalCount: 0, limit: 120, offset: 0, returnedCount: 0, hasPreviousPage: false, hasNextPage: false });
   const [selectedIds, setSelectedIds] = useState([]);
   const [activeId, setActiveId] = useState(null);
@@ -325,6 +341,7 @@ export default function ImportReviewPage() {
         setBatches(payload.batches || []);
         setSummary(payload.summary);
         setRows(payload.rows || []);
+        setReviewMode(payload.reviewMode || 'normalized_records');
         setPagination(payload.pagination || { totalCount: payload.rows?.length || 0, limit: filters.limit, offset: filters.offset, returnedCount: payload.rows?.length || 0, hasPreviousPage: false, hasNextPage: false });
         setSelectedIds((prev) => prev.filter((id) => (payload.rows || []).some((row) => row.id === id)));
         setActiveId((prev) => {
@@ -338,6 +355,7 @@ export default function ImportReviewPage() {
           setRows([]);
           setPagination({ totalCount: 0, limit: filters.limit, offset: filters.offset, returnedCount: 0, hasPreviousPage: false, hasNextPage: false });
           setSummary(null);
+          setReviewMode('normalized_records');
           setBatch(null);
           setBatches([]);
         }
@@ -360,9 +378,10 @@ export default function ImportReviewPage() {
   const rowIds = rows.map((row) => row.id);
   const allVisibleSelected = rowIds.length > 0 && rowIds.every((id) => selectedIds.includes(id));
   const selectedCount = selectedIds.filter((id) => rowIds.includes(id)).length;
+  const isDecisionMode = reviewMode === 'decisions';
   const canReview = access.canWriteImportReview;
   const batchHasBusinessUnit = Boolean(batch?.businessUnitId || batch?.businessUnitName);
-  const canApproveRows = canReview && batchHasBusinessUnit;
+  const canApproveRows = canReview && (isDecisionMode || batchHasBusinessUnit);
   const pageStart = pagination.totalCount > 0 ? pagination.offset + 1 : 0;
   const pageEnd = Math.min(pagination.offset + rows.length, pagination.totalCount);
   const totalRowsLabel = pagination.totalCount.toLocaleString();
@@ -405,27 +424,31 @@ export default function ImportReviewPage() {
     }
   }
 
-  async function updateRows(recordIds, status) {
-    if (!recordIds.length) return;
+  async function updateRows(rowUpdateIds, status) {
+    if (!rowUpdateIds.length) return;
     setSaving(true);
     try {
+      const updateBody = {
+        batchId: batch?.id || null,
+        status,
+      };
+      if (isDecisionMode) updateBody.reviewItemIds = rowUpdateIds;
+      else updateBody.recordIds = rowUpdateIds;
+
       const response = await fetch('/api/import-review', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          batchId: batch?.id || null,
-          recordIds,
-          status,
-        }),
+        body: JSON.stringify(updateBody),
       });
       const payload = await response.json();
       if (!response.ok) {
         throw new Error(payload.error || 'Unable to update staged records.');
       }
 
-      toast(`${recordIds.length} row${recordIds.length === 1 ? '' : 's'} marked ${status.replace('_', ' ')}`, 'success');
-      setSelectedIds((prev) => prev.filter((id) => !recordIds.includes(id)));
-      setActiveId((prev) => (recordIds.includes(prev) ? null : prev));
+      const objectLabel = isDecisionMode ? 'decision' : 'row';
+      toast(`${rowUpdateIds.length} ${objectLabel}${rowUpdateIds.length === 1 ? '' : 's'} marked ${status.replace('_', ' ')}`, 'success');
+      setSelectedIds((prev) => prev.filter((id) => !rowUpdateIds.includes(id)));
+      setActiveId((prev) => (rowUpdateIds.includes(prev) ? null : prev));
       setReloadKey((key) => key + 1);
     } catch (err) {
       toast(err.message || 'Unable to update staged records.', 'error');
@@ -512,9 +535,11 @@ export default function ImportReviewPage() {
               {batch?.status || 'pending'}
             </span>
           </div>
-          <h1 className="page-title">Approve staged rows inside the CRM</h1>
+          <h1 className="page-title">{isDecisionMode ? 'Resolve pending import decisions' : 'Approve staged rows inside the CRM'}</h1>
           <p className="page-subtitle" style={{ maxWidth: 760 }}>
-            Review raw workbook rows, inspect the proposed normalized record, and approve or reject them without leaving the app.
+            {isDecisionMode
+              ? 'Review source evidence, decide whether a row has a safe CRM target, or discard it. Spreadsheet decisions do not create CRM records.'
+              : 'Review raw workbook rows, inspect the proposed normalized record, and approve or reject them without leaving the app.'}
           </p>
         </div>
         <div className="flex-gap" style={{ flexWrap: 'wrap', justifyContent: 'flex-end' }}>
@@ -548,7 +573,9 @@ export default function ImportReviewPage() {
                 {batch?.businessUnitName || 'Unassigned'} · {batch?.fileName || batch?.sourceName || 'Latest import batch'}
               </div>
               <div className="audit-copy">
-                {summary.counts.sourceRows.toLocaleString()} source rows · {summary.counts.normalizedRecords.toLocaleString()} normalized records · {leadOutcomeCount.toLocaleString()} lead decisions
+                {isDecisionMode
+                  ? `${pagination.totalCount.toLocaleString()} pending source-row decisions · ${summary.counts.reviewItems.toLocaleString()} total review items · normalized records shown as evidence`
+                  : `${summary.counts.sourceRows.toLocaleString()} source rows · ${summary.counts.normalizedRecords.toLocaleString()} normalized records · ${leadOutcomeCount.toLocaleString()} lead decisions`}
               </div>
             </div>
             <div className="audit-meta">
@@ -563,121 +590,125 @@ export default function ImportReviewPage() {
             </div>
           </div>
 
-          <div className="outcome-grid">
-            {OUTCOME_BUCKETS.map((bucket) => {
-              const count = qualityCount(summary, bucket.value);
-              return (
-                <button
-                  className={`outcome-card ${bucket.className} ${filters.quality === bucket.value ? 'outcome-card-active' : ''}`}
-                  key={bucket.value}
-                  type="button"
-                  data-tooltip={bucket.description}
-                  onClick={() => setFilters((prev) => ({ ...prev, quality: bucket.value, type: 'lead', offset: 0 }))}
-                >
-                  <span className="outcome-card-label">
-                    {bucket.label}
-                    <HelpCircle size={14} />
-                  </span>
-                  <strong>{count.toLocaleString()}</strong>
-                  <span>{formatPercent(count, leadOutcomeCount)} of lead decisions</span>
-                </button>
-              );
-            })}
-          </div>
-
-          <div className="secondary-strip" aria-label="Overlapping quality flags">
-            {SECONDARY_BUCKETS.map((bucket) => {
-              const count = qualityCount(summary, bucket.value);
-              return (
-                <button
-                  className={`secondary-chip ${filters.quality === bucket.value ? 'secondary-chip-active' : ''}`}
-                  key={bucket.value}
-                  type="button"
-                  data-tooltip={bucket.description}
-                  onClick={() => setFilters((prev) => ({ ...prev, quality: bucket.value, type: 'lead', offset: 0 }))}
-                >
-                  <span>{bucket.label}</span>
-                  <strong>{count.toLocaleString()}</strong>
-                </button>
-              );
-            })}
-            {filters.quality !== 'all' && (
-              <button
-                className="secondary-chip clear-chip"
-                type="button"
-                onClick={() => setFilters((prev) => ({ ...prev, quality: 'all', offset: 0 }))}
-              >
-                Clear quality filter
-              </button>
-            )}
-          </div>
-
-          <div className="decision-breakdowns">
-            <div className="breakdown-panel">
-              <div className="breakdown-head">
-                <div>
-                  <div className="card-title">Why needs review?</div>
-                  <p className="page-subtitle">Action buckets for the unresolved lead queue.</p>
-                </div>
-                <span className="badge badge-medium">{qualityCount(summary, 'needs_review').toLocaleString()} total</span>
-              </div>
-              <div className="bucket-list">
-                {needsReviewReasons.map((item) => (
-                  <div className="bucket-row" key={item.label}>
-                    <span>{item.label}</span>
-                    <strong>{item.count.toLocaleString()}</strong>
-                  </div>
-                ))}
-                {!needsReviewReasons.length && <div className="bucket-empty">No needs-review lead buckets found.</div>}
-              </div>
-            </div>
-
-            <div className="breakdown-panel">
-              <div className="breakdown-head">
-                <div>
-                  <div className="card-title">Suppress reasons</div>
-                  <p className="page-subtitle">Dead-lead reasons to spot rule gaps quickly.</p>
-                </div>
-                <span className="badge badge-lost">{qualityCount(summary, 'suppress_from_follow_up').toLocaleString()} total</span>
-              </div>
-              <div className="bucket-list">
-                {suppressReasons.map((item) => (
-                  <div className="bucket-row" key={item.label}>
-                    <span>{item.label}</span>
-                    <strong>{item.count.toLocaleString()}</strong>
-                  </div>
-                ))}
-                {!suppressReasons.length && <div className="bucket-empty">No suppress buckets found.</div>}
-              </div>
-            </div>
-
-            <div className="breakdown-panel">
-              <div className="breakdown-head">
-                <div>
-                  <div className="card-title">Review by sheet</div>
-                  <p className="page-subtitle">Where the unresolved rows came from.</p>
-                </div>
-                <span className="badge badge-pending">{needsReviewSheetMix.length.toLocaleString()} sheets</span>
-              </div>
-              <div className="bucket-list">
-                {needsReviewSheetMix.map((item) => {
-                  const total = qualityCount(summary, 'needs_review');
+          {!isDecisionMode && (
+            <>
+              <div className="outcome-grid">
+                {OUTCOME_BUCKETS.map((bucket) => {
+                  const count = qualityCount(summary, bucket.value);
                   return (
-                    <div className="sheet-row" key={item.label}>
-                      <div className="bucket-row">
+                    <button
+                      className={`outcome-card ${bucket.className} ${filters.quality === bucket.value ? 'outcome-card-active' : ''}`}
+                      key={bucket.value}
+                      type="button"
+                      data-tooltip={bucket.description}
+                      onClick={() => setFilters((prev) => ({ ...prev, quality: bucket.value, type: 'lead', offset: 0 }))}
+                    >
+                      <span className="outcome-card-label">
+                        {bucket.label}
+                        <HelpCircle size={14} />
+                      </span>
+                      <strong>{count.toLocaleString()}</strong>
+                      <span>{formatPercent(count, leadOutcomeCount)} of lead decisions</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="secondary-strip" aria-label="Overlapping quality flags">
+                {SECONDARY_BUCKETS.map((bucket) => {
+                  const count = qualityCount(summary, bucket.value);
+                  return (
+                    <button
+                      className={`secondary-chip ${filters.quality === bucket.value ? 'secondary-chip-active' : ''}`}
+                      key={bucket.value}
+                      type="button"
+                      data-tooltip={bucket.description}
+                      onClick={() => setFilters((prev) => ({ ...prev, quality: bucket.value, type: 'lead', offset: 0 }))}
+                    >
+                      <span>{bucket.label}</span>
+                      <strong>{count.toLocaleString()}</strong>
+                    </button>
+                  );
+                })}
+                {filters.quality !== 'all' && (
+                  <button
+                    className="secondary-chip clear-chip"
+                    type="button"
+                    onClick={() => setFilters((prev) => ({ ...prev, quality: 'all', offset: 0 }))}
+                  >
+                    Clear quality filter
+                  </button>
+                )}
+              </div>
+
+              <div className="decision-breakdowns">
+                <div className="breakdown-panel">
+                  <div className="breakdown-head">
+                    <div>
+                      <div className="card-title">Why needs review?</div>
+                      <p className="page-subtitle">Action buckets for the unresolved lead queue.</p>
+                    </div>
+                    <span className="badge badge-medium">{qualityCount(summary, 'needs_review').toLocaleString()} total</span>
+                  </div>
+                  <div className="bucket-list">
+                    {needsReviewReasons.map((item) => (
+                      <div className="bucket-row" key={item.label}>
                         <span>{item.label}</span>
                         <strong>{item.count.toLocaleString()}</strong>
                       </div>
-                      <div className="sheet-bar" aria-hidden="true">
-                        <span style={{ width: formatPercent(item.count, total) }} />
-                      </div>
+                    ))}
+                    {!needsReviewReasons.length && <div className="bucket-empty">No needs-review lead buckets found.</div>}
+                  </div>
+                </div>
+
+                <div className="breakdown-panel">
+                  <div className="breakdown-head">
+                    <div>
+                      <div className="card-title">Suppress reasons</div>
+                      <p className="page-subtitle">Dead-lead reasons to spot rule gaps quickly.</p>
                     </div>
-                  );
-                })}
-                {!needsReviewSheetMix.length && <div className="bucket-empty">No needs-review sheet mix found.</div>}
+                    <span className="badge badge-lost">{qualityCount(summary, 'suppress_from_follow_up').toLocaleString()} total</span>
+                  </div>
+                  <div className="bucket-list">
+                    {suppressReasons.map((item) => (
+                      <div className="bucket-row" key={item.label}>
+                        <span>{item.label}</span>
+                        <strong>{item.count.toLocaleString()}</strong>
+                      </div>
+                    ))}
+                    {!suppressReasons.length && <div className="bucket-empty">No suppress buckets found.</div>}
+                  </div>
+                </div>
+
+                <div className="breakdown-panel">
+                  <div className="breakdown-head">
+                    <div>
+                      <div className="card-title">Review by sheet</div>
+                      <p className="page-subtitle">Where the unresolved rows came from.</p>
+                    </div>
+                    <span className="badge badge-pending">{needsReviewSheetMix.length.toLocaleString()} sheets</span>
+                  </div>
+                  <div className="bucket-list">
+                    {needsReviewSheetMix.map((item) => {
+                      const total = qualityCount(summary, 'needs_review');
+                      return (
+                        <div className="sheet-row" key={item.label}>
+                          <div className="bucket-row">
+                            <span>{item.label}</span>
+                            <strong>{item.count.toLocaleString()}</strong>
+                          </div>
+                          <div className="sheet-bar" aria-hidden="true">
+                            <span style={{ width: formatPercent(item.count, total) }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {!needsReviewSheetMix.length && <div className="bucket-empty">No needs-review sheet mix found.</div>}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          )}
         </section>
       )}
 
@@ -775,11 +806,11 @@ export default function ImportReviewPage() {
             </button>
             <button className="btn btn-primary" disabled={!canApproveRows || selectedCount === 0 || saving} onClick={() => updateRows(selectedIds, 'approved')}>
               <Check size={16} />
-              Approve selected ({selectedCount})
+              {isDecisionMode ? 'Mark approved' : 'Approve selected'} ({selectedCount})
             </button>
             <button className="btn btn-danger" disabled={!canReview || selectedCount === 0 || saving} onClick={() => updateRows(selectedIds, 'rejected')}>
               <X size={16} />
-              Reject selected ({selectedCount})
+              {isDecisionMode ? 'Discard selected' : 'Reject selected'} ({selectedCount})
             </button>
           </div>
         </div>
@@ -789,9 +820,11 @@ export default function ImportReviewPage() {
         <div className="card review-list">
           <div className="review-list-header">
             <div>
-              <div className="card-title" style={{ marginBottom: 4 }}>Staged rows</div>
+              <div className="card-title" style={{ marginBottom: 4 }}>{isDecisionMode ? 'Pending decisions' : 'Staged rows'}</div>
               <p className="page-subtitle" style={{ margin: 0 }}>
-                {loading ? 'Loading review queue…' : `Showing ${pageRowsLabel} rows from ${batch?.fileName || 'the latest batch'}`}
+                {loading
+                  ? 'Loading review queue…'
+                  : `Showing ${pageRowsLabel} ${isDecisionMode ? 'decisions' : 'rows'} from ${batch?.fileName || 'the latest batch'}`}
               </p>
             </div>
             <div className="pagination-actions">
@@ -817,7 +850,7 @@ export default function ImportReviewPage() {
                     />
                   </th>
                   <th>Source</th>
-                  <th>CRM record</th>
+                  <th>{isDecisionMode ? 'Decision type' : 'CRM record'}</th>
                   <th>Status</th>
                   <th>Confidence</th>
                   <th>Preview</th>
@@ -889,11 +922,11 @@ export default function ImportReviewPage() {
                           </button>
                           <button className="btn btn-sm btn-primary" disabled={!canApproveRows || saving} onClick={() => updateRows([row.id], 'approved')}>
                             <Check size={14} />
-                            Approve
+                            {isDecisionMode ? 'Mark approved' : 'Approve'}
                           </button>
                           <button className="btn btn-sm btn-danger" disabled={!canReview || saving} onClick={() => updateRows([row.id], 'rejected')}>
                             <X size={14} />
-                            Reject
+                            {isDecisionMode ? 'Discard' : 'Reject'}
                           </button>
                         </div>
                       </td>
@@ -955,11 +988,11 @@ export default function ImportReviewPage() {
                       </button>
                       <button className="btn btn-sm btn-primary" disabled={!canApproveRows || saving} onClick={() => updateRows([row.id], 'approved')}>
                         <Check size={14} />
-                        Approve
+                        {isDecisionMode ? 'Mark approved' : 'Approve'}
                       </button>
                       <button className="btn btn-sm btn-danger" disabled={!canReview || saving} onClick={() => updateRows([row.id], 'rejected')}>
                         <X size={14} />
-                        Reject
+                        {isDecisionMode ? 'Discard' : 'Reject'}
                       </button>
                     </div>
                   </article>
@@ -977,9 +1010,9 @@ export default function ImportReviewPage() {
         <div className="card review-detail">
           <div className="review-detail-head">
             <div>
-              <div className="card-title" style={{ marginBottom: 4 }}>Selected row</div>
+              <div className="card-title" style={{ marginBottom: 4 }}>{isDecisionMode ? 'Selected decision' : 'Selected row'}</div>
               <p className="page-subtitle" style={{ margin: 0 }}>
-                Row-level approval happens here.
+                {isDecisionMode ? 'Review status changes happen here; CRM creation stays out of this action.' : 'Row-level approval happens here.'}
               </p>
             </div>
             {activeRow && <span className={`badge ${badgeClassForStatus(activeRow.status)}`}>{activeRow.status}</span>}
@@ -1043,13 +1076,41 @@ export default function ImportReviewPage() {
                 <div className="review-interpretation">{interpretationForRow(activeRow)}</div>
               </div>
 
+              {activeRow.isDecisionRow && (
+                <div className="detail-section">
+                  <div className="review-meta-label">Decision evidence</div>
+                  <div className="decision-evidence">
+                    <div>
+                      <span>Review reason</span>
+                      <strong>{activeRow.decisionReason || 'Needs operator decision'}</strong>
+                    </div>
+                    <div>
+                      <span>Candidate data</span>
+                      <strong>
+                        {summarizeJson(activeRow.proposedResolution).length
+                          ? summarizeJson(activeRow.proposedResolution).map(([key, value]) => `${key}: ${value}`).join(' · ')
+                          : 'No structured candidate payload.'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span>Normalized evidence</span>
+                      <strong>
+                        {activeRow.normalizedEvidence?.length
+                          ? activeRow.normalizedEvidence.map((item) => `${labelForType(item.recordType)} ${item.status}`).join(' · ')
+                          : 'No normalized evidence attached.'}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="detail-section">
                 <div className="review-meta-label">Raw text</div>
                 <pre className="review-pre">{activeRow.raw_text || 'No raw text captured.'}</pre>
               </div>
 
               <div className="detail-section">
-                <div className="review-meta-label">Proposed record</div>
+                <div className="review-meta-label">{activeRow.isDecisionRow ? 'Candidate payload' : 'Proposed record'}</div>
                 <div className="proposal-grid">
                   {[
                     ['Lead', activeRow.proposed_lead_json],
@@ -1107,11 +1168,11 @@ export default function ImportReviewPage() {
               <div className="review-detail-actions">
                 <button className="btn btn-primary" disabled={!canApproveRows || saving} onClick={() => updateRows([activeRow.id], 'approved')}>
                   <Check size={16} />
-                  Approve row
+                  {isDecisionMode ? 'Mark decision approved' : 'Approve row'}
                 </button>
                 <button className="btn btn-danger" disabled={!canReview || saving} onClick={() => updateRows([activeRow.id], 'rejected')}>
                   <X size={16} />
-                  Reject row
+                  {isDecisionMode ? 'Discard row' : 'Reject row'}
                 </button>
               </div>
             </>
@@ -1558,6 +1619,30 @@ export default function ImportReviewPage() {
           color: var(--text-secondary);
           font-size: var(--text-sm);
           line-height: 1.5;
+        }
+        .decision-evidence {
+          display: grid;
+          gap: 8px;
+          padding: 12px 14px;
+          border: 1px solid var(--border-subtle);
+          border-radius: var(--radius-lg);
+          background: var(--bg-primary);
+        }
+        .decision-evidence div {
+          display: grid;
+          grid-template-columns: minmax(120px, 0.3fr) minmax(0, 1fr);
+          gap: 12px;
+          align-items: start;
+          font-size: var(--text-sm);
+        }
+        .decision-evidence span {
+          color: var(--text-muted);
+          font-weight: 700;
+        }
+        .decision-evidence strong {
+          color: var(--text-primary);
+          font-weight: 600;
+          word-break: break-word;
         }
         .review-pre {
           margin-top: 8px;

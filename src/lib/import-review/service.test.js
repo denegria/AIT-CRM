@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadImportReviewRows, updateImportReviewStatus } from './service.js';
+import { loadImportReviewDecisionRows, loadImportReviewRows, updateImportReviewStatus } from './service.js';
 
 function normalizeSql(sql) {
   return String(sql).replace(/\s+/g, ' ').trim().toLowerCase();
@@ -75,6 +75,10 @@ function createClient({ batchSourceType = 'facebook_messenger', batchBusinessUni
 
         if (normalized.startsWith('update import_normalized_records set status = $1')) {
           return { rows: [{ id: 'record-1', record_type: 'lead', status: params[0] }] };
+        }
+
+        if (normalized.startsWith('update import_review_items iri set')) {
+          return { rows: [{ id: 'review-item-1', source_row_id: 'source-row-1' }], rowCount: 1 };
         }
 
         if (normalized.startsWith('update import_review_items')) {
@@ -220,6 +224,96 @@ test('import review can filter by quality disposition and flag buckets', async (
   assert.match(calls[1].sql, /quality_flag->>'code' = any\(\$2::text\[\]\)/);
   assert.deepEqual(calls[0].params, ['batch-1', ['wrong_number', 'disconnected', 'do_not_contact', 'not_current', 'repeated_no_answer']]);
   assert.deepEqual(calls[1].params, ['batch-1', ['wrong_number', 'disconnected', 'do_not_contact', 'not_current', 'repeated_no_answer'], 20, 0]);
+});
+
+test('import review decision rows use review items as source-row decisions', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, params = []) {
+      const normalized = normalizeSql(sql);
+      calls.push({ sql: normalized, params });
+
+      if (normalized.startsWith('select count(*)::int as count from import_review_items')) {
+        return { rows: [{ count: 1 }] };
+      }
+
+      if (normalized.startsWith('select iri.id, iri.source_row_id')) {
+        return {
+          rows: [{
+            id: 'review-item-1',
+            source_row_id: 'source-row-1',
+            review_type: 'misc_text',
+            reason: 'No exact CRM target found.',
+            review_status: 'pending',
+            proposed_resolution_json: {
+              sourceClientNames: ['MARIA JOSE'],
+              roughMatchBucket: 'no_rough_match',
+            },
+            created_at: new Date('2026-06-09T00:00:00.000Z'),
+            business_unit_id: 'bu-1',
+            business_unit_name: 'AIT Signs',
+            source_sheet: '1. INTERESADOS',
+            source_row_number: 55,
+            raw_text: 'MARIA JOSE | 908 255 8983',
+            parse_status: 'needs_review',
+            normalized_evidence_json: [{ id: 'record-1', recordType: 'lead', status: 'imported', confidenceScore: '0.70' }],
+          }],
+        };
+      }
+
+      throw new Error(`Unexpected query: ${normalized}`);
+    },
+  };
+
+  const result = await loadImportReviewDecisionRows(client, 'batch-1', { q: 'Maria', limit: 20, offset: 0 });
+
+  assert.equal(result.rows.length, 1);
+  assert.equal(result.rows[0].id, 'review-item-1');
+  assert.equal(result.rows[0].isDecisionRow, true);
+  assert.equal(result.rows[0].decisionReason, 'No exact CRM target found.');
+  assert.deepEqual(result.rows[0].normalizedEvidence, [{ id: 'record-1', recordType: 'lead', status: 'imported', confidenceScore: '0.70' }]);
+  assert.equal(result.pagination.totalCount, 1);
+  assert.match(calls[0].sql, /from import_review_items iri/);
+  assert.match(calls[0].sql, /join import_batches ib/);
+  assert.match(calls[0].sql, /join import_source_rows sr/);
+  assert.match(calls[1].sql, /left join import_normalized_records nr/);
+  assert.deepEqual(calls[0].params, [
+    'batch-1',
+    'pending',
+    '(^|[^[:alnum:]])Maria',
+    ['1. INTERESADOS', 'WORK ORDER TERMINADOS Y PAGADOS'],
+    ['misc_text', 'note'],
+  ]);
+  assert.deepEqual(calls[1].params, [
+    'batch-1',
+    'pending',
+    '(^|[^[:alnum:]])Maria',
+    ['1. INTERESADOS', 'WORK ORDER TERMINADOS Y PAGADOS'],
+    ['misc_text', 'note'],
+    20,
+    0,
+  ]);
+});
+
+test('review-item decisions update only import review items', async () => {
+  const { client, calls } = createClient();
+
+  const result = await updateImportReviewStatus(client, {
+    batchId: 'batch-1',
+    status: 'rejected',
+    reviewItemIds: ['review-item-1'],
+    organizationId: 'org-1',
+  });
+
+  assert.deepEqual(result.updatedReviewItemIds, ['review-item-1']);
+  assert.deepEqual(result.sourceRowIds, ['source-row-1']);
+  assert.equal(result.updatedReviewItems, 1);
+  assert.equal(calls.some((call) => call.sql.startsWith('select nr.id, nr.source_row_id')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('update import_normalized_records set status = $1')), false);
+  const reviewUpdate = calls.find((call) => call.sql.startsWith('update import_review_items iri set'));
+  assert.match(reviewUpdate.sql, /iri.id = any\(\$3::uuid\[\]\)/);
+  assert.match(reviewUpdate.sql, /ib.organization_id = \$5/);
+  assert.deepEqual(reviewUpdate.params, ['rejected', 'batch-1', ['review-item-1'], null, 'org-1']);
 });
 
 test('approving staged Facebook leads promotes them into CRM records', async () => {

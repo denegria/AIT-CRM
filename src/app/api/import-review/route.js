@@ -7,6 +7,7 @@ import {
   VALID_IMPORT_REVIEW_STATUSES,
   listImportReviewBatches,
   loadImportReviewBatch,
+  loadImportReviewDecisionRows,
   loadImportReviewRows,
   loadImportReviewSummary,
   normalizeImportReviewText,
@@ -99,13 +100,24 @@ export async function GET(request) {
         limit: parseImportReviewLimit(url.searchParams.get('limit')),
         offset: parseImportReviewOffset(url.searchParams.get('offset')),
       });
+      const { rows: decisionRows, pagination: decisionPagination } = await loadImportReviewDecisionRows(client, batchId, {
+        status: normalizeImportReviewText(url.searchParams.get('status'), 'pending'),
+        type: normalizeImportReviewText(url.searchParams.get('decisionType'), 'all'),
+        q: normalizeImportReviewText(url.searchParams.get('q'), ''),
+        limit: parseImportReviewLimit(url.searchParams.get('limit')),
+        offset: parseImportReviewOffset(url.searchParams.get('offset')),
+      });
+      const useDecisionRows = decisionRows.length > 0 || (url.searchParams.get('view') === 'decisions' && decisionPagination.totalCount > 0);
 
       return NextResponse.json({
         batch,
         batches,
         summary,
-        rows,
-        pagination,
+        rows: useDecisionRows ? decisionRows : rows,
+        pagination: useDecisionRows ? decisionPagination : pagination,
+        reviewMode: useDecisionRows ? 'decisions' : 'normalized_records',
+        decisionPagination,
+        normalizedPagination: pagination,
       });
     });
   } catch (error) {
@@ -132,13 +144,19 @@ export async function PATCH(request) {
       const recordIds = Array.isArray(body.recordIds)
         ? [...new Set(body.recordIds.map((id) => String(id)).filter(Boolean))]
         : [];
+      const reviewItemIds = Array.isArray(body.reviewItemIds)
+        ? [...new Set(body.reviewItemIds.map((id) => String(id)).filter(Boolean))]
+        : [];
 
       if (!VALID_IMPORT_REVIEW_STATUSES.has(status)) {
         return NextResponse.json({ error: 'Invalid review status.' }, { status: 400 });
       }
 
-      if (!recordIds.length) {
-        return NextResponse.json({ error: 'recordIds must be a non-empty array.' }, { status: 400 });
+      if (!recordIds.length && !reviewItemIds.length) {
+        return NextResponse.json({ error: 'recordIds or reviewItemIds must be a non-empty array.' }, { status: 400 });
+      }
+      if (recordIds.length && reviewItemIds.length) {
+        return NextResponse.json({ error: 'Update normalized records and review items separately.' }, { status: 400 });
       }
       if (batchId && !isUuid(batchId)) {
         return NextResponse.json({ error: 'A valid batchId is required.' }, { status: 400 });
@@ -146,15 +164,19 @@ export async function PATCH(request) {
       if (recordIds.some((recordId) => !isUuid(recordId))) {
         return NextResponse.json({ error: 'recordIds must contain only valid UUIDs.' }, { status: 400 });
       }
+      if (reviewItemIds.some((reviewItemId) => !isUuid(reviewItemId))) {
+        return NextResponse.json({ error: 'reviewItemIds must contain only valid UUIDs.' }, { status: 400 });
+      }
 
       const result = await updateImportReviewStatus(client, {
         batchId,
         status,
         recordIds,
+        reviewItemIds,
         organizationId: auth.organizationId,
       });
 
-      if (!result.updatedIds.length) {
+      if (!result.updatedIds.length && !result.updatedReviewItemIds?.length) {
         return NextResponse.json({ error: 'No matching staged records found.' }, { status: 404 });
       }
 

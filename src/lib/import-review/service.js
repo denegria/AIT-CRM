@@ -7,6 +7,9 @@ const MAX_IMPORT_REVIEW_LIMIT = 250;
 const DEFAULT_SAMPLE_LIMIT = 10;
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const REVIEWABLE_RECORD_STATUSES = ['pending', 'needs_review'];
+const REVIEWABLE_ITEM_STATUSES = ['pending', 'needs_review'];
+const AIT_SIGNS_DECISION_SHEETS = ['1. INTERESADOS', 'WORK ORDER TERMINADOS Y PAGADOS'];
+const AIT_SIGNS_DECISION_TYPES = ['misc_text', 'note'];
 const QUALITY_FLAG_FILTERS = {
   phone_only: ['phone_only'],
   dead_contact: ['wrong_number', 'disconnected', 'do_not_contact', 'not_current', 'repeated_no_answer'],
@@ -97,6 +100,27 @@ export async function resolveImportReviewBatchId(client, batchId, { organization
   );
   if (preferredPending.rows[0]?.id) return preferredPending.rows[0].id;
 
+  const preferredReviewItemParams = [OPERATOR_REVIEW_SOURCE_TYPES, REVIEWABLE_ITEM_STATUSES];
+  const reviewItemScopeClauses = [];
+  if (organizationId) {
+    preferredReviewItemParams.push(organizationId);
+    reviewItemScopeClauses.push(`and ib.organization_id = $${preferredReviewItemParams.length} `);
+  }
+  if (businessUnitId) {
+    preferredReviewItemParams.push(businessUnitId);
+    reviewItemScopeClauses.push(`and ib.business_unit_id = $${preferredReviewItemParams.length} `);
+  }
+  const preferredReviewItems = await client.query(
+    'select ib.id ' +
+    'from import_batches ib ' +
+    'where ib.source_type = any($1::text[]) ' +
+    'and exists (select 1 from import_review_items iri where iri.import_batch_id = ib.id and iri.review_status = any($2::text[])) ' +
+    reviewItemScopeClauses.join('') +
+    'order by ib.created_at desc limit 1',
+    preferredReviewItemParams,
+  );
+  if (preferredReviewItems.rows[0]?.id) return preferredReviewItems.rows[0].id;
+
   const pendingParams = [REVIEWABLE_RECORD_STATUSES];
   const pendingScopeClauses = [];
   if (organizationId) {
@@ -116,6 +140,26 @@ export async function resolveImportReviewBatchId(client, batchId, { organization
     pendingParams,
   );
   if (anyPending.rows[0]?.id) return anyPending.rows[0].id;
+
+  const anyReviewItemParams = [REVIEWABLE_ITEM_STATUSES];
+  const anyReviewItemScopeClauses = [];
+  if (organizationId) {
+    anyReviewItemParams.push(organizationId);
+    anyReviewItemScopeClauses.push(`and ib.organization_id = $${anyReviewItemParams.length} `);
+  }
+  if (businessUnitId) {
+    anyReviewItemParams.push(businessUnitId);
+    anyReviewItemScopeClauses.push(`and ib.business_unit_id = $${anyReviewItemParams.length} `);
+  }
+  const anyReviewItems = await client.query(
+    'select ib.id ' +
+    'from import_batches ib ' +
+    'where exists (select 1 from import_review_items iri where iri.import_batch_id = ib.id and iri.review_status = any($1::text[])) ' +
+    anyReviewItemScopeClauses.join('') +
+    'order by ib.created_at desc limit 1',
+    anyReviewItemParams,
+  );
+  if (anyReviewItems.rows[0]?.id) return anyReviewItems.rows[0].id;
 
   const fallbackParams = [OPERATOR_REVIEW_SOURCE_TYPES];
   const fallbackScopeClauses = [];
@@ -226,10 +270,14 @@ export async function listImportReviewBatches(client, { organizationId = null, b
         bu.name as business_unit_name,
         ib.created_at,
         count(nr.id)::int as normalized_count,
-        count(nr.id) filter (where nr.status in ('pending', 'needs_review'))::int as reviewable_count
+        (
+          count(distinct nr.id) filter (where nr.status in ('pending', 'needs_review'))
+          + count(distinct iri.id) filter (where iri.review_status in ('pending', 'needs_review'))
+        )::int as reviewable_count
       from import_batches ib
       left join business_units bu on bu.id = ib.business_unit_id
       left join import_normalized_records nr on nr.import_batch_id = ib.id
+      left join import_review_items iri on iri.import_batch_id = ib.id
       ${clauses.length ? `where ${clauses.join(' and ')}` : ''}
       group by ib.id, bu.name
       order by ib.created_at desc
@@ -561,10 +609,174 @@ export async function loadImportReviewRows(client, batchId, { status = 'all', ty
   };
 }
 
+export async function loadImportReviewDecisionRows(client, batchId, { status = 'pending', type = 'all', q = '', limit = DEFAULT_IMPORT_REVIEW_LIMIT, offset = 0 } = {}) {
+  const params = [batchId];
+  const clauses = ['iri.import_batch_id = $1'];
+
+  if (status && status !== 'all') {
+    params.push(status);
+    clauses.push(`iri.review_status = $${params.length}`);
+  }
+
+  if (type && type !== 'all') {
+    params.push(type);
+    clauses.push(`iri.review_type = $${params.length}`);
+  }
+
+  if (q) {
+    const searchFields = [
+      "coalesce(sr.raw_text, '')",
+      "coalesce(sr.source_sheet, '')",
+      "coalesce(iri.review_type, '')",
+      "coalesce(iri.reason, '')",
+      "coalesce(iri.review_status, '')",
+      "coalesce(iri.proposed_resolution_json::text, '')",
+    ];
+    const trimmed = q.trim();
+    const isWordSearch = isWordSearchTerm(trimmed);
+    params.push(isWordSearch ? `(^|[^[:alnum:]])${escapePostgresRegex(trimmed)}` : `%${trimmed}%`);
+    const placeholder = `$${params.length}`;
+    const operator = isWordSearch ? '~*' : 'ilike';
+    clauses.push(`(${searchFields.map((field) => `${field} ${operator} ${placeholder}`).join(' or ')})`);
+  }
+
+  params.push(AIT_SIGNS_DECISION_SHEETS);
+  const aitSignsSheetsPlaceholder = `$${params.length}`;
+  params.push(AIT_SIGNS_DECISION_TYPES);
+  const aitSignsTypesPlaceholder = `$${params.length}`;
+  clauses.push(`
+    (
+      (
+        lower(coalesce(ib.source_name, '')) not like '%ait signs%'
+        and lower(coalesce(ib.file_name, '')) not like '%signs%'
+      )
+      or (
+        sr.source_sheet = any(${aitSignsSheetsPlaceholder}::text[])
+        and iri.review_type = any(${aitSignsTypesPlaceholder}::text[])
+      )
+    )
+  `);
+
+  const whereSql = clauses.join(' and ');
+  const countResult = await client.query(
+    `
+      select count(*)::int as count
+      from import_review_items iri
+      join import_batches ib on ib.id = iri.import_batch_id
+      join import_source_rows sr on sr.id = iri.source_row_id
+      where ${whereSql}
+    `,
+    [...params],
+  );
+  const totalCount = Number(countResult.rows[0]?.count || 0);
+
+  params.push(limit);
+  const limitPlaceholder = `$${params.length}`;
+  params.push(offset);
+  const offsetPlaceholder = `$${params.length}`;
+  const result = await client.query(
+    `
+      select
+        iri.id,
+        iri.source_row_id,
+        iri.review_type,
+        iri.reason,
+        iri.review_status,
+        iri.proposed_resolution_json,
+        iri.created_at,
+        ib.business_unit_id,
+        bu.name as business_unit_name,
+        sr.source_sheet,
+        sr.source_row_number,
+        sr.raw_text,
+        sr.parse_status,
+        coalesce(
+          jsonb_agg(
+            jsonb_build_object(
+              'id', nr.id,
+              'recordType', nr.record_type,
+              'status', nr.status,
+              'confidenceScore', nr.confidence_score
+            )
+            order by nr.record_type asc, nr.created_at desc
+          ) filter (where nr.id is not null),
+          '[]'::jsonb
+        ) as normalized_evidence_json
+      from import_review_items iri
+      join import_batches ib on ib.id = iri.import_batch_id
+      left join business_units bu on bu.id = ib.business_unit_id
+      join import_source_rows sr on sr.id = iri.source_row_id
+      left join import_normalized_records nr on nr.source_row_id = sr.id
+        and nr.import_batch_id = iri.import_batch_id
+      where ${whereSql}
+      group by iri.id, ib.business_unit_id, bu.name, sr.id
+      order by
+        case iri.review_status
+          when 'pending' then 0
+          when 'needs_review' then 1
+          else 2
+        end asc,
+        sr.source_sheet asc,
+        sr.source_row_number asc,
+        iri.created_at desc
+      limit ${limitPlaceholder}
+      offset ${offsetPlaceholder}
+    `,
+    params,
+  );
+
+  return {
+    rows: result.rows.map((row) => ({
+      id: row.id,
+      reviewItemId: row.id,
+      source_row_id: row.source_row_id,
+      record_type: row.review_type,
+      status: row.review_status,
+      confidenceScore: null,
+      confidence_score: null,
+      proposed_contact_json: row.proposed_resolution_json || {},
+      proposed_lead_json: null,
+      proposed_estimate_json: null,
+      proposed_work_order_json: null,
+      proposed_payment_json: null,
+      proposed_note_json: null,
+      business_unit_id: row.business_unit_id,
+      business_unit_name: row.business_unit_name,
+      source_sheet: row.source_sheet,
+      source_row_number: row.source_row_number,
+      raw_text: row.raw_text,
+      parse_status: row.parse_status,
+      created_at: row.created_at,
+      isDecisionRow: true,
+      decisionType: row.review_type,
+      decisionReason: row.reason,
+      proposedResolution: row.proposed_resolution_json || {},
+      normalizedEvidence: row.normalized_evidence_json || [],
+      reviewItems: [{
+        id: row.id,
+        review_type: row.review_type,
+        reason: row.reason,
+        review_status: row.review_status,
+        proposed_resolution_json: row.proposed_resolution_json,
+        created_at: row.created_at,
+      }],
+    })),
+    pagination: {
+      totalCount,
+      limit,
+      offset,
+      returnedCount: result.rows.length,
+      hasPreviousPage: offset > 0,
+      hasNextPage: offset + result.rows.length < totalCount,
+    },
+  };
+}
+
 export async function updateImportReviewStatus(client, {
   batchId,
   status,
   recordIds = [],
+  reviewItemIds = [],
   rowSelector = null,
   reason = null,
   organizationId = null,
@@ -578,8 +790,29 @@ export async function updateImportReviewStatus(client, {
   await client.query('begin');
   try {
     const batch = await loadImportReviewBatch(client, resolvedBatchId);
-    if (status === 'approved' && OPERATOR_REVIEW_SOURCE_TYPES.includes(batch?.sourceType) && !batch?.businessUnitId) {
+    if (status === 'approved' && recordIds.length && OPERATOR_REVIEW_SOURCE_TYPES.includes(batch?.sourceType) && !batch?.businessUnitId) {
       throw new Error('Import batch must have a business unit before approval.');
+    }
+
+    if (reviewItemIds.length) {
+      const reviewItemResult = await updateImportReviewItemsOnly(client, resolvedBatchId, {
+        status,
+        reviewItemIds,
+        reason,
+        organizationId,
+      });
+
+      await client.query('commit');
+      return {
+        batchId: resolvedBatchId,
+        status,
+        updatedIds: [],
+        updatedRecords: [],
+        sourceRowIds: reviewItemResult.sourceRowIds,
+        updatedReviewItems: reviewItemResult.updatedIds.length,
+        updatedReviewItemIds: reviewItemResult.updatedIds,
+        promotedRecords: [],
+      };
     }
 
     const records = await findRecordsForStatusUpdate(client, resolvedBatchId, { recordIds, rowSelector, organizationId });
@@ -653,6 +886,45 @@ export async function updateImportReviewStatus(client, {
     await client.query('rollback');
     throw error;
   }
+}
+
+async function updateImportReviewItemsOnly(client, batchId, {
+  status,
+  reviewItemIds = [],
+  reason = null,
+  organizationId = null,
+}) {
+  const params = [
+    status,
+    batchId,
+    reviewItemIds,
+    reason ? JSON.stringify({ operatorReason: reason }) : null,
+  ];
+  const organizationClause = organizationId ? `and ib.organization_id = $${params.push(organizationId)}` : '';
+  const result = await client.query(
+    `
+      update import_review_items iri
+      set
+        review_status = $1,
+        proposed_resolution_json = case
+          when $4::jsonb is null then proposed_resolution_json
+          else coalesce(proposed_resolution_json, '{}'::jsonb) || $4::jsonb
+        end,
+        reviewed_at = now()
+      from import_batches ib
+      where ib.id = iri.import_batch_id
+        and iri.import_batch_id = $2
+        and iri.id = any($3::uuid[])
+        ${organizationClause}
+      returning iri.id, iri.source_row_id
+    `,
+    params,
+  );
+
+  return {
+    updatedIds: result.rows.map((row) => row.id),
+    sourceRowIds: [...new Set(result.rows.map((row) => row.source_row_id).filter(Boolean))],
+  };
 }
 
 function isPendingFacebookLeadRecord(record) {
