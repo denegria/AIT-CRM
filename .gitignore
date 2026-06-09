@@ -33,6 +33,9 @@ __pycache__/
 !/docs/mis-171-ait-signs-after-final-rough-review-remaining.csv
 !/docs/mis-171-ait-signs-after-final-rough-review-remaining.json
 !/docs/mis-171-ait-signs-after-final-rough-review-remaining.md
+!/docs/mis-176-ait-signs-import-review-decision-action-plan.csv
+!/docs/mis-176-ait-signs-import-review-decision-action-plan.json
+!/docs/mis-176-ait-signs-import-review-decision-action-plan.md
 
 # next.js
 /.next/

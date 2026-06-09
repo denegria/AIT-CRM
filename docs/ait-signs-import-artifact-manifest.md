@@ -11,8 +11,11 @@ The live staging repo keeps only the current actionable Import Review inputs:
 - `docs/mis-171-ait-signs-after-final-rough-review-remaining.csv`
 - `docs/mis-171-ait-signs-after-final-rough-review-remaining.json`
 - `docs/mis-171-ait-signs-after-final-rough-review-remaining.md`
+- `docs/mis-176-ait-signs-import-review-decision-action-plan.csv`
+- `docs/mis-176-ait-signs-import-review-decision-action-plan.json`
+- `docs/mis-176-ait-signs-import-review-decision-action-plan.md`
 
-These describe the 37 pending AIT Signs rows that should be handled by the future Import Review page.
+These describe the 37 pending AIT Signs rows and the current action-plan approval surface for the Import Review page.
 
 ## Archived Evidence
 
