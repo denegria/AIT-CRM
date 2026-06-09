@@ -1,0 +1,671 @@
+{
+  "issue": "MIS-171",
+  "generatedAt": "2026-06-09T16:39:55.866Z",
+  "mode": "dry-run",
+  "businessUnit": "AIT Signs",
+  "safeFingerprint": {
+    "expectedNeonBranchId": "br-broad-hill-aptjpyea",
+    "targetBaseUrl": "https://ait-crm-git-staging-alvaros-projects-efb8ae58.vercel.app",
+    "hostSuffix": "ep-muddy-frost-apgwqat1-pooler.c-7",
+    "currentDatabase": "neondb"
+  },
+  "input": "docs/mis-170-ait-signs-after-rough-approval-remaining-review.json",
+  "fourBrothers": {
+    "decision": "resolved_existing_contact",
+    "sourceKey": "3. 15 SIGNS WORK ORDER#109",
+    "target": "4 BOTHERS IMPROVEMENT",
+    "phone": "9083338110",
+    "reviewItemId": "b2090a55-4338-4a80-b77c-d0712a23ddb0",
+    "resolvedContact": {
+      "id": "4bb9d150-d93b-4515-a92e-3d45115cb7e7",
+      "name": "4 BOTHERS IMPROVEMENT",
+      "company_name": "4 BOTHERS IMPROVEMENT",
+      "phone": null,
+      "email": null
+    },
+    "sourceRow": {
+      "alvaro_decision": "",
+      "validationBucket": "manual_name_only_ambiguous",
+      "workflowRecommendation": "hold_name_only_not_enough",
+      "validationConfidence": "low",
+      "validationBasis": "name_only_match",
+      "reviewerAction": "Name-only match is not approval evidence.",
+      "sourceKey": "3. 15 SIGNS WORK ORDER#109",
+      "sourceSheet": "3. 15 SIGNS WORK ORDER",
+      "sourceRowNumber": 109,
+      "currentStatus": "pending",
+      "sourceClientNames": [
+        "4 BROTHERS HOME IMPROVENT"
+      ],
+      "sourcePhones": [
+        "9083338110"
+      ],
+      "sourceEmails": [],
+      "exactClientMatches": [],
+      "exactContactPointMatches": [],
+      "nameOnlyMatches": [
+        "4 BROTHER",
+        "ROTH"
+      ],
+      "promotedActivity": "",
+      "mis166Recommendation": "hold_ambiguous_attach_target",
+      "mis166Bucket": "manual_review",
+      "mis166Reason": "Possible target exists, but not enough exact evidence for status-only attach.",
+      "target": "4 BROTHER",
+      "workbookIdentityFields": "customer: 4 BROTHERS HOME IMPROVENT; phoneColumn: 908 333 8110; phones: 9083338110",
+      "workbookOriginalText": "92 | 45794.0 | 4 BROTHERS HOME IMPROVENT | 908 333 8110 | 2 YARD SINGS | 0 | 0 | 0 | 0",
+      "workbookPreviousRowText": "91 | 45794.0 | CUBE CARPENTRY | YEISON | TRUCK ROTULATION FULL WRAP YA ESTA HECHO EL MODELO PENDIETNE DEL PRECIO | EN PROCESO DE CORTE E IMPRESION | 2200.0 | 145.75 | 2345.75 | 1100.0 | 1245.75 | 1245.75 | 45801.0 | 0",
+      "workbookNextRowText": "93 | 45796.0 | BRYAN | BRYAN | 848 234 3187 | BANNER 45\"X 38\" $11.88 SQF $ 216 1 FOLLETO SETUP $ 125 BANNER 2\"X3\" $ 125 | YA RICHARD LO TIENE LISTO , SOLO JULITO LO IMPRIME APENAS LLEGUE | 375.0 | 24.84375 | 399.84375 | 400.0 | -0.15625 | -0.15625",
+      "currentDbStatus": "review:pending",
+      "roughMatchBucket": "review_medium_rough_client_match",
+      "topRoughMatch": "GK BROTHERS HOME IMPROVEMENT / 9086446318",
+      "topRoughMatchScore": "0.845",
+      "roughMatchCandidates": [
+        "medium:0.845:4 BROTHERS HOME IMPROVENT->GK BROTHERS HOME IMPROVEMENT / 9086446318",
+        "low:0.682:4 BROTHERS HOME IMPROVENT->4 BOTHERS IMPROVEMENT",
+        "low:0.660:4 BROTHERS HOME IMPROVENT->NEXT STEP HOME IMPROVMENT / 2904053532"
+      ],
+      "remaining": true
+    }
+  },
+  "discardRows": [
+    {
+      "decision": "discard_phone_only_no_identity",
+      "sourceKey": "1. INTERESADOS#41",
+      "reviewItemId": "5788c85f-968a-4cd7-a1a1-1418ef8a6ec6",
+      "currentReviewStatus": "pending",
+      "sourcePhones": [
+        "2156816461"
+      ],
+      "workbookOriginalText": "13 | 215 681 6461"
+    },
+    {
+      "decision": "discard_phone_only_no_identity",
+      "sourceKey": "1. INTERESADOS#42",
+      "reviewItemId": "892f6ff5-cab2-4f94-888d-1df0566319a2",
+      "currentReviewStatus": "pending",
+      "sourcePhones": [
+        "6098478395"
+      ],
+      "workbookOriginalText": "13.0 | 609 847 8395"
+    }
+  ],
+  "importReviewPageRows": [
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "1. INTERESADOS#55",
+      "sourceClientNames": [
+        "MARIA JOSE"
+      ],
+      "sourcePhones": [
+        "9082558983"
+      ],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "20 | LLEGO A AIT | 45363.0 | MARIA JOSE | 908 255 8983 | QUIERE CAMISAS | NUMERO EQUIVOCADO",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#14",
+      "sourceClientNames": [
+        "VICTOR RINCON"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "2 | SI | NO | 40140.0 | VICTOR RINCON | etiquetas | 2 | S | 0 | 0 | 42084.0 | va a venir | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#20",
+      "sourceClientNames": [
+        "FERNANDO VASQUEZ"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [
+        "jerseyoutlets@yahoo.com"
+      ],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "8 | SI | NO | 40288.0 | FERNANDO VASQUEZ | jerseyoutlets@yahoo.com | care plastic | 8 | S | 0 | 0 | 42090.0 | se le va a dar la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#22",
+      "sourceClientNames": [
+        "ROGER ZUNIGA"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "10 | SI | NO | 40380.0 | ROGER ZUNIGA | camisetas y estampado | 10 | S | 0 | 0 | 42084.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#24",
+      "sourceClientNames": [
+        "MR REY"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "12 | SI | NO | 40536.0 | MR REY | raute 22 east | 12 | S | 0 | 0 | 42084.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#34",
+      "sourceClientNames": [
+        "LAUNDRY"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "22 | SI | NO | 40955.0 | LAUNDRY | poust | 22 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#35",
+      "sourceClientNames": [
+        "WENDY SANCHEZ"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "23 | SI | NO | 41107.0 | WENDY SANCHEZ | bussines card | 23 | S | 0 | 0 | 42084.0 | se le envio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#36",
+      "sourceClientNames": [
+        "CESAR ROMERO"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "24 | SI | NO | 41107.0 | CESAR ROMERO | etiquetas | 24 | S | 0 | 0 | 42084.0 | se le envio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#37",
+      "sourceClientNames": [
+        "MAURICIO MADRID"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "25 | SI | NO | 41110.0 | MAURICIO MADRID | impreso | 25 | S | 0 | 0 | 42084.0 | se le envio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#39",
+      "sourceClientNames": [
+        "HECTOR DE LA CRUZ"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "review_low_rough_client_match",
+      "topRoughMatch": "ANGEL DE LA CRUZ / 9082852560",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "27 | SI | NO | 41183.0 | HECTOR DE LA CRUZ | etiquetas | 27 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#40",
+      "sourceClientNames": [
+        "ROSA CLEANING"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "review_low_rough_client_match",
+      "topRoughMatch": "ROLO CLEANING SERVICE",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "28 | SI | NO | 41255.0 | ROSA CLEANING | etiquetas | 28 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#42",
+      "sourceClientNames": [
+        "FINANCIAL EDUCATION"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "review_low_rough_client_match",
+      "topRoughMatch": "FINANCIAL DESIGN / 9089171420",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "30 | SI | NO | 41255.0 | FINANCIAL EDUCATION | stamp | 30 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#43",
+      "sourceClientNames": [
+        "VILMA ORTELLANA"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "31 | SI | NO | 41255.0 | VILMA ORTELLANA | sign | 31 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#44",
+      "sourceClientNames": [
+        "HOYDEE"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "32 | SI | NO | 41255.0 | HOYDEE | design logo | 32 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#50",
+      "sourceClientNames": [
+        "EDUARDO VARQUERO"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "38 | SI | NO | 41310.0 | EDUARDO VARQUERO | tree service | 38 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#51",
+      "sourceClientNames": [
+        "STANLEY"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "39 | SI | NO | 41310.0 | STANLEY | design | 39 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#54",
+      "sourceClientNames": [
+        "KHALID"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "review_low_rough_client_match",
+      "topRoughMatch": "HABID / 9089223906",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "42 | SI | NO | 41314.0 | KHALID | etiquetas | 42 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#55",
+      "sourceClientNames": [
+        "UNITED CREDIT EDUCATION"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "43 | SI | NO | 41314.0 | UNITED CREDIT EDUCATION | auto loans | 43 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#59",
+      "sourceClientNames": [
+        "FLOR TARAZANO"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "47 | SI | NO | 41321.0 | FLOR TARAZANO | cleaning service | 47 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#60",
+      "sourceClientNames": [
+        "ADAM"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "review_low_rough_client_match",
+      "topRoughMatch": "VAN DAM / 9732028836",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "48 | SI | NO | 41321.0 | ADAM | etiquetas | 48 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#64",
+      "sourceClientNames": [
+        "ROFER"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "52 | SI | NO | 41386.0 | ROFER | prestegc autostudio | 52 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#65",
+      "sourceClientNames": [
+        "BYRON JSJ PAINTING"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "53 | SI | NO | 41386.0 | BYRON JSJ PAINTING | sing | 53 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#66",
+      "sourceClientNames": [
+        "IVAN GONZALES"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "review_low_rough_client_match",
+      "topRoughMatch": "ALBA E. GONZALES",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "54 | SI | NO | 41386.0 | IVAN GONZALES | poust | 54 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#68",
+      "sourceClientNames": [
+        "YOGA"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "56 | SI | NO | 41394.0 | YOGA | post windows | 56 | S | 0 | 0 | 42086.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#76",
+      "sourceClientNames": [
+        "SANDRA'S TAXI"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "review_low_rough_client_match",
+      "topRoughMatch": "Sandra Salado / 7326673464",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "64 | SI | NO | 41480.0 | SANDRA'S TAXI | stamp | 64 | S | 0 | 0 | 42086.0 | se le envio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#77",
+      "sourceClientNames": [
+        "NEW CHASQUI TRANSPORTATION"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "65 | SI | NO | 41527.0 | NEW CHASQUI TRANSPORTATION | letrero | 65 | S | 0 | 0 | 42084.0 | se le envio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#78",
+      "sourceClientNames": [
+        "DELGADO"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "66 | SI | NO | 41537.0 | DELGADO | 2 magneticos | 66 | S | 0 | 0 | 42084.0 | se le dejo mensaje | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#80",
+      "sourceClientNames": [
+        "ODELI"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "68 | SI | NO | 41540.0 | ODELI | folleto | 68 | S | 0 | 0 | 42084.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#83",
+      "sourceClientNames": [
+        "ELIECER"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "71 | SI | NO | 41542.0 | ELIECER | b/c | 71 | S | 0 | 0 | 42084.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#85",
+      "sourceClientNames": [
+        "ROLANDO ALDANA"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "73 | SI | NO | 41592.0 | ROLANDO ALDANA | designe of bolant | 73 | S | 0 | 0 | 42084.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#92",
+      "sourceClientNames": [
+        "JOY'S RESTAURANT"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "review_low_rough_client_match",
+      "topRoughMatch": "BOMDIA RESTAURANT / 9087272812",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "80 | SI | NO | 41717.0 | JOY'S RESTAURANT | sign 10x3 | 80 | S | 0 | 0 | 42084.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#103",
+      "sourceClientNames": [
+        "JIMYS BEAUTY"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "91 | SI | NO | 41738.0 | JIMYS BEAUTY | designe | 91 | S | 0 | 0 | 42084.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#105",
+      "sourceClientNames": [
+        "BACOUS"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "93 | SI | NO | 41757.0 | BACOUS | b/c | 93 | S | 0 | 0 | 42084.0 | se le dio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#107",
+      "sourceClientNames": [
+        "OUR NATION CHILDREN"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "95 | SI | NO | 41783.0 | OUR NATION CHILDREN | impreso | 95 | S | 0 | 0 | 42084.0 | se le envio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#110",
+      "sourceClientNames": [
+        "ANIBAL MELO"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "98 | SI | NO | 41801.0 | ANIBAL MELO | b/c | 98 | S | 0 | 0 | 42084.0 | se le envio la informacion | 44981.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#111",
+      "sourceClientNames": [
+        "-------"
+      ],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "99 | SI | NO | 41802.0 | ------- | ------- | post card | 99 | S | 0 | 0 | 44982.0 | SIN NUMERO | ANDREA",
+      "futureAction": "Keep pending for future Import Review page."
+    },
+    {
+      "decision": "set_aside_for_import_review_page",
+      "sourceKey": "WORK ORDER TERMINADOS Y PAGADOS#8",
+      "sourceClientNames": [],
+      "sourcePhones": [],
+      "sourceEmails": [],
+      "roughMatchBucket": "no_rough_match",
+      "topRoughMatch": "",
+      "exactClientMatches": [],
+      "exactEmailMatches": [],
+      "workbookOriginalText": "VIENE A HACER EL PEDIDO | LLAMAR PARA TOMAR PEDIDO",
+      "futureAction": "Keep pending for future Import Review page."
+    }
+  ],
+  "summary": {
+    "fourBrothersDecision": "resolved_existing_contact",
+    "discardRows": 2,
+    "discardByDecision": {
+      "discard_phone_only_no_identity": 2
+    },
+    "importReviewPageRows": 37,
+    "importReviewPageByDecision": {
+      "set_aside_for_import_review_page": 37
+    },
+    "importReviewPageByRoughBucket": {
+      "no_rough_match": 29,
+      "review_low_rough_client_match": 8
+    },
+    "updatedReviewItems": 0,
+    "updatedContactPhones": 0
+  },
+  "updatedReviewItems": [],
+  "updatedContactPhones": []
+}
