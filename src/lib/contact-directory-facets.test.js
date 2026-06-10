@@ -25,6 +25,7 @@ test('contact directory facets expose counted division-aware buckets', () => {
       status: 'Intake',
       phone: '9085551212',
       email: '',
+      assignedTo: 'emp-1',
       isPipelineEligible: false,
       lastTouch: '2026-05-15',
     },
@@ -61,17 +62,18 @@ test('contact directory facets expose counted division-aware buckets', () => {
 
   const groups = buildContactDirectoryFacetGroups(contacts, {
     businessUnitById,
+    currentUserId: 'emp-1',
     now: new Date('2026-06-03T00:00:00Z').getTime(),
   });
 
   assert.equal(facetCount(groups, 'all'), 4);
+  assert.equal(facetCount(groups, 'mine'), 1);
   assert.equal(facetCount(groups, 'active'), 3);
   assert.equal(facetCount(groups, 'no_recent_touch'), 2);
   assert.equal(facetCount(groups, 'missing_phone'), 2);
   assert.equal(facetCount(groups, 'invalid_phone'), 1);
   assert.equal(facetCount(groups, 'signs_source_review'), 1);
   assert.equal(facetCount(groups, 'signs_linked_people'), 1);
-  assert.equal(facetCount(groups, 'signs_active_work'), 1);
   assert.equal(facetCount(groups, 'usa_ready_follow_up'), 1);
   assert.equal(facetCount(groups, 'usa_needs_review'), 1);
 });
@@ -103,7 +105,7 @@ test('contact directory facet filtering isolates sales-cycle buckets', () => {
   ];
 
   assert.deepEqual(
-    filterContactsByDirectoryFacet(contacts, 'usa_suppress_follow_up', { businessUnitById }).map((contact) => contact.id),
+    filterContactsByDirectoryFacet(contacts, 'usa_bad_contact_channel', { businessUnitById }).map((contact) => contact.id),
     ['suppress'],
   );
   assert.deepEqual(

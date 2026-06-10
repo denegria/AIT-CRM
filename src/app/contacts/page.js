@@ -10,16 +10,13 @@ import {
 } from '@/lib/contact-directory-facets';
 import {
   clientDirectoryColumnMode,
-  contactabilityText,
   enrollmentSourceText,
   enrollmentStageText,
-  programText,
 } from '@/lib/contact-directory-view';
 import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import { AlertCircle, UserPlus, UserRoundCheck } from 'lucide-react';
-import { isWorkflowStatusClosed } from '@/lib/sales-workflow';
 
 const empty = {
   name: '',
@@ -100,28 +97,6 @@ function EnrollmentCell({ row }) {
   );
 }
 
-function ProgramCell({ row }) {
-  return (
-    <div className="workflow-cell">
-      <div className="workflow-line">
-        <span>{programText(row)}</span>
-      </div>
-      {row.enrollmentSignals?.inquiry?.age && <div className="workflow-next">Age {row.enrollmentSignals.inquiry.age}</div>}
-    </div>
-  );
-}
-
-function ContactabilityCell({ row }) {
-  return (
-    <div className="workflow-cell">
-      <div className="workflow-line">
-        <span>{contactabilityText(row)}</span>
-      </div>
-      {row.lastTouchText && <div className="workflow-next">{row.lastTouchText}</div>}
-    </div>
-  );
-}
-
 function EnrollmentSourceCell({ row }) {
   return (
     <div className="workflow-cell">
@@ -156,7 +131,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const [drawer, setDrawer] = useState(null); // null | 'new' | contact object
   const [form, setForm] = useState(empty);
   const [statusFilter, setStatusFilter] = useState('All');
-  const [workflowFilter, setWorkflowFilter] = useState('all');
   const [ownerFilter, setOwnerFilter] = useState('all');
   const [directoryFacet, setDirectoryFacet] = useState('all');
   const [facetNow] = useState(() => Date.now());
@@ -199,7 +173,11 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     workflowKey: activeWorkflow?.key,
     isSingleDivisionScope: Boolean(currentScopedBusinessUnitId),
   });
-  const facetContext = useMemo(() => ({ businessUnitById, now: facetNow }), [businessUnitById, facetNow]);
+  const facetContext = useMemo(() => ({
+    businessUnitById,
+    currentUserId: currentUser?.id,
+    now: facetNow,
+  }), [businessUnitById, currentUser?.id, facetNow]);
   const directoryRows = useMemo(() => contactRows.map((contact) => {
     const signalLabels = contactDirectorySignalLabels(contact, facetContext);
     const accountSnapshotText = contact.operationalSummary || [
@@ -215,8 +193,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         contact.linkedPeoplePreview || '',
       ].filter(Boolean).join(' '),
       enrollmentStage: enrollmentStageText(contact),
-      programInterest: programText(contact),
-      contactabilityStatus: contactabilityText(contact),
       inquirySource: enrollmentSourceText(contact),
       signalLabels,
       signalText: signalLabels.join(' '),
@@ -266,8 +242,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     ] : []),
     ...(columnMode === 'ait_usa' ? [
       { key: 'enrollmentStage', label: 'Enrollment', sortable: true, render: (row) => <EnrollmentCell row={row} /> },
-      { key: 'programInterest', label: 'Program', sortable: true, render: (row) => <ProgramCell row={row} /> },
-      { key: 'contactabilityStatus', label: 'Contactability', sortable: true, render: (row) => <ContactabilityCell row={row} /> },
       { key: 'inquirySource', label: 'Source', sortable: true, render: (row) => <EnrollmentSourceCell row={row} /> },
     ] : []),
     ...(columnMode !== 'ait_usa' ? [{ key: 'status', label: 'Status', type: 'badge', sortable: true }] : []),
@@ -277,23 +251,17 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     ...(columnMode === 'contacts' ? [{ key: 'divisionLabel', label: scopeLabel, sortable: true }] : []),
     ...(columnMode === 'contacts' ? [{ key: 'source', label: 'Source', sortable: true }] : []),
     { key: 'lastTouch', label: 'Last Touch', sortable: true },
-    ...(columnMode === 'contacts' ? [{ key: 'lastEdited', label: 'Last Edited', sortable: true }] : []),
+    { key: 'lastEdited', label: 'Last Edited', sortable: true },
   ];
 
   const baseFilteredContacts = useMemo(() => directoryRows.filter((contact) => {
     const statusMatch = statusFilter === 'All' || contact.status === statusFilter;
-    const businessUnit = businessUnitById.get(contact.businessUnitId || contact.primaryBusinessUnitId) || null;
-    const workflowMatch =
-      workflowFilter === 'all' ||
-      (workflowFilter === 'needs_first_outreach' && contact.needsFirstOutreach) ||
-      (workflowFilter === 'unassigned' && !contact.assignedTo) ||
-      (workflowFilter === 'active' && !isWorkflowStatusClosed(contact.status, businessUnit));
     const ownerMatch =
       ownerFilter === 'all' ||
       (ownerFilter === 'unassigned' && !contact.assignedTo) ||
       contact.assignedTo === ownerFilter;
-    return statusMatch && workflowMatch && ownerMatch;
-  }), [businessUnitById, directoryRows, ownerFilter, statusFilter, workflowFilter]);
+    return statusMatch && ownerMatch;
+  }), [directoryRows, ownerFilter, statusFilter]);
   const facetGroups = useMemo(
     () => buildContactDirectoryFacetGroups(baseFilteredContacts, facetContext),
     [baseFilteredContacts, facetContext],
@@ -321,9 +289,9 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       .join(' · ');
   }, [businessUnitById, effectiveDirectoryFacet, filteredContacts]);
   const mobileFieldKeys = columnMode === 'ait_signs'
-    ? ['phone', 'linkedPeopleSummary', 'accountSnapshotText', 'workflow', 'lastTouch']
+    ? ['phone', 'linkedPeopleSummary', 'accountSnapshotText', 'workflow', 'lastTouch', 'lastEdited']
     : columnMode === 'ait_usa'
-      ? ['phone', 'enrollmentStage', 'programInterest', 'contactabilityStatus', 'inquirySource', 'lastTouch']
+      ? ['phone', 'enrollmentStage', 'inquirySource', 'assignedLabel', 'lastTouch', 'lastEdited']
       : ['phone', 'workflow', 'signalText', 'assignedLabel', 'divisionLabel', 'lastTouch', 'lastEdited'];
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
@@ -339,12 +307,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           <select className="input select contacts-filter" style={{width:130, padding:'4px 8px'}} value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
             <option value="All">All Statuses</option>
             {statusOptions.map(s=><option key={s} value={s}>{s}</option>)}
-          </select>
-          <select className="input select contacts-filter contacts-workflow-filter" style={{width:180, padding:'4px 8px'}} value={workflowFilter} onChange={e=>setWorkflowFilter(e.target.value)}>
-            <option value="all">All Workflows</option>
-            <option value="needs_first_outreach">Needs First Outreach</option>
-            <option value="active">Active Pipeline</option>
-            <option value="unassigned">Unassigned</option>
           </select>
           <select className="input select contacts-filter" style={{width:150, padding:'4px 8px'}} value={ownerFilter} onChange={e=>setOwnerFilter(e.target.value)}>
             <option value="all">All Owners</option>
@@ -368,7 +330,9 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
             <div key={group.id} className="contacts-facet-group">
               <div className="contacts-facet-label">{group.label}</div>
               <div className="contacts-facet-pills">
-                {group.facets.map((facet) => (
+                {group.facets
+                  .filter((facet) => facet.count > 0 || facet.id === 'all' || effectiveDirectoryFacet === facet.id)
+                  .map((facet) => (
                   <button
                     key={facet.id}
                     type="button"

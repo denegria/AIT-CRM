@@ -77,6 +77,10 @@ function isActive(contact = {}, options = {}) {
   return contact.isPipelineEligible !== false && !isClosed(contact, options);
 }
 
+function assignedToCurrentUser(contact = {}, options = {}) {
+  return Boolean(options.currentUserId) && contact.assignedTo === options.currentUserId;
+}
+
 function isAitSigns(contact = {}) {
   return contact.workflowKey === WORKFLOW_KEYS.AIT_SIGNS;
 }
@@ -94,12 +98,6 @@ function isSourceReview(contact = {}) {
     contact.isPipelineEligible === false ||
     hasToken(contactTokens(contact), ['source_review', 'import_artifact', 'source_history', 'source_only'])
   );
-}
-
-function hasActiveWork(contact = {}, options = {}) {
-  return isAitSigns(contact) &&
-    !isClosed(contact, options) &&
-    (Number(contact.relatedWorkOrderCount || 0) > 0 || Number(contact.relatedEstimateCount || 0) > 0);
 }
 
 function hasBalanceOrPayment(contact = {}) {
@@ -162,6 +160,7 @@ export const CONTACT_DIRECTORY_FACET_GROUPS = [
     alwaysVisible: true,
     facets: [
       { id: 'all', label: 'All', matches: () => true },
+      { id: 'mine', label: 'Mine', matches: assignedToCurrentUser },
       { id: 'active', label: 'Active', matches: isActive },
       { id: 'needs_first_outreach', label: 'Needs First Outreach', matches: (contact) => Boolean(contact.needsFirstOutreach) },
       { id: 'unassigned', label: 'Unassigned', matches: (contact) => !contact.assignedTo },
@@ -184,7 +183,6 @@ export const CONTACT_DIRECTORY_FACET_GROUPS = [
       { id: 'signs_invoice_payment', label: 'Invoice / Payment', matches: (contact) => isAitSigns(contact) && hasStatus(contact, 'Invoice / Payment') },
       { id: 'signs_source_review', label: 'Source Review', matches: isSourceReview },
       { id: 'signs_linked_people', label: 'Has Linked People', matches: hasLinkedPeople },
-      { id: 'signs_active_work', label: 'Has Active Work', matches: hasActiveWork },
       { id: 'signs_payment_balance', label: 'Balance / Payment', matches: hasBalanceOrPayment },
     ],
   },
@@ -203,10 +201,16 @@ export const CONTACT_DIRECTORY_FACET_GROUPS = [
       },
       { id: 'usa_ready_follow_up', label: 'Ready Follow-up', matches: readyForFollowUp },
       { id: 'usa_needs_review', label: 'Needs Review', matches: needsReview },
-      { id: 'usa_suppress_follow_up', label: 'Suppress Follow-up', matches: suppressFromFollowUp },
       { id: 'usa_repeated_no_answer', label: 'Repeated No Answer', matches: repeatedNoAnswer },
-      { id: 'usa_wrong_disconnected', label: 'Wrong / Disconnected', matches: wrongOrDisconnected },
-      { id: 'usa_do_not_contact', label: 'Do Not Contact', matches: (contact) => isAitUsa(contact) && doNotContact(contact) },
+      {
+        id: 'usa_bad_contact_channel',
+        label: 'Bad Contact Channel',
+        matches: (contact) => isAitUsa(contact) && (
+          suppressFromFollowUp(contact) ||
+          wrongOrDisconnected(contact) ||
+          doNotContact(contact)
+        ),
+      },
     ],
   },
 ];
@@ -278,7 +282,6 @@ export function contactDirectorySignalLabels(contact = {}, options = {}) {
   if (contact.isWrongNumber) add('Wrong Number');
   if (isSourceReview(contact)) add('Source Review');
   if (hasLinkedPeople(contact)) add('Linked People');
-  if (hasActiveWork(contact, options)) add('Active Work');
   if (hasBalanceOrPayment(contact)) add('Balance / Payment');
   for (const pill of contact.processPills || []) add(labelForContactProcessPill(pill));
 
