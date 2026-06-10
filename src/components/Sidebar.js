@@ -22,6 +22,7 @@ const nav = [
 ];
 
 const mobilePrimaryPriority = ['/', '/clients', '/contacts', '/pipeline', '/tasks'];
+const clientViewBusinessUnits = new Set(['AIT Signs', 'AIT USA Institute']);
 
 function isRouteActive(pathname, href) {
   if (href === '/') return pathname === '/';
@@ -54,21 +55,22 @@ export default function Sidebar() {
     window.location.reload();
   };
 
-  const isAitSignsScope = currentBusinessUnitId !== 'all' && currentBusinessUnit?.name === 'AIT Signs';
+  const isClientViewScope = currentBusinessUnitId !== 'all' && clientViewBusinessUnits.has(currentBusinessUnit?.name);
   const scopedNav = useMemo(() => nav.map((item) => {
-    if (item.href === '/contacts' && isAitSignsScope) {
+    if (item.href === '/contacts' && isClientViewScope) {
       return { href: '/clients', label: 'Clients', Icon: Building2 };
     }
     return item;
-  }), [isAitSignsScope]);
+  }), [isClientViewScope]);
 
   const visibleNav = useMemo(() => scopedNav.filter(({ href }) => {
     if (href === '/settings' && !access.canReadSettings) return false;
     if (href === '/comms-ops' && !access.canReadSettings) return false;
     if (href === '/import-review' && !access.canReadImportReview) return false;
-    if ((href === '/reports' || href === '/financials') && role !== 'admin') return false;
+    if (href === '/reports' && !access.canReadReports) return false;
+    if (href === '/financials' && !access.canReadFinancials) return false;
     return true;
-  }), [access.canReadImportReview, access.canReadSettings, role, scopedNav]);
+  }), [access.canReadFinancials, access.canReadImportReview, access.canReadReports, access.canReadSettings, scopedNav]);
 
   const mobileNav = useMemo(() => {
     if (visibleNav.length <= 5) {

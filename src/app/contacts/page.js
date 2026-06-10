@@ -8,6 +8,13 @@ import {
   contactDirectorySignalLabels,
   filterContactsByDirectoryFacet,
 } from '@/lib/contact-directory-facets';
+import {
+  clientDirectoryColumnMode,
+  contactabilityText,
+  enrollmentSourceText,
+  enrollmentStageText,
+  programText,
+} from '@/lib/contact-directory-view';
 import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
@@ -85,18 +92,57 @@ function AccountActivityCell({ row }) {
   return <span>{parts.join(' · ')}</span>;
 }
 
-function businessUnitIdForRecord(record) {
-  return record?.businessUnitId || record?.primaryBusinessUnitId || '';
+function EnrollmentCell({ row }) {
+  return (
+    <div className="workflow-cell">
+      <div className="workflow-line">
+        <UserRoundCheck size={13} />
+        <span>{enrollmentStageText(row)}</span>
+      </div>
+      {row.nextAction && <div className="workflow-next">{row.nextAction}</div>}
+      <TagList tags={row.tags || []} />
+    </div>
+  );
+}
+
+function ProgramCell({ row }) {
+  return (
+    <div className="workflow-cell">
+      <div className="workflow-line">
+        <span>{programText(row)}</span>
+      </div>
+      {row.enrollmentSignals?.inquiry?.age && <div className="workflow-next">Age {row.enrollmentSignals.inquiry.age}</div>}
+    </div>
+  );
+}
+
+function ContactabilityCell({ row }) {
+  return (
+    <div className="workflow-cell">
+      <div className="workflow-line">
+        <span>{contactabilityText(row)}</span>
+      </div>
+      {row.lastTouchText && <div className="workflow-next">{row.lastTouchText}</div>}
+    </div>
+  );
+}
+
+function EnrollmentSourceCell({ row }) {
+  return (
+    <div className="workflow-cell">
+      <div className="workflow-line">
+        <span>{enrollmentSourceText(row)}</span>
+      </div>
+      {row.latestCommentLabel && <div className="workflow-next">{row.latestCommentLabel}</div>}
+    </div>
+  );
 }
 
 export default function ContactsPage({ mode = 'contacts' } = {}) {
   const {
     contacts,
-    allContacts,
     workOrders,
-    allWorkOrders,
     financials,
-    allFinancials,
     addContact,
     updateContact,
     deleteContact,
@@ -123,43 +169,21 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const singularLabel = isClientsMode ? 'Client' : 'Contact';
   const pluralLabel = isClientsMode ? 'Clients' : 'Contacts';
   const routeBase = isClientsMode ? '/clients' : '/contacts';
-  const forcedBusinessUnit = useMemo(
-    () => (isClientsMode ? accessibleBusinessUnits.find((unit) => unit.name === 'AIT Signs') || null : null),
-    [accessibleBusinessUnits, isClientsMode],
-  );
   const directoryContacts = useMemo(() => {
-    if (!isClientsMode) return contacts;
-    const source = allContacts || contacts;
-    if (!forcedBusinessUnit?.id) return [];
-    return source.filter((contact) => businessUnitIdForRecord(contact) === forcedBusinessUnit.id);
-  }, [allContacts, contacts, forcedBusinessUnit, isClientsMode]);
-  const directoryContactIds = useMemo(
-    () => new Set(directoryContacts.map((contact) => contact.id)),
-    [directoryContacts],
-  );
+    return contacts;
+  }, [contacts]);
   const directoryWorkOrders = useMemo(() => {
-    if (!isClientsMode) return workOrders;
-    const source = allWorkOrders || workOrders;
-    if (!forcedBusinessUnit?.id) return [];
-    return source.filter((order) => (
-      businessUnitIdForRecord(order) === forcedBusinessUnit.id ||
-      directoryContactIds.has(order.contactId)
-    ));
-  }, [allWorkOrders, directoryContactIds, forcedBusinessUnit, isClientsMode, workOrders]);
+    return workOrders;
+  }, [workOrders]);
   const directoryFinancials = useMemo(() => {
-    if (!isClientsMode) return financials;
-    const source = allFinancials || financials;
-    if (!forcedBusinessUnit?.id) return [];
-    return source.filter((record) => (
-      businessUnitIdForRecord(record) === forcedBusinessUnit.id ||
-      directoryContactIds.has(record.contactId)
-    ));
-  }, [allFinancials, directoryContactIds, financials, forcedBusinessUnit, isClientsMode]);
-  const directoryBusinessUnitId = forcedBusinessUnit?.id || currentBusinessUnitId;
-  const directoryBusinessUnit = forcedBusinessUnit || currentBusinessUnit;
+    return financials;
+  }, [financials]);
+  const directoryBusinessUnitId = currentBusinessUnitId;
+  const directoryBusinessUnit = currentBusinessUnit;
 
   const canWrite = access.canWriteCrm;
   const {
+    activeWorkflow,
     businessUnitById,
     contactRows,
     currentScopedBusinessUnitId,
@@ -174,6 +198,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     accessibleBusinessUnits,
     currentBusinessUnitId: directoryBusinessUnitId,
     currentBusinessUnit: directoryBusinessUnit,
+  });
+  const columnMode = clientDirectoryColumnMode({
+    isClientsMode,
+    workflowKey: activeWorkflow?.key,
   });
   const facetContext = useMemo(() => ({ businessUnitById, now: facetNow }), [businessUnitById, facetNow]);
   const directoryRows = useMemo(() => contactRows.map((contact) => {
@@ -191,6 +219,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         contact.linkedPeopleCount ? `${contact.linkedPeopleCount} people` : '',
         contact.linkedPeoplePreview || '',
       ].filter(Boolean).join(' '),
+      enrollmentStage: enrollmentStageText(contact),
+      programInterest: programText(contact),
+      contactabilityStatus: contactabilityText(contact),
+      inquirySource: enrollmentSourceText(contact),
       signalLabels,
       signalText: signalLabels.join(' '),
     };
@@ -233,9 +265,15 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     { key: 'name', label: isClientsMode ? 'Client' : 'Name', sortable: true, editable: true },
     { key: 'email', label: 'Email', sortable: true, editable: true },
     { key: 'phone', label: 'Phone', editable: true },
-    ...(isClientsMode ? [
+    ...(columnMode === 'ait_signs' ? [
       { key: 'linkedPeopleSummary', label: 'People', sortable: true, render: (row) => <PeopleCell row={row} /> },
       { key: 'accountActivityText', label: 'Activity', sortable: false, render: (row) => <AccountActivityCell row={row} /> },
+    ] : []),
+    ...(columnMode === 'ait_usa' ? [
+      { key: 'enrollmentStage', label: 'Enrollment', sortable: true, render: (row) => <EnrollmentCell row={row} /> },
+      { key: 'programInterest', label: 'Program', sortable: true, render: (row) => <ProgramCell row={row} /> },
+      { key: 'contactabilityStatus', label: 'Contactability', sortable: true, render: (row) => <ContactabilityCell row={row} /> },
+      { key: 'inquirySource', label: 'Source', sortable: true, render: (row) => <EnrollmentSourceCell row={row} /> },
     ] : []),
     { key: 'status', label: 'Status', type: 'badge', sortable: true },
     { key: 'workflow', label: 'Next Step', sortable: false, render: (row) => <WorkflowCell row={row} /> },
@@ -289,7 +327,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   }, [businessUnitById, effectiveDirectoryFacet, filteredContacts]);
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
-  if (isClientsMode && !forcedBusinessUnit) return <div className="empty-state">Clients unavailable for this user.</div>;
 
   return (
     <div className="fade-in">

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { PIPELINE_STATUSES, workflowForBusinessUnit } from '@/lib/sales-workflow';
 import { buildContactDetailViewModel } from '@/lib/contact-detail-view-model';
+import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
 
 const SNAPSHOT_ICONS = {
   estimate: BriefcaseBusiness,
@@ -293,6 +294,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     businessUnit: contactBusinessUnit,
     counts: contactRecordCounts,
   });
+  const showLinkedPeoplePanel = isClientMode && detailView.workflowKey === WORKFLOW_KEYS.AIT_SIGNS;
   const showWorkOrdersTab = detailView.tabs.showWorkOrders;
   const showFinancialsTab = detailView.tabs.showFinancials;
   const renderedActiveTab =
@@ -384,7 +386,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   }, [contact?.id, dataSource, timelineReloadKey]);
 
   useEffect(() => {
-    if (!isClientMode || !contact?.id || dataSource !== 'postgres') {
+    if (!showLinkedPeoplePanel || !contact?.id || dataSource !== 'postgres') {
       return undefined;
     }
     let cancelled = false;
@@ -416,7 +418,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [contact?.id, dataSource, isClientMode]);
+  }, [contact?.id, dataSource, showLinkedPeoplePanel]);
 
   useEffect(() => {
     if (!contact?.id || dataSource !== 'postgres') return undefined;
@@ -552,7 +554,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       });
   };
 
-  if (loaded && (!contact || (isClientMode && contactBusinessUnit?.name !== 'AIT Signs'))) {
+  if (loaded && !contact) {
     return <div className="empty-state">{singularLabel} not found</div>;
   }
 
@@ -708,7 +710,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             )}
           </div>
 
-          {isClientMode && (
+          {showLinkedPeoplePanel && (
             <div className={s.peoplePanel} aria-label="Linked people">
               <div className={s.peopleHeader}>
                 <div>

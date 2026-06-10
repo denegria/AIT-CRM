@@ -17,7 +17,7 @@ export default function FinancialsPage() {
     deleteFinancial,
     contacts,
     loaded,
-    role,
+    access,
     accessibleBusinessUnits,
     currentBusinessUnitId,
     currentBusinessUnit,
@@ -28,6 +28,7 @@ export default function FinancialsPage() {
   const [tab, setTab] = useState('Invoice');
   const [drawer, setDrawer] = useState(null);
   const [form, setForm] = useState(emptyForm);
+  const canWriteFinancials = Boolean(access?.canWriteFinancials);
 
   const [selectedIds, setSelectedIds] = useState([]);
 
@@ -47,15 +48,17 @@ export default function FinancialsPage() {
   const filtered = useMemo(() => financials.filter(f => f.type === tab), [financials, tab]);
 
   const openNew = () => {
+    if (!canWriteFinancials) return;
     const prefix = tab === 'Invoice' ? 'INV' : tab === 'Estimate' ? 'EST' : 'REC';
     const count = financials.filter(f => f.type === tab).length + 1;
     const businessUnitId = currentBusinessUnitId !== 'all' && currentBusinessUnitId !== 'unassigned' ? currentBusinessUnitId : accessibleBusinessUnits[0]?.id || '';
     setForm({ ...emptyForm, type: tab, number: `${prefix}-${String(count).padStart(3,'0')}`, businessUnitId, date: new Date().toISOString().slice(0,10) });
     setDrawer('new');
   };
-  const openEdit = (row) => { setForm({ ...row }); setDrawer(row); };
+  const openEdit = (row) => { if (!canWriteFinancials) return; setForm({ ...row }); setDrawer(row); };
   const close = () => setDrawer(null);
   const save = () => {
+    if (!canWriteFinancials) return;
     if (!form.client.trim()) return;
     const total = form.items.reduce((s, it) => s + (it.qty||1)*(it.rate||0), 0);
     const data = { ...form, amount: total };
@@ -91,7 +94,7 @@ export default function FinancialsPage() {
   if (tab !== 'Receipt') columns.splice(4, 0, { key: 'dueDate', label: 'Due Date', sortable: true });
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
-  if (role !== 'admin') return <div className="empty-state">Financials are admin-only in v1.</div>;
+  if (!access.canReadFinancials) return <div className="empty-state">Financials access is required.</div>;
 
   return (
     <div className="fade-in">
@@ -100,7 +103,7 @@ export default function FinancialsPage() {
           <h1 className="page-title">Financials</h1>
           <p className="page-subtitle">Manage estimates, invoices, and receipts for {currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}</p>
         </div>
-        <button className="btn btn-primary" onClick={openNew}>+ New {tab}</button>
+        {canWriteFinancials && <button className="btn btn-primary" onClick={openNew}>+ New {tab}</button>}
       </div>
 
       <div className="card" style={{marginBottom:16}}>
@@ -172,16 +175,16 @@ export default function FinancialsPage() {
           selectedIds={selectedIds}
           onSelect={setSelectedIds}
           toolbarExtra={
-            role === 'admin' && selectedIds.length > 0 && (
+            selectedIds.length > 0 && (
               <button className="btn fade-in" onClick={exportSelected} data-tooltip="Sample feature — exports selected rows to CSV">
                 Export Selected ({selectedIds.length})
               </button>
             )
           }
           actions={[
-            { label: 'Edit', onClick: openEdit },
+            ...(canWriteFinancials ? [{ label: 'Edit', onClick: openEdit }] : []),
             { label: 'PDF', onClick: genPDF },
-            { label: 'Delete', onClick: (r) => { deleteFinancial(r.id); toast('Record deleted', 'error'); }, danger: true },
+            ...(canWriteFinancials ? [{ label: 'Delete', onClick: (r) => { deleteFinancial(r.id); toast('Record deleted', 'error'); }, danger: true }] : []),
           ]}
         />
       </div>

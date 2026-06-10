@@ -8,7 +8,7 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 const SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 export default function ReportsPage() {
-  const { financials, contacts, workOrders, businessUnits, loaded, role, currentBusinessUnit, scopeLabel } = useCRM();
+  const { financials, contacts, workOrders, businessUnits, loaded, access, currentBusinessUnit, scopeLabel } = useCRM();
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
 
   const report = useMemo(() => {
@@ -74,7 +74,7 @@ export default function ReportsPage() {
   };
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
-  if (role !== 'admin') return <div className="empty-state">Reports are admin-only in v1.</div>;
+  if (!access.canReadReports) return <div className="empty-state">Reports access is required.</div>;
 
   return (
     <div className="fade-in">
@@ -87,7 +87,7 @@ export default function ReportsPage() {
           <select className="input select" style={{width:'auto'}} value={selectedMonth} onChange={e => setSelectedMonth(Number(e.target.value))}>
             {MONTHS.map((m, i) => <option key={i} value={i}>{m}</option>)}
           </select>
-          {role === 'admin' && <button className="btn" onClick={exportCSV} data-tooltip="Sample feature — exports monthly report to CSV">Export CSV</button>}
+          <button className="btn" onClick={exportCSV} data-tooltip="Sample feature — exports monthly report to CSV">Export CSV</button>
           <button className="btn btn-primary" onClick={() => window.print()}>Print Report</button>
         </div>
       </div>

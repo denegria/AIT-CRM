@@ -21,9 +21,14 @@ export default function Dashboard() {
     loaded,
     dataSource,
     importStaging,
+    currentUser,
+    access,
     currentBusinessUnit,
     scopeLabel,
   } = useCRM();
+  const currentUserId = currentUser?.id || 'emp-1';
+  const isAdminView = role === 'admin' || Boolean(currentUser?.canAccessAllBusinessUnits);
+  const canReadFinancials = Boolean(access?.canReadFinancials);
 
   const kpis = useMemo(() => {
     const invoices = financials.filter(f => f.type === 'Invoice');
@@ -34,13 +39,14 @@ export default function Dashboard() {
     const newLeads = contacts.filter(c => c.status === 'New Lead').length;
     
     // Employee Specific
-    const myTasksCount = tasks.filter(t => t.assignedTo === 'emp-1' && !t.completed).length;
+    const myTasksCount = tasks.filter(t => (t.ownerUserId || t.assignedTo) === currentUserId && !t.completed).length;
     const needsFollowUp = contacts.filter(c => c.status !== 'Won' && c.status !== 'Lost').length;
     const pendingInvoices = invoices.filter(f => f.status === 'Pending').length;
-    const assignedWOs = workOrders.filter(w => w.assignedTo === 'emp-1' && w.status !== 'Completed').length;
+    const assignedWOs = workOrders.filter(w => w.assignedTo === currentUserId && w.status !== 'Completed').length;
+    const myPipeline = contacts.filter(c => c.assignedTo === currentUserId && c.status !== 'Won' && c.status !== 'Lost').length;
 
-    return { totalRevenue, pipeline, totalInvoiced, activeWOs, newLeads, myTasksCount, needsFollowUp, pendingInvoices, assignedWOs };
-  }, [financials, workOrders, contacts, tasks]);
+    return { totalRevenue, pipeline, totalInvoiced, activeWOs, newLeads, myTasksCount, needsFollowUp, pendingInvoices, assignedWOs, myPipeline };
+  }, [financials, workOrders, contacts, tasks, currentUserId]);
 
   const statusData = useMemo(() => {
     const counts = {};
@@ -66,9 +72,9 @@ export default function Dashboard() {
   }, [kpis.totalRevenue]);
 
   const myTasks = useMemo(() => {
-    if (role === 'admin') return tasks;
-    return tasks.filter(t => t.assignedTo === 'emp-1');
-  }, [tasks, role]);
+    if (isAdminView) return tasks;
+    return tasks.filter(t => (t.ownerUserId || t.assignedTo) === currentUserId);
+  }, [tasks, isAdminView, currentUserId]);
 
   const empProgress = useMemo(() => {
     return employees.map(emp => {
@@ -105,10 +111,10 @@ export default function Dashboard() {
             {' '}· {currentBusinessUnit?.name || `All ${scopeLabel}`}
           </p>
         </div>
-        <span className={`badge ${role==='admin'?'badge-won':'badge-contacted'}`} style={{fontSize:'var(--text-sm)',padding:'4px 12px'}}>{role==='admin'?'Admin View':'Employee View'}</span>
+        <span className={`badge ${isAdminView ? 'badge-won' : 'badge-contacted'}`} style={{fontSize:'var(--text-sm)',padding:'4px 12px'}}>{isAdminView ? 'Admin View' : 'Employee View'}</span>
       </div>
 
-      {dataSource === 'postgres' && importStaging?.latestBatch && (
+      {dataSource === 'postgres' && access.canReadImportReview && importStaging?.latestBatch && (
         <div className="card" style={{marginBottom:20, padding:16}}>
           <div className="flex-between" style={{alignItems:'flex-start', gap:16}}>
             <div>
@@ -143,7 +149,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {role === 'admin' ? (
+      {isAdminView ? (
         <div className="dashboard-kpi-grid" style={{marginBottom:20}}>
           <KPICard label="Total Revenue" value={`$${kpis.totalRevenue.toLocaleString()}`} change="12% vs last month" trend="up" />
           <KPICard label="Pipeline Value" value={`$${kpis.pipeline.toLocaleString()}`} change={`${financials.filter(f=>f.type==='Estimate'&&f.status==='Pending').length} estimates`} trend="up" />
@@ -154,7 +160,9 @@ export default function Dashboard() {
         <div className="dashboard-kpi-grid" style={{marginBottom:20}}>
           <KPICard label="My Active Tasks" value={kpis.myTasksCount} change="Due soon" trend="up" />
           <KPICard label="Needs Follow Up" value={kpis.needsFollowUp} change="Active leads" trend="up" />
-          <KPICard label="Invoices Pending" value={kpis.pendingInvoices} change="Action required" trend="down" />
+          {canReadFinancials
+            ? <KPICard label="Invoices Pending" value={kpis.pendingInvoices} change="Action required" trend="down" />
+            : <KPICard label="My Pipeline" value={kpis.myPipeline} change="Assigned active leads" trend="up" />}
           <KPICard label="Assigned Work Orders" value={kpis.assignedWOs} change="In progress" trend="up" />
         </div>
       )}
@@ -184,7 +192,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {role === 'admin' && (
+      {isAdminView && (
         <div className="dashboard-panel-grid" style={{marginBottom:20}}>
           <div className="card">
             <div className="card-title">Revenue Trend</div>
@@ -202,7 +210,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {role === 'admin' && (
+      {isAdminView && (
         <div className="card">
           <div className="card-title">Employee Progress</div>
           <div className="responsive-table">
