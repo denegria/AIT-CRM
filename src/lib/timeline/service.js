@@ -359,9 +359,9 @@ function importedNoteInterpretation(value = '') {
       title: 'Audit / Source Cleanup',
       text: cleanupAuditSummary(text) || 'Duplicate customer/contact rows were folded into this account.',
       hint: {
-        category: TIMELINE_CATEGORIES.NOTE,
+        category: TIMELINE_CATEGORIES.IMPORT,
         categoryLabel: 'Audit / Source Cleanup',
-        priority: 'primary',
+        priority: 'secondary',
         isImported: false,
         sourceKind: 'Cleanup audit',
         rawText: text,

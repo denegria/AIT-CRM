@@ -101,6 +101,17 @@ function timelineCategory(item) {
   return item.presentation?.category || item.type || 'activity';
 }
 
+function isSourceDetailTimelineItem(item) {
+  const category = timelineCategory(item);
+  const sourceKind = item.presentation?.provenance?.sourceKind || '';
+  if (category === 'import') return true;
+  return ['Cleanup audit', 'Imported workbook note'].includes(sourceKind);
+}
+
+function timelineFilterCategory(item) {
+  return isSourceDetailTimelineItem(item) ? 'import' : timelineCategory(item);
+}
+
 function timelineCategoryLabel(item) {
   return item.presentation?.categoryLabel || item.typeLabel || item.type || 'Activity';
 }
@@ -298,7 +309,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const showWorkOrdersTab = detailView.tabs.showWorkOrders;
   const showFinancialsTab = detailView.tabs.showFinancials;
   const renderedActiveTab =
-    (!showWorkOrdersTab && activeTab === 'workorders') || (!showFinancialsTab && activeTab === 'financials')
+    (!showLinkedPeoplePanel && activeTab === 'contacts') ||
+    (!showWorkOrdersTab && activeTab === 'workorders') ||
+    (!showFinancialsTab && activeTab === 'financials')
       ? 'timeline'
       : activeTab;
   const assignedEmployee = useMemo(() => employees.find(e => e.id === contact?.assignedTo), [employees, contact]);
@@ -316,15 +329,15 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const timelineSource = hasMatchingServerTimeline && serverTimeline.items ? serverTimeline.items : fallbackTimeline;
   const cleanupAudits = useMemo(() => timelineSource.map(timelineCleanupAudit).filter(Boolean).slice(0, 3), [timelineSource]);
   const timelineCounts = useMemo(() => timelineSource.reduce((counts, item) => {
-    counts.all += 1;
-    const category = timelineCategory(item);
+    const category = timelineFilterCategory(item);
+    if (!isSourceDetailTimelineItem(item)) counts.all += 1;
     counts[category] = (counts[category] || 0) + 1;
     return counts;
   }, { all: 0 }), [timelineSource]);
   const renderedTimelineFilter = detailView.timelineFilters.some((filter) => filter.value === timelineFilter) ? timelineFilter : 'all';
   const timeline = useMemo(() => {
-    if (renderedTimelineFilter === 'all') return timelineSource;
-    return timelineSource.filter((item) => timelineCategory(item) === renderedTimelineFilter);
+    if (renderedTimelineFilter === 'all') return timelineSource.filter((item) => !isSourceDetailTimelineItem(item));
+    return timelineSource.filter((item) => timelineFilterCategory(item) === renderedTimelineFilter);
   }, [renderedTimelineFilter, timelineSource]);
   const hasMatchingServerConversations = serverConversations.contactId === contact?.id && serverConversations.reloadKey === conversationReloadKey;
   const conversationMessages = hasMatchingServerConversations && serverConversations.items ? serverConversations.items : [];
@@ -350,6 +363,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     : hasMatchingServerConversations && serverConversations.error
       ? 'error'
       : 'idle';
+  const currentLinkedPeople = linkedPeople.contactId === contact?.id
+    ? linkedPeople
+    : { contactId: contact?.id || '', items: [], loading: showLinkedPeoplePanel && dataSource === 'postgres', error: '' };
 
   useEffect(() => {
     if (!contact?.id || dataSource !== 'postgres') return undefined;
@@ -667,7 +683,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             </div>
           )}
 
-          {!!cleanupAudits.length && (
+          {access.canReadImportReview && !!cleanupAudits.length && (
             <div className={s.cleanupSummary} aria-label="Cleanup provenance">
               <div className={s.cleanupSummaryHeader}>
                 <Archive size={15} />
@@ -710,48 +726,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             )}
           </div>
 
-          {showLinkedPeoplePanel && (
-            <div className={s.peoplePanel} aria-label="Linked people">
-              <div className={s.peopleHeader}>
-                <div>
-                  <strong>Linked People</strong>
-                  <span>{linkedPeople.loading ? 'Loading' : `${linkedPeople.items.length} saved`}</span>
-                </div>
-                {access.canWriteCrm && (
-                  <button className="btn btn-sm" type="button" onClick={() => openPersonModal()}>
-                    <Plus size={14} /> Add
-                  </button>
-                )}
-              </div>
-              {linkedPeople.error && <div className={s.peopleEmpty}>{linkedPeople.error}</div>}
-              {!linkedPeople.error && linkedPeople.items.length === 0 && !linkedPeople.loading && (
-                <div className={s.peopleEmpty}>No linked people yet.</div>
-              )}
-              <div className={s.peopleList}>
-                {linkedPeople.items.map((person) => (
-                  <div key={person.id} className={s.personCard}>
-                    <div className={s.personTopline}>
-                      <strong>{person.name}</strong>
-                      {person.isPrimary && <span>Primary</span>}
-                    </div>
-                    {person.role && <div className={s.personRole}>{person.role}</div>}
-                    <div className={s.personMethods}>
-                      {person.phone && <a href={phoneHref(person.phone)}><Phone size={13} /> {person.phone}</a>}
-                      {person.email && <a href={`mailto:${person.email}`}><Mail size={13} /> {person.email}</a>}
-                    </div>
-                    {person.notes && <div className={s.personNotes}>{person.notes}</div>}
-                    {access.canWriteCrm && (
-                      <div className={s.personActions}>
-                        <button type="button" onClick={() => openPersonModal(person)}>Edit</button>
-                        <button type="button" onClick={() => deletePerson(person)}>Remove</button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
           {!!detailView.highlights?.length && (
             <div className={s.highlightGrid} aria-label={`${detailView.profileTitle} summary`}>
               {detailView.highlights.map((item) => (
@@ -783,6 +757,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           <div className={s.contentTabs}>
             <button className={`${s.contentTab} ${renderedActiveTab === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')}>Timeline</button>
             <button className={`${s.contentTab} ${renderedActiveTab === 'conversations' ? s.active : ''}`} onClick={() => setActiveTab('conversations')}>Conversations ({conversationMessages.length})</button>
+            {showLinkedPeoplePanel && (
+              <button className={`${s.contentTab} ${renderedActiveTab === 'contacts' ? s.active : ''}`} onClick={() => setActiveTab('contacts')}>Contacts ({currentLinkedPeople.items.length})</button>
+            )}
             {showWorkOrdersTab && (
               <button className={`${s.contentTab} ${renderedActiveTab === 'workorders' ? s.active : ''}`} onClick={() => setActiveTab('workorders')}>{detailView.tabs.workOrdersLabel} ({contactWorkOrders.length})</button>
             )}
@@ -952,6 +929,48 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   {timeline.length === 0 && (
                     <div className={s.timelineEmpty}>{timelineEmptyText(renderedTimelineFilter, detailView.timelineFilters)}</div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {renderedActiveTab === 'contacts' && showLinkedPeoplePanel && (
+              <div className={s.peoplePanel} aria-label="Linked contacts">
+                <div className={s.peopleHeader}>
+                  <div>
+                    <strong>Contacts</strong>
+                    <span>{currentLinkedPeople.loading ? 'Loading' : `${currentLinkedPeople.items.length} saved`}</span>
+                  </div>
+                  {access.canWriteCrm && (
+                    <button className="btn btn-sm" type="button" onClick={() => openPersonModal()}>
+                      <Plus size={14} /> Add
+                    </button>
+                  )}
+                </div>
+                {currentLinkedPeople.error && <div className={s.peopleEmpty}>{currentLinkedPeople.error}</div>}
+                {!currentLinkedPeople.error && currentLinkedPeople.items.length === 0 && !currentLinkedPeople.loading && (
+                  <div className={s.peopleEmpty}>No contacts linked to this client yet.</div>
+                )}
+                <div className={s.peopleList}>
+                  {currentLinkedPeople.items.map((person) => (
+                    <div key={person.id} className={s.personCard}>
+                      <div className={s.personTopline}>
+                        <strong>{person.name}</strong>
+                        {person.isPrimary && <span>Primary</span>}
+                      </div>
+                      {person.role && <div className={s.personRole}>{person.role}</div>}
+                      <div className={s.personMethods}>
+                        {person.phone && <a href={phoneHref(person.phone)}><Phone size={13} /> {person.phone}</a>}
+                        {person.email && <a href={`mailto:${person.email}`}><Mail size={13} /> {person.email}</a>}
+                      </div>
+                      {person.notes && <div className={s.personNotes}>{person.notes}</div>}
+                      {access.canWriteCrm && (
+                        <div className={s.personActions}>
+                          <button type="button" onClick={() => openPersonModal(person)}>Edit</button>
+                          <button type="button" onClick={() => deletePerson(person)}>Remove</button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             )}

@@ -315,13 +315,13 @@ test('buildContactTimeline demotes raw imported notes behind source details', ()
   assert.equal(rawNote.presentation.provenance.sourceKind, 'Imported workbook note');
   assert.match(rawNote.presentation.provenance.rawText, /BLUE MOUNTAIN/);
   assert.equal(cleanupNote.title, 'Audit / Source Cleanup');
-  assert.equal(cleanupNote.presentation.category, 'note');
+  assert.equal(cleanupNote.presentation.category, 'import');
   assert.equal(cleanupNote.presentation.categoryLabel, 'Audit / Source Cleanup');
   assert.equal(cleanupNote.presentation.provenance.sourceKind, 'Cleanup audit');
   assert.equal(mis97CleanupNote.title, 'Audit / Source Cleanup');
   assert.match(mis97CleanupNote.text, /Retained BLUE MOUNTAIN/);
   assert.match(mis97CleanupNote.text, /Merged aliases: MARK BLUE MOUNTAIN/);
-  assert.equal(mis97CleanupNote.presentation.category, 'note');
+  assert.equal(mis97CleanupNote.presentation.category, 'import');
   assert.equal(mis97CleanupNote.presentation.provenance.sourceKind, 'Cleanup audit');
   assert.equal(mis125CleanupNote.title, 'Audit / Source Cleanup');
   assert.match(mis125CleanupNote.text, /Retained BRENMA TREE SERVICE/);
