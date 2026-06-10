@@ -202,6 +202,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const columnMode = clientDirectoryColumnMode({
     isClientsMode,
     workflowKey: activeWorkflow?.key,
+    isSingleDivisionScope: Boolean(currentScopedBusinessUnitId),
   });
   const facetContext = useMemo(() => ({ businessUnitById, now: facetNow }), [businessUnitById, facetNow]);
   const directoryRows = useMemo(() => contactRows.map((contact) => {

@@ -22,7 +22,7 @@ const nav = [
 ];
 
 const mobilePrimaryPriority = ['/', '/clients', '/contacts', '/pipeline', '/tasks'];
-const clientViewBusinessUnits = new Set(['AIT Signs', 'AIT USA Institute']);
+const clientViewBusinessUnits = new Set(['AIT Signs']);
 
 function isRouteActive(pathname, href) {
   if (href === '/') return pathname === '/';

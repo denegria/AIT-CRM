@@ -11,6 +11,7 @@ import {
 
 test('client directory column mode follows workflow only in clients mode', () => {
   assert.equal(clientDirectoryColumnMode({ isClientsMode: false, workflowKey: 'ait_usa' }), 'contacts');
+  assert.equal(clientDirectoryColumnMode({ isClientsMode: false, workflowKey: 'ait_usa', isSingleDivisionScope: true }), 'ait_usa');
   assert.equal(clientDirectoryColumnMode({ isClientsMode: true, workflowKey: 'ait_usa' }), 'ait_usa');
   assert.equal(clientDirectoryColumnMode({ isClientsMode: true, workflowKey: 'ait_signs' }), 'ait_signs');
   assert.equal(clientDirectoryColumnMode({ isClientsMode: true, workflowKey: 'default' }), 'ait_signs');
@@ -43,4 +44,3 @@ test('AIT USA row labels fall back to readable defaults', () => {
   assert.equal(contactabilityText({}), 'Reachable');
   assert.equal(enrollmentSourceText({}), 'Source not set');
 });
-

@@ -44,9 +44,8 @@ export function enrollmentSourceText(row = {}) {
     'Source not set';
 }
 
-export function clientDirectoryColumnMode({ isClientsMode = false, workflowKey = '' } = {}) {
-  if (!isClientsMode) return 'contacts';
+export function clientDirectoryColumnMode({ isClientsMode = false, workflowKey = '', isSingleDivisionScope = false } = {}) {
+  if (!isClientsMode && !(isSingleDivisionScope && workflowKey === WORKFLOW_KEYS.AIT_USA)) return 'contacts';
   if (workflowKey === WORKFLOW_KEYS.AIT_USA) return 'ait_usa';
   return 'ait_signs';
 }
-
