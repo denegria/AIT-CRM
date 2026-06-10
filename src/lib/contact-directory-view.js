@@ -44,6 +44,52 @@ export function enrollmentSourceText(row = {}) {
     'Source not set';
 }
 
+export function lifecycleBucket(row = {}) {
+  const workflowKey = clean(row.workflowKey);
+  if (workflowKey === WORKFLOW_KEYS.AIT_SIGNS) {
+    if (row.isPipelineEligible === false) {
+      return {
+        label: 'Source history',
+        tone: 'muted',
+        detail: 'Hidden from active pipeline',
+      };
+    }
+    if (row.hasRecentFollowUpTouch) {
+      return {
+        label: '2026 follow-up',
+        tone: 'success',
+        detail: clean(row.lastFollowUpTouch),
+      };
+    }
+    if (clean(row.lastTouch) >= '2025-01-01') {
+      return {
+        label: 'Current work',
+        tone: 'active',
+        detail: clean(row.lastTouch),
+      };
+    }
+    return {
+      label: 'Active pipeline',
+      tone: 'active',
+      detail: '',
+    };
+  }
+
+  if (workflowKey === WORKFLOW_KEYS.AIT_USA) {
+    return {
+      label: clean(row.currentStage) || clean(row.status) || 'Enrollment',
+      tone: 'active',
+      detail: clean(row.lastTouch),
+    };
+  }
+
+  return {
+    label: clean(row.status) || 'Active',
+    tone: 'active',
+    detail: clean(row.lastTouch),
+  };
+}
+
 export function clientDirectoryColumnMode({ isClientsMode = false, workflowKey = '', isSingleDivisionScope = false } = {}) {
   if (!isClientsMode && !(isSingleDivisionScope && workflowKey === WORKFLOW_KEYS.AIT_USA)) return 'contacts';
   if (workflowKey === WORKFLOW_KEYS.AIT_USA) return 'ait_usa';

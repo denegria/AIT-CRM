@@ -6,6 +6,7 @@ import {
   contactabilityText,
   enrollmentSourceText,
   enrollmentStageText,
+  lifecycleBucket,
   programText,
 } from './contact-directory-view.js';
 
@@ -43,4 +44,45 @@ test('AIT USA row labels fall back to readable defaults', () => {
   assert.equal(programText({}), 'Program not set');
   assert.equal(contactabilityText({}), 'Reachable');
   assert.equal(enrollmentSourceText({}), 'Source not set');
+});
+
+test('AIT Signs lifecycle buckets distinguish source history from current work', () => {
+  assert.deepEqual(
+    lifecycleBucket({
+      workflowKey: 'ait_signs',
+      isPipelineEligible: false,
+      lastTouch: '2023-04-01',
+    }),
+    {
+      label: 'Source history',
+      tone: 'muted',
+      detail: 'Hidden from active pipeline',
+    },
+  );
+  assert.deepEqual(
+    lifecycleBucket({
+      workflowKey: 'ait_signs',
+      isPipelineEligible: true,
+      lastTouch: '2025-10-16',
+    }),
+    {
+      label: 'Current work',
+      tone: 'active',
+      detail: '2025-10-16',
+    },
+  );
+  assert.deepEqual(
+    lifecycleBucket({
+      workflowKey: 'ait_signs',
+      isPipelineEligible: true,
+      hasRecentFollowUpTouch: true,
+      lastFollowUpTouch: '2026-03-28',
+      lastTouch: '2024-03-12',
+    }),
+    {
+      label: '2026 follow-up',
+      tone: 'success',
+      detail: '2026-03-28',
+    },
+  );
 });

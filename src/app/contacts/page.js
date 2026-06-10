@@ -12,6 +12,7 @@ import {
   clientDirectoryColumnMode,
   enrollmentSourceText,
   enrollmentStageText,
+  lifecycleBucket,
 } from '@/lib/contact-directory-view';
 import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
@@ -104,6 +105,16 @@ function EnrollmentSourceCell({ row }) {
         <span>{enrollmentSourceText(row)}</span>
       </div>
       {row.latestCommentLabel && <div className="workflow-next">{row.latestCommentLabel}</div>}
+    </div>
+  );
+}
+
+function BucketCell({ row }) {
+  const bucket = lifecycleBucket(row);
+  return (
+    <div className="contacts-bucket-cell">
+      <span className={`contacts-bucket-pill tone-${bucket.tone}`}>{bucket.label}</span>
+      {bucket.detail && <div className="workflow-next">{bucket.detail}</div>}
     </div>
   );
 }
@@ -245,6 +256,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       { key: 'inquirySource', label: 'Source', sortable: true, render: (row) => <EnrollmentSourceCell row={row} /> },
     ] : []),
     ...(columnMode !== 'ait_usa' ? [{ key: 'status', label: 'Status', type: 'badge', sortable: true }] : []),
+    ...(columnMode === 'ait_signs' ? [{ key: 'lifecycleBucket', label: 'Bucket', sortable: false, render: (row) => <BucketCell row={row} /> }] : []),
     ...(columnMode !== 'ait_usa' ? [{ key: 'workflow', label: 'Next Step', sortable: false, render: (row) => <WorkflowCell row={row} /> }] : []),
     ...(columnMode === 'contacts' ? [{ key: 'signalText', label: 'Signals', sortable: false, render: (row) => <SignalCell row={row} /> }] : []),
     { key: 'assignedLabel', label: 'Owner', sortable: true },
@@ -289,7 +301,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       .join(' · ');
   }, [businessUnitById, effectiveDirectoryFacet, filteredContacts]);
   const mobileFieldKeys = columnMode === 'ait_signs'
-    ? ['phone', 'linkedPeopleSummary', 'accountSnapshotText', 'workflow', 'lastTouch', 'lastEdited']
+    ? ['phone', 'linkedPeopleSummary', 'accountSnapshotText', 'lifecycleBucket', 'workflow', 'lastTouch', 'lastEdited']
     : columnMode === 'ait_usa'
       ? ['phone', 'enrollmentStage', 'inquirySource', 'assignedLabel', 'lastTouch', 'lastEdited']
       : ['phone', 'workflow', 'signalText', 'assignedLabel', 'divisionLabel', 'lastTouch', 'lastEdited'];

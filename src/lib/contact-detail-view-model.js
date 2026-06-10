@@ -1,4 +1,5 @@
 import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from './crm/lifecycle.js';
+import { lifecycleBucket } from './contact-directory-view.js';
 
 function clean(value) {
   return String(value || '').trim();
@@ -190,11 +191,13 @@ function buildSignsHighlights(contact = {}, businessUnit = null) {
   const contactPerson = companyName && clean(contact.name) && clean(contact.name).toLowerCase() !== companyName.toLowerCase()
     ? clean(contact.name)
     : '';
+  const bucket = lifecycleBucket(contact);
   return compactArray([
     { label: 'Account', value: accountName },
     { label: 'Contact person', value: contactPerson },
     { label: 'Division', value: firstPresent([businessUnit?.name, contact.businessUnitName, contact.workflowLabel]) },
     { label: 'Stage', value: firstPresent([contact.currentStage, contact.status]) },
+    { label: 'Bucket', value: bucket.label, tone: bucket.tone === 'muted' ? 'default' : bucket.tone },
     { label: 'Last touch', value: firstPresent([contact.lastTouchLabel, contact.lastTouch, contact.lastContact, 'None']) },
     { label: 'Last edited', value: firstPresent([contact.lastEdited, 'None']) },
   ]).filter((item) => item.value);

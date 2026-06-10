@@ -707,6 +707,42 @@ a { color: inherit; text-decoration: none; }
 .contacts-signal-empty {
   color: var(--text-muted);
 }
+.contacts-bucket-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 116px;
+}
+.contacts-bucket-pill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 24px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background: color-mix(in srgb, var(--bg-tertiary) 62%, var(--bg-secondary));
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.contacts-bucket-pill.tone-active {
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--border-subtle));
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+.contacts-bucket-pill.tone-success {
+  border-color: color-mix(in srgb, var(--success) 28%, var(--border-subtle));
+  background: var(--success-muted);
+  color: var(--success);
+}
+.contacts-bucket-pill.tone-muted {
+  background: rgba(113,113,122,0.12);
+  color: var(--text-muted);
+}
 
 @media (max-width: 900px) and (min-width: 641px) {
   .workflow-strip { gap: 8px; }
