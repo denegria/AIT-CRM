@@ -82,14 +82,9 @@ function PeopleCell({ row }) {
   );
 }
 
-function AccountActivityCell({ row }) {
-  const parts = [
-    Number(row.relatedWorkOrderCount || 0) ? `${row.relatedWorkOrderCount} work` : '',
-    Number(row.relatedEstimateCount || 0) ? `${row.relatedEstimateCount} est.` : '',
-    Number(row.relatedPaymentCount || 0) ? `${row.relatedPaymentCount} pay` : '',
-  ].filter(Boolean);
-  if (!parts.length) return <span className="contacts-signal-empty">—</span>;
-  return <span>{parts.join(' · ')}</span>;
+function RecentWorkCell({ row }) {
+  if (row.accountSnapshotText) return <span>{row.accountSnapshotText}</span>;
+  return <span className="contacts-signal-empty">No recent work</span>;
 }
 
 function EnrollmentCell({ row }) {
@@ -207,15 +202,14 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const facetContext = useMemo(() => ({ businessUnitById, now: facetNow }), [businessUnitById, facetNow]);
   const directoryRows = useMemo(() => contactRows.map((contact) => {
     const signalLabels = contactDirectorySignalLabels(contact, facetContext);
-    const accountActivityText = [
-      contact.linkedPeopleCount ? `${contact.linkedPeopleCount} people` : '',
-      Number(contact.relatedWorkOrderCount || 0) ? `${contact.relatedWorkOrderCount} work` : '',
+    const accountSnapshotText = contact.operationalSummary || [
+      Number(contact.relatedWorkOrderCount || 0) ? `${contact.relatedWorkOrderCount} work orders` : '',
       Number(contact.relatedEstimateCount || 0) ? `${contact.relatedEstimateCount} estimates` : '',
       Number(contact.relatedPaymentCount || 0) ? `${contact.relatedPaymentCount} payments` : '',
-    ].filter(Boolean).join(' ');
+    ].filter(Boolean).join(' · ');
     return {
       ...contact,
-      accountActivityText,
+      accountSnapshotText,
       linkedPeopleSummary: [
         contact.linkedPeopleCount ? `${contact.linkedPeopleCount} people` : '',
         contact.linkedPeoplePreview || '',
@@ -264,11 +258,11 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
 
   const columns = [
     { key: 'name', label: isClientsMode ? 'Client' : 'Name', sortable: true, editable: true },
-    { key: 'email', label: 'Email', sortable: true, editable: true },
+    ...(columnMode !== 'ait_signs' ? [{ key: 'email', label: 'Email', sortable: true, editable: true }] : []),
     { key: 'phone', label: 'Phone', editable: true },
     ...(columnMode === 'ait_signs' ? [
       { key: 'linkedPeopleSummary', label: 'People', sortable: true, render: (row) => <PeopleCell row={row} /> },
-      { key: 'accountActivityText', label: 'Activity', sortable: false, render: (row) => <AccountActivityCell row={row} /> },
+      { key: 'accountSnapshotText', label: 'Recent Work', sortable: false, render: (row) => <RecentWorkCell row={row} /> },
     ] : []),
     ...(columnMode === 'ait_usa' ? [
       { key: 'enrollmentStage', label: 'Enrollment', sortable: true, render: (row) => <EnrollmentCell row={row} /> },
@@ -276,14 +270,14 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       { key: 'contactabilityStatus', label: 'Contactability', sortable: true, render: (row) => <ContactabilityCell row={row} /> },
       { key: 'inquirySource', label: 'Source', sortable: true, render: (row) => <EnrollmentSourceCell row={row} /> },
     ] : []),
-    { key: 'status', label: 'Status', type: 'badge', sortable: true },
-    { key: 'workflow', label: 'Next Step', sortable: false, render: (row) => <WorkflowCell row={row} /> },
-    { key: 'signalText', label: 'Signals', sortable: false, render: (row) => <SignalCell row={row} /> },
+    ...(columnMode !== 'ait_usa' ? [{ key: 'status', label: 'Status', type: 'badge', sortable: true }] : []),
+    ...(columnMode !== 'ait_usa' ? [{ key: 'workflow', label: 'Next Step', sortable: false, render: (row) => <WorkflowCell row={row} /> }] : []),
+    ...(columnMode === 'contacts' ? [{ key: 'signalText', label: 'Signals', sortable: false, render: (row) => <SignalCell row={row} /> }] : []),
     { key: 'assignedLabel', label: 'Owner', sortable: true },
-    { key: 'divisionLabel', label: scopeLabel, sortable: true },
-    { key: 'source', label: 'Source', sortable: true },
+    ...(columnMode === 'contacts' ? [{ key: 'divisionLabel', label: scopeLabel, sortable: true }] : []),
+    ...(columnMode === 'contacts' ? [{ key: 'source', label: 'Source', sortable: true }] : []),
     { key: 'lastTouch', label: 'Last Touch', sortable: true },
-    { key: 'lastEdited', label: 'Last Edited', sortable: true },
+    ...(columnMode === 'contacts' ? [{ key: 'lastEdited', label: 'Last Edited', sortable: true }] : []),
   ];
 
   const baseFilteredContacts = useMemo(() => directoryRows.filter((contact) => {
@@ -326,6 +320,11 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       .map(([label, count]) => `${label}: ${count}`)
       .join(' · ');
   }, [businessUnitById, effectiveDirectoryFacet, filteredContacts]);
+  const mobileFieldKeys = columnMode === 'ait_signs'
+    ? ['phone', 'linkedPeopleSummary', 'accountSnapshotText', 'workflow', 'lastTouch']
+    : columnMode === 'ait_usa'
+      ? ['phone', 'enrollmentStage', 'programInterest', 'contactabilityStatus', 'inquirySource', 'lastTouch']
+      : ['phone', 'workflow', 'signalText', 'assignedLabel', 'divisionLabel', 'lastTouch', 'lastEdited'];
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
@@ -415,9 +414,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
             ] : []),
           ]}
           mobileBadges={['status']}
-          mobileFields={isClientsMode
-            ? ['phone', 'linkedPeopleSummary', 'accountActivityText', 'workflow', 'signalText', 'lastTouch', 'lastEdited']
-            : ['phone', 'workflow', 'signalText', 'assignedLabel', 'divisionLabel', 'lastTouch', 'lastEdited']}
+          mobileFields={mobileFieldKeys}
         />
       </div>
 

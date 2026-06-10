@@ -14,6 +14,14 @@ function getBusinessUnitId(record) {
   return record?.businessUnitId || record?.primaryBusinessUnitId || '';
 }
 
+function defaultBusinessUnitScope({ businessUnits = [], currentUser = null } = {}) {
+  const activeUnits = (businessUnits || []).filter((unit) => unit.isActive !== false);
+  const allowedIds = currentUser?.canAccessAllBusinessUnits
+    ? activeUnits.map((unit) => unit.id)
+    : currentUser?.businessUnitIds || activeUnits.map((unit) => unit.id);
+  return allowedIds.find((id) => activeUnits.some((unit) => unit.id === id)) || activeUnits[0]?.id || ALL_BUSINESS_UNITS;
+}
+
 function withBusinessUnitDefaults(record, businessUnitId, includePrimary = false) {
   if (!businessUnitId || businessUnitId === ALL_BUSINESS_UNITS) return record;
   const hasBusinessUnitId = Object.prototype.hasOwnProperty.call(record, 'businessUnitId');
@@ -147,11 +155,9 @@ export function CRMProvider({ children, initialData }) {
     if (isPostgres && currentUserId && storedUserId && storedUserId !== currentUserId) {
       localStorage.removeItem(SCOPE_STORAGE_KEY);
       localStorage.removeItem(SCOPE_USER_KEY);
-      // Default to user's primary business unit or 'all'
-      const userUnits = bootstrapData.currentUser?.businessUnitIds || [];
-      return userUnits[0] || ALL_BUSINESS_UNITS;
+      return defaultBusinessUnitScope({ businessUnits: bootstrapData.businessUnits, currentUser: bootstrapData.currentUser });
     }
-    return localStorage.getItem(SCOPE_STORAGE_KEY) || ALL_BUSINESS_UNITS;
+    return localStorage.getItem(SCOPE_STORAGE_KEY) || defaultBusinessUnitScope({ businessUnits: bootstrapData.businessUnits, currentUser: bootstrapData.currentUser });
   });
   const [storageReady, setStorageReady] = useState(isPostgres);
   const loaded = true;
@@ -165,12 +171,11 @@ export function CRMProvider({ children, initialData }) {
 
   const canUseConsolidatedScope = Boolean(!currentUser || currentUser.canAccessAllBusinessUnits);
   const effectiveBusinessUnitId = useMemo(() => {
-    if (currentBusinessUnitId === ALL_BUSINESS_UNITS && canUseConsolidatedScope) return ALL_BUSINESS_UNITS;
     if (currentBusinessUnitId === UNASSIGNED_BUSINESS_UNIT) return UNASSIGNED_BUSINESS_UNIT;
     const allowedIds = new Set(accessibleBusinessUnits.map((unit) => unit.id));
     if (allowedIds.has(currentBusinessUnitId)) return currentBusinessUnitId;
-    return canUseConsolidatedScope ? ALL_BUSINESS_UNITS : accessibleBusinessUnits[0]?.id || ALL_BUSINESS_UNITS;
-  }, [accessibleBusinessUnits, canUseConsolidatedScope, currentBusinessUnitId]);
+    return accessibleBusinessUnits[0]?.id || ALL_BUSINESS_UNITS;
+  }, [accessibleBusinessUnits, currentBusinessUnitId]);
   const currentBusinessUnit = useMemo(() => {
     if (effectiveBusinessUnitId === UNASSIGNED_BUSINESS_UNIT) {
       return { id: UNASSIGNED_BUSINESS_UNIT, name: 'No Division', label: businessUnits?.[0]?.label || 'Divisions' };
@@ -180,7 +185,7 @@ export function CRMProvider({ children, initialData }) {
   const scopeLabel = currentBusinessUnit?.label || businessUnits?.[0]?.label || 'Divisions';
 
   const setCurrentBusinessUnitId = useCallback((nextId) => {
-    const selectedId = nextId || ALL_BUSINESS_UNITS;
+    const selectedId = nextId || accessibleBusinessUnits[0]?.id || ALL_BUSINESS_UNITS;
     const allowedIds = new Set(accessibleBusinessUnits.map((unit) => unit.id));
     if (selectedId === UNASSIGNED_BUSINESS_UNIT) {
       setCurrentBusinessUnitIdState(selectedId);
@@ -189,15 +194,15 @@ export function CRMProvider({ children, initialData }) {
       }
       return;
     }
+    if (selectedId === ALL_BUSINESS_UNITS) return;
     if (selectedId !== ALL_BUSINESS_UNITS && !allowedIds.has(selectedId)) return;
-    if (selectedId === ALL_BUSINESS_UNITS && !canUseConsolidatedScope) return;
     setCurrentBusinessUnitIdState(selectedId);
     if (typeof window !== 'undefined') {
       localStorage.setItem(SCOPE_STORAGE_KEY, selectedId);
       const userId = currentUser?.id;
       if (userId) localStorage.setItem(SCOPE_USER_KEY, userId);
     }
-  }, [accessibleBusinessUnits, canUseConsolidatedScope, currentUser?.id]);
+  }, [accessibleBusinessUnits, currentUser?.id]);
 
   const inCurrentBusinessUnitScope = useCallback((record) => {
     if (effectiveBusinessUnitId === ALL_BUSINESS_UNITS) return true;
