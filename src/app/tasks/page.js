@@ -1,16 +1,20 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   AlarmClock,
   CheckCircle2,
   ExternalLink,
   FilterX,
+  Plus,
   RefreshCcw,
+  X,
   UserPlus,
 } from 'lucide-react';
 import { useCRM } from '@/lib/store';
+import { lifecycleBucket } from '@/lib/contact-directory-view.js';
 import { useToast } from '@/components/Toast';
 import s from './FollowUpQueue.module.css';
 
@@ -42,6 +46,14 @@ const FOLLOW_UP_OUTCOME_OPTIONS = [
   ['wrong_number', 'Wrong number'],
   ['do_not_contact', 'Do not contact'],
   ['enrolled_or_won', 'Enrolled / won'],
+];
+
+const TASK_CREATE_TYPE_OPTIONS = TASK_TYPE_OPTIONS.filter(([value]) => value !== 'all');
+const TASK_PRIORITY_OPTIONS = [
+  ['low', 'Low'],
+  ['medium', 'Medium'],
+  ['high', 'High'],
+  ['urgent', 'Urgent'],
 ];
 
 const OPEN_STATUSES = new Set(['open', 'in_progress', 'snoozed']);
@@ -87,6 +99,25 @@ function titleCase(value) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function defaultBusinessUnitId(currentBusinessUnitId, accessibleBusinessUnits = []) {
+  if (currentBusinessUnitId && currentBusinessUnitId !== 'all' && currentBusinessUnitId !== 'unassigned') {
+    return currentBusinessUnitId;
+  }
+  return accessibleBusinessUnits[0]?.id || '';
+}
+
+function defaultCreateDraft({ currentBusinessUnitId, accessibleBusinessUnits, currentUser }) {
+  return {
+    title: '',
+    taskType: 'manual_reminder',
+    dueDate: todayKey(),
+    ownerUserId: currentUser?.id || '',
+    businessUnitId: defaultBusinessUnitId(currentBusinessUnitId, accessibleBusinessUnits),
+    contactId: '',
+    priority: 'medium',
+  };
+}
+
 function normalizeTask(task, contacts = []) {
   const contact = contacts.find((row) => row.id === task.contactId);
   const status = task.status || task.taskStatus || (task.completed ? 'completed' : 'open');
@@ -126,6 +157,7 @@ export default function FollowUpQueuePage() {
   const {
     tasks,
     contacts,
+    allContacts,
     employees,
     accessibleBusinessUnits,
     currentBusinessUnitId,
@@ -137,6 +169,8 @@ export default function FollowUpQueuePage() {
     updateTask,
   } = useCRM();
   const { toast } = useToast();
+  const searchParams = useSearchParams();
+  const prefillSignatureRef = useRef('');
   const [queueTasks, setQueueTasks] = useState([]);
   const [assignees, setAssignees] = useState([]);
   const [filters, setFilters] = useState({
@@ -150,6 +184,14 @@ export default function FollowUpQueuePage() {
   const [busyTaskId, setBusyTaskId] = useState('');
   const [completionTaskId, setCompletionTaskId] = useState('');
   const [followUpDrafts, setFollowUpDrafts] = useState({});
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [createDraft, setCreateDraft] = useState(() => defaultCreateDraft({
+    currentBusinessUnitId,
+    accessibleBusinessUnits,
+    currentUser,
+  }));
 
   const fallbackAssignees = useMemo(() => {
     const mappedEmployees = (employees || []).map((employee) => ({
@@ -167,6 +209,40 @@ export default function FollowUpQueuePage() {
   }, [currentUser, employees]);
 
   const visibleAssignees = assignees.length ? assignees : fallbackAssignees;
+  const accessibleContacts = allContacts?.length ? allContacts : contacts;
+  const businessUnitById = useMemo(
+    () => new Map((accessibleBusinessUnits || []).map((unit) => [unit.id, unit])),
+    [accessibleBusinessUnits],
+  );
+  const accessibleBusinessUnitIds = useMemo(
+    () => new Set((accessibleBusinessUnits || []).map((unit) => unit.id)),
+    [accessibleBusinessUnits],
+  );
+  const contactOptions = useMemo(() => {
+    return (accessibleContacts || [])
+      .filter((contact) => {
+        const businessUnitId = contact.businessUnitId || contact.primaryBusinessUnitId || '';
+        if (!businessUnitId) return false;
+        if (!accessibleBusinessUnitIds.has(businessUnitId)) return false;
+        return !createDraft.businessUnitId || businessUnitId === createDraft.businessUnitId;
+      })
+      .map((contact) => {
+        const businessUnitId = contact.businessUnitId || contact.primaryBusinessUnitId || '';
+        const bucket = lifecycleBucket(contact);
+        const status = contact.currentStage || contact.status || '';
+        const context = [
+          businessUnitById.get(businessUnitId)?.name || contact.businessUnitName || contact.divisionLabel || '',
+          bucket.label,
+          status && status !== bucket.label ? status : '',
+        ].filter(Boolean);
+        const name = contact.name || contact.client || 'Unnamed contact';
+        return {
+          contact,
+          label: context.length ? `${name} - ${context.join(' - ')}` : name,
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
+  }, [accessibleBusinessUnitIds, accessibleContacts, businessUnitById, createDraft.businessUnitId]);
 
   const readTasks = useCallback(async () => {
     if (dataSource !== 'postgres') {
@@ -190,14 +266,14 @@ export default function FollowUpQueuePage() {
       const response = await fetch(`/api/tasks?${params.toString()}`, { cache: 'no-store' });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Task queue could not load.');
-      setQueueTasks((payload.tasks || []).map((task) => normalizeTask(task, contacts)));
+      setQueueTasks((payload.tasks || []).map((task) => normalizeTask(task, accessibleContacts)));
       setAssignees(payload.users || []);
     } catch (err) {
       setError(err.message || 'Task queue could not load.');
     } finally {
       setLoading(false);
     }
-  }, [contacts, dataSource, fallbackAssignees, filters.businessUnitId, filters.ownerUserId, filters.taskType, tasks]);
+  }, [accessibleContacts, contacts, dataSource, fallbackAssignees, filters.businessUnitId, filters.ownerUserId, filters.taskType, tasks]);
 
   useEffect(() => {
     let cancelled = false;
@@ -306,6 +382,122 @@ export default function FollowUpQueuePage() {
     }));
   }
 
+  function openCreatePanel(overrides = {}) {
+    setCreateDraft({
+      ...defaultCreateDraft({ currentBusinessUnitId, accessibleBusinessUnits, currentUser }),
+      ...overrides,
+    });
+    setCreateError('');
+    setCreateOpen(true);
+  }
+
+  function updateCreateDraft(patch) {
+    setCreateDraft((prev) => ({ ...prev, ...patch }));
+  }
+
+  function updateCreateBusinessUnit(businessUnitId) {
+    setCreateDraft((prev) => {
+      const selectedContact = (accessibleContacts || []).find((contact) => contact.id === prev.contactId);
+      const contactBusinessUnitId = selectedContact?.businessUnitId || selectedContact?.primaryBusinessUnitId || '';
+      return {
+        ...prev,
+        businessUnitId,
+        contactId: contactBusinessUnitId === businessUnitId ? prev.contactId : '',
+      };
+    });
+  }
+
+  function updateCreateContact(contactId) {
+    const selectedContact = (accessibleContacts || []).find((contact) => contact.id === contactId);
+    const businessUnitId = selectedContact?.businessUnitId || selectedContact?.primaryBusinessUnitId || createDraft.businessUnitId;
+    setCreateDraft((prev) => ({
+      ...prev,
+      contactId,
+      businessUnitId,
+    }));
+  }
+
+  useEffect(() => {
+    let cancelled = false;
+    const contactId = searchParams.get('contactId') || '';
+    if (!contactId) return undefined;
+    const taskTypeParam = searchParams.get('taskType') || '';
+    const signature = `${contactId}:${taskTypeParam}`;
+    if (prefillSignatureRef.current === signature) return undefined;
+    const selectedContact = (accessibleContacts || []).find((contact) => contact.id === contactId);
+    if (!selectedContact) return undefined;
+
+    const businessUnitId = selectedContact.businessUnitId ||
+      selectedContact.primaryBusinessUnitId ||
+      defaultBusinessUnitId(currentBusinessUnitId, accessibleBusinessUnits);
+    const taskType = TASK_CREATE_TYPE_OPTIONS.some(([value]) => value === taskTypeParam)
+      ? taskTypeParam
+      : 'follow_up';
+    prefillSignatureRef.current = signature;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setCreateDraft({
+        ...defaultCreateDraft({ currentBusinessUnitId, accessibleBusinessUnits, currentUser }),
+        title: `${taskType === 'first_outreach' ? 'First outreach' : 'Follow up'} - ${selectedContact.name || selectedContact.client || 'contact'}`,
+        taskType,
+        businessUnitId,
+        contactId,
+        ownerUserId: selectedContact.assignedTo || currentUser?.id || '',
+      });
+      setCreateError('');
+      setCreateOpen(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [accessibleBusinessUnits, accessibleContacts, currentBusinessUnitId, currentUser, searchParams]);
+
+  async function submitCreatedTask(event) {
+    event.preventDefault();
+    if (!access.canWriteCrm || createBusy) return;
+    const title = createDraft.title.trim();
+    if (!title) {
+      setCreateError('Task title is required.');
+      return;
+    }
+    if (!createDraft.businessUnitId) {
+      setCreateError(`${scopeLabel} is required.`);
+      return;
+    }
+
+    setCreateBusy(true);
+    setCreateError('');
+    try {
+      const response = await fetch('/api/tasks', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          taskType: createDraft.taskType,
+          dueAt: dateInputToIso(createDraft.dueDate),
+          ownerUserId: createDraft.ownerUserId || null,
+          businessUnitId: createDraft.businessUnitId,
+          contactId: createDraft.contactId || null,
+          priority: createDraft.priority,
+          sourceType: 'manual',
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Task creation failed.');
+      const nextTask = normalizeTask(payload.task, accessibleContacts);
+      setQueueTasks((prev) => [nextTask, ...prev.filter((task) => task.id !== nextTask.id)]);
+      setCreateDraft(defaultCreateDraft({ currentBusinessUnitId, accessibleBusinessUnits, currentUser }));
+      setCreateOpen(false);
+      toast('Task created');
+    } catch (err) {
+      const message = err.message || 'Task creation failed.';
+      setCreateError(message);
+      toast(message);
+    } finally {
+      setCreateBusy(false);
+    }
+  }
+
   async function submitFollowUpCompletion(task) {
     const draft = followUpDraft(task.id);
     await applyTaskAction(task, 'complete', {
@@ -344,12 +536,91 @@ export default function FollowUpQueuePage() {
           <p className="page-subtitle">{currentBusinessUnit?.name || `All ${scopeLabel}`} · {filteredTasks.length} visible tasks</p>
         </div>
         <div className="flex-gap">
+          <button className="btn btn-sm btn-primary" onClick={() => openCreatePanel()} disabled={!access.canWriteCrm}>
+            <Plus size={14} />
+            New Task
+          </button>
           <button className="btn btn-sm" onClick={readTasks} disabled={loading}>
             <RefreshCcw size={14} />
             Refresh
           </button>
         </div>
       </div>
+
+      {createOpen && (
+        <form className={s.createPanel} onSubmit={submitCreatedTask}>
+          <div className={s.createPanelHeader}>
+            <div>
+              <h2 className={s.createTitle}>New task</h2>
+            </div>
+            <button className={`btn btn-sm ${s.iconButton}`} type="button" onClick={() => setCreateOpen(false)} aria-label="Close new task panel">
+              <X size={14} />
+            </button>
+          </div>
+          <div className={s.createGrid}>
+            <label className={s.createTitleField}>
+              <span className="form-label">Title</span>
+              <input
+                className="input"
+                value={createDraft.title}
+                disabled={createBusy}
+                onChange={(event) => updateCreateDraft({ title: event.target.value })}
+                placeholder="Call client about next step"
+              />
+            </label>
+            <label>
+              <span className="form-label">Task Type</span>
+              <select className="select" value={createDraft.taskType} disabled={createBusy} onChange={(event) => updateCreateDraft({ taskType: event.target.value })}>
+                {TASK_CREATE_TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+            <label>
+              <span className="form-label">Due Date</span>
+              <input
+                className="input"
+                type="date"
+                value={createDraft.dueDate}
+                disabled={createBusy}
+                onChange={(event) => updateCreateDraft({ dueDate: event.target.value })}
+              />
+            </label>
+            <label>
+              <span className="form-label">Owner</span>
+              <select className="select" value={createDraft.ownerUserId} disabled={createBusy} onChange={(event) => updateCreateDraft({ ownerUserId: event.target.value })}>
+                <option value="">Unassigned</option>
+                {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
+              </select>
+            </label>
+            <label>
+              <span className="form-label">{scopeLabel}</span>
+              <select className="select" value={createDraft.businessUnitId} disabled={createBusy} onChange={(event) => updateCreateBusinessUnit(event.target.value)}>
+                {accessibleBusinessUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+              </select>
+            </label>
+            <label>
+              <span className="form-label">Priority</span>
+              <select className="select" value={createDraft.priority} disabled={createBusy} onChange={(event) => updateCreateDraft({ priority: event.target.value })}>
+                {TASK_PRIORITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+            <label className={s.createContactField}>
+              <span className="form-label">Contact</span>
+              <select className="select" value={createDraft.contactId} disabled={createBusy} onChange={(event) => updateCreateContact(event.target.value)}>
+                <option value="">No contact linked</option>
+                {contactOptions.map(({ contact, label }) => <option key={contact.id} value={contact.id}>{label}</option>)}
+              </select>
+            </label>
+          </div>
+          {createError && <div className={s.createError}>{createError}</div>}
+          <div className={s.createActions}>
+            <button className="btn btn-sm" type="button" disabled={createBusy} onClick={() => setCreateOpen(false)}>Cancel</button>
+            <button className="btn btn-sm btn-primary" type="submit" disabled={createBusy || !access.canWriteCrm}>
+              <Plus size={14} />
+              Create Task
+            </button>
+          </div>
+        </form>
+      )}
 
       <div className={s.summaryGrid}>
         <div className={s.summaryTile}><span className={s.summaryValue}>{stats.open}</span><span className={s.summaryLabel}>Open Work</span></div>

@@ -746,9 +746,18 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           </div>
           
           {access.canWriteCrm && (
-            <button className="btn btn-block" style={{marginTop: 20}} onClick={openEditModal}>
-              <Edit3 size={16} style={{marginRight: 8}} /> Edit Profile
-            </button>
+            <>
+              <Link
+                className="btn btn-block btn-primary"
+                style={{marginTop: 20}}
+                href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}
+              >
+                <CheckSquare size={16} style={{marginRight: 8}} /> Create Follow-up
+              </Link>
+              <button className="btn btn-block" style={{marginTop: 8}} onClick={openEditModal}>
+                <Edit3 size={16} style={{marginRight: 8}} /> Edit Profile
+              </button>
+            </>
           )}
         </div>
 

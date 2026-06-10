@@ -40,6 +40,63 @@
   min-width: 0;
 }
 
+.createPanel {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.createPanelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.createTitle {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+  font-weight: 760;
+  line-height: 1.2;
+}
+
+.createGrid {
+  display: grid;
+  grid-template-columns: minmax(220px, 1.3fr) repeat(3, minmax(140px, 0.75fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.createTitleField {
+  grid-column: span 2;
+}
+
+.createContactField {
+  grid-column: span 2;
+}
+
+.createError {
+  padding: 10px 12px;
+  color: var(--danger);
+  font-size: var(--text-sm);
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border-subtle));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg-secondary));
+}
+
+.createActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .queueShell {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -180,6 +237,15 @@
     grid-template-columns: repeat(2, minmax(160px, 1fr));
   }
 
+  .createGrid {
+    grid-template-columns: repeat(2, minmax(160px, 1fr));
+  }
+
+  .createTitleField,
+  .createContactField {
+    grid-column: 1 / -1;
+  }
+
   .completionNote,
   .completionActions {
     grid-column: 1 / -1;
@@ -188,8 +254,23 @@
 
 @media (max-width: 760px) {
   .summaryGrid,
-  .toolbar {
+  .toolbar,
+  .createGrid {
     grid-template-columns: 1fr;
+  }
+
+  .createPanelHeader {
+    align-items: center;
+  }
+
+  .createTitleField,
+  .createContactField {
+    grid-column: auto;
+  }
+
+  .createActions button {
+    flex: 1 1 130px;
+    justify-content: center;
   }
 
   .queueItem {
