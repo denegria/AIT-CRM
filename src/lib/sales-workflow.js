@@ -15,6 +15,9 @@ export const FIRST_OUTREACH_TAGS = ['wix_history', 'needs_first_outreach', 'unwo
 export const FIRST_OUTREACH_ACTION =
   'Make first outreach by phone/SMS/email; confirm program interest and schedule follow-up.';
 
+const AIT_SIGNS_CURRENT_PIPELINE_START = '2025-01-01';
+const AIT_SIGNS_RECENT_FOLLOW_UP_START = '2026-01-01';
+
 function clean(value) {
   return String(value || '').trim();
 }
@@ -58,6 +61,17 @@ function hasRows(rows) {
   return Array.isArray(rows) && rows.length > 0;
 }
 
+function dateValue(value) {
+  if (!value || String(value).toLowerCase() === 'none') return 0;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function isOnOrAfter(value, isoDate) {
+  const time = dateValue(value);
+  return Boolean(time && time >= dateValue(isoDate));
+}
+
 function isImportedAitSignsSource(value) {
   const source = normalized(value);
   const importedSourceLabels = new Set([
@@ -68,7 +82,16 @@ function isImportedAitSignsSource(value) {
     'work order',
     'xlsx',
   ]);
-  return source.includes('ait signs import') || importedSourceLabels.has(source);
+  return source.includes('ait signs import') ||
+    importedSourceLabels.has(source) ||
+    [
+      'interesados',
+      'estimados',
+      'work order',
+      'terminados',
+      'pagados',
+      'sheet',
+    ].some((label) => source.includes(label));
 }
 
 function isImportedAitSignsArtifactSheet(value) {
@@ -243,8 +266,6 @@ export function isPipelineEligibleContact(contact = {}, options = {}) {
     hasRows(options.estimates) ||
     hasRows(options.paymentSnapshots) ||
     hasRows(options.financials);
-  if (hasLead || hasOperationalRecord) return true;
-
   const importArtifactSignal = [
     contact.source,
     contact.sourceLabel,
@@ -252,6 +273,22 @@ export function isPipelineEligibleContact(contact = {}, options = {}) {
   ].some(isImportedAitSignsSource) ||
     hasRows(options.activityEvents?.filter(isImportedAitSignsArtifactEvent)) ||
     hasRows(options.events?.filter(isImportedAitSignsArtifactEvent));
+
+  const hasCurrentTouch = isOnOrAfter(
+    options.lastTouch || contact.lastTouch || contact.lastContact,
+    AIT_SIGNS_CURRENT_PIPELINE_START,
+  );
+  const hasPastTouch = Boolean(dateValue(options.lastTouch || contact.lastTouch || contact.lastContact)) && !hasCurrentTouch;
+  const hasRecentFollowUp = isOnOrAfter(
+    options.lastFollowUpTouch || contact.lastFollowUpTouch,
+    AIT_SIGNS_RECENT_FOLLOW_UP_START,
+  );
+
+  if (hasCurrentTouch || hasRecentFollowUp) return true;
+  if (hasPastTouch) return false;
+  if (importArtifactSignal || hasOperationalRecord) return false;
+  if (hasLead) return true;
+
   return !importArtifactSignal;
 }
 

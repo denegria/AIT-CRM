@@ -118,6 +118,16 @@ function mapContacts(
       businessUnitIds,
     );
     const source = lead?.sourceName || lead?.sourceType || contact.sourceLabel || seedData.SOURCES[index % seedData.SOURCES.length];
+    const touchSummary = summarizeContactTouch({
+      contact,
+      businessUnit,
+      notes: contactNotes,
+      activityEvents: contactEvents,
+      conversationMessages: contactConversationMessages,
+      workOrders: contactWorkOrders,
+      estimates: contactEstimates,
+      paymentSnapshots: contactPaymentSnapshots,
+    });
     const isPipelineEligible = isPipelineEligibleContact({
       ...contact,
       source,
@@ -129,6 +139,8 @@ function mapContacts(
       estimates: contactEstimates,
       paymentSnapshots: contactPaymentSnapshots,
       activityEvents: contactEvents,
+      lastTouch: touchSummary.lastTouch,
+      lastFollowUpTouch: touchSummary.lastFollowUpTouch,
     });
     const noteItems = contactNotes.map((note) => ({
       id: note.id,
@@ -145,16 +157,6 @@ function mapContacts(
       activityEvents: contactEvents,
       leads: lead ? [lead] : [],
       businessUnits: businessUnitRows,
-    });
-    const touchSummary = summarizeContactTouch({
-      contact,
-      businessUnit,
-      notes: contactNotes,
-      activityEvents: contactEvents,
-      conversationMessages: contactConversationMessages,
-      workOrders: contactWorkOrders,
-      estimates: contactEstimates,
-      paymentSnapshots: contactPaymentSnapshots,
     });
     const enrollmentSignals = buildAitUsaEnrollmentSignals({
       contact,
@@ -192,6 +194,9 @@ function mapContacts(
       lastTouch: touchSummary.lastTouch,
       lastTouchLabel: touchSummary.lastTouchLabel,
       lastTouchText: touchSummary.lastTouchText,
+      lastFollowUpTouch: touchSummary.lastFollowUpTouch,
+      lastFollowUpTouchText: touchSummary.lastFollowUpTouchText,
+      hasRecentFollowUpTouch: touchSummary.hasRecentFollowUpTouch,
       latestComment: touchSummary.latestComment,
       latestCommentDate: touchSummary.latestCommentDate,
       latestCommentLabel: touchSummary.latestCommentLabel,

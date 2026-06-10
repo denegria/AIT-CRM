@@ -82,12 +82,31 @@ test('AIT Signs source-only import contacts stay out of the active pipeline', ()
       { id: 'contact-2', source: 'archive', hasLeadStatus: true, businessUnitId: 'bu-signs' },
       { businessUnit },
     ),
-    true,
+    false,
   );
   assert.equal(
     isPipelineEligibleContact(
       { id: 'contact-3', source: 'archive', hasLeadStatus: false, businessUnitId: 'bu-signs' },
       { businessUnit, workOrders: [{ contactId: 'contact-3' }] },
+    ),
+    false,
+  );
+  assert.equal(
+    isPipelineEligibleContact(
+      { id: 'contact-3-current', source: 'archive', hasLeadStatus: false, businessUnitId: 'bu-signs' },
+      { businessUnit, workOrders: [{ contactId: 'contact-3-current' }], lastTouch: '2025-10-16' },
+    ),
+    true,
+  );
+  assert.equal(
+    isPipelineEligibleContact(
+      { id: 'contact-3-follow-up', source: 'archive', hasLeadStatus: false, businessUnitId: 'bu-signs' },
+      {
+        businessUnit,
+        workOrders: [{ contactId: 'contact-3-follow-up' }],
+        lastTouch: '2024-12-15',
+        lastFollowUpTouch: '2026-02-01',
+      },
     ),
     true,
   );
@@ -111,5 +130,26 @@ test('AIT Signs source-only import contacts stay out of the active pipeline', ()
       { businessUnit, activityEvents: [{ eventType: 'import_promoted_note', sourceSheet: '2. ESTIMADOS' }] },
     ),
     false,
+  );
+  assert.equal(
+    isPipelineEligibleContact(
+      { id: 'contact-7', hasLeadStatus: true, businessUnitId: 'bu-signs' },
+      { businessUnit },
+    ),
+    true,
+  );
+  assert.equal(
+    isPipelineEligibleContact(
+      { id: 'contact-8', source: '1. INTERESADOS', hasLeadStatus: true, businessUnitId: 'bu-signs' },
+      { businessUnit },
+    ),
+    false,
+  );
+  assert.equal(
+    isPipelineEligibleContact(
+      { id: 'contact-9', source: '1. INTERESADOS', hasLeadStatus: true, businessUnitId: 'bu-signs' },
+      { businessUnit, lastFollowUpTouch: '2026-03-28' },
+    ),
+    true,
   );
 });

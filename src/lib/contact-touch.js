@@ -5,6 +5,7 @@ const EXCEL_DAY_MS = 24 * 60 * 60 * 1000;
 const MIN_EXCEL_SERIAL = 40000;
 const MAX_EXCEL_SERIAL = 60000;
 const TOUCH_FUTURE_GRACE_MS = EXCEL_DAY_MS;
+const RECENT_FOLLOW_UP_START = '2026-01-01';
 
 function cleanText(value = '') {
   return String(value || '')
@@ -59,11 +60,12 @@ function businessTimeFromText(value, fallback, referenceTime, { allowFallback = 
   return isAllowedTouchTime(fallbackTime, referenceTime) ? fallbackTime : 0;
 }
 
-function isCleanupNote(text = '') {
+function isSystemHistoryNote(text = '') {
   const normalized = cleanText(text).toLowerCase();
   return (
     normalized.startsWith('ait signs cleanup merged duplicate customer contacts') ||
-    normalized.startsWith('mis-97 staging duplicate cleanup')
+    /^mis-\d+\s+.*\b(cleanup|consolidation|correction|merge|merged|backfill|parser|audit|source-row|artifact|data-fix)\b/.test(normalized) ||
+    /^mis-\d+\s+approved\b/.test(normalized)
   );
 }
 
@@ -89,6 +91,37 @@ function isAitUsaTouchEvent(eventType = '') {
     normalized.includes('whatsapp') ||
     normalized.includes('manual_outbound')
   );
+}
+
+function isFollowUpTouch({ eventType = '', text = '', kind = '' } = {}) {
+  const normalizedEvent = String(eventType || '').toLowerCase();
+  const normalizedText = cleanText(text).toLowerCase();
+  if (kind === 'message') return true;
+  if (
+    normalizedEvent.includes('follow_up') ||
+    normalizedEvent.includes('manual_outbound') ||
+    normalizedEvent.includes('call') ||
+    normalizedEvent.includes('sms') ||
+    normalizedEvent.includes('whatsapp') ||
+    normalizedEvent.includes('message')
+  ) {
+    return true;
+  }
+  return [
+    'follow up',
+    'follow-up',
+    'seguimiento',
+    'llamada',
+    'llamo',
+    'llamó',
+    'called',
+    'voicemail',
+    'no contesta',
+    'no answer',
+    'whatsapp',
+    'mensaje',
+    'texted',
+  ].some((needle) => normalizedText.includes(needle));
 }
 
 function addCandidate(candidates, candidate, referenceTime) {
@@ -123,71 +156,72 @@ export function summarizeContactTouch({
   const workflowKey = workflowKeyForBusinessUnit(businessUnit || contact.businessUnitName || contact.divisionLabel || '');
   const latestCommentCandidates = [];
   const touchCandidates = [];
+  const followUpCandidates = [];
 
   for (const message of conversationMessages || []) {
     const text = messageText(message);
     const time = dateTime(message.occurredAt || message.createdAt);
-    addCandidate(latestCommentCandidates, {
+    const candidate = {
       time,
       text,
       kind: 'message',
       label: 'Message',
-    }, referenceTime);
-    addCandidate(touchCandidates, {
-      time,
-      text,
-      kind: 'message',
-      label: 'Message',
-    }, referenceTime);
+    };
+    addCandidate(latestCommentCandidates, candidate, referenceTime);
+    addCandidate(touchCandidates, candidate, referenceTime);
+    addCandidate(followUpCandidates, candidate, referenceTime);
   }
 
   for (const event of activityEvents || []) {
     const text = event.message || event.eventType || '';
+    if (isSystemHistoryNote(text)) continue;
     const allowFallback = workflowKey !== WORKFLOW_KEYS.AIT_SIGNS || !isImportedHistoryRow(event);
     const eventTime = workflowKey === WORKFLOW_KEYS.AIT_SIGNS
       ? businessTimeFromText(text, event.occurredAt || event.createdAt, referenceTime, { allowFallback })
       : dateTime(event.occurredAt || event.createdAt);
     const label = String(event.eventType || '').includes('follow_up') ? 'Follow-up' : 'Activity';
-    addCandidate(latestCommentCandidates, {
+    const candidate = {
       time: eventTime,
       text,
       kind: 'activity',
       label,
-    }, referenceTime);
+      eventType: event.eventType || '',
+    };
+    addCandidate(latestCommentCandidates, candidate, referenceTime);
 
     if (
       workflowKey === WORKFLOW_KEYS.AIT_SIGNS ||
       isAitUsaTouchEvent(event.eventType)
     ) {
-      addCandidate(touchCandidates, {
-        time: eventTime,
-        text,
-        kind: 'activity',
-        label,
-      }, referenceTime);
+      addCandidate(touchCandidates, candidate, referenceTime);
+    }
+    if (isFollowUpTouch(candidate)) {
+      addCandidate(followUpCandidates, candidate, referenceTime);
     }
   }
 
   for (const note of notes || []) {
     const text = note.body || note.text || '';
-    if (isCleanupNote(text)) continue;
+    if (isSystemHistoryNote(text)) continue;
     const allowFallback = workflowKey !== WORKFLOW_KEYS.AIT_SIGNS || !isImportedHistoryRow(note);
     const noteTime = workflowKey === WORKFLOW_KEYS.AIT_SIGNS
       ? businessTimeFromText(text, note.createdAt, referenceTime, { allowFallback })
       : dateTime(note.createdAt);
-    addCandidate(latestCommentCandidates, {
+    const candidate = {
       time: noteTime,
       text,
       kind: 'note',
       label: 'Note',
-    }, referenceTime);
+    };
+    addCandidate(latestCommentCandidates, candidate, referenceTime);
     if (workflowKey === WORKFLOW_KEYS.AIT_SIGNS) {
       addCandidate(touchCandidates, {
-        time: noteTime,
-        text,
-        kind: 'note',
+        ...candidate,
         label: 'History',
       }, referenceTime);
+    }
+    if (isFollowUpTouch(candidate)) {
+      addCandidate(followUpCandidates, candidate, referenceTime);
     }
   }
 
@@ -248,9 +282,11 @@ export function summarizeContactTouch({
 
   latestCommentCandidates.sort((a, b) => b.time - a.time);
   touchCandidates.sort((a, b) => b.time - a.time);
+  followUpCandidates.sort((a, b) => b.time - a.time);
 
   const latestComment = latestCommentCandidates[0] || null;
   const lastTouch = touchCandidates[0] || null;
+  const lastFollowUpTouch = followUpCandidates[0] || null;
   const lastEditedTime = dateTime(contact.updatedAt || contact.createdAt);
 
   return {
@@ -260,6 +296,9 @@ export function summarizeContactTouch({
     lastTouch: isoDateFromTime(lastTouch?.time || 0),
     lastTouchLabel: lastTouch?.label || '',
     lastTouchText: lastTouch?.text || '',
+    lastFollowUpTouch: isoDateFromTime(lastFollowUpTouch?.time || 0),
+    lastFollowUpTouchText: lastFollowUpTouch?.text || '',
+    hasRecentFollowUpTouch: isoDateFromTime(lastFollowUpTouch?.time || 0) >= RECENT_FOLLOW_UP_START,
     lastEdited: isoDateFromTime(lastEditedTime),
   };
 }

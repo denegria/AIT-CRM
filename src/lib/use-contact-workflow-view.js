@@ -146,6 +146,8 @@ export function useContactWorkflowView({
         workOrders: relatedWorkOrders,
         financials: relatedFinancials,
         paymentSnapshots: relatedPaymentSnapshots,
+        lastTouch: contact.lastTouch || contact.lastContact,
+        lastFollowUpTouch: contact.lastFollowUpTouch,
       });
     return {
       ...contact,

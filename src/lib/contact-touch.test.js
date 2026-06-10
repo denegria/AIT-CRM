@@ -75,6 +75,7 @@ test('summarizeContactTouch uses AIT Signs job history dates and exposes edit se
   assert.equal(summary.lastTouch, '2023-10-16');
   assert.equal(summary.lastEdited, '2026-06-02');
   assert.match(summary.latestComment, /EL PALACIO/);
+  assert.equal(summary.lastFollowUpTouch, '');
 });
 
 test('summarizeContactTouch ignores MIS-97 cleanup notes as customer comments', () => {
@@ -98,6 +99,48 @@ test('summarizeContactTouch ignores MIS-97 cleanup notes as customer comments', 
 
   assert.match(summary.latestComment, /BLUE MOUNTAIN/);
   assert.doesNotMatch(summary.latestComment, /MIS-97 staging duplicate cleanup/);
+});
+
+test('summarizeContactTouch ignores MIS cleanup and correction notes as AIT Signs touch evidence', () => {
+  const summary = summarizeContactTouch({
+    contact: {
+      updatedAt: new Date('2026-06-07T00:00:00.000Z'),
+      createdAt: new Date('2026-06-01T15:00:00.000Z'),
+    },
+    businessUnit: { name: 'AIT Signs' },
+    referenceTime: new Date('2026-06-07T00:00:00.000Z').getTime(),
+    notes: [{
+      body: 'MIS-125 staging invalid phone correction from hardened AIT Signs workbook parser. Previous invalid phone tail/length: 20',
+      createdAt: new Date('2026-06-05T00:00:00.000Z'),
+    }, {
+      body: 'MIS-97 staging short-term fuller-name consolidation: ART BY LORELAY',
+      createdAt: new Date('2026-06-04T00:00:00.000Z'),
+    }],
+  });
+
+  assert.equal(summary.latestComment, '');
+  assert.equal(summary.lastTouch, '');
+  assert.equal(summary.lastFollowUpTouch, '');
+  assert.equal(summary.hasRecentFollowUpTouch, false);
+});
+
+test('summarizeContactTouch exposes real AIT Signs follow-up evidence separately', () => {
+  const summary = summarizeContactTouch({
+    contact: {
+      updatedAt: new Date('2026-06-07T00:00:00.000Z'),
+      createdAt: new Date('2026-06-01T15:00:00.000Z'),
+    },
+    businessUnit: { name: 'AIT Signs' },
+    referenceTime: new Date('2026-06-07T00:00:00.000Z').getTime(),
+    notes: [{
+      body: 'Follow-up note: called client about updated sign proof.',
+      createdAt: new Date('2026-06-03T14:00:00.000Z'),
+    }],
+  });
+
+  assert.equal(summary.lastTouch, '2026-06-03');
+  assert.equal(summary.lastFollowUpTouch, '2026-06-03');
+  assert.equal(summary.hasRecentFollowUpTouch, true);
 });
 
 test('summarizeContactTouch ignores future AIT Signs date artifacts', () => {
