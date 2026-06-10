@@ -1,0 +1,369 @@
+contactId,name,companyName,businessUnit,workflowKey,status,currentStage,bucket,contactability,lastTouch,lastTouchLabel,lastFollowUpTouch,assignedUserId,recommendedTaskType,reason
+d3dd8dcf-0ce5-4013-9171-521ec6496ab0,2 QUICK,2 QUICK,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-05-21,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+0fcba791-b890-4aae-bfc1-50a02b2b239a,A&M CAR AUTODETAILLING,A&M CAR AUTODETAILLING,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-05-24,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+0d7fff3b-cb7e-46e2-8774-dbab9581fbdd,A.L. PAINTING,A.L. PAINTING,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-08-14,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+724446c4-512e-40d5-ada4-bb66f82ecae4,ADRIAN GARBANZO,ADRIAN GARBANZO,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-04-07,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+21e42581-df77-43a1-af56-5a895e6c46c5,ALBERT MAINTENACE,ALBERT MAINTENACE,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-05-04,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+955d4152-03ea-4a45-99da-e2bb7e129e2a,ANA CLEANING SERVICES,ANA CLEANING SERVICES,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-04-29,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+77d1c262-1ba6-4512-90e2-53ff1f263527,ARIAS AUTO DETAILLING,ARIAS AUTO DETAILLING,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-04-22,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+4e794ccb-2f25-4881-9beb-4890a04bbe9d,AUTO CHIP CORP,AUTO CHIP CORP,AIT Signs,ait_signs,Work Order,Work Order,Current work,missing_email,2025-10-19,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+55760ddd-8c4e-4e1d-ac7d-a6cfa21bb970,BLUE SHEEP,BLUE SHEEP,AIT Signs,ait_signs,Estimate,Estimate,Current work,missing_email,2026-02-19,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+6ae8c5fe-605c-4e65-8d58-4a067174d26a,BRYAN,BRYAN,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-05-19,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+30396e88-3df3-49cc-adf4-0b3acb0c66c0,CAMILA CONTRACTOR,CAMILA CONTRACTOR,AIT Signs,ait_signs,Fulfillment,Fulfillment,2026 follow-up,missing_email,2026-02-17,Activity,2026-02-17,,follow_up,AIT Signs active record with 2026 follow-up touch
+c77319a3-d980-4896-a36a-3e6e5be244fe,CENTRAL FRESH,CENTRAL FRESH,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-05-26,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+4f0ab9da-de3d-4e05-8ff2-37fdf34c20f3,CENTRAL FRESH SUPERMARKET,CENTRAL FRESH SUPERMARKET,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-05-08,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+e11c4d5c-a356-4123-a598-8e221446324c,CJ MAJESTIC TRANSPORT LLC,CJ MAJESTIC TRANSPORT LLC,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-08-04,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+6ab78aa9-2633-4d18-af0f-4dbd573cf588,CON. SIGNS,,AIT Signs,ait_signs,Intake,Intake,Current work,missing_email,2026-02-18,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+2d1c505a-f9b5-4279-9aad-a89f04a814c0,COTIZACION 1 LILI,COTIZACION 1 LILI,AIT Signs,ait_signs,Estimate,Estimate,Current work,missing_email,2025-10-29,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+38e7c3a0-4192-48a7-b388-b4532c68adea,DELFINO CRUZ,DELFINO CRUZ,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-06-16,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+3564d81b-574e-4cdb-ba66-66ed901686d5,DENNYS,DENNYS,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-05-15,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+f7504f06-a15e-459f-a001-d6e9c1ab4a7c,DISENO DE TARJETA DE BABY SHOWER,DISENO DE TARJETA DE BABY SHOWER,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-05-22,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+457df581-f458-4768-9162-0092f61e6655,DOWN TOWN PLAINFIELD,DOWN TOWN PLAINFIELD,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-10-06,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+0ba3d848-75f2-4838-836d-78785c19f3dc,DREWBYS,DREWBYS,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-04-09,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+ebf7f692-8db4-43bf-8a2d-3f09b57d5dc8,DRS HOME IMPROVEMENT,DRS HOME IMPROVEMENT,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-05-11,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+17e8b705-1352-4879-8a2d-f8af1683fdc3,ELIS CLEANING,ELIS CLEANING,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-04-11,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+389345d2-e1d5-4474-a75c-cb8ddab5d517,EMMANUEL,EMMANUEL,AIT Signs,ait_signs,Intake,Intake,Current work,missing_email,2026-04-27,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+ca50b0ae-ae65-4694-83b2-d2ad8ce80ab9,EXTREM KLEAN LOUNDROMAT,EXTREM KLEAN LOUNDROMAT,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-04-29,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+83e21607-01d6-40cf-aba9-d3c761e52eff,FONSE,FONSE,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-05-27,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+13abfc9f-efbb-4eef-94f4-008e8a49290f,FRANCISCO INESTROZA,FRANCISCO INESTROZA,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-03-09,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+8eec75f2-919e-4b0b-a7d7-3b15c84fff50,G&L LANDSCAPING,G&L LANDSCAPING,AIT Signs,ait_signs,Estimate,Estimate,Current work,missing_email,2026-01-08,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+83854693-2599-4981-96e5-8f75ef6320dd,GEAR LIFT LLC,GEAR LIFT LLC,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-04-14,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+f4bbb549-49fc-4e62-870f-b7724dfa5912,GEINER BERMUDEZ,GEINER BERMUDEZ,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-02-19,Activity,2025-02-19,,follow_up,AIT Signs active record with current non-closed work stage
+0e4767c3-1692-4146-aad9-d94ecf147741,GREEN HEAVEN,GREEN HEAVEN,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-03-26,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+ea871f8e-0523-468d-b5fc-feb6e0f14ac8,GUAJIRO,GUAJIRO,AIT Signs,ait_signs,Intake,Intake,Current work,missing_email,2026-04-27,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+c26e0ca8-3494-44ab-9461-e9776991d053,INESTROZA LANDSCAPING,INESTROZA LANDSCAPING,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-02-27,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+e79f201c-27e1-4d6f-8e28-ea1a513afcfc,INFASM - CARPENTRY AND REMODELLING,INFASM - CARPENTRY AND REMODELLING,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-03-31,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+d5eb23e9-b684-4a3b-9679-8e920150acbb,J DIAZ CONSTRUCTION,J DIAZ CONSTRUCTION,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-04-14,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+80b50010-66de-49bb-8405-e0ab2e1ee248,J&R TAXI,J&R TAXI,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-10-08,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+8befc4a4-223c-4be1-a6ea-a00e70b46a3c,JBP CONST.,JBP CONST.,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-05-04,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+3b9c485d-38d1-4209-bc96-3404df2e56d7,JESUS,JESUS,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-06-17,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+703fcb43-4e53-47b0-a3d5-03bd129a280c,JUAREZ MEDINA,JUAREZ MEDINA,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-08-04,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+c660c014-5df5-4971-9ec8-0c3a8caa669c,KRISTELS CONSTRUCTION,KRISTELS CONSTRUCTION,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-05-15,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+ca4c45a7-5ae1-44df-b38f-51bbfd5e4082,LA REINA BAKERY,LA REINA BAKERY,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-05-05,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+705fbdf4-4541-4211-b6bb-f4fb4c15cfae,LATINOS KITCHEN,LATINOS KITCHEN,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-03-31,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+f6d1ee5a-baae-4d98-90c2-4359fb700176,LEIDY ACOSTA,LEIDY ACOSTA,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-03-31,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+59a24dab-fb32-48c5-afdf-c3a5f002bff0,LUXMARY,LUXMARY,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-10-10,Activity,2025-10-10,,follow_up,AIT Signs active record with current non-closed work stage
+c4dc89b2-2af8-463b-be06-757ec5c2bad3,M&S HOME IMPROV. ( HUGO PERSONAL ),M&S HOME IMPROV. ( HUGO PERSONAL ),AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-10-14,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+71503f88-d513-40d2-ad7e-22a675bd51c0,MANA,MANA,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-10-16,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+76e7e411-fa41-439a-b0db-c0fcd3d36ac9,MARTHA ORTIZ (HNA JUNIOR),MARTHA ORTIZ (HNA JUNIOR),AIT Signs,ait_signs,Estimate,Estimate,Current work,missing_email,2026-04-06,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+bd9a0b12-c302-47fb-80b4-4ef95f4d0fa8,MASTER CONSTRUCTION,MASTER CONSTRUCTION,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-02-17,Activity,2025-06-15,,follow_up,AIT Signs active record with current non-closed work stage
+91ff8d8f-4a80-40bc-9a44-c7053720c791,MG EPOXY,MG EPOXY,AIT Signs,ait_signs,Fulfillment,Fulfillment,2026 follow-up,missing_email,2026-02-17,Activity,2026-02-17,,follow_up,AIT Signs active record with 2026 follow-up touch
+379ffddc-25c5-462b-97be-23159f008785,MR. PATEL,MR. PATEL,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-10-01,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+34a9eac9-6455-4e74-b07b-cd93d6334904,NADIA,NADIA,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-08-04,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+8ee1b910-4d04-4bf9-a736-382878e072dc,ONLY ME,ONLY ME,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-05-12,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+e64c26fe-1f5e-440e-a6c5-62b6e3c80599,ORION LIMO LLC,ORION LIMO LLC,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-03-31,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+1dd696da-f134-4be9-9675-8d35fb74efad,PERCY V,PERCY V,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-06-30,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+f3ae5f03-8f8d-42d9-9ddf-efaebb260989,POWER WASHING,POWER WASHING,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-05-16,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+5ca85dc2-42f8-457b-8dca-c71ed05734c1,PRITCHARD,PRITCHARD,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-06-30,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+d9219d74-adda-4dfe-85fd-d3dd16d63899,RAMON REPAIR AND LANDSPAING,RAMON REPAIR AND LANDSPAING,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-03-31,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+e509833f-e073-4cd7-9fdf-5cda1d48805d,RINCON HONDURENO,RINCON HONDURENO,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-10-08,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+43e7ab03-57aa-4c51-b03c-060596ba8427,ROXANA - REALTOR,ROXANA - REALTOR,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-03-26,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+ee0f6743-6a55-4d78-b723-e830d299b215,TAX TRX,TAX TRX,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-02-21,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+c3786651-c661-4312-9594-11788e716f6d,TBA TOUCH BY ANGELS,TBA TOUCH BY ANGELS,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-07-16,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+3b6c7d8d-df44-442b-b618-214166b52944,TEAM ISLAM,TEAM ISLAM,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2025-08-21,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+2ef78e99-0bb7-48ee-b462-dab0b9c6396e,VALGREEN,VALGREEN,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-05-21,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+944fd43c-643b-43d5-9e98-3134336d0417,XPRESS SMOKE,XPRESS SMOKE,AIT Signs,ait_signs,Fulfillment,Fulfillment,Current work,missing_email,2026-05-21,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+3b69f177-c37d-426d-8c2e-cc53c8fc1a08,YUPON,YUPON,AIT Signs,ait_signs,Intake,Intake,Current work,missing_email,2026-02-18,Activity,,,follow_up,AIT Signs active record with current non-closed work stage
+f96d91cf-4b54-463e-b0cf-e4f816beca0c,Adriana,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+1e2bf6a4-7aa9-42bb-a38a-a6f84bdb7c52,Adrián Miranda,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+cd5a47f5-107f-4cd4-ba72-2195ed23fdde,Ait America,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+727e4ac1-8c48-45b2-bbec-7b8ac5bd366e,Akbar,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_email,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+bc62cf56-202d-48cb-9db2-9e77ce1d1007,Alberto Robles,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+b9e3d5e6-65d5-4374-808a-04933398d3a6,Alejandra Munoz,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+5df49c6c-49fc-4bb5-883f-15f9a1a6412b,Alejandra Rodriguez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+138dfe37-379e-4c3a-a696-aa4afd03764e,Alejandrina Banegas,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+6c18dc2b-78fe-4691-a7ee-48aea5f3b6ff,Alessandra Zevallos Valladares,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+19a7a514-1f26-4947-a95b-6519338c8850,Alfonso,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+dd7288dd-e45d-4a13-9843-52b181588ce6,Alfredo montano,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+707e9d74-e5e9-423e-acd3-74d346e293a9,Amy,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+9676ef13-8464-45b1-9c3a-2926aa6e55b6,Ana Mejia,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+7f50f5aa-1d7f-4b23-a8c5-738188ca9714,Anabel Rodríguez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+366cddce-8916-4de0-8f0b-9abc8ed70ad4,Anayansi Marroquín de paz,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+006ba68f-64c8-4cd2-baa1-ad134d475fac,Anderson Perez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+597990f3-43ba-4c2b-be82-543e72a2a130,Andrea Molero,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+0b8684e4-990d-4334-9e4b-5385d6a7cc49,Andrea Montero Barrios,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+ebec3c4e-cf8b-465c-a4f6-56be5af43bef,Andrea Pedroza,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+24c4c48b-7eef-4325-bba8-b4520048ddbc,Andrea Pozo,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+46cac2c7-6e61-4e23-b98c-58cd294af710,Andrea del Pilar Guzman Rodriguez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+ca9b02f4-4b4e-4ff0-9721-c046c5f18b21,Andrea del pilar Montero,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+6fa3751b-1567-4651-9330-24959b00ede3,Andres Cordova,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+82b5f308-2064-4de7-9038-c80fee092d59,Andres Sanchez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+85f57d60-1905-49be-9949-ca6424129c60,Angel Bautista,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+be6581e5-3361-45ed-818c-1c15286dadac,Angel Salazar Leon,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+415aef67-81ad-4477-95a4-a72f6904083a,Angelica Santos,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+305e0b55-2a95-4f75-ad11-c2066152208b,Anthony Brito,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+e0bbc968-911e-4a73-b97e-d33693a5f654,Ariel Ruiz Caballero,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+4e5909c1-3972-45ad-be12-68ce02acf2b2,Axel,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+fddc5e97-ee4e-4fff-87f5-fd8722c7969e,Azucena Ramírez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+5f9eae47-124c-4ff7-98f3-f77ca76ed340,BEATRIZ R GONZALEZ,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+f2022739-8fb2-4730-bfee-d64f5351ef4c,BENJAMIN,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+4da65f07-a30d-4e2e-9478-dc460dd17254,Beatriz Alcala,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+aa0b98bb-5742-4b62-943d-6585faba404e,Belen Aguirre,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+29181f3d-5dd1-43eb-9de0-d683678935ed,Benjamin Cano,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+60009b7e-573d-49eb-99c3-c93617d9b4b6,Bertha Martinez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+554be55f-4604-4cbd-a533-03e5559b57ad,Brainelys,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+474fee4b-b39e-4029-9ff2-e05941be5981,Brenda,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+f9b080c1-f56d-465a-ba05-81ba24a881f3,Brenda Salazar,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+ced9495e-ebc1-41b5-b77f-d6ecb20da9fd,CARLOS LUIS GUTIERREZ LORDA,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+1e995a95-a0c7-437e-8b0f-7fba5d1811aa,Carlos Aules,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+4e61f798-81bf-414c-a5e2-d00baceafa9b,Carolina Manzano,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+2d51a239-6514-4251-8a56-c2e2c46083bf,Cecilia Catalan,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+fa56b28f-caf9-4917-8bda-be9a1448f6d0,Cesareo Jimenez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+0325ea32-b668-4f56-813d-1a31ad2424ac,Charlotte Williams,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+679f420a-726a-47d3-9d1a-222b9689913b,Crystal Flax,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+bd1fc26b-1257-43cd-8059-170a40cb6872,DANIEL GODOy,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+9945b852-c3cf-4365-804c-608cd2e9b57e,Daniela Miranda,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+516af38b-c454-4eac-bbfc-edd29d582729,Danitza Cordero Mercado,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+e94ae552-55ca-4658-bc6d-d2f5a8d361cd,David Flores,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+5b752f96-9824-42af-a2d4-f772833dcb2b,David Pena,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+05853da0-a469-4d64-8c54-ce7572452bc4,Dayanys Ramirez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+1e88b0e7-a1f0-47bc-b325-1e743b24433a,Daysi,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+45d55226-8ac0-430c-a0ae-c61d8917dc06,Denise Martinez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+10823771-1c18-4604-b81b-63d5c1045dc7,Dewer,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+52e747d3-9252-4873-b5ec-099888df8dbb,Diana Gabriela,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+8a49d787-acf8-4452-9751-cc64a2dc0356,Diana Malagon,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+42388bf9-b916-4b59-b494-29488a8d25ac,Diana Paola Velez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+df9ee8f9-b670-4f81-a4ce-175a38cb3d10,Diego Fernandez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+e86de010-1087-4bb1-ac56-9f4320e82f69,Digna Lema,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+6f3bbcf4-183d-4f02-94ab-9fd0981d9153,Domenica Ramirez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+53751e56-c06e-404b-b242-d5ac556cecd0,Donoban Vega Peña,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+7d60c699-6f37-45b9-9a59-4e4eb1511a29,Doris Villalta,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+b1238174-7e98-4d14-8ec7-eb84bb0c6e32,Dustin Johnson,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+b8ed5fdb-b5a8-41ed-a5a7-c2a185665705,Dyala Zuniga,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+08ef5aea-fd14-4138-9824-ed9deb7643fe,Edna Rodriguez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+8e6ffdd0-324f-443e-ae8d-70b01a771933,Edson Rojas,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+36e99416-6fb9-4cef-a808-71b5d93f3598,Edwin isaac Ramirez Henriquez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+02eab27c-389e-41ca-bdd3-123e5944ab1a,Elda RUT Cuc Gonzalez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+3327b38b-a4c9-484a-9c98-e5ae15126ac8,Elda Rivera,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+5cd075df-034a-4137-9900-2a22e1ca1e28,Elena Mercado,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+ab892445-931f-483e-bd25-92203520ecb0,Eliana Acero,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+eedc44ea-4271-44b3-96db-e1e8bdc5476e,Elizabeth,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+a81d68ae-8728-4db6-9824-04b2a6edaafd,Elsa Nuñez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+42806d1f-99c7-40c7-8cd9-83757ff05280,Elvira Chun,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+bfb12e4e-3862-42e1-a105-c05d1f6d0383,Emely Dominguez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+de95fd67-a9a3-477e-b9b7-5229ed181e6f,Emilia Jimenez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+e5ccce36-0dca-4784-be25-179ed9e591cf,Emmanuel Vázquez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+7d4b3137-b721-4c6a-97a6-459a7cdaab63,Erica arevalo,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+e1c3daad-7e0a-4ea8-93f8-5baeb1968a71,Erick Cojon,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+e7e11d32-b153-4a93-9ac7-ad6a460a0ef6,Ericka,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+692616ea-75fd-4961-9615-c214bb179df5,Esteban,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+95f7e864-4103-4d7d-a974-3cfb6406c7cd,Esteban Perez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+97705412-9607-4075-a1f1-4872bfe5643f,Esthefane Caroline Silva,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+7731e994-c5d5-4a40-ab56-eb72618e93d5,Eufrocina Lopez Manzano,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+d72f6380-206c-49b8-a769-d16567f6407a,Evelyn D,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+491928c5-1854-41f8-9061-81139b046d3c,Evelyn Rodriguez Quiros,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+7ab2cc3f-072a-4135-9820-9555a7389500,Evelyn castro,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+1b4466df-00bb-4f47-8e48-97cfff311ddd,Eyder Santos,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+84d35ef2-1aa0-452b-9b1e-a9e4d04fdd49,Fabian,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+e9cc3712-8c19-49cf-9b4f-6fb925b8998c,Fany Iglesias,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+773c9102-6620-45e1-be8f-18a130c06570,Fernando Alvarez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+91498f10-6a0d-4167-9726-e38d4a7c7720,Fernando Ciprian,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+0bdc9595-9089-4ef2-977b-a632ecf23f5b,Fernando Pazmino,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+fa88a826-49ad-4d5d-a96b-a1627764ad97,Fiorella Vieira,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+0f7db0c5-492e-4661-9b0e-353111683cda,Gabriel Cristobal Cuello Díaz,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+f48d3d5e-2547-4f9a-8fa9-db33cb7109e1,Gabriela Ocampo,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+319c67f7-c6dc-4509-a5b4-347567e05020,Gladis peralta,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+664d1bcc-f533-4110-9de9-c1ecf4402de2,Gloria Mabel Davalos,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+7e7ccf2d-3413-4f77-9592-3ad7b3e37fd0,Gloria Vaquedano,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+e94e4429-488e-482a-9f88-db2f70f6e8f8,Gloriana Vargas Oreamuno,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+a493ec7c-a8aa-41c8-a970-bd0d5a6ca485,Grisel Zecena,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+9c895d67-ae40-4e8e-b2b7-556a350f4e01,Guadalupe,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+dfbbe04b-daf3-4d3c-9640-dd453ac4338e,Guadalupe Talancon,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+94ddd3bc-2629-4182-a9a7-3a5072ffa504,Hanzel Castro Solano,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+403f1ac3-6944-4322-9d73-dce610dbf492,Hector Escobar,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+815a9cab-b0c7-431e-8b3d-d1f53dc2135a,Helio,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+9a052fe0-90c8-4ac7-8829-afedd0311e87,Hilda Rodriguez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+b4cabfdd-ba5e-42e5-a573-b166444df99b,Hillary Letona,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+900274d6-6703-49bf-a8e4-df9ddd0acc0b,Héctor Menjivar,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+d878487e-6a61-4c0c-b2c3-d959591c6b93,Irene,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+7999417a-b0c7-44c2-9625-12d1e01dabc3,Irene Benitez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+d39e5502-d829-4cfb-bfcc-8b59c53ead4b,Iva Osorio,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+9db7aa85-3e02-4e79-83d3-792f3a56cd57,JENNYFER CAROLINA REY TEQUIA,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+d503b6b4-7478-4a8a-8e34-5d64bd0c2fe2,JORGE PAULO DE OLIVEIRA GOMES FILHO,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+a2c1b0d3-e162-4b9a-9f8f-15de266e89c3,Jaime Betancur,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+d326138b-be49-40bd-aaef-969b51d5b883,Jair Mejia,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+a8c60feb-bbbc-47cf-94db-e3d7a05a62ac,Javier Arturo Largo Rodriguez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+cc63e8ef-ee37-4ea5-9382-6176be397f14,Jazmin,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+4807e7c8-0066-417c-828b-ddefc012360b,Jessica,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+caff2bd0-c3d7-4839-a5a0-e2cc331f73d7,Jessica Sierra,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+bd02aa96-aa64-457e-8d62-c6ad72d55ead,Jessy Carvajal,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+97691570-6b9e-4654-874a-d6d9f5f1c41c,Jesus Laj,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+d6fd8d92-10f7-42e7-b186-7e8c17059721,Jevson De leon,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+482c1b16-294a-4345-94be-0b003e0ad7cc,Jhon Bustamante,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+38384c03-e358-4e01-b9d6-e4ee660e9d6a,Jhonatan Rauda,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+a1861ec5-e22a-4539-b623-a2f11858050b,Jhorman Robledo,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+143c1eed-f352-4172-8ea3-5baa59ec0113,Joel valtierra,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+66c9b70b-e2d3-41e7-a1f1-ebcb159c9180,Jose,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+b6bad890-0705-4cdd-a669-d5a7b45ff8b3,Jose Mera,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+12e225c8-c070-4111-855b-b1a176e04400,Jose Monge Mesen,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+7f16c097-676f-4950-8cbc-45dc89b82e66,Jose Naranza,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+91bd2452-fd0c-4196-9256-c860afed018f,Jose Osorio,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+d1b9708a-a6f3-4362-99bf-67406f7608ff,Jose Quintero,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+1081740b-8f9a-4798-b2d4-600dd324ad66,Jose Rodriguez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+77ef7368-b1cd-44c0-b7e2-815af23faeb5,Joselyn Lazo del Valle,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+cb667c4b-d338-4a1b-9687-27c9d7e8ac90,Josseline Rivero,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+7add2d36-338f-4eb8-b015-2081bb6e3f7c,Josue Arce,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+f841d7f8-c2c5-46dd-ae58-746c7d5ad498,Juan Carlos Miranda Serrano,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+7629416f-f19a-47ee-bd18-e4153cc2b9a5,Juana Valle,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+58f8d5d5-4a4c-4bc6-80a0-1aaf5ac9cd4f,Juandiegocantorduran,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+1467937e-e33a-4d64-896a-434c04383946,Juanita Rodriguez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+a663d1ef-019a-41c7-b7ae-d993c323eda7,Julio Roberto orantes santos,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+ba2b6e76-6c15-498f-830a-93f87995a29f,July Espinoza,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+e53e8a92-02fd-4570-9822-0daa5010d76c,KA Foster,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+d95c3fd1-ec88-403d-b740-9cf55d52ddc7,Karina Amerman,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+ac1e5d30-212e-4749-8343-09f59c74b9ac,Karla,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+488e90c5-55a6-4b4f-9475-40bf48f29dc9,Karla Cruz,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+be60e7e5-3528-402a-8cbc-329713c6ce07,Katherine Vargas,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+989f6889-e3eb-442b-8cda-cef48b3fecf0,Katia Carrasco,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+1a67c9df-6e45-4179-a9cc-7d746376f735,Kattin Castillo,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+661f399b-d212-4734-8fb8-1e5a6c6cc254,Khalid Fawaz,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+e5a773d1-adf0-4ff3-9594-591ca80e6009,Kotw,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+255e3c5a-5b30-4617-8214-fa69db0607c2,Kristina Zumbana Podaneva,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+0a673af5-770c-4eb4-8d8a-ff3ca9d59312,Laura Constante,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+d53647f6-6046-4782-aeca-135f166c919a,Leila Diaz,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+f1e781b1-7323-4aef-9af5-f36bc347f5b7,Lines Rosado,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+69ab88e3-189d-47c5-b3aa-9025e890fa82,Lino Antony Rodriguez Cortes,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+9b6faea1-f414-42f5-8d96-6a12738332cc,Liza Macedo Carreño,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+38f64bb5-5498-4ee6-b140-27a99be99fb5,Lizeth Hernandez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+db5598d3-fa8a-42b8-9d8a-26f2ec1c6a8a,Lon Plasner,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+efc6b30f-9bdf-41c3-9ea3-c9b724fa41cf,Lorena Andrade,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+ddb7c75b-9046-4491-a285-89209d9e98d8,Lorena Mora,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+dcd9de40-10a0-4236-bf1f-2a54633efc2a,Lorena Rodríguez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+4f99ebd0-02c3-4ca6-9255-579b9adb48d8,Luis Arenas,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+50877dc8-a00b-4cf7-b6eb-f2fc722ff7b1,Lupe Palomino,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+cee379de-31e2-412b-bc8c-e3e1480a96fd,MARIA ESPEJO,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+ff2a2825-921c-4cde-805b-89a14aec4556,MARTHA MORALES,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+a7876a93-da90-4b28-93f4-f720e3bb7791,Mari Lafaurie,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+a21155cd-61fd-413d-b2b5-08159afad034,Maria Acevedo,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+9b760ec0-4bac-4fe4-8393-1a0a6f715fa6,Maria Rojas,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+f85774bb-271e-4db5-905c-6b5271d083e3,Maria Salazar,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+6495474c-2c13-4993-a6c8-c5973758ae7f,Mariana,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+735f4aea-5ac7-4f11-b51f-b1e2e74faed9,Mariana Rojas,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+9a721447-23ea-4211-8622-c9f9c41684d2,Mariangel Y Castillo,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+181a22bc-6a43-4224-980e-2191be930719,Maribeth,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+4fe2fdd6-811e-4441-aabb-e26eb362ce33,Maritza castillo,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+9f77b73d-e50e-4432-9e71-3d9e6b49e41e,Marvin Torres,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+9bef9b85-214e-4aac-b955-6ee245f1fc36,Marving Duplan,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+864ca2bc-3787-4be6-a793-16dfa3a19638,Mary monda,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+17b4bfd9-df5f-42d8-b5ca-b427e8af2c66,María Alejandra Ruíz Landaeta,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+95df2d9c-6788-405a-9773-7a39dfacf0b9,Mauricio Jimenez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+1e96ac1a-6f53-487e-99e0-325408e82b79,Mauro Ismael Pinchu Naranza,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+3c625996-7c4b-4ed7-8e82-343bd285e5d8,Miguel Jadan,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+4fb116b0-121c-4ae8-aba9-5ea4f97be698,Miguel Reyes,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+d742edce-b9e7-4e7e-8777-52a2a5a5b8c9,Mileidy Figueira,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+e12b8503-3fa0-4771-9310-53599bfa2bef,Milena Alejos,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+6586ce2b-f537-42b1-b1d0-032a38deb487,Monica Borbon,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+24f46e4f-a98d-4057-8566-dd560a24648b,Nancy López,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+2df13751-04c0-4aaf-9720-8b113e926d3f,Natalia,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+d8ea172e-7b1b-470e-81ef-64a800e45096,Nathalia Jimenez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+96e68022-017c-4e50-8466-532aa450a9fd,Nayely Villa Alcalá,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+8c146d2f-ea62-46bc-9741-163d413d1cee,Nelby Bastidas,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+57985512-9a18-4531-b51c-9616cddfde4b,Nora Mendez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+b2801c3c-f22f-4cb8-9e3f-03383cd981bc,Norma Gomez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+b66dd86b-36bd-46f6-af31-b915dc0f5b95,Norma Hernandez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+090b7226-c10e-4efe-be58-b8878676deb9,Olga,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+9dc35f55-77ac-4e42-8983-bd72bc26f33e,Oscar Osorio,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+0bd22e0c-825f-4d07-9c61-0139c8c73572,Pamela Jimenez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+e10af47b-a651-44c3-8182-40d1ac44ebbd,Pamela Ovalle,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+67176f71-df1d-4142-994f-e1254f4536c5,Paola Chavarria,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+d1326e9d-5fa9-49d9-8cba-7fbe4ba79165,Paola Simons,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+8fafbc20-4cb4-4a9a-9054-88e7a0a162e4,Patricia Iriarte,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+6e72930e-8573-44f9-98bc-c33096f003cc,Patricia Palomino,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+28063d5b-9256-4e6c-895e-16207be5c848,Patricia Parraguez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+957303dd-0218-423e-886a-ba51397bfa5b,Paul Nunez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+99b9c17f-bcce-4a3a-b5f2-03b47ef2fe14,Pilar Silva Caycho,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+5693619a-481f-4cf3-8dbe-165fe973a2ff,Prueba Amy,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+b12793ea-fadc-48da-92f8-97d842a5c9c0,RICARDO,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+12b443e2-d57e-487a-85e2-15f006b9b53d,Raysa Oliveira,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+98aae61c-fed2-4536-97d8-218e19902f89,Rebeca Mendoza,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+cda2e13e-a001-4d8a-b800-1f620fe925c9,Rita Rivera-Huerta,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+861839b0-7306-40e0-9c43-36905a094e87,Rocio Perez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+8df1b4ec-9857-4af0-b11c-03184b6d4c8b,Rodrigo Maldonado,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+8fa24dce-9544-4d9c-b4c3-8371a0120099,Ronald Alvarenga,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+2e1dfc9e-5368-46b9-8074-e710882642c8,Rosa Ahuanari,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+803f0ea7-f664-4aee-9089-5fc087ab1676,Rosa Hernández,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+4a74150d-8267-4d04-87e6-299df441121f,Rosel Torres,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+b9860f71-7321-47f1-a412-e426a5a703f3,Rosetta Wood,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+73637a9a-944d-4d76-908e-8f6c6dade41f,Rossa Rodríguez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+79a0d157-da59-4e77-bc6f-0bea831fba2c,Ruben Guayta,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+aae65ea0-24da-471b-ba1b-1506d1dfbbba,SICONG GUO,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+1343f7f3-cb79-44c5-9545-4e62f5503887,Sandra Nova,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+057eceb7-5052-4b4d-9017-e5dda8f57cd5,Sandy Quejú,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+a6238247-1e94-4679-ad21-9e0e99275ac8,Sara Garcia,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+fe931616-a73c-4c90-8f15-35904d76e3bc,Sara Garcia Martínez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+3f294e87-993e-407b-b6d2-6a745413df88,Sara Ramirez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+1b843f32-8fdb-4e32-99c3-0871e02f9963,Scarlis Hernandez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+7ba34325-7a13-40cc-a6cf-213d4116e85f,Sebastian Zuluaga,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+3ece89ab-9296-4624-97f9-9aa45307e131,Sergio,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+8b8b071f-8a39-4f58-9e4b-4e87f1843ca3,Shaila Valiente,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+8348929f-af06-4cdf-93b5-97b1a3743ae9,Shantanu Pethe,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+10282bbe-7e2f-41a7-b631-a30167046dd1,Silvia Isabel Bonilla,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+46b2166e-216f-411a-86b9-cc82bed07817,Sofia,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+fdac74da-1113-491a-9a11-26ce33ee5bc8,Steffi Gravenhorst,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+ca939c7c-c73f-4cfd-9748-0dc864b78dc9,Steven Landa,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+63a73e7f-351b-4b40-b8f0-a331f2bd89f8,Thomas M,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+67f6aa9c-aade-4e60-b791-cdcc7302a96f,Thomas S. Sweeney,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+52ea5efe-acaa-4069-992d-d8a5fde289db,Uribe,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+89651bbd-2763-4827-b4fa-3862c48bd0b1,Urkien Guadalupe,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+040291be-197f-47e1-b74b-243fdab63930,VICTORIO BASSI,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+f13fd427-d3d8-461c-91c5-9dfe1ce715c2,VIVIANA SOLIS,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+e74dd554-7b81-4e36-8711-a655c946833a,Valentina Numpaque,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+52077599-f165-4b08-a0d2-bfa1d934fab7,Vanessa E Tavarez Reyes,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+c894270d-45a8-4a32-9979-e2247ebe5a2e,Vanessa Toala,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+8d2753aa-4215-47ae-ade4-ae94b5363d4a,Vicente Sis Ixpatac,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+5656ffe6-ce50-46fc-85b8-c5a48d7e4b1a,Victoria Dubon,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+5e1b07f8-897a-4381-a0c0-80436cee154d,Vincent Caudo-Engelmann,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+84254d2a-82b5-411a-9331-0876082e8d3d,Vitor Tessutti,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+2a28a080-21a2-47bb-8d95-6df29e58cb9d,Walter Inga,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+2843fd97-ec05-4f85-89c3-f52bff636b60,Watson Shaw,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+f9feab69-b57a-4e2f-8580-03e8e0079843,Wendy Solis,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+cea1533c-e078-4aa4-9687-5db71006f944,Wilder Mora,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+ae945cd0-0e5e-43d9-96ac-e78f82e3556e,Wismel Garzon,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+55b868b0-0362-4990-a379-13f6bb490ceb,XIMENA SCARLETH larrea,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+88fee81e-444f-42b5-ad30-776c4de4f707,Xochil Reyes,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+c681e466-b1b7-439a-b6b2-0fbb737421b9,YALING WANG,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+6b12edf1-b07a-4ab0-a43e-a9a58221f0b8,YURANAN SANDOS,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+e71789fe-e5d9-45fc-bb6e-d0000a396e35,Yamileth Rosales,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+70ac45ce-a610-464b-a361-1d450a05fb8e,Yancy Alfaro,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+3432d8d5-7aec-493a-8e0b-53d817e49d32,Yarleny,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+1e0871ba-c95c-4746-8645-f75aaff439e2,Yeison Palacios,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+84c2d9dc-17fa-417c-8017-20b3d7fad716,Yenifer Diaz Quienteros,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+4c2978e8-01ba-4609-84b6-ee43aa242339,Yessica Rivas,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+2a5dab1f-d5d3-4898-8da7-286ca672dd8d,Yorlania,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+9b022c5b-ed22-460d-9af2-f69fcf593c42,Yorleny Alvarez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+6f45bedb-3875-4107-b922-bf5e54796347,Yuliana Ballestero,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+f8575678-0f2a-4724-959d-17d471d6ab2f,Zenayda solis,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+9f20b904-78a4-4a58-9c70-b6e8a875bea7,Zuleica Quito,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+4aa095e9-3e35-487e-9dea-ee66e5f9212d,Zulema Gomez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+22a48666-5683-4a81-9425-92d5a4d5e95c,alejandrasaganome@hotmail.com,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+c20dd248-ac07-4b63-924d-bac325527865,andrea jurado,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+fdfd6b0c-a892-40b5-89e5-38382b7c8ec1,angelica segura,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+5626dc4a-26f3-41a9-8626-387e558c5493,ashley hernandez batista,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+ca42aeba-10fc-4c7c-b9c2-d49e5c8eaa51,claudia maria cuellar acosta,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+49dfc0c8-de25-4564-85c6-652e921b8d9e,claudia viviana Ruiz Carmona,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+043248fc-9e21-4ab9-b5b3-a90b16a4160a,edwinpituza30@hotmail.com,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+b2e56acc-ca0e-4c0b-a79e-88d6728dac0d,francisco ciprian sam,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+742afb36-7e91-426e-ae79-e9f2d295679a,frank bardales,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+132ca16c-2bd0-4bd0-8306-ab7a60ec6949,gumer munoa,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+48177b38-75e5-402c-8cb8-f30881d1847d,jordi marcalla,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+e0e4c856-4cc1-480c-b9bd-2b0607deaf72,jose macotelo,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+b4c5142e-469f-4251-af96-4d851bf7c5e1,jose rivera,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+797ef5d2-25ac-4829-96d6-54c33a47cb9f,karina bojorquez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+72dcd3a5-9d30-483a-9a8a-092d8ac56eac,karla mogollon bardales,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+1e5a734f-0d4d-4253-b5c1-1d53547aa56e,karls bardales,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+e005eeeb-9156-40b6-a631-05e677ab5835,luis,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+2103ec97-06a5-46c1-a7f9-1fc6c325fcf1,luis,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+30b5d51a-0105-461b-8b1f-93e760a661e5,luis,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+d39bcbaa-df20-4f69-82fe-56bae04b951e,maria siles,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+7ecacec2-82e7-4876-9f6d-fa2104c43069,mingrid1ml@gmail.com,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+6a56d1ed-aa67-482c-acd2-e4ef445cc5ea,mohamed cisse,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+f0322730-a9ab-42b7-be3f-b1bf327b8a76,noelia leiton Alpizar,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+ac00e0e0-e51b-4eb9-b365-a896506d2739,rUTH Villatoro,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+7ec9e2e3-7085-48f7-b3bc-966f2ef271a8,shi8963@sina.com,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+fa22afef-6abf-4821-9d47-4daee6ceb87d,soledad,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+21ce9c88-85aa-40e1-820e-e689dd0630b1,valerie carvajal,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+dd3d160a-13b9-4367-af57-43587e097384,wendi liguori,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+346e3172-8934-4370-a2f2-110db66e9b11,william molina,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+ef26909a-d82f-41ff-97f9-2e0c37e6db4e,ximena,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+54045be4-43b7-47c3-9b9c-d12c5f34068b,yelin gomez,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,reachable,,,,,first_outreach,AIT USA enrollment contact with no recorded touch
+a4f897d6-12d9-463c-8cb5-a5d12691c68b,닝티 모,,AIT USA Institute,ait_usa,New Lead,New Lead,New Lead,missing_phone,,,,,first_outreach,AIT USA enrollment contact with no recorded touch

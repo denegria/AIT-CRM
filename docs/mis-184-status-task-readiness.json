@@ -1,0 +1,556 @@
+{
+  "generatedAt": "2026-06-10T23:26:03.394Z",
+  "fingerprint": {
+    "targetBaseUrl": "https://ait-crm-git-staging-alvaros-projects-efb8ae58.vercel.app",
+    "hostSuffix": "us-east-1.aws.neon.tech",
+    "database": "neondb",
+    "neonBranchId": "br-broad-hill-aptjpyea",
+    "neonProjectId": "plain-band-07005942"
+  },
+  "assumptions": [
+    "AIT Signs active pipeline remains runtime-classified by current work since 2025-01-01 or follow-up touch since 2026-01-01.",
+    "Source/history-only AIT Signs rows stay searchable but should not generate employee tasks.",
+    "No task backfill should run until the first batch is reviewed by division and contactability."
+  ],
+  "totals": {
+    "contacts": 1209,
+    "leads": 368,
+    "tasks": 0,
+    "taskCandidates": 368
+  },
+  "summaries": {
+    "AIT Signs": {
+      "workflowKey": "ait_signs",
+      "contacts": 906,
+      "leads": 65,
+      "tasks": 0,
+      "workflowStatuses": [
+        "Intake",
+        "Estimate",
+        "Work Order",
+        "Fulfillment",
+        "Invoice / Payment"
+      ],
+      "statusCounts": [
+        {
+          "label": "Invoice / Payment",
+          "count": 760
+        },
+        {
+          "label": "Fulfillment",
+          "count": 64
+        },
+        {
+          "label": "Intake",
+          "count": 55
+        },
+        {
+          "label": "Estimate",
+          "count": 23
+        },
+        {
+          "label": "Work Order",
+          "count": 4
+        }
+      ],
+      "stageCounts": [
+        {
+          "label": "Invoice / Payment",
+          "count": 756
+        },
+        {
+          "label": "Fulfillment",
+          "count": 64
+        },
+        {
+          "label": "Intake",
+          "count": 58
+        },
+        {
+          "label": "Estimate",
+          "count": 23
+        },
+        {
+          "label": "Work Order",
+          "count": 5
+        }
+      ],
+      "bucketCounts": [
+        {
+          "label": "Source history",
+          "count": 784
+        },
+        {
+          "label": "Current work",
+          "count": 120
+        },
+        {
+          "label": "2026 follow-up",
+          "count": 2
+        }
+      ],
+      "rawLeadStatuses": [
+        {
+          "label": "New Lead",
+          "count": 53
+        },
+        {
+          "label": "Lost",
+          "count": 6
+        },
+        {
+          "label": "Won",
+          "count": 2
+        }
+      ],
+      "rawLeadStages": [
+        {
+          "label": "new",
+          "count": 53
+        },
+        {
+          "label": "not_interested",
+          "count": 4
+        },
+        {
+          "label": "converted_to_work_order",
+          "count": 2
+        },
+        {
+          "label": "invalid_contact",
+          "count": 2
+        }
+      ],
+      "contactabilityCounts": [
+        {
+          "label": "missing_email",
+          "count": 761
+        },
+        {
+          "label": "no_contact_channel",
+          "count": 145
+        }
+      ],
+      "taskCounts": [],
+      "taskReadyCount": 65,
+      "firstOutreachOrFollowUpCandidates": 65,
+      "manualReviewCount": 790
+    },
+    "AIT USA Institute": {
+      "workflowKey": "ait_usa",
+      "contacts": 303,
+      "leads": 303,
+      "tasks": 0,
+      "workflowStatuses": [
+        "New Lead",
+        "Follow Up",
+        "Enrolled",
+        "Completed / Previous Student"
+      ],
+      "statusCounts": [
+        {
+          "label": "New Lead",
+          "count": 303
+        }
+      ],
+      "stageCounts": [
+        {
+          "label": "New Lead",
+          "count": 303
+        }
+      ],
+      "bucketCounts": [
+        {
+          "label": "New Lead",
+          "count": 303
+        }
+      ],
+      "rawLeadStatuses": [
+        {
+          "label": "New Lead",
+          "count": 303
+        }
+      ],
+      "rawLeadStages": [
+        {
+          "label": "Needs First Outreach",
+          "count": 302
+        },
+        {
+          "label": "New Lead",
+          "count": 1
+        }
+      ],
+      "contactabilityCounts": [
+        {
+          "label": "reachable",
+          "count": 276
+        },
+        {
+          "label": "missing_phone",
+          "count": 26
+        },
+        {
+          "label": "missing_email",
+          "count": 1
+        }
+      ],
+      "taskCounts": [],
+      "taskReadyCount": 303,
+      "firstOutreachOrFollowUpCandidates": 303,
+      "manualReviewCount": 0
+    }
+  },
+  "taskCandidateSample": [
+    {
+      "contactId": "d3dd8dcf-0ce5-4013-9171-521ec6496ab0",
+      "name": "2 QUICK",
+      "companyName": "2 QUICK",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Fulfillment",
+      "currentStage": "Fulfillment",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2026-05-21",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    },
+    {
+      "contactId": "0fcba791-b890-4aae-bfc1-50a02b2b239a",
+      "name": "A&M CAR AUTODETAILLING",
+      "companyName": "A&M CAR AUTODETAILLING",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Fulfillment",
+      "currentStage": "Fulfillment",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2025-05-24",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    },
+    {
+      "contactId": "0d7fff3b-cb7e-46e2-8774-dbab9581fbdd",
+      "name": "A.L. PAINTING",
+      "companyName": "A.L. PAINTING",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Fulfillment",
+      "currentStage": "Fulfillment",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2025-08-14",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    },
+    {
+      "contactId": "724446c4-512e-40d5-ada4-bb66f82ecae4",
+      "name": "ADRIAN GARBANZO",
+      "companyName": "ADRIAN GARBANZO",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Fulfillment",
+      "currentStage": "Fulfillment",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2025-04-07",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    },
+    {
+      "contactId": "21e42581-df77-43a1-af56-5a895e6c46c5",
+      "name": "ALBERT MAINTENACE",
+      "companyName": "ALBERT MAINTENACE",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Fulfillment",
+      "currentStage": "Fulfillment",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2026-05-04",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    },
+    {
+      "contactId": "955d4152-03ea-4a45-99da-e2bb7e129e2a",
+      "name": "ANA CLEANING SERVICES",
+      "companyName": "ANA CLEANING SERVICES",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Fulfillment",
+      "currentStage": "Fulfillment",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2026-04-29",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    },
+    {
+      "contactId": "77d1c262-1ba6-4512-90e2-53ff1f263527",
+      "name": "ARIAS AUTO DETAILLING",
+      "companyName": "ARIAS AUTO DETAILLING",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Fulfillment",
+      "currentStage": "Fulfillment",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2025-04-22",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    },
+    {
+      "contactId": "4e794ccb-2f25-4881-9beb-4890a04bbe9d",
+      "name": "AUTO CHIP CORP",
+      "companyName": "AUTO CHIP CORP",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Work Order",
+      "currentStage": "Work Order",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2025-10-19",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    },
+    {
+      "contactId": "55760ddd-8c4e-4e1d-ac7d-a6cfa21bb970",
+      "name": "BLUE SHEEP",
+      "companyName": "BLUE SHEEP",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Estimate",
+      "currentStage": "Estimate",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2026-02-19",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    },
+    {
+      "contactId": "6ae8c5fe-605c-4e65-8d58-4a067174d26a",
+      "name": "BRYAN",
+      "companyName": "BRYAN",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Fulfillment",
+      "currentStage": "Fulfillment",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2025-05-19",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    },
+    {
+      "contactId": "30396e88-3df3-49cc-adf4-0b3acb0c66c0",
+      "name": "CAMILA CONTRACTOR",
+      "companyName": "CAMILA CONTRACTOR",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Fulfillment",
+      "currentStage": "Fulfillment",
+      "bucket": "2026 follow-up",
+      "contactability": "missing_email",
+      "lastTouch": "2026-02-17",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "2026-02-17",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with 2026 follow-up touch"
+    },
+    {
+      "contactId": "c77319a3-d980-4896-a36a-3e6e5be244fe",
+      "name": "CENTRAL FRESH",
+      "companyName": "CENTRAL FRESH",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Fulfillment",
+      "currentStage": "Fulfillment",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2026-05-26",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    },
+    {
+      "contactId": "4f0ab9da-de3d-4e05-8ff2-37fdf34c20f3",
+      "name": "CENTRAL FRESH SUPERMARKET",
+      "companyName": "CENTRAL FRESH SUPERMARKET",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Fulfillment",
+      "currentStage": "Fulfillment",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2026-05-08",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    },
+    {
+      "contactId": "e11c4d5c-a356-4123-a598-8e221446324c",
+      "name": "CJ MAJESTIC TRANSPORT LLC",
+      "companyName": "CJ MAJESTIC TRANSPORT LLC",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Fulfillment",
+      "currentStage": "Fulfillment",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2025-08-04",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    },
+    {
+      "contactId": "6ab78aa9-2633-4d18-af0f-4dbd573cf588",
+      "name": "CON. SIGNS",
+      "companyName": "",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Intake",
+      "currentStage": "Intake",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2026-02-18",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    },
+    {
+      "contactId": "2d1c505a-f9b5-4279-9aad-a89f04a814c0",
+      "name": "COTIZACION 1 LILI",
+      "companyName": "COTIZACION 1 LILI",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Estimate",
+      "currentStage": "Estimate",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2025-10-29",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    },
+    {
+      "contactId": "38e7c3a0-4192-48a7-b388-b4532c68adea",
+      "name": "DELFINO CRUZ",
+      "companyName": "DELFINO CRUZ",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Fulfillment",
+      "currentStage": "Fulfillment",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2025-06-16",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    },
+    {
+      "contactId": "3564d81b-574e-4cdb-ba66-66ed901686d5",
+      "name": "DENNYS",
+      "companyName": "DENNYS",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Fulfillment",
+      "currentStage": "Fulfillment",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2025-05-15",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    },
+    {
+      "contactId": "f7504f06-a15e-459f-a001-d6e9c1ab4a7c",
+      "name": "DISENO DE TARJETA DE BABY SHOWER",
+      "companyName": "DISENO DE TARJETA DE BABY SHOWER",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Fulfillment",
+      "currentStage": "Fulfillment",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2025-05-22",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    },
+    {
+      "contactId": "457df581-f458-4768-9162-0092f61e6655",
+      "name": "DOWN TOWN PLAINFIELD",
+      "companyName": "DOWN TOWN PLAINFIELD",
+      "businessUnit": "AIT Signs",
+      "workflowKey": "ait_signs",
+      "status": "Fulfillment",
+      "currentStage": "Fulfillment",
+      "bucket": "Current work",
+      "contactability": "missing_email",
+      "lastTouch": "2025-10-06",
+      "lastTouchLabel": "Activity",
+      "lastFollowUpTouch": "",
+      "assignedUserId": "",
+      "recommendedTaskType": "follow_up",
+      "reason": "AIT Signs active record with current non-closed work stage"
+    }
+  ],
+  "recommendation": {
+    "nextIssueTitle": "[AIT CRM Data] Build task activation approval packet from normalized statuses",
+    "nextIssueScope": [
+      "Use current runtime lifecycle buckets instead of mutating contact statuses first.",
+      "Generate a read-only candidate list for AIT Signs current-work/2026-follow-up rows and AIT USA New Lead/Follow Up rows with at least one usable contact channel.",
+      "Group candidates by division, owner, status, contactability, and reason.",
+      "Keep source-history, DNC/wrong-number/no-channel, closed/completed, and low-evidence records out of the first task batch.",
+      "Only after approval, add idempotent task creation using sourceType=system/sourceId policy keys."
+    ]
+  }
+}
