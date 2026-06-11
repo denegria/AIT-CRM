@@ -20,6 +20,9 @@ function defaultBusinessUnitScope({ businessUnits = [], currentUser = null, cont
     ? activeUnits.map((unit) => unit.id)
     : currentUser?.businessUnitIds || activeUnits.map((unit) => unit.id);
   const allowedSet = new Set(allowedIds);
+  if (!currentUser?.canAccessAllBusinessUnits && currentUser?.primaryBusinessUnitId && allowedSet.has(currentUser.primaryBusinessUnitId)) {
+    return currentUser.primaryBusinessUnitId;
+  }
   const counts = new Map();
   for (const contact of contacts || []) {
     const businessUnitId = getBusinessUnitId(contact);
@@ -191,6 +194,7 @@ export function CRMProvider({ children, initialData }) {
 
   useEffect(() => {
     if (typeof window === 'undefined' || !isPostgres) return undefined;
+    if (currentUser && !currentUser.canAccessAllBusinessUnits) return undefined;
 
     let cancelled = false;
     queueMicrotask(() => {
@@ -213,7 +217,7 @@ export function CRMProvider({ children, initialData }) {
     return () => {
       cancelled = true;
     };
-  }, [accessibleBusinessUnits, currentUser?.id, isPostgres]);
+  }, [accessibleBusinessUnits, currentUser, currentUser?.id, isPostgres]);
 
   const setCurrentBusinessUnitId = useCallback((nextId) => {
     const selectedId = nextId || accessibleBusinessUnits[0]?.id || ALL_BUSINESS_UNITS;

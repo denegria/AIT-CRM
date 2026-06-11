@@ -77,7 +77,7 @@ export async function resolveBusinessUnitId({
   }
 
   if (!session.user.canAccessAllBusinessUnits && session.user.businessUnitIds.length) {
-    return session.user.businessUnitIds[0];
+    return session.user.primaryBusinessUnitId || session.user.businessUnitIds[0];
   }
 
   const [row] = await db

@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   evaluateLifecycleTransition,
   lifecycleWorkflowForBusinessUnit,
+  isClientAccountBusinessUnit,
   normalizeLifecycleStatus,
   requireLifecycleStatus,
   workflowKeyForBusinessUnit,
@@ -21,6 +22,8 @@ test('normalizeLifecycleStatus maps input aliases to canonical pipeline values',
 test('lifecycle workflows resolve division-specific statuses', () => {
   assert.equal(workflowKeyForBusinessUnit({ name: 'AIT USA Institute' }), 'ait_usa');
   assert.equal(workflowKeyForBusinessUnit({ name: 'AIT Signs' }), 'ait_signs');
+  assert.equal(isClientAccountBusinessUnit({ name: 'AIT Signs' }), true);
+  assert.equal(isClientAccountBusinessUnit({ name: 'AIT USA Institute' }), false);
   assert.deepEqual(
     lifecycleWorkflowForBusinessUnit({ name: 'AIT USA Institute' }).statuses,
     ['New Lead', 'Follow Up', 'Enrolled', 'Completed / Previous Student'],

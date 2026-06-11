@@ -4,15 +4,12 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import ContactsPage from '@/app/contacts/page';
 import { useCRM } from '@/lib/store';
-
-function isClientWorkflowScope(unit) {
-  return unit?.name === 'AIT Signs';
-}
+import { isClientAccountBusinessUnit } from '@/lib/crm/lifecycle';
 
 export default function ClientsPage() {
   const router = useRouter();
   const { currentBusinessUnit, loaded } = useCRM();
-  const canUseClientLanguage = isClientWorkflowScope(currentBusinessUnit);
+  const canUseClientLanguage = isClientAccountBusinessUnit(currentBusinessUnit);
 
   useEffect(() => {
     if (loaded && !canUseClientLanguage) {

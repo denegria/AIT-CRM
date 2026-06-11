@@ -1,6 +1,6 @@
 import { createHash, pbkdf2Sync, randomBytes, timingSafeEqual } from 'crypto';
 import { cookies } from 'next/headers';
-import { and, eq, gt, isNull } from 'drizzle-orm';
+import { and, desc, eq, gt, isNull } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 import { getDb } from '@/db/index.js';
 import {
@@ -159,9 +159,13 @@ async function loadSession(token) {
       .innerJoin(permissions, eq(rolePermissions.permissionId, permissions.id))
       .where(eq(userRoles.userId, sessionRow.userId)),
     db
-      .select({ businessUnitId: businessUnitMemberships.businessUnitId })
+      .select({
+        businessUnitId: businessUnitMemberships.businessUnitId,
+        isPrimary: businessUnitMemberships.isPrimary,
+      })
       .from(businessUnitMemberships)
-      .where(eq(businessUnitMemberships.userId, sessionRow.userId)),
+      .where(eq(businessUnitMemberships.userId, sessionRow.userId))
+      .orderBy(desc(businessUnitMemberships.isPrimary), businessUnitMemberships.createdAt),
   ]);
 
   const roleKeys = [...new Set(roleRows.map((role) => role.key))];
@@ -178,6 +182,7 @@ async function loadSession(token) {
       primaryRoleKey: roleKeys.includes('admin') ? 'admin' : roleKeys[0] || 'account_manager',
       permissions: permissionKeys,
       businessUnitIds: membershipRows.map((row) => row.businessUnitId),
+      primaryBusinessUnitId: membershipRows.find((row) => row.isPrimary)?.businessUnitId || membershipRows[0]?.businessUnitId || null,
       canAccessAllBusinessUnits: permissionKeys.includes(PERMISSIONS.BUSINESS_UNITS_ALL),
     },
   };

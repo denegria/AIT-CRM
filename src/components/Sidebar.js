@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useCRM } from '@/lib/store';
+import { isClientAccountBusinessUnit } from '@/lib/crm/lifecycle';
 import s from './Sidebar.module.css';
 
 import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal } from 'lucide-react';
@@ -22,7 +23,6 @@ const nav = [
 ];
 
 const mobilePrimaryPriority = ['/', '/clients', '/contacts', '/pipeline', '/tasks'];
-const clientViewBusinessUnits = new Set(['AIT Signs']);
 
 function isRouteActive(pathname, href) {
   if (href === '/') return pathname === '/';
@@ -54,7 +54,7 @@ export default function Sidebar() {
     window.location.reload();
   };
 
-  const isClientViewScope = currentBusinessUnitId !== 'all' && clientViewBusinessUnits.has(currentBusinessUnit?.name);
+  const isClientViewScope = currentBusinessUnitId !== 'all' && isClientAccountBusinessUnit(currentBusinessUnit);
   const scopedNav = useMemo(() => nav.map((item) => {
     if (item.href === '/contacts' && isClientViewScope) {
       return { href: '/clients', label: 'Clients', Icon: Building2 };

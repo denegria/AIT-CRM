@@ -159,6 +159,10 @@ export function workflowKeyForBusinessUnit(businessUnit = null) {
   return workflowKeyFromBusinessLabel(businessUnit?.name || businessUnit?.label || businessUnit?.businessUnitName || '');
 }
 
+export function isClientAccountBusinessUnit(businessUnit = null) {
+  return workflowKeyForBusinessUnit(businessUnit) === WORKFLOW_KEYS.AIT_SIGNS;
+}
+
 export function lifecycleWorkflowForBusinessUnit(businessUnit = null) {
   return WORKFLOW_DEFINITIONS[workflowKeyForBusinessUnit(businessUnit)] || WORKFLOW_DEFINITIONS[WORKFLOW_KEYS.DEFAULT];
 }
