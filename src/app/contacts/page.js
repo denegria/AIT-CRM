@@ -17,7 +17,7 @@ import {
 import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
-import { AlertCircle, UserPlus, UserRoundCheck } from 'lucide-react';
+import { AlertCircle, UserRoundCheck } from 'lucide-react';
 
 const empty = {
   name: '',
@@ -375,15 +375,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           actions={[
             { label: 'View', onClick: (r) => router.push(`${routeBase}/${r.id}`) },
             ...(canWrite ? [
-              ...(currentUser?.id ? [{
-                label: 'Assign to me',
-                icon: <UserPlus size={14} />,
-                onClick: (r) => {
-                  updateContact(r.id, { assignedTo: currentUser.id })
-                    .then(() => toast(`${singularLabel} assigned`))
-                    .catch((error) => toast(error?.message || 'Assignment failed.', 'error'));
-                },
-              }] : []),
               { label: 'Edit', onClick: openEdit },
               {
                 label: 'Delete',
