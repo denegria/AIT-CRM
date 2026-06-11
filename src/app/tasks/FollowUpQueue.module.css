@@ -201,6 +201,16 @@
   border-top: 1px solid var(--border-subtle);
 }
 
+.editPanel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(220px, 1.3fr) repeat(3, minmax(140px, 0.75fr));
+  gap: 10px;
+  align-items: end;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
 .completionNote {
   min-width: 0;
 }
@@ -209,6 +219,24 @@
   display: flex;
   justify-content: flex-end;
   gap: 6px;
+  flex-wrap: wrap;
+}
+
+.editError {
+  grid-column: 1 / -1;
+  padding: 10px 12px;
+  color: var(--danger);
+  font-size: var(--text-sm);
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, var(--border-subtle));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg-secondary));
+}
+
+.editActions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
@@ -247,7 +275,8 @@
     grid-template-columns: repeat(2, minmax(160px, 1fr));
   }
 
-  .createGrid {
+  .createGrid,
+  .editPanel {
     grid-template-columns: repeat(2, minmax(160px, 1fr));
   }
 
@@ -257,7 +286,8 @@
   }
 
   .completionNote,
-  .completionActions {
+  .completionActions,
+  .editActions {
     grid-column: 1 / -1;
   }
 }
@@ -265,7 +295,8 @@
 @media (max-width: 760px) {
   .summaryGrid,
   .toolbar,
-  .createGrid {
+  .createGrid,
+  .editPanel {
     grid-template-columns: 1fr;
   }
 
@@ -295,7 +326,8 @@
   .actions .iconButton,
   .actions a,
   .actions button,
-  .completionActions button {
+  .completionActions button,
+  .editActions button {
     flex: 1 1 44px;
     justify-content: center;
   }
@@ -305,7 +337,8 @@
   }
 
   .completionNote,
-  .completionActions {
+  .completionActions,
+  .editActions {
     grid-column: auto;
   }
 }

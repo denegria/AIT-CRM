@@ -257,6 +257,25 @@ function taskMetadata(body, dueAt) {
   return metadata;
 }
 
+function taskPatchMetadata(existingTask, body, dueAt) {
+  if (!Object.prototype.hasOwnProperty.call(body, 'recurrence') &&
+      !Object.prototype.hasOwnProperty.call(body, 'metadataJson')) {
+    return undefined;
+  }
+  return taskMetadata({
+    metadataJson: existingTask.metadataJson || {},
+    recurrence: Object.prototype.hasOwnProperty.call(body, 'recurrence')
+      ? body.recurrence
+      : body.metadataJson?.recurrence,
+  }, dueAt);
+}
+
+function hasLinkPatch(body) {
+  return ['businessUnitId', 'contactId', 'leadId', 'workOrderId'].some((key) => (
+    Object.prototype.hasOwnProperty.call(body, key)
+  ));
+}
+
 export async function GET(request) {
   const { error, session } = await requirePermission(request, PERMISSIONS.CRM_READ);
   if (error) return error;
@@ -510,13 +529,27 @@ export async function PATCH(request) {
         ...(ownerUserId !== undefined ? { ownerUserId } : {}),
       },
     });
+    const linkPatch = hasLinkPatch(body)
+      ? await resolveTaskLinks(db, session, {
+          businessUnitId: body.businessUnitId || existingTask.businessUnitId,
+          contactId: Object.prototype.hasOwnProperty.call(body, 'contactId') ? body.contactId : existingTask.contactId,
+          leadId: Object.prototype.hasOwnProperty.call(body, 'leadId') ? body.leadId : existingTask.leadId,
+          workOrderId: Object.prototype.hasOwnProperty.call(body, 'workOrderId') ? body.workOrderId : existingTask.workOrderId,
+        })
+      : {};
+    const metadataJson = taskPatchMetadata(existingTask, body, transition.patch.dueAt || existingTask.dueAt);
+    const taskPatch = {
+      ...transition.patch,
+      ...linkPatch,
+      ...(metadataJson !== undefined ? { metadataJson } : {}),
+    };
 
     const { task } = await updateTaskWithEvents({
       db,
       organizationId: session.user.organizationId,
       actorUserId: session.user.id,
       existingTask,
-      taskPatch: compactTaskPatch(transition.patch),
+      taskPatch: compactTaskPatch(taskPatch),
       eventType: transition.eventType,
       eventMessage: transition.message,
     });

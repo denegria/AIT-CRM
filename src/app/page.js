@@ -57,12 +57,12 @@ export default function Dashboard() {
     
     // Employee Specific
     const myTasksCount = tasks.filter(t => (t.ownerUserId || t.assignedTo) === currentUserId && !t.completed).length;
-    const needsFollowUp = contacts.filter(c => c.status !== 'Won' && c.status !== 'Lost').length;
+    const activeContacts = contacts.filter(c => c.status !== 'Won' && c.status !== 'Lost').length;
     const pendingInvoices = invoices.filter(f => f.status === 'Pending').length;
     const assignedWOs = workOrders.filter(w => w.assignedTo === currentUserId && w.status !== 'Completed').length;
     const myPipeline = contacts.filter(c => c.assignedTo === currentUserId && c.status !== 'Won' && c.status !== 'Lost').length;
 
-    return { totalRevenue, pipeline, totalInvoiced, activeWOs, newLeads, myTasksCount, needsFollowUp, pendingInvoices, assignedWOs, myPipeline };
+    return { totalRevenue, pipeline, totalInvoiced, activeWOs, newLeads, myTasksCount, activeContacts, pendingInvoices, assignedWOs, myPipeline };
   }, [financials, workOrders, contacts, tasks, currentUserId]);
 
   const statusData = useMemo(() => {
@@ -209,7 +209,7 @@ export default function Dashboard() {
       ) : (
         <div className="dashboard-kpi-grid" style={{marginBottom:20}}>
           <KPICard label="My Active Tasks" value={kpis.myTasksCount} change="Due soon" trend="up" />
-          <KPICard label="Needs Follow Up" value={kpis.needsFollowUp} change="Active leads" trend="up" />
+          <KPICard label="Active Contacts" value={kpis.activeContacts} change="Needs next action" trend="up" />
           {canReadFinancials
             ? <KPICard label="Invoices Pending" value={kpis.pendingInvoices} change="Action required" trend="down" />
             : <KPICard label="My Pipeline" value={kpis.myPipeline} change="Assigned active leads" trend="up" />}
@@ -235,7 +235,7 @@ export default function Dashboard() {
         <div className="card">
           <div className="flex-between" style={{marginBottom:12, gap:12}}>
             <div className="card-title" style={{marginBottom:0}}>Tasks</div>
-            <Link className="btn btn-sm" href="/tasks">Detailed task page</Link>
+            <Link className="btn btn-sm" href="/tasks">Open tasks</Link>
           </div>
           <TaskList
             tasks={myTasks}

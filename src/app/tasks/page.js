@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import {
   AlarmClock,
   CheckCircle2,
+  Pencil,
   ExternalLink,
   FilterX,
   Plus,
@@ -30,7 +31,7 @@ const TASK_TYPE_OPTIONS = [
 ];
 
 const DUE_OPTIONS = [
-  ['work', 'Open Work'],
+  ['work', 'Open Tasks'],
   ['today', 'Due Today'],
   ['overdue', 'Overdue'],
   ['unassigned', 'Unassigned'],
@@ -127,6 +128,19 @@ function defaultCreateDraft({ currentBusinessUnitId, accessibleBusinessUnits, cu
   };
 }
 
+function editDraftFromTask(task) {
+  return {
+    title: task.title || '',
+    taskType: task.taskType || 'manual_reminder',
+    dueDate: dateKey(task.dueAt),
+    ownerUserId: task.ownerUserId || '',
+    businessUnitId: task.businessUnitId || '',
+    contactId: task.contactId || '',
+    priority: task.priority || 'medium',
+    recurrenceFrequency: task.recurrence?.frequency || 'none',
+  };
+}
+
 function normalizeTask(task, contacts = []) {
   const contact = contacts.find((row) => row.id === task.contactId);
   const status = task.status || task.taskStatus || (task.completed ? 'completed' : 'open');
@@ -208,6 +222,10 @@ export default function FollowUpQueuePage() {
     accessibleBusinessUnits,
     currentUser,
   }));
+  const [editTaskId, setEditTaskId] = useState('');
+  const [editBusy, setEditBusy] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editDraft, setEditDraft] = useState(() => editDraftFromTask({}));
 
   const fallbackAssignees = useMemo(() => {
     const mappedEmployees = (employees || []).map((employee) => ({
@@ -234,13 +252,13 @@ export default function FollowUpQueuePage() {
     () => new Set((accessibleBusinessUnits || []).map((unit) => unit.id)),
     [accessibleBusinessUnits],
   );
-  const contactOptions = useMemo(() => {
+  const contactOptionsForBusinessUnit = useCallback((businessUnitId) => {
     return (accessibleContacts || [])
       .filter((contact) => {
-        const businessUnitId = contact.businessUnitId || contact.primaryBusinessUnitId || '';
-        if (!businessUnitId) return false;
-        if (!accessibleBusinessUnitIds.has(businessUnitId)) return false;
-        return !createDraft.businessUnitId || businessUnitId === createDraft.businessUnitId;
+        const contactBusinessUnitId = contact.businessUnitId || contact.primaryBusinessUnitId || '';
+        if (!contactBusinessUnitId) return false;
+        if (!accessibleBusinessUnitIds.has(contactBusinessUnitId)) return false;
+        return !businessUnitId || contactBusinessUnitId === businessUnitId;
       })
       .map((contact) => {
         const businessUnitId = contact.businessUnitId || contact.primaryBusinessUnitId || '';
@@ -258,7 +276,17 @@ export default function FollowUpQueuePage() {
         };
       })
       .sort((a, b) => a.label.localeCompare(b.label));
-  }, [accessibleBusinessUnitIds, accessibleContacts, businessUnitById, createDraft.businessUnitId]);
+  }, [accessibleBusinessUnitIds, accessibleContacts, businessUnitById]);
+
+  const contactOptions = useMemo(
+    () => contactOptionsForBusinessUnit(createDraft.businessUnitId),
+    [contactOptionsForBusinessUnit, createDraft.businessUnitId],
+  );
+
+  const editContactOptions = useMemo(
+    () => contactOptionsForBusinessUnit(editDraft.businessUnitId),
+    [contactOptionsForBusinessUnit, editDraft.businessUnitId],
+  );
 
   const readTasks = useCallback(async () => {
     if (dataSource !== 'postgres') {
@@ -433,6 +461,39 @@ export default function FollowUpQueuePage() {
     }));
   }
 
+  function openEditPanel(task) {
+    setEditTaskId(task.id);
+    setEditDraft(editDraftFromTask(task));
+    setEditError('');
+    setCompletionTaskId('');
+  }
+
+  function updateEditDraft(patch) {
+    setEditDraft((prev) => ({ ...prev, ...patch }));
+  }
+
+  function updateEditBusinessUnit(businessUnitId) {
+    setEditDraft((prev) => {
+      const selectedContact = (accessibleContacts || []).find((contact) => contact.id === prev.contactId);
+      const contactBusinessUnitId = selectedContact?.businessUnitId || selectedContact?.primaryBusinessUnitId || '';
+      return {
+        ...prev,
+        businessUnitId,
+        contactId: contactBusinessUnitId === businessUnitId ? prev.contactId : '',
+      };
+    });
+  }
+
+  function updateEditContact(contactId) {
+    const selectedContact = (accessibleContacts || []).find((contact) => contact.id === contactId);
+    const businessUnitId = selectedContact?.businessUnitId || selectedContact?.primaryBusinessUnitId || editDraft.businessUnitId;
+    setEditDraft((prev) => ({
+      ...prev,
+      contactId,
+      businessUnitId,
+    }));
+  }
+
   useEffect(() => {
     let cancelled = false;
     const contactId = searchParams.get('contactId') || '';
@@ -515,6 +576,83 @@ export default function FollowUpQueuePage() {
     }
   }
 
+  async function submitEditedTask(event) {
+    event.preventDefault();
+    if (!access.canWriteCrm || editBusy || !editTaskId) return;
+    const title = editDraft.title.trim();
+    if (!title) {
+      setEditError('Task title is required.');
+      return;
+    }
+    if (!editDraft.dueDate) {
+      setEditError('Task due date is required.');
+      return;
+    }
+    if (!editDraft.businessUnitId) {
+      setEditError(`${scopeLabel} is required.`);
+      return;
+    }
+
+    setEditBusy(true);
+    setEditError('');
+    try {
+      if (dataSource === 'postgres') {
+        const response = await fetch('/api/tasks', {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            id: editTaskId,
+            action: 'update',
+            title,
+            taskType: editDraft.taskType,
+            dueAt: dateInputToIso(editDraft.dueDate),
+            ownerUserId: editDraft.ownerUserId || null,
+            businessUnitId: editDraft.businessUnitId,
+            contactId: editDraft.contactId || null,
+            priority: editDraft.priority,
+            recurrence: { frequency: editDraft.recurrenceFrequency },
+          }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Task update failed.');
+        const nextTask = normalizeTask(payload.task, accessibleContacts);
+        setQueueTasks((prev) => prev.map((task) => (task.id === nextTask.id ? nextTask : task)));
+        updateTask(editTaskId, {
+          ...nextTask,
+          assignedTo: nextTask.ownerUserId,
+          dueDate: dateKey(nextTask.dueAt),
+          taskStatus: nextTask.status,
+          completed: nextTask.status === 'completed',
+        });
+      } else {
+        const localPatch = {
+          title,
+          taskType: editDraft.taskType,
+          dueAt: dateInputToIso(editDraft.dueDate),
+          dueDate: editDraft.dueDate,
+          ownerUserId: editDraft.ownerUserId || '',
+          assignedTo: editDraft.ownerUserId || '',
+          businessUnitId: editDraft.businessUnitId,
+          contactId: editDraft.contactId || '',
+          priority: editDraft.priority,
+          metadataJson: editDraft.recurrenceFrequency === 'none'
+            ? {}
+            : { recurrence: { frequency: editDraft.recurrenceFrequency, anchorDate: dateInputToIso(editDraft.dueDate), active: true, source: 'manual' } },
+        };
+        updateTask(editTaskId, localPatch);
+        setQueueTasks((prev) => prev.map((task) => (task.id === editTaskId ? normalizeTask({ ...task, ...localPatch }, contacts) : task)));
+      }
+      setEditTaskId('');
+      toast('Task updated');
+    } catch (err) {
+      const message = err.message || 'Task update failed.';
+      setEditError(message);
+      toast(message);
+    } finally {
+      setEditBusy(false);
+    }
+  }
+
   async function submitFollowUpCompletion(task) {
     const draft = followUpDraft(task.id);
     await applyTaskAction(task, 'complete', {
@@ -536,7 +674,7 @@ export default function FollowUpQueuePage() {
       <div className="fade-in">
         <div className="page-header">
           <div>
-            <h1 className="page-title">Follow-up Queue</h1>
+            <h1 className="page-title">Tasks</h1>
             <p className="page-subtitle">CRM read access is required.</p>
           </div>
         </div>
@@ -549,7 +687,7 @@ export default function FollowUpQueuePage() {
     <div className="fade-in">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Follow-up Queue</h1>
+          <h1 className="page-title">Tasks</h1>
           <p className="page-subtitle">{currentBusinessUnit?.name || `All ${scopeLabel}`} · {filteredTasks.length} visible tasks</p>
         </div>
         <div className="flex-gap">
@@ -647,7 +785,7 @@ export default function FollowUpQueuePage() {
       )}
 
       <div className={s.summaryGrid}>
-        <div className={s.summaryTile}><span className={s.summaryValue}>{stats.open}</span><span className={s.summaryLabel}>Open Work</span></div>
+        <div className={s.summaryTile}><span className={s.summaryValue}>{stats.open}</span><span className={s.summaryLabel}>Open Tasks</span></div>
         <div className={s.summaryTile}><span className={s.summaryValue}>{stats.dueToday}</span><span className={s.summaryLabel}>Due Today</span></div>
         <div className={s.summaryTile}><span className={s.summaryValue}>{stats.overdue}</span><span className={s.summaryLabel}>Overdue</span></div>
         <div className={s.summaryTile}><span className={s.summaryValue}>{stats.unassigned}</span><span className={s.summaryLabel}>Unassigned</span></div>
@@ -713,6 +851,7 @@ export default function FollowUpQueuePage() {
             const assignee = visibleAssignees.find((user) => user.id === task.ownerUserId);
             const draft = followUpDraft(task.id);
             const showFollowUpCompletion = completionTaskId === task.id && task.taskType === 'follow_up';
+            const showEditPanel = editTaskId === task.id;
             return (
               <article key={task.id} className={`${s.queueItem} ${isOverdue ? s.queueItemOverdue : ''} ${isToday ? s.queueItemToday : ''}`}>
                 <div>
@@ -750,6 +889,15 @@ export default function FollowUpQueuePage() {
                   {assignee?.email && <span className={s.mutedText}>{assignee.email}</span>}
                 </label>
                 <div className={s.actions}>
+                  <button
+                    className={`btn btn-sm ${s.iconButton}`}
+                    data-tooltip="Edit task"
+                    disabled={!access.canWriteCrm || editBusy}
+                    onClick={() => (showEditPanel ? setEditTaskId('') : openEditPanel(task))}
+                    aria-label="Edit task"
+                  >
+                    <Pencil size={14} />
+                  </button>
                   <button
                     className={`btn btn-sm ${s.iconButton}`}
                     data-tooltip="Assign to me"
@@ -793,6 +941,75 @@ export default function FollowUpQueuePage() {
                     </Link>
                   )}
                 </div>
+                {showEditPanel && (
+                  <form className={s.editPanel} onSubmit={submitEditedTask}>
+                    <label className={s.createTitleField}>
+                      <span className="form-label">Title</span>
+                      <input
+                        className="input"
+                        value={editDraft.title}
+                        disabled={editBusy}
+                        onChange={(event) => updateEditDraft({ title: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span className="form-label">Task Type</span>
+                      <select className="select" value={editDraft.taskType} disabled={editBusy} onChange={(event) => updateEditDraft({ taskType: event.target.value })}>
+                        {TASK_CREATE_TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      <span className="form-label">Due Date</span>
+                      <input
+                        className="input"
+                        type="date"
+                        required
+                        value={editDraft.dueDate}
+                        disabled={editBusy}
+                        onChange={(event) => updateEditDraft({ dueDate: event.target.value })}
+                      />
+                    </label>
+                    <label>
+                      <span className="form-label">Repeats</span>
+                      <select className="select" value={editDraft.recurrenceFrequency} disabled={editBusy} onChange={(event) => updateEditDraft({ recurrenceFrequency: event.target.value })}>
+                        {TASK_RECURRENCE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      <span className="form-label">Owner</span>
+                      <select className="select" value={editDraft.ownerUserId} disabled={editBusy} onChange={(event) => updateEditDraft({ ownerUserId: event.target.value })}>
+                        <option value="">Unassigned</option>
+                        {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      <span className="form-label">{scopeLabel}</span>
+                      <select className="select" value={editDraft.businessUnitId} disabled={editBusy} onChange={(event) => updateEditBusinessUnit(event.target.value)}>
+                        {accessibleBusinessUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+                      </select>
+                    </label>
+                    <label>
+                      <span className="form-label">Priority</span>
+                      <select className="select" value={editDraft.priority} disabled={editBusy} onChange={(event) => updateEditDraft({ priority: event.target.value })}>
+                        {TASK_PRIORITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                      </select>
+                    </label>
+                    <label className={s.createContactField}>
+                      <span className="form-label">Contact</span>
+                      <select className="select" value={editDraft.contactId} disabled={editBusy} onChange={(event) => updateEditContact(event.target.value)}>
+                        <option value="">No contact linked</option>
+                        {editContactOptions.map(({ contact, label }) => <option key={contact.id} value={contact.id}>{label}</option>)}
+                      </select>
+                    </label>
+                    {editError && <div className={s.editError}>{editError}</div>}
+                    <div className={s.editActions}>
+                      <button className="btn btn-sm" type="button" disabled={editBusy} onClick={() => setEditTaskId('')}>Cancel</button>
+                      <button className="btn btn-sm btn-primary" type="submit" disabled={editBusy || !access.canWriteCrm}>
+                        Save Task
+                      </button>
+                    </div>
+                  </form>
+                )}
                 {showFollowUpCompletion && (
                   <div className={s.completionPanel}>
                     <label className={s.filterGroup}>

@@ -162,6 +162,9 @@ export function buildTaskTransition({ task, action, now = new Date(), payload = 
       ? TASK_EVENT_TYPES.DUE_DATE_CHANGED
       : eventType;
     patch.dueAt = parseTaskDateTime(payload.dueAt, 'dueAt');
+    if (!patch.dueAt) {
+      throw taskPolicyError('Task due date is required.');
+    }
   }
   if (Object.prototype.hasOwnProperty.call(payload, 'ownerUserId') && normalizedAction !== 'assign') {
     eventType = eventType === TASK_EVENT_TYPES.UPDATED

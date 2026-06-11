@@ -12,7 +12,7 @@ const nav = [
   { href: '/', label: 'Dashboard', Icon: LayoutDashboard },
   { href: '/contacts', label: 'Contacts', Icon: Users },
   { href: '/pipeline', label: 'Pipeline', Icon: Columns3 },
-  { href: '/tasks', label: 'Follow-ups', Icon: ListTodo },
+  { href: '/tasks', label: 'Tasks', Icon: ListTodo },
   { href: '/import-review', label: 'Import Review', Icon: Database },
   { href: '/work-orders', label: 'Work Orders', Icon: ClipboardList },
   { href: '/financials', label: 'Financials', Icon: DollarSign },
