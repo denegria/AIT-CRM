@@ -45,7 +45,7 @@ export default function PipelinePage() {
   const [pipelineBusinessUnitId, setPipelineBusinessUnitId] = useState('');
   const [workflowFilter, setWorkflowFilter] = useState('all');
   const [ownerFilter, setOwnerFilter] = useState(() => (
-    currentUser?.id && !currentUser.canAccessAllBusinessUnits ? currentUser.id : 'all'
+    currentUser?.id && !currentUser.canAccessAllBusinessUnits ? 'unassigned' : 'all'
   ));
   const [search, setSearch] = useState('');
   const canWrite = access.canWriteCrm;
@@ -119,6 +119,9 @@ export default function PipelinePage() {
               <UserRoundCheck size={14} /> My Pipeline
             </button>
           )}
+          <button className="btn" onClick={() => setOwnerFilter('unassigned')}>
+            <AlertCircle size={14} /> Unassigned
+          </button>
           {canWrite && (
             <button className="btn btn-primary" onClick={() => router.push('/contacts')}>
               <UserPlus size={14} /> Add Contact

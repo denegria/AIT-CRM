@@ -14,12 +14,22 @@ function getBusinessUnitId(record) {
   return record?.businessUnitId || record?.primaryBusinessUnitId || '';
 }
 
-function defaultBusinessUnitScope({ businessUnits = [], currentUser = null } = {}) {
+function defaultBusinessUnitScope({ businessUnits = [], currentUser = null, contacts = [] } = {}) {
   const activeUnits = (businessUnits || []).filter((unit) => unit.isActive !== false);
   const allowedIds = currentUser?.canAccessAllBusinessUnits
     ? activeUnits.map((unit) => unit.id)
     : currentUser?.businessUnitIds || activeUnits.map((unit) => unit.id);
-  return allowedIds.find((id) => activeUnits.some((unit) => unit.id === id)) || activeUnits[0]?.id || ALL_BUSINESS_UNITS;
+  const allowedSet = new Set(allowedIds);
+  const counts = new Map();
+  for (const contact of contacts || []) {
+    const businessUnitId = getBusinessUnitId(contact);
+    if (!businessUnitId || !allowedSet.has(businessUnitId)) continue;
+    counts.set(businessUnitId, (counts.get(businessUnitId) || 0) + 1);
+  }
+  const preferredUnit = activeUnits
+    .filter((unit) => allowedSet.has(unit.id))
+    .sort((left, right) => (counts.get(right.id) || 0) - (counts.get(left.id) || 0))[0];
+  return preferredUnit?.id || allowedIds.find((id) => activeUnits.some((unit) => unit.id === id)) || activeUnits[0]?.id || ALL_BUSINESS_UNITS;
 }
 
 function withBusinessUnitDefaults(record, businessUnitId, includePrimary = false) {
@@ -148,16 +158,11 @@ export function CRMProvider({ children, initialData }) {
   const [calendarEvents, setCalendarEvents] = useState(bootstrapData.calendarEvents);
   const [salesLedger, setSalesLedger] = useState(bootstrapData.salesLedger);
   const [currentBusinessUnitId, setCurrentBusinessUnitIdState] = useState(() => {
-    if (typeof window === 'undefined') return ALL_BUSINESS_UNITS;
-    // Reset persisted scope if the current user differs from the stored scope owner
-    const storedUserId = localStorage.getItem(SCOPE_USER_KEY);
-    const currentUserId = bootstrapData.currentUser?.id || null;
-    if (isPostgres && currentUserId && storedUserId && storedUserId !== currentUserId) {
-      localStorage.removeItem(SCOPE_STORAGE_KEY);
-      localStorage.removeItem(SCOPE_USER_KEY);
-      return defaultBusinessUnitScope({ businessUnits: bootstrapData.businessUnits, currentUser: bootstrapData.currentUser });
-    }
-    return localStorage.getItem(SCOPE_STORAGE_KEY) || defaultBusinessUnitScope({ businessUnits: bootstrapData.businessUnits, currentUser: bootstrapData.currentUser });
+    return defaultBusinessUnitScope({
+      businessUnits: bootstrapData.businessUnits,
+      currentUser: bootstrapData.currentUser,
+      contacts: bootstrapData.contacts,
+    });
   });
   const [storageReady, setStorageReady] = useState(isPostgres);
   const loaded = true;
@@ -183,6 +188,32 @@ export function CRMProvider({ children, initialData }) {
     return accessibleBusinessUnits.find((unit) => unit.id === effectiveBusinessUnitId) || null;
   }, [accessibleBusinessUnits, businessUnits, effectiveBusinessUnitId]);
   const scopeLabel = currentBusinessUnit?.label || businessUnits?.[0]?.label || 'Divisions';
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !isPostgres) return undefined;
+
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const storedUserId = localStorage.getItem(SCOPE_USER_KEY);
+      const currentUserId = currentUser?.id || null;
+      if (currentUserId && storedUserId && storedUserId !== currentUserId) {
+        localStorage.removeItem(SCOPE_STORAGE_KEY);
+        localStorage.removeItem(SCOPE_USER_KEY);
+        return;
+      }
+
+      const storedScope = localStorage.getItem(SCOPE_STORAGE_KEY);
+      const allowedIds = new Set(accessibleBusinessUnits.map((unit) => unit.id));
+      if (storedScope === UNASSIGNED_BUSINESS_UNIT || allowedIds.has(storedScope)) {
+        setCurrentBusinessUnitIdState(storedScope);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [accessibleBusinessUnits, currentUser?.id, isPostgres]);
 
   const setCurrentBusinessUnitId = useCallback((nextId) => {
     const selectedId = nextId || accessibleBusinessUnits[0]?.id || ALL_BUSINESS_UNITS;

@@ -18,7 +18,7 @@ const PERMISSIONS = {
     'business_units:all',
   ],
   designer: ['crm:read', 'work_orders:write'],
-  account_manager: ['crm:read', 'crm:write', 'financials:read'],
+  account_manager: ['crm:read', 'crm:write', 'financials:read', 'work_orders:write'],
   sales_manager: ['crm:read', 'crm:write', 'reports:read', 'financials:read'],
 };
 

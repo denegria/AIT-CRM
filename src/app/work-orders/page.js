@@ -7,7 +7,7 @@ import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import { generateWorkOrderPDF } from '@/lib/pdf';
 
-const empty = { number:'', title:'', client:'', contactId:'', priority:'Medium', status:'Pending', assignedTo:'emp-1', dueDate:'', description:'', estimatedCost:0 };
+const empty = { number:'', title:'', client:'', contactId:'', priority:'Medium', status:'Pending', assignedTo:'', dueDate:'', description:'', estimatedCost:0 };
 
 export default function WorkOrdersPage() {
   const router = useRouter();
@@ -36,7 +36,7 @@ export default function WorkOrdersPage() {
     if (!canWriteWorkOrders) return;
     const num = `WO-${String(workOrders.length + 1).padStart(3, '0')}`;
     const businessUnitId = currentBusinessUnitId !== 'all' && currentBusinessUnitId !== 'unassigned' ? currentBusinessUnitId : accessibleBusinessUnits[0]?.id || '';
-    setForm({ ...empty, number: num, businessUnitId, dueDate: new Date().toISOString().slice(0,10) });
+    setForm({ ...empty, number: num, businessUnitId, assignedTo: employees[0]?.id || '', dueDate: new Date().toISOString().slice(0,10) });
     setDrawer('new');
   };
   const openEdit = (row) => {
@@ -102,7 +102,7 @@ export default function WorkOrdersPage() {
           <h1 className="page-title">Work Orders</h1>
           <p className="page-subtitle">{workOrders.filter(w=>w.status!=='Completed').length} active orders in {currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}</p>
         </div>
-        <button className="btn btn-primary" onClick={openNew} disabled={!canWriteWorkOrders}>+ New Work Order</button>
+        <button className="btn btn-primary" onClick={openNew} disabled={!canWriteWorkOrders}>+ Create Work Order</button>
       </div>
 
       <div className="card" style={{padding:16}}>
@@ -134,7 +134,7 @@ export default function WorkOrdersPage() {
           actions={[
             { label: 'View', onClick: (r) => router.push(`/work-orders/${r.id}`) },
             ...(canWriteWorkOrders ? [{ label: 'Edit', onClick: openEdit }] : []),
-            { label: 'PDF', onClick: (r) => { generateWorkOrderPDF(r); toast('PDF Generated'); } },
+            { label: 'Generate PDF', onClick: (r) => { generateWorkOrderPDF(r); toast('PDF generated'); } },
             ...(canWriteWorkOrders ? [{
               label: 'Delete',
               onClick: async (r) => {
