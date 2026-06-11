@@ -38,6 +38,22 @@ const DUE_OPTIONS = [
   ['all', 'All Statuses'],
 ];
 
+const STATUS_OPTIONS = [
+  ['all', 'All Statuses'],
+  ['open', 'Open'],
+  ['in_progress', 'In Progress'],
+  ['snoozed', 'Snoozed'],
+  ['completed', 'Completed'],
+  ['canceled', 'Canceled'],
+];
+
+const LINK_OPTIONS = [
+  ['all', 'All Links'],
+  ['contact', 'Linked Contact'],
+  ['unlinked', 'No Contact'],
+  ['recurring', 'Recurring'],
+];
+
 const FOLLOW_UP_OUTCOME_OPTIONS = [
   ['reached_interested', 'Reached - interested'],
   ['left_voicemail', 'Left voicemail'],
@@ -158,11 +174,12 @@ function normalizeTask(task, contacts = []) {
   };
 }
 
-function taskMatchesDue(task, dueFilter) {
+function taskMatchesDue(task, dueFilter, statusFilter = 'all') {
   const key = dateKey(task.dueAt);
   const today = todayKey();
   const isClosed = CLOSED_STATUSES.has(task.status);
   if (dueFilter === 'all') return true;
+  if (dueFilter === 'work' && statusFilter !== 'all') return true;
   if (dueFilter === 'unassigned') return !task.ownerUserId && !isClosed;
   if (dueFilter === 'today') return !isClosed && key === today;
   if (dueFilter === 'overdue') return !isClosed && key && key < today;
@@ -208,6 +225,8 @@ export default function FollowUpQueuePage() {
     ownerUserId: 'all',
     businessUnitId: currentBusinessUnitId === 'all' || currentBusinessUnitId === 'unassigned' ? 'all' : currentBusinessUnitId,
     taskType: 'all',
+    status: 'all',
+    link: 'all',
   });
   const [loading, setLoading] = useState(dataSource === 'postgres');
   const [error, setError] = useState('');
@@ -301,10 +320,11 @@ export default function FollowUpQueuePage() {
     const params = new URLSearchParams();
     if (filters.businessUnitId !== 'all') params.set('businessUnitId', filters.businessUnitId);
     if (filters.ownerUserId !== 'all' && filters.ownerUserId !== 'unassigned') {
-      params.set('ownerUserId', filters.ownerUserId);
+      params.set('ownerUserId', filters.ownerUserId === '__me' ? currentUser?.id || '' : filters.ownerUserId);
     }
     if (filters.ownerUserId === 'unassigned') params.set('unassigned', 'true');
     if (filters.taskType !== 'all') params.set('taskType', filters.taskType);
+    if (filters.status !== 'all') params.set('status', filters.status);
 
     try {
       const response = await fetch(`/api/tasks?${params.toString()}`, { cache: 'no-store' });
@@ -317,7 +337,7 @@ export default function FollowUpQueuePage() {
     } finally {
       setLoading(false);
     }
-  }, [accessibleContacts, contacts, dataSource, fallbackAssignees, filters.businessUnitId, filters.ownerUserId, filters.taskType, tasks]);
+  }, [accessibleContacts, contacts, currentUser?.id, dataSource, fallbackAssignees, filters.businessUnitId, filters.ownerUserId, filters.status, filters.taskType, tasks]);
 
   useEffect(() => {
     let cancelled = false;
@@ -331,18 +351,25 @@ export default function FollowUpQueuePage() {
 
   const filteredTasks = useMemo(() => {
     return queueTasks
-      .filter((task) => taskMatchesDue(task, filters.due))
-      .filter((task) => filters.ownerUserId === 'all' || filters.ownerUserId === 'unassigned' || task.ownerUserId === filters.ownerUserId)
+      .filter((task) => taskMatchesDue(task, filters.due, filters.status))
+      .filter((task) => filters.ownerUserId === 'all' || filters.ownerUserId === 'unassigned' || task.ownerUserId === (filters.ownerUserId === '__me' ? currentUser?.id : filters.ownerUserId))
       .filter((task) => filters.ownerUserId !== 'unassigned' || !task.ownerUserId)
       .filter((task) => filters.businessUnitId === 'all' || task.businessUnitId === filters.businessUnitId)
       .filter((task) => filters.taskType === 'all' || task.taskType === filters.taskType)
+      .filter((task) => filters.status === 'all' || task.status === filters.status)
+      .filter((task) => {
+        if (filters.link === 'contact') return Boolean(task.contactId);
+        if (filters.link === 'unlinked') return !task.contactId;
+        if (filters.link === 'recurring') return Boolean(task.recurrence);
+        return true;
+      })
       .sort((a, b) => {
         const aKey = dateKey(a.dueAt) || '9999-12-31';
         const bKey = dateKey(b.dueAt) || '9999-12-31';
         if (aKey !== bKey) return aKey.localeCompare(bKey);
         return String(a.createdAt || '').localeCompare(String(b.createdAt || ''));
       });
-  }, [filters, queueTasks]);
+  }, [currentUser?.id, filters, queueTasks]);
 
   const stats = useMemo(() => {
     const open = queueTasks.filter((task) => OPEN_STATUSES.has(task.status)).length;
@@ -667,6 +694,8 @@ export default function FollowUpQueuePage() {
     ownerUserId: 'all',
     businessUnitId: currentBusinessUnitId === 'all' || currentBusinessUnitId === 'unassigned' ? 'all' : currentBusinessUnitId,
     taskType: 'all',
+    status: 'all',
+    link: 'all',
   });
 
   if (!access.canReadCrm) {
@@ -803,6 +832,7 @@ export default function FollowUpQueuePage() {
             <span className="form-label">Owner</span>
             <select className="select" value={filters.ownerUserId} onChange={(event) => setFilters((prev) => ({ ...prev, ownerUserId: event.target.value }))}>
               <option value="all">All Owners</option>
+              {currentUser?.id && <option value="__me">My Tasks</option>}
               <option value="unassigned">Unassigned</option>
               {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
             </select>
@@ -818,6 +848,18 @@ export default function FollowUpQueuePage() {
             <span className="form-label">Task Type</span>
             <select className="select" value={filters.taskType} onChange={(event) => setFilters((prev) => ({ ...prev, taskType: event.target.value }))}>
               {TASK_TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+          <label className={s.filterGroup}>
+            <span className="form-label">Status</span>
+            <select className="select" value={filters.status} onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}>
+              {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          </label>
+          <label className={s.filterGroup}>
+            <span className="form-label">Link</span>
+            <select className="select" value={filters.link} onChange={(event) => setFilters((prev) => ({ ...prev, link: event.target.value }))}>
+              {LINK_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
           <div className={s.filterGroup}>

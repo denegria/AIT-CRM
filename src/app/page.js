@@ -15,6 +15,24 @@ function dateInputToIso(value) {
   return date.toISOString();
 }
 
+function dateKey(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+  return date.toISOString().slice(0, 10);
+}
+
+function taskDueKey(task) {
+  return dateKey(task?.dueAt || task?.dueDate);
+}
+
+const CLOSED_TASK_STATUSES = new Set(['completed', 'canceled']);
+
+function isOpenTask(task) {
+  const status = task?.taskStatus || task?.status || (task?.completed ? 'completed' : 'open');
+  return !task?.completed && !CLOSED_TASK_STATUSES.has(status);
+}
+
 export default function Dashboard() {
   const {
     role,
@@ -93,6 +111,31 @@ export default function Dashboard() {
     return tasks.filter(t => (t.ownerUserId || t.assignedTo) === currentUserId);
   }, [tasks, isAdminView, currentUserId]);
 
+  const dashboardDueTodayTasks = useMemo(() => {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    return myTasks
+      .filter((task) => isOpenTask(task) && taskDueKey(task) === todayKey)
+      .sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
+  }, [myTasks]);
+
+  const dashboardCalendarEvents = useMemo(() => {
+    const taskEvents = tasks
+      .map((task) => {
+        const dueDate = taskDueKey(task);
+        if (!dueDate) return null;
+        return {
+          id: `task-${task.id}`,
+          title: `Task: ${task.title || 'Untitled task'}`,
+          date: dueDate,
+          type: 'deadline',
+          contactId: task.contactId || '',
+          businessUnitId: task.businessUnitId || '',
+        };
+      })
+      .filter(Boolean);
+    return [...calendarEvents, ...taskEvents];
+  }, [calendarEvents, tasks]);
+
   const empProgress = useMemo(() => {
     return employees.map(emp => {
       const t = tasks.filter(tk => tk.assignedTo === emp.id);
@@ -103,10 +146,10 @@ export default function Dashboard() {
 
   const followUpStats = useMemo(() => {
     const todayKey = new Date().toISOString().slice(0, 10);
-    const openTasks = tasks.filter(t => !t.completed && !['completed', 'canceled'].includes(t.taskStatus || t.status || ''));
-    const dueToday = openTasks.filter(t => (t.dueDate || t.dueAt || '').slice(0, 10) === todayKey).length;
+    const openTasks = tasks.filter(isOpenTask);
+    const dueToday = openTasks.filter(t => taskDueKey(t) === todayKey).length;
     const overdue = openTasks.filter(t => {
-      const due = (t.dueDate || t.dueAt || '').slice(0, 10);
+      const due = taskDueKey(t);
       return due && due < todayKey;
     }).length;
     const unassigned = openTasks.filter(t => !(t.assignedTo || t.ownerUserId)).length;
@@ -238,17 +281,18 @@ export default function Dashboard() {
             <Link className="btn btn-sm" href="/tasks">Open tasks</Link>
           </div>
           <TaskList
-            tasks={myTasks}
+            tasks={dashboardDueTodayTasks}
             onToggle={(id, u) => updateTask(id, u)}
             onAdd={createDashboardTask}
             employees={employees}
             owners={dashboardTaskOwners}
             canAdd={Boolean(access.canWriteCrm)}
+            emptyText="No tasks due today."
           />
         </div>
         <div className="card">
           <div className="card-title">Calendar</div>
-          <Calendar events={calendarEvents} />
+          <Calendar events={dashboardCalendarEvents} />
         </div>
       </div>
 

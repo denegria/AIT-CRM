@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import s from './TaskList.module.css';
 
-export default function TaskList({ tasks, onToggle, onAdd, employees, owners, canAdd = true }) {
+export default function TaskList({ tasks, onToggle, onAdd, employees, owners, canAdd = true, emptyText = 'No tasks yet.' }) {
   const [newTask, setNewTask] = useState('');
   const [dueDate, setDueDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [ownerId, setOwnerId] = useState('');
@@ -37,6 +37,7 @@ export default function TaskList({ tasks, onToggle, onAdd, employees, owners, ca
   return (
     <div>
       <div className={s.list}>
+        {tasks.length === 0 && <div className={s.empty}>{emptyText}</div>}
         {tasks.map(t => (
           <div key={t.id} className={s.item}>
             <button className={`${s.check} ${t.completed ? s.checked : ''}`} onClick={() => onToggle(t.id, { completed: !t.completed })}>

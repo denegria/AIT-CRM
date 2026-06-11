@@ -30,7 +30,7 @@
 
 .toolbar {
   display: grid;
-  grid-template-columns: repeat(5, minmax(130px, 1fr)) auto;
+  grid-template-columns: repeat(7, minmax(120px, 1fr)) auto;
   gap: 10px;
   align-items: end;
   margin-bottom: 14px;
@@ -259,7 +259,7 @@
 
 @media (max-width: 1120px) {
   .toolbar {
-    grid-template-columns: repeat(3, minmax(130px, 1fr));
+    grid-template-columns: repeat(4, minmax(130px, 1fr));
   }
 
   .queueItem {
