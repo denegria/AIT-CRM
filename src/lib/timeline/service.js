@@ -275,6 +275,35 @@ function normalizeForWhom(value = '') {
   return text.toLowerCase().startsWith('for ') ? text : `For ${text}`;
 }
 
+function looksLikeForWhom(value = '') {
+  const text = readableLine(value);
+  if (!text) return false;
+  const normalized = text.toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  return [
+    'para mi',
+    'for me',
+    'myself',
+    'me',
+  ].includes(normalized) || [
+    'daughter',
+    'hija',
+    'son',
+    'hijo',
+    'spouse',
+    'wife',
+    'husband',
+    'espos',
+    'brother',
+    'hermano',
+    'sister',
+    'hermana',
+    'friend',
+    'amig',
+  ].some((token) => normalized.includes(token));
+}
+
 function websiteLeadForWhom(fields = {}) {
   const formFields = parseLooseKeyValues(fields.form_fields);
   const entries = [
@@ -299,7 +328,9 @@ function websiteLeadForWhom(fields = {}) {
       'student',
     ].includes(normalizedKey);
   });
-  return normalizeForWhom(directMatch?.[1] || '');
+  if (directMatch?.[1]) return normalizeForWhom(directMatch[1]);
+  if (looksLikeForWhom(fields.message)) return normalizeForWhom(fields.message);
+  return '';
 }
 
 function websiteLeadRecordPayload(lead) {
@@ -332,6 +363,7 @@ function websiteLeadRecordPayload(lead) {
 
 function websiteLeadText(lead, record) {
   const message = readableLine(record?.fields?.message || lead.originalNotes);
+  if (looksLikeForWhom(message)) return '';
   if (message && !message.includes('external_id=') && !message.includes('source_key=')) return message;
   return 'Website lead submitted.';
 }
@@ -673,6 +705,7 @@ export function buildContactTimeline({
     importedSourceCounts.set(key, (importedSourceCounts.get(key) || 0) + 1);
   }
   const hasCanonicalTaskEvents = taskEventRows.length > 0;
+  const seenWebsiteLeadGroups = new Set();
 
   const entries = [];
 
@@ -697,6 +730,12 @@ export function buildContactTimeline({
 
   for (const event of activityRows) {
     if (hasCanonicalTaskEvents && String(event.eventType || '').startsWith('task.')) continue;
+    if (
+      String(event.eventType || '').toLowerCase() === 'lead.assigned' &&
+      /assigned inbound lead by default rule/i.test(String(event.message || ''))
+    ) {
+      continue;
+    }
     if (
       String(event.eventType || '').toLowerCase() === 'website_lead_captured' &&
       event.leadId &&
@@ -795,6 +834,16 @@ export function buildContactTimeline({
 
   for (const lead of leadRows) {
     const record = websiteLeadRecordPayload(lead);
+    if (record?.kind === 'website_lead') {
+      const groupKey = [
+        record.fields?.source_key || lead.sourceName || lead.sourceType || '',
+        isoTimestamp(lead.createdAt).slice(0, 16),
+        readableLine(record.fields?.age),
+        normalizeForWhom(record.fields?.message || websiteLeadForWhom(record.fields)),
+      ].join('::').toLowerCase();
+      if (seenWebsiteLeadGroups.has(groupKey)) continue;
+      seenWebsiteLeadGroups.add(groupKey);
+    }
     const rawImportedText = record && lead.originalNotes ? lead.originalNotes : '';
     entries.push(withPresentation({
       id: `lead:${lead.id}`,
@@ -806,7 +855,7 @@ export function buildContactTimeline({
       rawText: rawImportedText,
       timestamp: isoTimestamp(lead.createdAt),
       date: isoDate(lead.createdAt),
-      actor: userPayload(lead.assignedUserId, userLookup),
+      actor: record?.kind === 'website_lead' ? null : userPayload(lead.assignedUserId, userLookup),
       source: sourcePayload(lead, lead.sourceName || lead.sourceType || 'Lead'),
       businessUnit: businessUnitPayload(lead.businessUnitId, businessUnitLookup),
       linkedRecords: linkedRecordPayload(lead),
