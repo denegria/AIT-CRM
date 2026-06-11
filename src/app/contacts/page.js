@@ -17,6 +17,7 @@ import {
 import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import { AlertCircle, UserRoundCheck } from 'lucide-react';
 
 const empty = {
@@ -144,6 +145,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const [statusFilter, setStatusFilter] = useState('All');
   const [ownerFilter, setOwnerFilter] = useState('all');
   const [directoryFacet, setDirectoryFacet] = useState('all');
+  const [deleteTarget, setDeleteTarget] = useState(null);
   const [facetNow] = useState(() => Date.now());
   const isClientsMode = mode === 'clients';
   const singularLabel = isClientsMode ? 'Client' : 'Contact';
@@ -223,6 +225,20 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   };
   const openEdit = (row) => { if (!canWrite) return; setForm({ ...row }); setDrawer(row); };
   const close = () => setDrawer(null);
+  const requestDelete = () => {
+    if (!canWrite || !drawer || drawer === 'new') return;
+    setDeleteTarget(drawer);
+  };
+  const confirmDelete = () => {
+    if (!deleteTarget) return;
+    deleteContact(deleteTarget.id)
+      .then(() => {
+        toast(`${singularLabel} deleted`);
+        setDeleteTarget(null);
+        close();
+      })
+      .catch((error) => toast(error?.message || 'Delete failed.', 'error'));
+  };
 
   const save = () => {
     if (!form.name.trim()) return;
@@ -376,15 +392,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
             { label: 'View', onClick: (r) => router.push(`${routeBase}/${r.id}`) },
             ...(canWrite ? [
               { label: 'Edit', onClick: openEdit },
-              {
-                label: 'Delete',
-                onClick: (r) => {
-                  deleteContact(r.id)
-                    .then(() => toast(`${singularLabel} deleted`))
-                    .catch((error) => toast(error?.message || 'Delete failed.', 'error'));
-                },
-                danger: true,
-              },
             ] : []),
           ]}
           mobileBadges={['status']}
@@ -393,7 +400,13 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       </div>
 
       <Modal open={!!drawer} onClose={close} title={drawer === 'new' ? `New ${singularLabel}` : `Edit ${singularLabel}`}
-        footer={<><button className="btn" onClick={close}>Cancel</button><button className="btn btn-primary" onClick={save}>Save</button></>}>
+        footer={<>
+          {canWrite && drawer && drawer !== 'new' && (
+            <button className="btn btn-danger" type="button" onClick={requestDelete}>Delete</button>
+          )}
+          <button className="btn" onClick={close}>Cancel</button>
+          <button className="btn btn-primary" onClick={save}>Save</button>
+        </>}>
         <div className="form-group">
           <label className="form-label">Name</label>
           <input className="input" value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} />
@@ -476,6 +489,15 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           </div>
         </div>
       </Modal>
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDelete}
+        title={`Delete ${singularLabel}`}
+        message={`Delete ${deleteTarget?.name || `this ${singularLabel.toLowerCase()}`}? This action cannot be undone.`}
+        confirmLabel="Delete"
+        variant="danger"
+      />
     </div>
   );
 }
