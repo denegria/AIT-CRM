@@ -120,7 +120,8 @@ export default function Dashboard() {
   }, [myTasks]);
 
   const dashboardCalendarEvents = useMemo(() => {
-    const taskEvents = tasks
+    const taskEvents = myTasks
+      .filter(isOpenTask)
       .map((task) => {
         const dueDate = taskDueKey(task);
         if (!dueDate) return null;
@@ -129,13 +130,14 @@ export default function Dashboard() {
           title: `Task: ${task.title || 'Untitled task'}`,
           date: dueDate,
           type: 'deadline',
+          href: '/tasks',
           contactId: task.contactId || '',
           businessUnitId: task.businessUnitId || '',
         };
       })
       .filter(Boolean);
     return [...calendarEvents, ...taskEvents];
-  }, [calendarEvents, tasks]);
+  }, [calendarEvents, myTasks]);
 
   const empProgress = useMemo(() => {
     return employees.map(emp => {

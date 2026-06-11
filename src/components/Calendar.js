@@ -1,9 +1,25 @@
 'use client';
 import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import s from './Calendar.module.css';
 
 const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function eventDate(value) {
+  if (!value) return null;
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(value));
+  if (dateOnly) {
+    return new Date(Number(dateOnly[1]), Number(dateOnly[2]) - 1, Number(dateOnly[3]));
+  }
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function eventTone(type) {
+  const key = type || 'meeting';
+  return s[`dot${key.charAt(0).toUpperCase()}${key.slice(1)}`] || s.dotMeeting;
+}
 
 export default function Calendar({ events = [] }) {
   const today = new Date();
@@ -26,7 +42,8 @@ export default function Calendar({ events = [] }) {
   const eventMap = useMemo(() => {
     const m = {};
     events.forEach(ev => {
-      const d = new Date(ev.date);
+      const d = eventDate(ev.date);
+      if (!d) return;
       if (d.getFullYear() === year && d.getMonth() === month) {
         const key = d.getDate();
         if (!m[key]) m[key] = [];
@@ -35,6 +52,17 @@ export default function Calendar({ events = [] }) {
     });
     return m;
   }, [events, year, month]);
+
+  const visibleEvents = useMemo(() => {
+    return events
+      .map((event) => ({ ...event, parsedDate: eventDate(event.date) }))
+      .filter((event) => event.parsedDate && event.parsedDate.getFullYear() === year && event.parsedDate.getMonth() === month)
+      .sort((left, right) => {
+        const dayDiff = left.parsedDate.getDate() - right.parsedDate.getDate();
+        if (dayDiff) return dayDiff;
+        return String(left.title || '').localeCompare(String(right.title || ''));
+      });
+  }, [events, month, year]);
 
   const prev = () => { if (month === 0) { setMonth(11); setYear(y=>y-1); } else setMonth(m=>m-1); };
   const next = () => { if (month === 11) { setMonth(0); setYear(y=>y+1); } else setMonth(m=>m+1); };
@@ -54,11 +82,36 @@ export default function Calendar({ events = [] }) {
           <div key={i} className={`${s.day} ${isToday(d.day, d.current) ? s.today : ''} ${!d.current ? s.otherMonth : ''}`} title={eventMap[d.day]?.map(e=>e.title).join(', ')}>
             {d.day}
             {d.current && eventMap[d.day] && (
-              <span className={`${s.dot} ${s['dot' + (eventMap[d.day][0].type || 'meeting').charAt(0).toUpperCase() + (eventMap[d.day][0].type || 'meeting').slice(1)]}`} />
+              <span className={`${s.dot} ${eventTone(eventMap[d.day][0].type)}`} />
             )}
           </div>
         ))}
       </div>
+      {visibleEvents.length > 0 && (
+        <div className={s.eventList} aria-label={`${MONTHS[month]} calendar items`}>
+          {visibleEvents.slice(0, 6).map((event) => {
+            const content = (
+              <>
+                <span className={`${s.eventDot} ${eventTone(event.type)}`} />
+                <span className={s.eventDay}>{event.parsedDate.getDate()}</span>
+                <span className={s.eventTitle}>{event.title}</span>
+              </>
+            );
+            return event.href ? (
+              <Link key={event.id || `${event.date}-${event.title}`} className={s.eventItem} href={event.href}>
+                {content}
+              </Link>
+            ) : (
+              <div key={event.id || `${event.date}-${event.title}`} className={s.eventItem}>
+                {content}
+              </div>
+            );
+          })}
+          {visibleEvents.length > 6 && (
+            <div className={s.eventMore}>+{visibleEvents.length - 6} more this month</div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
