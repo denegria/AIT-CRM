@@ -349,6 +349,7 @@ export async function POST(request) {
       session,
       body.ownerUserId || body.assignedTo,
     );
+    if (!ownerUserId) throw createCrmError('Task owner is required.');
     const dueAt = parseTaskDateTime(body.dueAt || body.dueDate, 'dueAt');
     if (!dueAt) throw createCrmError('Task due date is required.');
     const metadataJson = taskMetadata(body, dueAt);
@@ -404,6 +405,7 @@ export async function PATCH(request) {
     }
 
     if (String(body.action || '').trim() === 'complete' && existingTask.taskType === TASK_TYPES.FOLLOW_UP) {
+      if (!existingTask.ownerUserId) throw createCrmError('Task owner is required.');
       const now = new Date();
       const completion = normalizeFollowUpCompletionPayload({
         task: existingTask,
@@ -520,6 +522,8 @@ export async function PATCH(request) {
       Object.prototype.hasOwnProperty.call(body, 'assignedTo')
         ? await resolveOrganizationUserId(db, session, ownerInput)
         : undefined;
+    const nextOwnerUserId = ownerUserId !== undefined ? ownerUserId : existingTask.ownerUserId;
+    if (!nextOwnerUserId) throw createCrmError('Task owner is required.');
 
     const transition = buildTaskTransition({
       task: existingTask,

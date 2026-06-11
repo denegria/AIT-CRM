@@ -293,6 +293,7 @@ export default function Dashboard() {
             employees={employees}
             owners={dashboardTaskOwners}
             canAdd={Boolean(access.canWriteCrm)}
+            ownerRequired
             emptyText="No tasks due today."
           />
         </div>

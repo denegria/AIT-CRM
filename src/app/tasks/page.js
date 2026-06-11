@@ -144,6 +144,10 @@ function defaultCreateDraft({ currentBusinessUnitId, accessibleBusinessUnits, cu
   };
 }
 
+function defaultOwnerUserId(currentUser, assignees = []) {
+  return currentUser?.id || assignees[0]?.id || '';
+}
+
 function editDraftFromTask(task) {
   return {
     title: task.title || '',
@@ -454,9 +458,11 @@ export default function FollowUpQueuePage() {
   }
 
   function openCreatePanel(overrides = {}) {
+    const baseDraft = defaultCreateDraft({ currentBusinessUnitId, accessibleBusinessUnits, currentUser });
     setCreateDraft({
-      ...defaultCreateDraft({ currentBusinessUnitId, accessibleBusinessUnits, currentUser }),
+      ...baseDraft,
       ...overrides,
+      ownerUserId: overrides.ownerUserId || baseDraft.ownerUserId || defaultOwnerUserId(currentUser, visibleAssignees),
     });
     setCreateError('');
     setCreateOpen(true);
@@ -546,7 +552,7 @@ export default function FollowUpQueuePage() {
         taskType,
         businessUnitId,
         contactId,
-        ownerUserId: selectedContact.assignedTo || currentUser?.id || '',
+        ownerUserId: selectedContact.assignedTo || defaultOwnerUserId(currentUser, visibleAssignees),
       });
       setCreateError('');
       setCreateOpen(true);
@@ -554,7 +560,7 @@ export default function FollowUpQueuePage() {
     return () => {
       cancelled = true;
     };
-  }, [accessibleBusinessUnits, accessibleContacts, currentBusinessUnitId, currentUser, searchParams]);
+  }, [accessibleBusinessUnits, accessibleContacts, currentBusinessUnitId, currentUser, searchParams, visibleAssignees]);
 
   async function submitCreatedTask(event) {
     event.preventDefault();
@@ -562,6 +568,10 @@ export default function FollowUpQueuePage() {
     const title = createDraft.title.trim();
     if (!title) {
       setCreateError('Task title is required.');
+      return;
+    }
+    if (!createDraft.ownerUserId) {
+      setCreateError('Task owner is required.');
       return;
     }
     if (!createDraft.businessUnitId) {
@@ -613,6 +623,10 @@ export default function FollowUpQueuePage() {
     }
     if (!editDraft.dueDate) {
       setEditError('Task due date is required.');
+      return;
+    }
+    if (!editDraft.ownerUserId) {
+      setEditError('Task owner is required.');
       return;
     }
     if (!editDraft.businessUnitId) {
@@ -778,7 +792,7 @@ export default function FollowUpQueuePage() {
             <label>
               <span className="form-label">Owner</span>
               <select className="select" value={createDraft.ownerUserId} disabled={createBusy} onChange={(event) => updateCreateDraft({ ownerUserId: event.target.value })}>
-                <option value="">Unassigned</option>
+                <option value="" disabled>Select owner</option>
                 {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
               </select>
             </label>
@@ -925,7 +939,7 @@ export default function FollowUpQueuePage() {
                     disabled={!access.canWriteCrm || busyTaskId === task.id}
                     onChange={(event) => applyTaskAction(task, 'assign', { ownerUserId: event.target.value || null })}
                   >
-                    <option value="">Unassigned</option>
+                    <option value="" disabled>Select owner</option>
                     {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
                   </select>
                   {assignee?.email && <span className={s.mutedText}>{assignee.email}</span>}
@@ -1020,7 +1034,7 @@ export default function FollowUpQueuePage() {
                     <label>
                       <span className="form-label">Owner</span>
                       <select className="select" value={editDraft.ownerUserId} disabled={editBusy} onChange={(event) => updateEditDraft({ ownerUserId: event.target.value })}>
-                        <option value="">Unassigned</option>
+                        <option value="" disabled>Select owner</option>
                         {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
                       </select>
                     </label>
