@@ -34,7 +34,6 @@ const DUE_OPTIONS = [
   ['work', 'Open Tasks'],
   ['today', 'Due Today'],
   ['overdue', 'Overdue'],
-  ['unassigned', 'Unassigned'],
   ['all', 'All Statuses'],
 ];
 
@@ -245,6 +244,7 @@ export default function FollowUpQueuePage() {
     accessibleBusinessUnits,
     currentUser,
   }));
+  const [createContactSearch, setCreateContactSearch] = useState('');
   const [editTaskId, setEditTaskId] = useState('');
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState('');
@@ -305,6 +305,28 @@ export default function FollowUpQueuePage() {
     () => contactOptionsForBusinessUnit(createDraft.businessUnitId),
     [contactOptionsForBusinessUnit, createDraft.businessUnitId],
   );
+  const visibleContactOptions = useMemo(() => {
+    const query = createContactSearch.trim().toLowerCase();
+    const selected = contactOptions.find(({ contact }) => contact.id === createDraft.contactId);
+    const matches = query
+      ? contactOptions.filter(({ label, contact }) => {
+          return [
+            label,
+            contact.email,
+            contact.phone,
+            contact.status,
+            contact.currentStage,
+          ]
+            .filter(Boolean)
+            .some((value) => String(value).toLowerCase().includes(query));
+        })
+      : contactOptions;
+    const limited = matches.slice(0, 35);
+    if (selected && !limited.some(({ contact }) => contact.id === selected.contact.id)) {
+      return [selected, ...limited];
+    }
+    return limited;
+  }, [contactOptions, createContactSearch, createDraft.contactId]);
 
   const editContactOptions = useMemo(
     () => contactOptionsForBusinessUnit(editDraft.businessUnitId),
@@ -464,6 +486,7 @@ export default function FollowUpQueuePage() {
       ...overrides,
       ownerUserId: overrides.ownerUserId || baseDraft.ownerUserId || defaultOwnerUserId(currentUser, visibleAssignees),
     });
+    setCreateContactSearch('');
     setCreateError('');
     setCreateOpen(true);
   }
@@ -482,16 +505,19 @@ export default function FollowUpQueuePage() {
         contactId: contactBusinessUnitId === businessUnitId ? prev.contactId : '',
       };
     });
+    setCreateContactSearch('');
   }
 
   function updateCreateContact(contactId) {
     const selectedContact = (accessibleContacts || []).find((contact) => contact.id === contactId);
     const businessUnitId = selectedContact?.businessUnitId || selectedContact?.primaryBusinessUnitId || createDraft.businessUnitId;
+    const selectedOption = contactOptions.find(({ contact }) => contact.id === contactId);
     setCreateDraft((prev) => ({
       ...prev,
       contactId,
       businessUnitId,
     }));
+    setCreateContactSearch(selectedOption?.label || '');
   }
 
   function openEditPanel(task) {
@@ -554,6 +580,7 @@ export default function FollowUpQueuePage() {
         contactId,
         ownerUserId: selectedContact.assignedTo || defaultOwnerUserId(currentUser, visibleAssignees),
       });
+      setCreateContactSearch(selectedContact.name || selectedContact.client || '');
       setCreateError('');
       setCreateOpen(true);
     });
@@ -572,6 +599,10 @@ export default function FollowUpQueuePage() {
     }
     if (!createDraft.ownerUserId) {
       setCreateError('Task owner is required.');
+      return;
+    }
+    if (!createDraft.dueDate) {
+      setCreateError('Task due date is required.');
       return;
     }
     if (!createDraft.businessUnitId) {
@@ -602,6 +633,7 @@ export default function FollowUpQueuePage() {
       const nextTask = normalizeTask(payload.task, accessibleContacts);
       setQueueTasks((prev) => [nextTask, ...prev.filter((task) => task.id !== nextTask.id)]);
       setCreateDraft(defaultCreateDraft({ currentBusinessUnitId, accessibleBusinessUnits, currentUser }));
+      setCreateContactSearch('');
       setCreateOpen(false);
       toast('Task created');
     } catch (err) {
@@ -711,6 +743,8 @@ export default function FollowUpQueuePage() {
     status: 'all',
     link: 'all',
   });
+  const createTitle = createDraft.title.trim();
+  const canSubmitCreate = Boolean(access.canWriteCrm && createTitle && createDraft.dueDate && createDraft.ownerUserId && createDraft.businessUnitId);
 
   if (!access.canReadCrm) {
     return (
@@ -757,10 +791,12 @@ export default function FollowUpQueuePage() {
           </div>
           <div className={s.createGrid}>
             <label className={s.createTitleField}>
-              <span className="form-label">Title</span>
+              <span className="form-label">Title *</span>
               <input
                 className="input"
                 value={createDraft.title}
+                required
+                aria-required="true"
                 disabled={createBusy}
                 onChange={(event) => updateCreateDraft({ title: event.target.value })}
                 placeholder="Call client about next step"
@@ -773,7 +809,7 @@ export default function FollowUpQueuePage() {
               </select>
             </label>
             <label>
-              <span className="form-label">Due Date</span>
+              <span className="form-label">Due Date *</span>
               <input
                 className="input"
                 type="date"
@@ -790,14 +826,14 @@ export default function FollowUpQueuePage() {
               </select>
             </label>
             <label>
-              <span className="form-label">Owner</span>
+              <span className="form-label">Owner *</span>
               <select className="select" value={createDraft.ownerUserId} disabled={createBusy} onChange={(event) => updateCreateDraft({ ownerUserId: event.target.value })}>
                 <option value="" disabled>Select owner</option>
                 {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
               </select>
             </label>
             <label>
-              <span className="form-label">{scopeLabel}</span>
+              <span className="form-label">{scopeLabel} *</span>
               <select className="select" value={createDraft.businessUnitId} disabled={createBusy} onChange={(event) => updateCreateBusinessUnit(event.target.value)}>
                 {accessibleBusinessUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
               </select>
@@ -808,18 +844,30 @@ export default function FollowUpQueuePage() {
                 {TASK_PRIORITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </label>
-            <label className={s.createContactField}>
+            <label className={`${s.createContactField} ${s.contactPicker}`}>
               <span className="form-label">Contact</span>
+              <input
+                className="input"
+                value={createContactSearch}
+                disabled={createBusy}
+                onChange={(event) => setCreateContactSearch(event.target.value)}
+                placeholder="Search contact by name, email, phone, or status"
+              />
               <select className="select" value={createDraft.contactId} disabled={createBusy} onChange={(event) => updateCreateContact(event.target.value)}>
                 <option value="">No contact linked</option>
-                {contactOptions.map(({ contact, label }) => <option key={contact.id} value={contact.id}>{label}</option>)}
+                {visibleContactOptions.map(({ contact, label }) => <option key={contact.id} value={contact.id}>{label}</option>)}
               </select>
+              <span className={s.contactHint}>
+                {contactOptions.length > visibleContactOptions.length
+                  ? `Showing ${visibleContactOptions.length} of ${contactOptions.length}. Type to narrow.`
+                  : `${contactOptions.length} available contacts`}
+              </span>
             </label>
           </div>
           {createError && <div className={s.createError}>{createError}</div>}
           <div className={s.createActions}>
             <button className="btn btn-sm" type="button" disabled={createBusy} onClick={() => setCreateOpen(false)}>Cancel</button>
-            <button className="btn btn-sm btn-primary" type="submit" disabled={createBusy || !access.canWriteCrm}>
+            <button className="btn btn-sm btn-primary" type="submit" disabled={createBusy || !canSubmitCreate}>
               <Plus size={14} />
               Create Task
             </button>
@@ -847,7 +895,6 @@ export default function FollowUpQueuePage() {
             <select className="select" value={filters.ownerUserId} onChange={(event) => setFilters((prev) => ({ ...prev, ownerUserId: event.target.value }))}>
               <option value="all">All Owners</option>
               {currentUser?.id && <option value="__me">My Tasks</option>}
-              <option value="unassigned">Unassigned</option>
               {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
             </select>
           </label>

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { Client } from 'pg';
-import { ADMIN_TOKEN_ENV, hasConfiguredAdminToken, isImportReviewAdmin } from '@/lib/admin-guard';
+import { hasConfiguredAdminToken, isAdminTokenUnlockEnabled, isImportReviewAdmin } from '@/lib/admin-guard';
 import { getRequestSession, hasPermission, isAuthEnabled, PERMISSIONS } from '@/lib/auth';
 import { isUuid } from '@/lib/crm/validation.js';
 import {
@@ -55,14 +55,14 @@ async function requireImportReviewAdmin(request, permission) {
     }
   }
 
-  if (hasConfiguredAdminToken() && isImportReviewAdmin(request)) {
+  if (isAdminTokenUnlockEnabled() && hasConfiguredAdminToken() && isImportReviewAdmin(request)) {
     return { error: null, organizationId: null };
   }
 
-  if (!hasConfiguredAdminToken() && !isAuthEnabled()) {
+  if (!isAuthEnabled()) {
     return {
       error: NextResponse.json(
-        { error: `${ADMIN_TOKEN_ENV} or real auth/RBAC is required before import review can be accessed.` },
+        { error: 'Real auth/RBAC is required before import review can be accessed.' },
         { status: 503 },
       ),
       organizationId: null,
@@ -71,7 +71,7 @@ async function requireImportReviewAdmin(request, permission) {
 
   return {
     error: NextResponse.json(
-      { error: 'Admin unlock or import-review permission required.' },
+      { error: 'Import-review permission required.' },
       { status: 401 },
     ),
     organizationId: null,

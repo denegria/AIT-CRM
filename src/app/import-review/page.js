@@ -77,6 +77,7 @@ const SECONDARY_BUCKETS = [
     description: 'Rows whose acquisition/source hint is unclear. Informational unless paired with another blocker.',
   },
 ];
+const CAN_USE_ADMIN_TOKEN_UNLOCK = process.env.NEXT_PUBLIC_ENABLE_IMPORT_REVIEW_ADMIN_UNLOCK === '1';
 
 function labelForType(value) {
   return TYPE_LABELS[value] || value.replace(/_/g, ' ');
@@ -504,7 +505,35 @@ export default function ImportReviewPage() {
     );
   }
 
-  if (authRequired || (!access.canReadImportReview && !adminUnlocked)) {
+  if (!CAN_USE_ADMIN_TOKEN_UNLOCK && !access.canReadImportReview) {
+    return (
+      <div className="fade-in">
+        <div className="page-header">
+          <div>
+            <span className="badge badge-medium" style={{ padding: '4px 10px', marginBottom: 8 }}>
+              <Lock size={14} />
+              Restricted
+            </span>
+            <h1 className="page-title">Import review access required</h1>
+            <p className="page-subtitle">
+              This queue is limited to users with import-review permission for the current organization.
+            </p>
+          </div>
+          <Link className="btn btn-primary" href="/">
+            Back to dashboard
+          </Link>
+        </div>
+        <div className="card" style={{ maxWidth: 620 }}>
+          <div className="card-title">No access to import review</div>
+          <p className="page-subtitle" style={{ margin: 0 }}>
+            Your account can continue using the CRM surfaces available to your role. Ask an administrator if import review should be added to your permissions.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (CAN_USE_ADMIN_TOKEN_UNLOCK && (authRequired || (!access.canReadImportReview && !adminUnlocked))) {
     return (
       <div className="fade-in">
         <div className="page-header">
@@ -515,7 +544,7 @@ export default function ImportReviewPage() {
             </span>
             <h1 className="page-title">Unlock import review</h1>
             <p className="page-subtitle">
-              Import review contains staged customer data and requires either import-review permission or the temporary admin token.
+              Import review contains staged customer data and requires import-review permission or an explicitly enabled local unlock.
             </p>
           </div>
           <Link className="btn btn-primary" href="/">
@@ -525,7 +554,7 @@ export default function ImportReviewPage() {
         <form className="card" onSubmit={unlockAdminSession} style={{ maxWidth: 520 }}>
           <div className="card-title">Admin token</div>
           <p className="page-subtitle">
-            If your account does not have import-review access yet, enter the temporary AIT_CRM_ADMIN_TOKEN value.
+            Enter the local import-review unlock token for this browser session.
           </p>
           <input
             className="input"

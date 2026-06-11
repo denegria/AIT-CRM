@@ -20,6 +20,11 @@ export function hasConfiguredAdminToken() {
   return Boolean(getConfiguredAdminToken());
 }
 
+export function isAdminTokenUnlockEnabled() {
+  if (process.env.ENABLE_IMPORT_REVIEW_ADMIN_UNLOCK === '1') return true;
+  return process.env.NODE_ENV !== 'production';
+}
+
 export function isValidAdminToken(value) {
   const expected = getConfiguredAdminToken();
   if (!expected || !value) return false;
@@ -39,5 +44,6 @@ export function getRequestAdminToken(request) {
 }
 
 export function isImportReviewAdmin(request) {
+  if (!isAdminTokenUnlockEnabled()) return false;
   return isValidAdminToken(getRequestAdminToken(request));
 }

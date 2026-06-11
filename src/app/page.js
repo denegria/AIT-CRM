@@ -79,8 +79,9 @@ export default function Dashboard() {
     const pendingInvoices = invoices.filter(f => f.status === 'Pending').length;
     const assignedWOs = workOrders.filter(w => w.assignedTo === currentUserId && w.status !== 'Completed').length;
     const myPipeline = contacts.filter(c => c.assignedTo === currentUserId && c.status !== 'Won' && c.status !== 'Lost').length;
+    const needsFirstOutreach = contacts.filter(c => c.status === 'New Lead' || c.currentStage === 'needs_first_outreach').length;
 
-    return { totalRevenue, pipeline, totalInvoiced, activeWOs, newLeads, myTasksCount, activeContacts, pendingInvoices, assignedWOs, myPipeline };
+    return { totalRevenue, pipeline, totalInvoiced, activeWOs, newLeads, myTasksCount, activeContacts, pendingInvoices, assignedWOs, myPipeline, needsFirstOutreach };
   }, [financials, workOrders, contacts, tasks, currentUserId]);
 
   const statusData = useMemo(() => {
@@ -260,7 +261,7 @@ export default function Dashboard() {
           <KPICard label="My Active Tasks" value={kpis.myTasksCount} change="Due soon" trend="up" />
           <KPICard label="Active Contacts" value={kpis.activeContacts} change="Needs next action" trend="up" />
           {canReadFinancials
-            ? <KPICard label="Invoices Pending" value={kpis.pendingInvoices} change="Action required" trend="down" />
+            ? <KPICard label="Needs First Outreach" value={kpis.needsFirstOutreach} change="Ready to assign" trend="up" />
             : <KPICard label="My Pipeline" value={kpis.myPipeline} change="Assigned active leads" trend="up" />}
           <KPICard label="Assigned Work Orders" value={kpis.assignedWOs} change="In progress" trend="up" />
         </div>

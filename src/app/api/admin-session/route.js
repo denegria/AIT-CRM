@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import {
   ADMIN_COOKIE_NAME,
-  ADMIN_TOKEN_ENV,
   hasConfiguredAdminToken,
+  isAdminTokenUnlockEnabled,
   isValidAdminToken,
 } from '@/lib/admin-guard';
 
@@ -15,9 +15,16 @@ const COOKIE_OPTIONS = {
 };
 
 export async function POST(request) {
+  if (!isAdminTokenUnlockEnabled()) {
+    return NextResponse.json(
+      { error: 'Admin token unlock is disabled for this environment.' },
+      { status: 404 },
+    );
+  }
+
   if (!hasConfiguredAdminToken()) {
     return NextResponse.json(
-      { error: `${ADMIN_TOKEN_ENV} is required before admin routes can be unlocked.` },
+      { error: 'Admin token unlock is not configured.' },
       { status: 503 },
     );
   }
