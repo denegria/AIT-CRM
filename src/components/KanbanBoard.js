@@ -119,7 +119,7 @@ function cardChips(item) {
   return (item.tags || []).map(titleLabel).slice(0, 3);
 }
 
-export default function KanbanBoard({ data, columns, onMove, onEdit }) {
+export default function KanbanBoard({ data, columns, onMove, onEdit, showMobileMoveControls = true }) {
   const [draggingId, setDraggingId] = useState(null);
   const [dragOverCol, setDragOverCol] = useState(null);
 
@@ -255,7 +255,7 @@ export default function KanbanBoard({ data, columns, onMove, onEdit }) {
                       <span>{item.assignedLabel || 'Unassigned'}</span>
                     </div>
                   </div>
-                  {onMove && (
+                  {onMove && showMobileMoveControls && (
                     <label className={s.cardMove} onClick={(event) => event.stopPropagation()}>
                       <span>Move to</span>
                       <select value={item.status} onChange={(event) => moveCard(event, item)}>

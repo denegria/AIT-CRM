@@ -238,10 +238,68 @@ function parsePipeKeyValues(value = '') {
   return fields;
 }
 
+function parseLooseKeyValues(value = '') {
+  const fields = {};
+  for (const part of String(value || '').split(';')) {
+    const separatorIndex = part.indexOf(':');
+    if (separatorIndex < 0) continue;
+    const key = readableLine(part.slice(0, separatorIndex));
+    const rawValue = readableLine(part.slice(separatorIndex + 1));
+    if (!key || !rawValue || rawValue === 'none' || rawValue === 'unknown') continue;
+    fields[key] = rawValue;
+  }
+  return fields;
+}
+
 function fieldChip(label, value) {
   const text = readableLine(value);
   if (!text) return '';
   return `${label} ${text}`;
+}
+
+function normalizeForWhom(value = '') {
+  const text = readableLine(value);
+  if (!text) return '';
+  const normalized = text.toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  if (['para mi', 'for me', 'myself', 'me'].includes(normalized)) return 'For myself';
+  if (normalized.includes('daughter') || normalized.includes('hija')) return 'For my daughter';
+  if (normalized.includes('son') || normalized.includes('hijo')) return 'For my son';
+  if (normalized.includes('spouse') || normalized.includes('wife') || normalized.includes('husband') || normalized.includes('espos')) {
+    return 'For my spouse';
+  }
+  if (normalized.includes('brother') || normalized.includes('hermano')) return 'For my brother';
+  if (normalized.includes('sister') || normalized.includes('hermana')) return 'For my sister';
+  if (normalized.includes('friend') || normalized.includes('amig')) return 'For a friend';
+  return text.toLowerCase().startsWith('for ') ? text : `For ${text}`;
+}
+
+function websiteLeadForWhom(fields = {}) {
+  const formFields = parseLooseKeyValues(fields.form_fields);
+  const entries = [
+    ...Object.entries(fields),
+    ...Object.entries(formFields),
+  ];
+  const directMatch = entries.find(([key]) => {
+    const normalizedKey = key.toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, ' ')
+      .trim();
+    return [
+      'for',
+      'for whom',
+      'who is this for',
+      'who field',
+      'para quien',
+      'para quien es',
+      'relationship',
+      'beneficiary',
+      'student',
+    ].includes(normalizedKey);
+  });
+  return normalizeForWhom(directMatch?.[1] || '');
 }
 
 function websiteLeadRecordPayload(lead) {
@@ -250,8 +308,10 @@ function websiteLeadRecordPayload(lead) {
   if (sourceType !== 'website_form' && !sourceName.toLowerCase().includes('wix')) return null;
   const fields = parsePipeKeyValues(lead.originalNotes);
   const stage = readableLine(fields.current_stage || lead.currentStage || lead.status || 'New Lead');
+  const forWhom = websiteLeadForWhom(fields);
   const meta = compactArray([
     stage ? fieldChip('Stage', stage) : '',
+    forWhom ? fieldChip('For', forWhom.replace(/^For\s+/i, '')) : '',
     fields.service ? fieldChip('Interest', fields.service) : '',
     fields.address ? fieldChip('Location', fields.address) : '',
     fields.age ? fieldChip('Age', fields.age) : '',
@@ -294,9 +354,9 @@ function websiteFormDetailsNote(value = '') {
     title: 'Website form details',
     text: rows.join(' · '),
     hint: {
-      category: TIMELINE_CATEGORIES.NOTE,
-      categoryLabel: 'Note',
-      priority: 'primary',
+      category: TIMELINE_CATEGORIES.IMPORT,
+      categoryLabel: 'Source details',
+      priority: 'secondary',
       isImported: true,
       sourceKind: 'Website form details',
       rawText: text,
@@ -601,6 +661,12 @@ export function buildContactTimeline({
       .filter(([key]) => key),
   );
   const importedSourceCounts = new Map();
+  const websiteFormLeadIds = new Set(
+    leadRows
+      .filter((lead) => websiteLeadRecordPayload(lead))
+      .map((lead) => lead.id)
+      .filter(Boolean),
+  );
   for (const row of activityRows) {
     const key = sourceKey(row.sourceSheet, row.sourceRow);
     if (!key || !String(row.eventType || '').toLowerCase().startsWith('import_promoted_')) continue;
@@ -631,6 +697,13 @@ export function buildContactTimeline({
 
   for (const event of activityRows) {
     if (hasCanonicalTaskEvents && String(event.eventType || '').startsWith('task.')) continue;
+    if (
+      String(event.eventType || '').toLowerCase() === 'website_lead_captured' &&
+      event.leadId &&
+      websiteFormLeadIds.has(event.leadId)
+    ) {
+      continue;
+    }
     const entryType = timelineTypeForEvent(event.eventType);
     const source = sourcePayload(event);
     const metadataJson = event.metadataJson || {};

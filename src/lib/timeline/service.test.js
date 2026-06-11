@@ -191,7 +191,16 @@ test('buildContactTimeline interprets Wix website imports without raw pipe text'
       id: 'website-details-note',
       contactId: 'contact-wix-1',
       leadId: 'lead-wix-1',
-      body: 'Website form details:\n- Age: 36\n- Location: New jersey',
+      body: 'Website form details:\n- Age: 36\n- Location: New jersey\n- Additional form fields: Para quien: Para mí',
+      createdAt: new Date('2026-05-20T20:08:00.000Z'),
+    }],
+    activityEvents: [{
+      id: 'website-captured-activity',
+      contactId: 'contact-wix-1',
+      leadId: 'lead-wix-1',
+      businessUnitId: 'bu-ait-usa',
+      eventType: 'website_lead_captured',
+      message: 'Website lead submitted.',
       createdAt: new Date('2026-05-20T20:07:00.000Z'),
     }],
     leads: [{
@@ -202,7 +211,7 @@ test('buildContactTimeline interprets Wix website imports without raw pipe text'
       sourceName: 'Wix Contact Form',
       status: 'New Lead',
       currentStage: 'New Lead',
-      originalNotes: 'website_form | external_id=none | source_key=wix-ait-usa | source_row_id=source-row-1 | current_stage=New Lead | address=New jersey | age=36 | message=Website lead submitted.',
+      originalNotes: 'website_form | external_id=none | source_key=wix-ait-usa | source_row_id=source-row-1 | current_stage=New Lead | address=New jersey | age=36 | form_fields=Para quien: Para mí | message=Website lead submitted.',
       createdAt: new Date('2026-05-20T20:07:00.000Z'),
     }],
     businessUnits: [{ id: 'bu-ait-usa', name: 'AIT USA', label: 'Divisions' }],
@@ -215,12 +224,14 @@ test('buildContactTimeline interprets Wix website imports without raw pipe text'
   assert.equal(lead.text, 'Website lead submitted.');
   assert.equal(lead.text.includes('source_key='), false);
   assert.equal(lead.record.kind, 'website_lead');
-  assert.deepEqual(lead.record.meta, ['Stage New Lead', 'Location New jersey', 'Age 36', 'Source wix-ait-usa']);
+  assert.deepEqual(lead.record.meta, ['Stage New Lead', 'For myself', 'Location New jersey', 'Age 36', 'Source wix-ait-usa']);
   assert.equal(lead.presentation.category, 'lead');
   assert.equal(lead.presentation.provenance.sourceKind, 'Website form row');
   assert.match(lead.presentation.provenance.rawText, /source_key=wix-ait-usa/);
   assert.equal(detailsNote.title, 'Website form details');
-  assert.equal(detailsNote.text, 'Age 36 · Location New jersey');
+  assert.equal(detailsNote.text, 'Age 36 · Location New jersey · Additional form fields Para quien: Para mí');
+  assert.equal(detailsNote.presentation.category, 'import');
+  assert.equal(timeline.some((entry) => entry.id === 'activity:website-captured-activity'), false);
 });
 
 test('buildContactTimeline makes AIT Signs promoted work and financial history readable', () => {

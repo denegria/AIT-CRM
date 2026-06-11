@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, Clock3, Search, UserPlus, UserRoundCheck } from 'lucide-react';
+import { AlertCircle, ArrowRight, Clock3, Search, UserPlus, UserRoundCheck } from 'lucide-react';
 import KanbanBoard from '@/components/KanbanBoard';
 import { useToast } from '@/components/Toast';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
@@ -22,6 +22,32 @@ function matchesSearch(contact, query) {
     contact.divisionLabel,
   ].join(' ').toLowerCase();
   return haystack.includes(query);
+}
+
+function normalizedPipelineColumns(columns = []) {
+  return columns.map((column) => {
+    if (typeof column === 'string') {
+      return {
+        id: column,
+        label: column,
+        isOperational: false,
+      };
+    }
+    return {
+      id: column.id || column.status || column.label,
+      label: column.label || column.id || column.status,
+      isOperational: Boolean(column.isOperational),
+    };
+  });
+}
+
+function mobileCardMeta(contact) {
+  return [
+    contact.enrollmentSignals?.inquiry?.programInterest || contact.programInterest,
+    contact.enrollmentSignals?.inquiry?.age ? `Age ${contact.enrollmentSignals.inquiry.age}` : '',
+    contact.enrollmentSignals?.inquiry?.location,
+    contact.phone || contact.email || 'No contact channel',
+  ].filter(Boolean).join(' · ');
 }
 
 export default function PipelinePage() {
@@ -48,6 +74,8 @@ export default function PipelinePage() {
     currentUser?.id && !currentUser.canAccessAllBusinessUnits ? 'unassigned' : 'all'
   ));
   const [search, setSearch] = useState('');
+  const [mobileStageFilter, setMobileStageFilter] = useState('all');
+  const [mobileMoveCardId, setMobileMoveCardId] = useState('');
   const canWrite = access.canWriteCrm;
   const {
     activeWorkflow,
@@ -101,6 +129,23 @@ export default function PipelinePage() {
       contact.assignedTo === ownerFilter;
     return workflowMatch && ownerMatch && matchesSearch(contact, normalizedSearch);
   });
+  const normalizedColumns = useMemo(() => normalizedPipelineColumns(pipelineColumns), [pipelineColumns]);
+  const mobileStageRows = mobileStageFilter === 'all'
+    ? pipelineRows
+    : pipelineRows.filter((contact) => contact.status === mobileStageFilter);
+
+  const movePipelineCard = (id, status, column) => {
+    if (column?.isOperational) {
+      toast('Open the contact to update linked estimate, work order, fulfillment, or payment records.', 'error');
+      return;
+    }
+    updateContact(id, { status })
+      .then(() => {
+        setMobileMoveCardId('');
+        toast('Stage updated');
+      })
+      .catch((error) => toast(error?.message || 'Stage update failed.', 'error'));
+  };
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
@@ -114,11 +159,6 @@ export default function PipelinePage() {
           </p>
         </div>
         <div className={s.pipelineActions}>
-          {currentUser?.id && (
-            <button className="btn" onClick={() => setOwnerFilter(currentUser.id)}>
-              <UserRoundCheck size={14} /> My Pipeline
-            </button>
-          )}
           <button className="btn" onClick={() => setOwnerFilter('unassigned')}>
             <AlertCircle size={14} /> Unassigned
           </button>
@@ -173,11 +213,7 @@ export default function PipelinePage() {
         </select>
         <select className="input select" value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}>
           <option value="all">{canUseConsolidatedScope ? 'Team Pipeline' : 'All Owners'}</option>
-          {currentUser?.id && <option value={currentUser.id}>My Pipeline</option>}
           <option value="unassigned">Unassigned</option>
-          {employees
-            .filter((employee) => employee.id !== currentUser?.id)
-            .map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
         </select>
         <div className={s.searchBox}>
           <Search size={14} />
@@ -190,20 +226,88 @@ export default function PipelinePage() {
         </div>
       </div>
 
-      <KanbanBoard
-        data={pipelineRows}
-        columns={pipelineColumns}
-        onMove={canWrite ? (id, status, column) => {
-          if (column?.isOperational) {
-            toast('Open the contact to update linked estimate, work order, fulfillment, or payment records.', 'error');
-            return;
-          }
-          updateContact(id, { status })
-            .then(() => toast('Stage updated'))
-            .catch((error) => toast(error?.message || 'Stage update failed.', 'error'));
-        } : undefined}
-        onEdit={(item) => router.push(`/contacts/${item.id}`)}
-      />
+      <div className={s.desktopBoard}>
+        <KanbanBoard
+          data={pipelineRows}
+          columns={pipelineColumns}
+          onMove={canWrite ? movePipelineCard : undefined}
+          onEdit={(item) => router.push(`/contacts/${item.id}`)}
+          showMobileMoveControls={false}
+        />
+      </div>
+
+      <div className={s.mobilePipeline} aria-label="Mobile pipeline list">
+        <div className={s.mobileStageTabs}>
+          <button
+            className={`${s.mobileStageTab} ${mobileStageFilter === 'all' ? s.active : ''}`}
+            type="button"
+            onClick={() => setMobileStageFilter('all')}
+          >
+            <span>All</span>
+            <strong>{pipelineRows.length}</strong>
+          </button>
+          {normalizedColumns.map((column) => {
+            const count = pipelineRows.filter((contact) => contact.status === column.id).length;
+            return (
+              <button
+                key={column.id}
+                className={`${s.mobileStageTab} ${mobileStageFilter === column.id ? s.active : ''}`}
+                type="button"
+                onClick={() => setMobileStageFilter(column.id)}
+              >
+                <span>{column.label}</span>
+                <strong>{count}</strong>
+              </button>
+            );
+          })}
+        </div>
+        <div className={s.mobileCardList}>
+          {mobileStageRows.map((contact) => {
+            const isMoving = mobileMoveCardId === contact.id;
+            return (
+              <article key={contact.id} className={s.mobilePipelineCard}>
+                <button className={s.mobileCardMain} type="button" onClick={() => router.push(`/contacts/${contact.id}`)}>
+                  <span className={s.mobileCardStage}>{contact.currentStage || contact.status}</span>
+                  <strong>{contact.name}</strong>
+                  <small>{mobileCardMeta(contact)}</small>
+                  {contact.nextAction && <span className={s.mobileCardAction}>{contact.nextAction}</span>}
+                </button>
+                {canWrite && (
+                  <div className={s.mobileCardTools}>
+                    <button
+                      className="btn btn-sm"
+                      type="button"
+                      onClick={() => setMobileMoveCardId(isMoving ? '' : contact.id)}
+                      aria-expanded={isMoving}
+                    >
+                      <ArrowRight size={14} /> Move
+                    </button>
+                    {isMoving && (
+                      <select
+                        className={`input select ${s.mobileMoveSelect}`}
+                        value={contact.status}
+                        onChange={(event) => {
+                          const nextColumn = normalizedColumns.find((column) => column.id === event.target.value);
+                          if (!nextColumn || nextColumn.id === contact.status) return;
+                          movePipelineCard(contact.id, nextColumn.id, nextColumn);
+                        }}
+                        aria-label={`Move ${contact.name}`}
+                      >
+                        {normalizedColumns.map((column) => (
+                          <option key={column.id} value={column.id}>{column.label}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+              </article>
+            );
+          })}
+          {mobileStageRows.length === 0 && (
+            <div className={s.mobileEmpty}>No pipeline cards match this view.</div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

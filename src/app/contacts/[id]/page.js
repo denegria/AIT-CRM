@@ -254,7 +254,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     allFinancials,
     updateContact,
     loaded,
-    employees,
     sources,
     access,
     dataSource,
@@ -314,7 +313,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     (!showFinancialsTab && activeTab === 'financials')
       ? 'timeline'
       : activeTab;
-  const assignedEmployee = useMemo(() => employees.find(e => e.id === contact?.assignedTo), [employees, contact]);
+  const assignedEmployee = null;
   const fallbackTimeline = useMemo(() => {
     if (!contact) return [];
     if (Array.isArray(contact.timeline) && contact.timeline.length) return contact.timeline;
@@ -499,7 +498,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
   const openEditModal = () => {
     if (!access.canWriteCrm) return;
-    setEditForm({ ...contact });
+    setEditForm({ ...contact, assignedTo: '' });
     setIsEditModalOpen(true);
   };
 
@@ -1202,9 +1201,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           </div>
           <div className="form-group">
             <label className="form-label">Assigned To</label>
-            <select className="input select" value={editForm.assignedTo} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
+            <select className="input select" value="" onChange={() => setEditForm({...editForm, assignedTo: ''})}>
               <option value="">Unassigned</option>
-              {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
             </select>
           </div>
         </Modal>

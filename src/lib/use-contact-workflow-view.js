@@ -173,13 +173,13 @@ export function useContactWorkflowView({
 
   const contactRows = useMemo(() => contactsWithWorkflow.map((contact) => ({
     ...contact,
-    assignedLabel:
-      employees.find((employee) => employee.id === contact.assignedTo)?.name ||
-      (contact.assignedTo ? contact.assignedTo : 'Unassigned'),
+    originalAssignedTo: contact.assignedTo || '',
+    assignedTo: '',
+    assignedLabel: 'Unassigned',
     divisionLabel:
       accessibleBusinessUnits.find((unit) => unit.id === (contact.businessUnitId || contact.primaryBusinessUnitId))?.name ||
       'Unassigned',
-  })), [contactsWithWorkflow, employees, accessibleBusinessUnits]);
+  })), [contactsWithWorkflow, accessibleBusinessUnits]);
 
   const workflowStats = useMemo(() => ({
     needsFirstOutreach: contactsWithWorkflow.filter((contact) => contact.needsFirstOutreach).length,

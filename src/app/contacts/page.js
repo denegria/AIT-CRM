@@ -323,7 +323,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           <select className="input select contacts-filter" style={{width:150, padding:'4px 8px'}} value={ownerFilter} onChange={e=>setOwnerFilter(e.target.value)}>
             <option value="all">All Owners</option>
             <option value="unassigned">Unassigned</option>
-            {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
           </select>
           {canWrite && <button className="btn btn-primary" onClick={openNew}>+ Add {singularLabel}</button>}
         </div>
@@ -439,9 +438,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         </div>
         <div className="form-group">
           <label className="form-label">Assigned To</label>
-          <select className="input select" value={form.assignedTo} onChange={e => setForm(f => ({...f, assignedTo: e.target.value}))}>
+          <select className="input select" value="" onChange={() => setForm(f => ({...f, assignedTo: ''}))}>
             <option value="">Unassigned</option>
-            {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
           </select>
         </div>
         <div className="form-group">

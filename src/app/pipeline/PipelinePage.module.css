@@ -109,6 +109,10 @@
   padding-left: 32px;
 }
 
+.mobilePipeline {
+  display: none;
+}
+
 @media (max-width: 900px) {
   .statsGrid {
     gap: 8px;
@@ -160,5 +164,145 @@
 
   .scopeSelect {
     width: 100%;
+  }
+
+  .desktopBoard {
+    display: none;
+  }
+
+  .mobilePipeline {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .mobileStageTabs {
+    display: flex;
+    gap: 8px;
+    margin: 0 -16px;
+    padding: 0 16px 4px;
+    overflow-x: auto;
+    scroll-padding: 16px;
+  }
+
+  .mobileStageTab {
+    flex: 0 0 auto;
+    min-width: 112px;
+    min-height: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: var(--text-xs);
+    font-weight: 800;
+  }
+
+  .mobileStageTab span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mobileStageTab strong {
+    flex: 0 0 auto;
+    min-width: 22px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: var(--bg-elevated);
+    color: var(--text-muted);
+    font-size: 10px;
+    text-align: center;
+  }
+
+  .mobileStageTab.active {
+    border-color: color-mix(in srgb, var(--accent) 46%, var(--border-subtle));
+    background: var(--accent-muted);
+    color: var(--accent);
+  }
+
+  .mobileCardList {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .mobilePipelineCard {
+    border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
+    border-radius: var(--radius-lg);
+    background: linear-gradient(180deg, var(--bg-elevated), var(--bg-secondary));
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+
+  .mobileCardMain {
+    width: 100%;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 12px;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+  }
+
+  .mobileCardMain strong {
+    color: var(--text-primary);
+    font-size: var(--text-sm);
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+  }
+
+  .mobileCardMain small,
+  .mobileCardAction {
+    color: var(--text-secondary);
+    font-size: var(--text-xs);
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+  }
+
+  .mobileCardStage {
+    width: fit-content;
+    max-width: 100%;
+    padding: 3px 7px;
+    border-radius: 999px;
+    background: var(--accent-muted);
+    color: var(--accent);
+    font-size: 10px;
+    font-weight: 800;
+    overflow-wrap: anywhere;
+  }
+
+  .mobileCardTools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px 12px;
+    border-top: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  }
+
+  .mobileMoveSelect {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .mobileEmpty {
+    min-height: 90px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px dashed var(--border-default);
+    border-radius: var(--radius-lg);
+    color: var(--text-muted);
+    font-size: var(--text-sm);
   }
 }
