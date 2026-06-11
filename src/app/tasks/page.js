@@ -10,6 +10,7 @@ import {
   FilterX,
   Plus,
   RefreshCcw,
+  Repeat2,
   X,
   UserPlus,
 } from 'lucide-react';
@@ -54,6 +55,13 @@ const TASK_PRIORITY_OPTIONS = [
   ['medium', 'Medium'],
   ['high', 'High'],
   ['urgent', 'Urgent'],
+];
+const TASK_RECURRENCE_OPTIONS = [
+  ['none', 'Does Not Repeat'],
+  ['daily', 'Daily'],
+  ['weekly', 'Weekly'],
+  ['biweekly', 'Biweekly'],
+  ['monthly', 'Monthly'],
 ];
 
 const OPEN_STATUSES = new Set(['open', 'in_progress', 'snoozed']);
@@ -115,6 +123,7 @@ function defaultCreateDraft({ currentBusinessUnitId, accessibleBusinessUnits, cu
     businessUnitId: defaultBusinessUnitId(currentBusinessUnitId, accessibleBusinessUnits),
     contactId: '',
     priority: 'medium',
+    recurrenceFrequency: 'none',
   };
 }
 
@@ -131,6 +140,7 @@ function normalizeTask(task, contacts = []) {
     taskType: task.taskType || 'manual_reminder',
     priority: String(task.priority || 'medium').toLowerCase(),
     contactName: task.contactName || task.client || contact?.name || '',
+    recurrence: task.metadataJson?.recurrence || null,
   };
 }
 
@@ -151,6 +161,12 @@ function taskBadgeClass(task) {
   if (dateKey(task.dueAt) && dateKey(task.dueAt) < todayKey() && !CLOSED_STATUSES.has(task.status)) return 'badge-overdue';
   if (task.status === 'snoozed') return 'badge-pending';
   return 'badge-contacted';
+}
+
+function recurrenceLabel(recurrence) {
+  if (!recurrence?.frequency || recurrence.frequency === 'none') return '';
+  const match = TASK_RECURRENCE_OPTIONS.find(([value]) => value === recurrence.frequency);
+  return match?.[1] || titleCase(recurrence.frequency);
 }
 
 export default function FollowUpQueuePage() {
@@ -479,6 +495,7 @@ export default function FollowUpQueuePage() {
           businessUnitId: createDraft.businessUnitId,
           contactId: createDraft.contactId || null,
           priority: createDraft.priority,
+          recurrence: { frequency: createDraft.recurrenceFrequency },
           sourceType: 'manual',
         }),
       });
@@ -580,9 +597,16 @@ export default function FollowUpQueuePage() {
                 className="input"
                 type="date"
                 value={createDraft.dueDate}
+                required
                 disabled={createBusy}
                 onChange={(event) => updateCreateDraft({ dueDate: event.target.value })}
               />
+            </label>
+            <label>
+              <span className="form-label">Repeats</span>
+              <select className="select" value={createDraft.recurrenceFrequency} disabled={createBusy} onChange={(event) => updateCreateDraft({ recurrenceFrequency: event.target.value })}>
+                {TASK_RECURRENCE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
             </label>
             <label>
               <span className="form-label">Owner</span>
@@ -698,11 +722,18 @@ export default function FollowUpQueuePage() {
                     <span className={`badge ${taskBadgeClass(task)}`}>{titleCase(task.status)}</span>
                     <span className={`badge badge-${task.priority}`}>{titleCase(task.priority)}</span>
                     <span className="badge badge-draft">{titleCase(task.taskType)}</span>
+                    {task.recurrence && <span className="badge badge-pending">{recurrenceLabel(task.recurrence)}</span>}
                   </div>
                 </div>
                 <div>
                   <div className={s.compactLabel}>Due</div>
                   <div className={`${s.dueText} ${isOverdue ? s.dueTextDanger : ''}`}>{formatDate(task.dueAt)}</div>
+                  {task.recurrence && (
+                    <div className={s.recurrenceText}>
+                      <Repeat2 size={12} />
+                      {recurrenceLabel(task.recurrence)}
+                    </div>
+                  )}
                   <div className={s.mutedText}>{task.contactName || 'No contact linked'}</div>
                 </div>
                 <label className={s.assigneeSelect}>

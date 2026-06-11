@@ -55,12 +55,22 @@ export const FOLLOW_UP_OUTCOMES = Object.freeze({
   NEEDS_NEXT_FOLLOW_UP: 'needs_next_follow_up',
 });
 
+export const TASK_RECURRENCE_FREQUENCIES = Object.freeze({
+  NONE: 'none',
+  DAILY: 'daily',
+  WEEKLY: 'weekly',
+  BIWEEKLY: 'biweekly',
+  MONTHLY: 'monthly',
+});
+
 export const TASK_TYPE_VALUES = Object.freeze(Object.values(TASK_TYPES));
 export const TASK_STATUS_VALUES = Object.freeze(Object.values(TASK_STATUSES));
 export const TASK_PRIORITY_VALUES = Object.freeze(Object.values(TASK_PRIORITIES));
 export const TASK_EVENT_TYPE_VALUES = Object.freeze(Object.values(TASK_EVENT_TYPES));
 export const TASK_SOURCE_TYPE_VALUES = Object.freeze(Object.values(TASK_SOURCE_TYPES));
 export const FOLLOW_UP_OUTCOME_VALUES = Object.freeze(Object.values(FOLLOW_UP_OUTCOMES));
+export const TASK_RECURRENCE_FREQUENCY_VALUES = Object.freeze(Object.values(TASK_RECURRENCE_FREQUENCIES));
 
 export const DEFAULT_TASK_STATUS = TASK_STATUSES.OPEN;
 export const DEFAULT_TASK_PRIORITY = TASK_PRIORITIES.MEDIUM;
+export const DEFAULT_TASK_RECURRENCE_FREQUENCY = TASK_RECURRENCE_FREQUENCIES.NONE;

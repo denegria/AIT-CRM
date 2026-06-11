@@ -7,6 +7,7 @@ import {
 } from './constants.js';
 import {
   buildTaskTransition,
+  normalizeTaskRecurrence,
   normalizeTaskPriority,
   normalizeTaskType,
   parseTaskStatusFilter,
@@ -43,6 +44,24 @@ test('rejects invalid task list filters instead of silently defaulting', () => {
   assert.throws(
     () => parseTaskTypeFilter('not-real'),
     /Invalid task type filter/,
+  );
+});
+
+test('normalizes recurring task metadata with a hard date anchor', () => {
+  assert.deepEqual(
+    normalizeTaskRecurrence({ frequency: 'weekly' }, new Date('2026-06-12T09:00:00.000Z')),
+    {
+      frequency: 'weekly',
+      interval: 1,
+      anchorDate: '2026-06-12T09:00:00.000Z',
+      active: true,
+      source: 'manual',
+    },
+  );
+  assert.equal(normalizeTaskRecurrence({ frequency: 'none' }, new Date()), null);
+  assert.throws(
+    () => normalizeTaskRecurrence({ frequency: 'monthly' }, null),
+    /Recurring tasks require a hard due date/,
   );
 });
 

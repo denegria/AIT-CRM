@@ -1,8 +1,11 @@
 import {
   DEFAULT_TASK_PRIORITY,
+  DEFAULT_TASK_RECURRENCE_FREQUENCY,
   DEFAULT_TASK_STATUS,
   TASK_EVENT_TYPES,
   TASK_PRIORITY_VALUES,
+  TASK_RECURRENCE_FREQUENCIES,
+  TASK_RECURRENCE_FREQUENCY_VALUES,
   TASK_STATUSES,
   TASK_STATUS_VALUES,
   TASK_TYPES,
@@ -61,6 +64,32 @@ export function parseTaskDateTime(value, fieldName) {
     throw taskPolicyError(`${fieldName} must be a valid date/time.`);
   }
   return date;
+}
+
+export function normalizeTaskRecurrence(value = {}, anchorDate = null) {
+  const input = value && typeof value === 'object' ? value : {};
+  const frequency = String(input.frequency || DEFAULT_TASK_RECURRENCE_FREQUENCY).trim().toLowerCase();
+  const normalizedFrequency = TASK_RECURRENCE_FREQUENCY_VALUES.includes(frequency)
+    ? frequency
+    : DEFAULT_TASK_RECURRENCE_FREQUENCY;
+
+  if (normalizedFrequency === TASK_RECURRENCE_FREQUENCIES.NONE) {
+    return null;
+  }
+
+  const interval = Number.parseInt(input.interval || 1, 10);
+  const parsedAnchor = parseTaskDateTime(input.anchorDate || anchorDate, 'recurrence.anchorDate');
+  if (!parsedAnchor) {
+    throw taskPolicyError('Recurring tasks require a hard due date.');
+  }
+
+  return {
+    frequency: normalizedFrequency,
+    interval: Number.isFinite(interval) && interval > 0 ? interval : 1,
+    anchorDate: parsedAnchor.toISOString(),
+    active: input.active !== false,
+    source: 'manual',
+  };
 }
 
 export function buildTaskTransition({ task, action, now = new Date(), payload = {} }) {

@@ -28,6 +28,7 @@ import {
 import {
   buildTaskTransition,
   normalizeTaskPriority,
+  normalizeTaskRecurrence,
   normalizeTaskStatus,
   normalizeTaskType,
   parseTaskStatusFilter,
@@ -243,6 +244,19 @@ function taskBodyPayload(body) {
   return payload;
 }
 
+function taskMetadata(body, dueAt) {
+  const metadata = body.metadataJson && typeof body.metadataJson === 'object'
+    ? { ...body.metadataJson }
+    : {};
+  const recurrence = normalizeTaskRecurrence(body.recurrence || metadata.recurrence, dueAt);
+  if (recurrence) {
+    metadata.recurrence = recurrence;
+  } else {
+    delete metadata.recurrence;
+  }
+  return metadata;
+}
+
 export async function GET(request) {
   const { error, session } = await requirePermission(request, PERMISSIONS.CRM_READ);
   if (error) return error;
@@ -317,6 +331,8 @@ export async function POST(request) {
       body.ownerUserId || body.assignedTo,
     );
     const dueAt = parseTaskDateTime(body.dueAt || body.dueDate, 'dueAt');
+    if (!dueAt) throw createCrmError('Task due date is required.');
+    const metadataJson = taskMetadata(body, dueAt);
 
     const { task } = await createTaskWithEvents({
       db,
@@ -334,11 +350,9 @@ export async function POST(request) {
         sourceType: stringParam(body.sourceType) || 'manual',
         sourceId: stringParam(body.sourceId) || null,
         sourceLabel: stringParam(body.sourceLabel) || null,
-        metadataJson: body.metadataJson && typeof body.metadataJson === 'object'
-          ? body.metadataJson
-          : {},
+        metadataJson,
       },
-      eventMessage: 'Created task.',
+      eventMessage: metadataJson.recurrence ? 'Created recurring task.' : 'Created task.',
     });
 
     return NextResponse.json({ task: toTaskPayload(task) }, { status: 201 });
