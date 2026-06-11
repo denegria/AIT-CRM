@@ -386,7 +386,15 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                 },
               }] : []),
               { label: 'Edit', onClick: openEdit },
-              { label: 'Delete', onClick: (r) => { deleteContact(r.id); toast(`${singularLabel} deleted`, 'error'); }, danger: true },
+              {
+                label: 'Delete',
+                onClick: (r) => {
+                  deleteContact(r.id)
+                    .then(() => toast(`${singularLabel} deleted`))
+                    .catch((error) => toast(error?.message || 'Delete failed.', 'error'));
+                },
+                danger: true,
+              },
             ] : []),
           ]}
           mobileBadges={['status']}

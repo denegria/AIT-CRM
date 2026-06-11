@@ -164,11 +164,17 @@ export default function Dashboard() {
       return;
     }
 
+    const taskBusinessUnitId = currentBusinessUnit?.id;
+    if (!taskBusinessUnitId || taskBusinessUnitId === 'all' || taskBusinessUnitId === 'unassigned') {
+      throw new Error('Select a division before creating a task.');
+    }
+
     const response = await fetch('/api/tasks', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         title: draft.title,
+        businessUnitId: taskBusinessUnitId,
         dueAt: dateInputToIso(draft.dueDate),
         ownerUserId: draft.ownerUserId || null,
         taskType: 'manual_reminder',
@@ -187,7 +193,7 @@ export default function Dashboard() {
       taskStatus: payload.task.status,
     });
     toast('Task created');
-  }, [access.canWriteCrm, addTask, dataSource, toast]);
+  }, [access.canWriteCrm, addTask, currentBusinessUnit?.id, dataSource, toast]);
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
