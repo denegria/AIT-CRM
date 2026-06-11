@@ -2,17 +2,37 @@
 import { useState } from 'react';
 import s from './TaskList.module.css';
 
-export default function TaskList({ tasks, onToggle, onAdd, employees }) {
+export default function TaskList({ tasks, onToggle, onAdd, employees, owners, canAdd = true }) {
   const [newTask, setNewTask] = useState('');
+  const [dueDate, setDueDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [ownerId, setOwnerId] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
   const today = new Date().toISOString().slice(0, 10);
 
-  const handleAdd = () => {
-    if (!newTask.trim()) return;
-    onAdd({ title: newTask.trim(), dueDate: today, completed: false, priority: 'Medium', assignedTo: 'emp-1' });
-    setNewTask('');
+  const handleAdd = async () => {
+    if (!newTask.trim() || !dueDate || busy || !canAdd) return;
+    setBusy(true);
+    setError('');
+    try {
+      await onAdd({
+        title: newTask.trim(),
+        dueDate,
+        completed: false,
+        priority: 'Medium',
+        assignedTo: ownerId || '',
+        ownerUserId: ownerId || '',
+      });
+      setNewTask('');
+    } catch (err) {
+      setError(err.message || 'Task could not be created.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const empName = (id) => employees?.find(e => e.id === id)?.name || '';
+  const ownerOptions = owners || employees || [];
 
   return (
     <div>
@@ -36,10 +56,34 @@ export default function TaskList({ tasks, onToggle, onAdd, employees }) {
         ))}
       </div>
       {onAdd && (
-        <div className={s.addRow}>
-          <input className={s.addInput} placeholder="Add a task..." value={newTask} onChange={e => setNewTask(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAdd()} />
-          <button className="btn btn-primary btn-sm" onClick={handleAdd}>Add</button>
-        </div>
+        <>
+          <div className={s.addRow}>
+            <input
+              className={s.addInput}
+              placeholder="Add a task..."
+              value={newTask}
+              disabled={busy || !canAdd}
+              onChange={e => setNewTask(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleAdd()}
+            />
+            <input
+              className={s.dateInput}
+              type="date"
+              value={dueDate}
+              required
+              disabled={busy || !canAdd}
+              onChange={e => setDueDate(e.target.value)}
+            />
+            <select className={s.ownerSelect} value={ownerId} disabled={busy || !canAdd} onChange={e => setOwnerId(e.target.value)}>
+              <option value="">Unassigned</option>
+              {ownerOptions.map((owner) => (
+                <option key={owner.id} value={owner.id}>{owner.name || owner.email}</option>
+              ))}
+            </select>
+            <button className="btn btn-primary btn-sm" onClick={handleAdd} disabled={busy || !canAdd || !newTask.trim() || !dueDate}>Add</button>
+          </div>
+          {error && <div className={s.error}>{error}</div>}
+        </>
       )}
     </div>
   );

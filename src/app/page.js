@@ -1,11 +1,19 @@
 'use client';
-import { useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { useCRM } from '@/lib/store';
 import KPICard from '@/components/KPICard';
 import TaskList from '@/components/TaskList';
 import Calendar from '@/components/Calendar';
 import { BarChart, PieChart, ChartLegend } from '@/components/Charts';
+import { useToast } from '@/components/Toast';
+
+function dateInputToIso(value) {
+  if (!value) return null;
+  const date = new Date(`${value}T09:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
 
 export default function Dashboard() {
   const {
@@ -26,9 +34,18 @@ export default function Dashboard() {
     currentBusinessUnit,
     scopeLabel,
   } = useCRM();
+  const { toast } = useToast();
   const currentUserId = currentUser?.id || 'emp-1';
   const isAdminView = role === 'admin' || Boolean(currentUser?.canAccessAllBusinessUnits);
   const canReadFinancials = Boolean(access?.canReadFinancials);
+  const dashboardTaskOwners = useMemo(() => {
+    if (dataSource === 'postgres') {
+      return currentUser?.id
+        ? [{ id: currentUser.id, name: currentUser.name || currentUser.email || 'Me', email: currentUser.email || '' }]
+        : [];
+    }
+    return employees || [];
+  }, [currentUser, dataSource, employees]);
 
   const kpis = useMemo(() => {
     const invoices = financials.filter(f => f.type === 'Invoice');
@@ -95,6 +112,39 @@ export default function Dashboard() {
     const unassigned = openTasks.filter(t => !(t.assignedTo || t.ownerUserId)).length;
     return { open: openTasks.length, dueToday, overdue, unassigned };
   }, [tasks]);
+
+  const createDashboardTask = useCallback(async (draft) => {
+    if (!access.canWriteCrm) throw new Error('CRM write access is required.');
+    if (dataSource !== 'postgres') {
+      addTask(draft);
+      toast('Task created');
+      return;
+    }
+
+    const response = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: draft.title,
+        dueAt: dateInputToIso(draft.dueDate),
+        ownerUserId: draft.ownerUserId || null,
+        taskType: 'manual_reminder',
+        priority: 'medium',
+        sourceType: 'manual',
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || 'Task could not be created.');
+    addTask({
+      ...payload.task,
+      assignedTo: payload.task.ownerUserId || '',
+      dueDate: (payload.task.dueAt || '').slice(0, 10),
+      completed: payload.task.status === 'completed',
+      priority: 'Medium',
+      taskStatus: payload.task.status,
+    });
+    toast('Task created');
+  }, [access.canWriteCrm, addTask, dataSource, toast]);
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
@@ -170,21 +220,31 @@ export default function Dashboard() {
       <div className="card dashboard-action-card" style={{marginBottom:20, padding:16}}>
         <div className="flex-between" style={{alignItems:'flex-start', gap:16}}>
           <div>
-            <div className="card-title" style={{marginBottom:4}}>Follow-up queue</div>
+            <div className="card-title" style={{marginBottom:4}}>Task snapshot</div>
             <p className="page-subtitle" style={{margin:0}}>
               {followUpStats.open} open · {followUpStats.dueToday} due today · {followUpStats.overdue} overdue · {followUpStats.unassigned} unassigned
             </p>
           </div>
           <Link className="btn btn-sm btn-primary" href="/tasks">
-            Open follow-ups
+            Open tasks
           </Link>
         </div>
       </div>
 
       <div className="dashboard-panel-grid" style={{marginBottom:20}}>
         <div className="card">
-          <div className="card-title">Tasks</div>
-          <TaskList tasks={myTasks} onToggle={(id, u) => updateTask(id, u)} onAdd={addTask} employees={employees} />
+          <div className="flex-between" style={{marginBottom:12, gap:12}}>
+            <div className="card-title" style={{marginBottom:0}}>Tasks</div>
+            <Link className="btn btn-sm" href="/tasks">Detailed task page</Link>
+          </div>
+          <TaskList
+            tasks={myTasks}
+            onToggle={(id, u) => updateTask(id, u)}
+            onAdd={createDashboardTask}
+            employees={employees}
+            owners={dashboardTaskOwners}
+            canAdd={Boolean(access.canWriteCrm)}
+          />
         </div>
         <div className="card">
           <div className="card-title">Calendar</div>

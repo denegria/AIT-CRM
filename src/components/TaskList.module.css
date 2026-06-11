@@ -26,15 +26,28 @@
 .metaItem { font-size:var(--text-xs); color:var(--text-muted); }
 .overdue { color:var(--danger); }
 .addRow {
-  display:flex; gap:8px; margin-top:8px; padding-top:8px;
+  display:grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(132px, 0.45fr) minmax(132px, 0.45fr) auto;
+  gap:8px; margin-top:8px; padding-top:8px;
   border-top:1px solid var(--border-subtle);
+  align-items:center;
 }
-.addInput {
+.addInput,
+.dateInput,
+.ownerSelect {
   flex:1; padding:6px 10px; font-family:var(--font-sans); font-size:var(--text-sm);
   background:var(--bg-secondary); border:1px solid var(--border-default);
   border-radius:var(--radius-md); color:var(--text-primary); outline:none;
+  min-width:0;
 }
-.addInput:focus { border-color:var(--border-focus); box-shadow:var(--shadow-focus); }
+.addInput:focus,
+.dateInput:focus,
+.ownerSelect:focus { border-color:var(--border-focus); box-shadow:var(--shadow-focus); }
+.error {
+  margin-top:6px;
+  color:var(--danger);
+  font-size:var(--text-xs);
+}
 
 @media (max-width: 520px) {
   .meta {
@@ -44,10 +57,12 @@
   }
 
   .addRow {
-    flex-direction: column;
+    grid-template-columns: 1fr;
   }
 
   .addRow .addInput,
+  .addRow .dateInput,
+  .addRow .ownerSelect,
   .addRow button {
     width: 100%;
   }
