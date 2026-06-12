@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
+import { validateManualContactIdentity } from '@/lib/crm/contact-input';
 import {
   buildContactDirectoryFacetGroups,
   contactDirectorySignalLabels,
@@ -145,6 +146,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const [ownerFilter, setOwnerFilter] = useState('all');
   const [directoryFacet, setDirectoryFacet] = useState('all');
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [formError, setFormError] = useState('');
   const [facetNow] = useState(() => Date.now());
   const isClientsMode = mode === 'clients';
   const singularLabel = isClientsMode ? 'Client' : 'Contact';
@@ -220,10 +222,11 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       businessUnitId: defaultBusinessUnitId,
       primaryBusinessUnitId: defaultBusinessUnitId,
     });
+    setFormError('');
     setDrawer('new');
   };
-  const openEdit = (row) => { if (!canWrite) return; setForm({ ...row }); setDrawer(row); };
-  const close = () => setDrawer(null);
+  const openEdit = (row) => { if (!canWrite) return; setForm({ ...row }); setFormError(''); setDrawer(row); };
+  const close = () => { setDrawer(null); setFormError(''); };
   const requestDelete = () => {
     if (!canWrite || !drawer || drawer === 'new') return;
     setDeleteTarget(drawer);
@@ -240,7 +243,14 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   };
 
   const save = () => {
-    if (!form.name.trim()) return;
+    const validationError = drawer === 'new'
+      ? validateManualContactIdentity(form)
+      : (!String(form.name || '').trim() ? 'Contact name is required.' : '');
+    if (validationError) {
+      setFormError(validationError);
+      return;
+    }
+    setFormError('');
     if (drawer === 'new') {
       addContact(form)
         .then(() => {
@@ -406,18 +416,34 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           <button className="btn" onClick={close}>Cancel</button>
           <button className="btn btn-primary" onClick={save}>Save</button>
         </>}>
+        {formError && (
+          <div
+            role="alert"
+            style={{
+              marginBottom: 12,
+              padding: '8px 10px',
+              border: '1px solid var(--danger)',
+              borderRadius: 'var(--radius-md)',
+              color: 'var(--danger)',
+              background: 'color-mix(in srgb, var(--danger) 8%, transparent)',
+              fontSize: 'var(--text-sm)',
+            }}
+          >
+            {formError}
+          </div>
+        )}
         <div className="form-group">
           <label className="form-label">Name</label>
-          <input className="input" value={form.name} onChange={e => setForm(f => ({...f, name: e.target.value}))} />
+          <input className="input" value={form.name} required onChange={e => setForm(f => ({...f, name: e.target.value}))} />
         </div>
         <div className="grid-2">
           <div className="form-group">
             <label className="form-label">Email</label>
-            <input className="input" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+            <input className="input" type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
           </div>
           <div className="form-group">
             <label className="form-label">Phone</label>
-            <input className="input" value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} />
+            <input className="input" type="tel" value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} />
           </div>
         </div>
         <div className="grid-2">

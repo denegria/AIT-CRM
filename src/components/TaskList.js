@@ -2,7 +2,18 @@
 import { useState } from 'react';
 import s from './TaskList.module.css';
 
-export default function TaskList({ tasks, onToggle, onAdd, employees, owners, canAdd = true, ownerRequired = false, emptyText = 'No tasks yet.' }) {
+export default function TaskList({
+  tasks,
+  onToggle,
+  onAdd,
+  employees,
+  owners,
+  canAdd = true,
+  ownerRequired = false,
+  fixedOwnerId = '',
+  showOwnerSelect = true,
+  emptyText = 'No tasks yet.',
+}) {
   const [newTask, setNewTask] = useState('');
   const [dueDate, setDueDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [ownerId, setOwnerId] = useState('');
@@ -11,10 +22,11 @@ export default function TaskList({ tasks, onToggle, onAdd, employees, owners, ca
   const today = new Date().toISOString().slice(0, 10);
   const ownerOptions = owners || employees || [];
   const defaultOwnerId = ownerOptions[0]?.id || '';
+  const selectedOwnerId = fixedOwnerId || ownerId || (ownerRequired ? defaultOwnerId : '');
 
   const handleAdd = async () => {
     if (!newTask.trim() || !dueDate || busy || !canAdd) return;
-    const effectiveOwnerId = ownerId || (ownerRequired ? defaultOwnerId : '');
+    const effectiveOwnerId = fixedOwnerId || ownerId || (ownerRequired ? defaultOwnerId : '');
     if (ownerRequired && !effectiveOwnerId) {
       setError('Task owner is required.');
       return;
@@ -64,7 +76,7 @@ export default function TaskList({ tasks, onToggle, onAdd, employees, owners, ca
       </div>
       {onAdd && (
         <>
-          <div className={s.addRow}>
+          <div className={`${s.addRow} ${!showOwnerSelect ? s.addRowCompact : ''}`}>
             <input
               className={s.addInput}
               placeholder="Add a task..."
@@ -81,13 +93,15 @@ export default function TaskList({ tasks, onToggle, onAdd, employees, owners, ca
               disabled={busy || !canAdd}
               onChange={e => setDueDate(e.target.value)}
             />
-            <select className={s.ownerSelect} value={ownerId || (ownerRequired ? defaultOwnerId : '')} disabled={busy || !canAdd} onChange={e => setOwnerId(e.target.value)}>
-              {ownerRequired ? <option value="" disabled>Select owner</option> : <option value="">Unassigned</option>}
-              {ownerOptions.map((owner) => (
-                <option key={owner.id} value={owner.id}>{owner.name || owner.email}</option>
-              ))}
-            </select>
-            <button className="btn btn-primary btn-sm" onClick={handleAdd} disabled={busy || !canAdd || !newTask.trim() || !dueDate || (ownerRequired && !(ownerId || defaultOwnerId))}>Add</button>
+            {showOwnerSelect && (
+              <select className={s.ownerSelect} value={selectedOwnerId} disabled={busy || !canAdd || Boolean(fixedOwnerId)} onChange={e => setOwnerId(e.target.value)}>
+                {ownerRequired ? <option value="" disabled>Select owner</option> : <option value="">Unassigned</option>}
+                {ownerOptions.map((owner) => (
+                  <option key={owner.id} value={owner.id}>{owner.name || owner.email}</option>
+                ))}
+              </select>
+            )}
+            <button className="btn btn-primary btn-sm" onClick={handleAdd} disabled={busy || !canAdd || !newTask.trim() || !dueDate || (ownerRequired && !selectedOwnerId)}>Add</button>
           </div>
           {error && <div className={s.error}>{error}</div>}
         </>

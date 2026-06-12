@@ -37,13 +37,16 @@
   border-top:1px solid var(--border-subtle);
   align-items:center;
 }
+.addRowCompact {
+  grid-template-columns: minmax(160px, 1fr) minmax(132px, 160px) auto;
+}
 .addInput,
 .dateInput,
 .ownerSelect {
   flex:1; padding:6px 10px; font-family:var(--font-sans); font-size:var(--text-sm);
   background:var(--bg-secondary); border:1px solid var(--border-default);
   border-radius:var(--radius-md); color:var(--text-primary); outline:none;
-  min-width:0;
+  box-sizing:border-box; height:34px; min-width:0;
 }
 .addInput:focus,
 .dateInput:focus,
@@ -65,10 +68,23 @@
     grid-template-columns: 1fr;
   }
 
+  .addRowCompact {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .addRowCompact .addInput {
+    grid-column: 1 / -1;
+  }
+
   .addRow .addInput,
   .addRow .dateInput,
   .addRow .ownerSelect,
   .addRow button {
     width: 100%;
+  }
+
+  .addRowCompact button {
+    height: 34px;
+    white-space: nowrap;
   }
 }

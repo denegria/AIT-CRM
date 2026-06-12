@@ -9,6 +9,7 @@ import {
   resolveOptionalBusinessUnitId,
 } from '@/lib/crm/access.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
+import { validateManualContactIdentity } from '@/lib/crm/contact-input.js';
 import { evaluateLifecycleTransition, requireLifecycleStatus } from '@/lib/crm/lifecycle.js';
 import { isUuid } from '@/lib/crm/validation.js';
 import {
@@ -145,9 +146,8 @@ export async function POST(request) {
 
   const body = await request.json().catch(() => ({}));
   const name = String(body.name || '').trim();
-  if (!name) {
-    return NextResponse.json({ error: 'Contact name is required.' }, { status: 400 });
-  }
+  const validationError = validateManualContactIdentity(body);
+  if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 
   const db = getDb();
   let businessUnitId;

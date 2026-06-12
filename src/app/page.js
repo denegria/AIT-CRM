@@ -56,14 +56,6 @@ export default function Dashboard() {
   const currentUserId = currentUser?.id || 'emp-1';
   const isAdminView = role === 'admin' || Boolean(currentUser?.canAccessAllBusinessUnits);
   const canReadFinancials = Boolean(access?.canReadFinancials);
-  const dashboardTaskOwners = useMemo(() => {
-    if (dataSource === 'postgres') {
-      return currentUser?.id
-        ? [{ id: currentUser.id, name: currentUser.name || currentUser.email || 'Me', email: currentUser.email || '' }]
-        : [];
-    }
-    return employees || [];
-  }, [currentUser, dataSource, employees]);
 
   const kpis = useMemo(() => {
     const invoices = financials.filter(f => f.type === 'Invoice');
@@ -147,22 +139,12 @@ export default function Dashboard() {
     });
   }, [employees, tasks, contacts]);
 
-  const followUpStats = useMemo(() => {
-    const todayKey = new Date().toISOString().slice(0, 10);
-    const openTasks = tasks.filter(isOpenTask);
-    const dueToday = openTasks.filter(t => taskDueKey(t) === todayKey).length;
-    const overdue = openTasks.filter(t => {
-      const due = taskDueKey(t);
-      return due && due < todayKey;
-    }).length;
-    const unassigned = openTasks.filter(t => !(t.assignedTo || t.ownerUserId)).length;
-    return { open: openTasks.length, dueToday, overdue, unassigned };
-  }, [tasks]);
-
   const createDashboardTask = useCallback(async (draft) => {
     if (!access.canWriteCrm) throw new Error('CRM write access is required.');
+    const ownerUserId = currentUser?.id || '';
+    if (!ownerUserId) throw new Error('Sign in again before creating a task.');
     if (dataSource !== 'postgres') {
-      addTask(draft);
+      addTask({ ...draft, assignedTo: ownerUserId, ownerUserId });
       toast('Task created');
       return;
     }
@@ -179,7 +161,7 @@ export default function Dashboard() {
         title: draft.title,
         businessUnitId: taskBusinessUnitId,
         dueAt: dateInputToIso(draft.dueDate),
-        ownerUserId: draft.ownerUserId || null,
+        ownerUserId,
         taskType: 'manual_reminder',
         priority: 'medium',
         sourceType: 'manual',
@@ -196,7 +178,7 @@ export default function Dashboard() {
       taskStatus: payload.task.status,
     });
     toast('Task created');
-  }, [access.canWriteCrm, addTask, currentBusinessUnit?.id, dataSource, toast]);
+  }, [access.canWriteCrm, addTask, currentBusinessUnit?.id, currentUser?.id, dataSource, toast]);
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
@@ -269,20 +251,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="card dashboard-action-card" style={{marginBottom:20, padding:16}}>
-        <div className="flex-between" style={{alignItems:'flex-start', gap:16}}>
-          <div>
-            <div className="card-title" style={{marginBottom:4}}>Task snapshot</div>
-            <p className="page-subtitle" style={{margin:0}}>
-              {followUpStats.open} open · {followUpStats.dueToday} due today · {followUpStats.overdue} overdue · {followUpStats.unassigned} unassigned
-            </p>
-          </div>
-          <Link className="btn btn-sm btn-primary" href="/tasks">
-            Open tasks
-          </Link>
-        </div>
-      </div>
-
       <div className="dashboard-panel-grid" style={{marginBottom:20}}>
         <div className="card">
           <div className="flex-between" style={{marginBottom:12, gap:12}}>
@@ -294,9 +262,10 @@ export default function Dashboard() {
             onToggle={(id, u) => updateTask(id, u)}
             onAdd={createDashboardTask}
             employees={employees}
-            owners={dashboardTaskOwners}
             canAdd={Boolean(access.canWriteCrm)}
+            fixedOwnerId={currentUser?.id || ''}
             ownerRequired
+            showOwnerSelect={false}
             emptyText="No tasks due today."
           />
         </div>
