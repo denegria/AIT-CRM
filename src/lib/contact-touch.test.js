@@ -27,7 +27,7 @@ test('latestExcelDateFromText ignores decimal money fragments and future serials
   );
 });
 
-test('summarizeContactTouch keeps AIT USA last touch to follow-up/contact events', () => {
+test('summarizeContactTouch prefers AIT USA follow-up touches over website submission', () => {
   const summary = summarizeContactTouch({
     contact: {
       updatedAt: new Date('2026-06-02T15:00:00.000Z'),
@@ -53,6 +53,31 @@ test('summarizeContactTouch keeps AIT USA last touch to follow-up/contact events
   assert.equal(summary.lastTouch, '2026-05-20');
   assert.equal(summary.lastTouchLabel, 'Follow-up');
   assert.equal(summary.lastEdited, '2026-06-02');
+  assert.equal(summary.latestComment, 'Internal note after profile edit.');
+});
+
+test('summarizeContactTouch uses AIT USA website submission as initial last touch', () => {
+  const summary = summarizeContactTouch({
+    contact: {
+      updatedAt: new Date('2026-06-02T15:00:00.000Z'),
+      createdAt: new Date('2026-06-01T15:00:00.000Z'),
+    },
+    businessUnit: { name: 'AIT USA Institute' },
+    referenceTime: new Date('2026-06-02T20:00:00.000Z').getTime(),
+    notes: [{
+      body: 'Internal note after profile edit.',
+      createdAt: new Date('2026-06-02T16:00:00.000Z'),
+    }],
+    activityEvents: [{
+      eventType: 'website_lead_captured',
+      message: 'Website lead submitted.',
+      occurredAt: new Date('2026-06-01T14:00:00.000Z'),
+    }],
+  });
+
+  assert.equal(summary.lastTouch, '2026-06-01');
+  assert.equal(summary.lastTouchLabel, 'Submission');
+  assert.equal(summary.lastTouchText, 'Website lead submitted.');
   assert.equal(summary.latestComment, 'Internal note after profile edit.');
 });
 

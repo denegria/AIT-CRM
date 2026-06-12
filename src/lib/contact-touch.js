@@ -84,6 +84,7 @@ function isImportedHistoryRow(row = {}) {
 function isAitUsaTouchEvent(eventType = '') {
   const normalized = String(eventType || '').toLowerCase();
   return (
+    normalized === 'website_lead_captured' ||
     normalized.includes('follow_up') ||
     normalized.includes('message') ||
     normalized.includes('call') ||
@@ -179,7 +180,12 @@ export function summarizeContactTouch({
     const eventTime = workflowKey === WORKFLOW_KEYS.AIT_SIGNS
       ? businessTimeFromText(text, event.occurredAt || event.createdAt, referenceTime, { allowFallback })
       : dateTime(event.occurredAt || event.createdAt);
-    const label = String(event.eventType || '').includes('follow_up') ? 'Follow-up' : 'Activity';
+    const normalizedEventType = String(event.eventType || '').toLowerCase();
+    const label = normalizedEventType === 'website_lead_captured'
+      ? 'Submission'
+      : normalizedEventType.includes('follow_up')
+        ? 'Follow-up'
+        : 'Activity';
     const candidate = {
       time: eventTime,
       text,
@@ -285,8 +291,10 @@ export function summarizeContactTouch({
   followUpCandidates.sort((a, b) => b.time - a.time);
 
   const latestComment = latestCommentCandidates[0] || null;
-  const lastTouch = touchCandidates[0] || null;
   const lastFollowUpTouch = followUpCandidates[0] || null;
+  const lastTouch = workflowKey === WORKFLOW_KEYS.AIT_USA
+    ? lastFollowUpTouch || touchCandidates[0] || null
+    : touchCandidates[0] || null;
   const lastEditedTime = dateTime(contact.updatedAt || contact.createdAt);
 
   return {
