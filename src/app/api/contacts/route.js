@@ -32,12 +32,13 @@ async function loadBusinessUnitForWorkflow(db, session, businessUnitId) {
   return businessUnit || null;
 }
 
-function toContactPayload(row, lead = null, noteRows = [], businessUnit = null) {
+function toContactPayload(row, lead = null, noteRows = [], businessUnit = null, activityEventRows = []) {
   const workflow = workflowFromLead(lead, { businessUnit });
   const touchSummary = summarizeContactTouch({
     contact: row,
     businessUnit,
     notes: noteRows,
+    activityEvents: activityEventRows,
   });
   return {
     id: row.id,
@@ -124,6 +125,16 @@ function normalizeNoteInputs(rawNotes) {
       createdAt: parseNoteDate(note?.date || note?.createdAt),
     }))
     .filter((note) => note.body);
+}
+
+function normalizeFollowUpNoteInput(rawFollowUpNote) {
+  if (!rawFollowUpNote || typeof rawFollowUpNote !== 'object') return null;
+  const body = String(rawFollowUpNote.text || rawFollowUpNote.body || rawFollowUpNote.note || '').trim();
+  if (!body) return null;
+  return {
+    body,
+    occurredAt: parseNoteDate(rawFollowUpNote.occurredAt || rawFollowUpNote.date || rawFollowUpNote.createdAt),
+  };
 }
 
 export async function POST(request) {
@@ -297,6 +308,7 @@ export async function PATCH(request) {
       replaceNotes: Array.isArray(body.notes)
         ? { noteInputs: normalizeNoteInputs(body.notes) }
         : null,
+      addFollowUpNote: normalizeFollowUpNoteInput(body.followUpNote),
     });
   } catch (error) {
     return NextResponse.json({ error: error.message || 'Contact update failed.' }, { status: 500 });
@@ -307,7 +319,15 @@ export async function PATCH(request) {
     session,
     result.contact.primaryBusinessUnitId || result.lead?.businessUnitId,
   );
-  return NextResponse.json({ contact: toContactPayload(result.contact, result.lead, result.noteRows, resultBusinessUnit) });
+  return NextResponse.json({
+    contact: toContactPayload(
+      result.contact,
+      result.lead,
+      result.noteRows,
+      resultBusinessUnit,
+      result.createdActivityEvents,
+    ),
+  });
 }
 
 export async function DELETE(request) {

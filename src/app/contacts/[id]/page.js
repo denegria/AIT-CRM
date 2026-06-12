@@ -279,6 +279,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     error: '',
   });
   const [noteInput, setNoteInput] = useState('');
+  const [noteMode, setNoteMode] = useState('note');
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   const contactSource = isClientMode ? (allContacts || contacts) : contacts;
@@ -576,6 +577,23 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const addNote = () => {
     if (!noteInput.trim()) return;
     if (!access.canWriteCrm) return;
+    if (noteMode === 'follow_up') {
+      updateContact(contact.id, {
+        followUpNote: {
+          text: noteInput,
+          occurredAt: new Date().toISOString(),
+        },
+      })
+        .then(() => {
+          setNoteInput('');
+          setTimelineReloadKey((key) => key + 1);
+          toast('Follow-up note added');
+        })
+        .catch((error) => {
+          toast(error.message || 'Follow-up note save failed', 'error');
+        });
+      return;
+    }
     const newNote = {
       text: noteInput,
       date: new Date().toISOString().slice(0, 10),
@@ -780,15 +798,33 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             {renderedActiveTab === 'timeline' && (
               <div className={s.timelineView}>
                 <div className={s.noteBox}>
+                  <div className={s.noteModeControl} aria-label="Note type">
+                    <button
+                      type="button"
+                      className={`${s.noteModeButton} ${noteMode === 'note' ? s.active : ''}`}
+                      onClick={() => setNoteMode('note')}
+                      disabled={!access.canWriteCrm}
+                    >
+                      <MessageSquare size={14} /> Note
+                    </button>
+                    <button
+                      type="button"
+                      className={`${s.noteModeButton} ${noteMode === 'follow_up' ? s.active : ''}`}
+                      onClick={() => setNoteMode('follow_up')}
+                      disabled={!access.canWriteCrm}
+                    >
+                      <AlertCircle size={14} /> Follow-up
+                    </button>
+                  </div>
                   <textarea 
-                    placeholder="Type a note or activity update..." 
+                    placeholder={noteMode === 'follow_up' ? 'Write what happened during follow-up...' : 'Type an internal note...'}
                     value={noteInput}
                     onChange={e => setNoteInput(e.target.value)}
                     disabled={!access.canWriteCrm}
                   />
                   <div className={s.noteBoxFooter}>
                     <button className="btn btn-primary btn-sm" onClick={addNote} disabled={!access.canWriteCrm}>
-                      <Plus size={14} /> Add Note
+                      <Plus size={14} /> {noteMode === 'follow_up' ? 'Add Follow-up' : 'Add Note'}
                     </button>
                   </div>
                 </div>

@@ -1,5 +1,5 @@
 import { and, desc, eq } from 'drizzle-orm';
-import { activityEvents, businessUnits, contacts, leadStatusHistory, leads, notes, workOrders } from '@/db/schema.js';
+import { activityEvents, businessUnits, contacts, leadStatusHistory, leads, notes, workOrders } from '../../db/schema.js';
 import { updateLeadOwnerWithActivity } from './assignment.js';
 
 export async function latestLeadForContact(db, organizationId, contactId) {
@@ -86,6 +86,7 @@ export async function updateContactWithLeadAndNotes({
   leadPatch = null,
   leadStatusChange = null,
   replaceNotes = null,
+  addFollowUpNote = null,
 }) {
   return db.transaction(async (tx) => {
     const [contact] = await tx
@@ -133,6 +134,7 @@ export async function updateContactWithLeadAndNotes({
       }
     }
 
+    const createdActivityEvents = [];
     let noteRows = await notesForContact(tx, organizationId, contactId);
     if (replaceNotes) {
       const previousNoteCount = noteRows.length;
@@ -153,7 +155,7 @@ export async function updateContactWithLeadAndNotes({
         : [];
 
       if (noteRows.length > previousNoteCount) {
-        await tx.insert(activityEvents).values({
+        const [activityEvent] = await tx.insert(activityEvents).values({
           organizationId,
           businessUnitId: contact.primaryBusinessUnitId,
           contactId,
@@ -162,11 +164,27 @@ export async function updateContactWithLeadAndNotes({
           message: 'Added contact timeline note.',
           actorUserId,
           occurredAt: new Date(),
-        });
+        }).returning();
+        if (activityEvent) createdActivityEvents.push(activityEvent);
       }
     }
 
-    return { contact, lead, noteRows };
+    if (addFollowUpNote?.body) {
+      const occurredAt = addFollowUpNote.occurredAt || new Date();
+      const [activityEvent] = await tx.insert(activityEvents).values({
+        organizationId,
+        businessUnitId: contact.primaryBusinessUnitId,
+        contactId,
+        leadId: lead?.id || null,
+        eventType: 'ait_usa.follow_up',
+        message: addFollowUpNote.body,
+        actorUserId,
+        occurredAt,
+      }).returning();
+      if (activityEvent) createdActivityEvents.push(activityEvent);
+    }
+
+    return { contact, lead, noteRows, createdActivityEvents };
   });
 }
 
