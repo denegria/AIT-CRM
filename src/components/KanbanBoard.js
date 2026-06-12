@@ -27,6 +27,17 @@ function firstPresent(values = []) {
   return values.map(clean).find(Boolean) || '';
 }
 
+function normalized(value = '') {
+  return clean(value).toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+}
+
+const FIRST_OUTREACH_ACTION =
+  'Make first outreach by phone/SMS/email; confirm program interest and schedule follow-up.';
+
+function isDefaultFirstOutreachAction(value = '') {
+  return normalized(value) === normalized(FIRST_OUTREACH_ACTION);
+}
+
 function isAitUsa(item) {
   return item.workflowKey === 'ait_usa';
 }
@@ -81,8 +92,8 @@ function cardSummary(item) {
     }
     const channel = item.enrollmentSignals?.source?.channel || item.inquirySource;
     return firstPresent([
-      item.enrollmentSignals?.process?.nextAction,
-      item.nextAction,
+      isDefaultFirstOutreachAction(item.enrollmentSignals?.process?.nextAction) ? '' : item.enrollmentSignals?.process?.nextAction,
+      isDefaultFirstOutreachAction(item.nextAction) ? '' : item.nextAction,
       channel ? `New enrollment inquiry from ${channel}.` : '',
       'Enrollment lead ready for review.',
     ]);
@@ -105,7 +116,6 @@ function cardChips(item) {
       item.needsFirstOutreach ? 'First Outreach' : '',
       item.qualityDisposition === 'ready_for_follow_up' ? 'Ready Follow-up' : titleLabel(item.qualityDisposition),
       contactabilityLabel(item),
-      item.enrollmentSignals?.source?.tags?.includes('wix_history') ? 'Wix History' : '',
     ].filter(Boolean).slice(0, 3);
   }
   if (isAitSigns(item)) {
@@ -230,7 +240,9 @@ export default function KanbanBoard({ data, columns, onMove, onEdit, showMobileM
                         {item.needsFirstOutreach && <AlertCircle size={12} />}
                         <span>{item.currentStage || item.status}</span>
                       </div>
-                      {item.nextAction && <div className={s.workflowAction}>{item.nextAction}</div>}
+                      {item.nextAction && !isDefaultFirstOutreachAction(item.nextAction) && (
+                        <div className={s.workflowAction}>{item.nextAction}</div>
+                      )}
                     </div>
                   )}
                   <div className={s.cardComment}>

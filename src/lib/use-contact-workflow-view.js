@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import {
   PIPELINE_STATUSES,
+  FIRST_OUTREACH_ACTION,
   isWorkflowStatusClosed,
   isPipelineEligibleContact,
   workflowColumnsForBusinessUnit,
@@ -49,6 +50,25 @@ function buildOperationalSummary({ workOrders = [], financials = [] } = {}) {
   }
 
   return '';
+}
+
+function normalizeTag(value = '') {
+  return String(value || '').trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+}
+
+function displayTagsForWorkflow(tags = [], workflowKey = '') {
+  if (workflowKey !== 'ait_usa') return tags;
+  const hiddenTags = new Set([
+    'wix history',
+    'needs first outreach',
+    'unworked lead',
+  ]);
+  return (tags || []).filter((tag) => !hiddenTags.has(normalizeTag(tag)));
+}
+
+function displayNextActionForWorkflow(nextAction = '', workflowKey = '') {
+  if (workflowKey !== 'ait_usa') return nextAction;
+  return normalizeTag(nextAction) === normalizeTag(FIRST_OUTREACH_ACTION) ? '' : nextAction;
 }
 
 export function useContactWorkflowView({
@@ -149,14 +169,16 @@ export function useContactWorkflowView({
         lastTouch: contact.lastTouch || contact.lastContact,
         lastFollowUpTouch: contact.lastFollowUpTouch,
       });
+    const rawTags = workflow.tags?.length ? workflow.tags : contact.tags;
+    const rawNextAction = workflow.nextAction || contact.nextAction;
     return {
       ...contact,
       workflowKey: workflow.workflowKey,
       workflowLabel: workflow.workflowLabel,
       status: workflow.status,
       currentStage: workflow.currentStage,
-      tags: workflow.tags?.length ? workflow.tags : contact.tags,
-      nextAction: workflow.nextAction || contact.nextAction,
+      tags: displayTagsForWorkflow(rawTags, workflow.workflowKey),
+      nextAction: displayNextActionForWorkflow(rawNextAction, workflow.workflowKey),
       priority: workflow.priority || contact.priority,
       outreachState: workflow.outreachState || contact.outreachState,
       needsFirstOutreach: workflow.needsFirstOutreach || contact.needsFirstOutreach,

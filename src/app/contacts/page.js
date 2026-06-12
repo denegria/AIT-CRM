@@ -28,8 +28,8 @@ const empty = {
   currentStage: 'Needs First Outreach',
   source: 'Wix Historical Import',
   assignedTo: '',
-  tags: ['needs_first_outreach'],
-  nextAction: 'Make first outreach by phone/SMS/email; confirm program interest and schedule follow-up.',
+  tags: [],
+  nextAction: '',
   notes: [],
 };
 
@@ -94,7 +94,6 @@ function EnrollmentCell({ row }) {
         <span>{enrollmentStageText(row)}</span>
       </div>
       {row.nextAction && <div className="workflow-next">{row.nextAction}</div>}
-      <TagList tags={row.tags || []} />
     </div>
   );
 }
