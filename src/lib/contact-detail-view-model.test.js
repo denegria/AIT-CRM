@@ -86,7 +86,85 @@ test('AIT USA contact detail uses enrollment grammar and hides empty Signs finan
   assert.equal(model.tabs.showWorkOrders, false);
   assert.equal(model.tabs.showFinancials, false);
   assert.ok(model.highlights.some((item) => item.label === 'Program' && item.value === 'ESL'));
-  assert.ok(model.workflowChips.includes('Missing Email'));
+  assert.deepEqual(model.workflowChips, ['Needs First Outreach']);
+  assert.ok(model.highlights.some((item) => item.label === 'Contactability' && item.value === 'Missing Email'));
+});
+
+test('AIT USA contact detail keeps Wix source tags out of the top action row', () => {
+  const model = buildContactDetailViewModel({
+    businessUnit: { name: 'AIT USA Institute' },
+    contact: {
+      id: 'contact-ait-america',
+      name: 'Ait America',
+      workflowKey: 'ait_usa',
+      status: 'New Lead',
+      currentStage: 'Needs First Outreach',
+      email: 'lead@example.com',
+      phone: '',
+      source: 'Wix Historical Import',
+      needsFirstOutreach: true,
+      enrollmentSignals: {
+        source: {
+          channel: 'Wix Historical Import',
+          tags: ['wix_history', 'needs_first_outreach', 'unworked_lead'],
+        },
+        inquiry: {},
+        process: {
+          stage: 'Needs First Outreach',
+          outreachState: 'never_contacted',
+          needsFirstOutreach: true,
+          nextAction: 'Call today',
+        },
+        contactability: {
+          status: 'missing_phone',
+          label: 'Missing Phone',
+          canFollowUp: true,
+          hasPhone: false,
+          hasEmail: true,
+        },
+      },
+    },
+  });
+
+  assert.deepEqual(model.workflowChips, ['Needs First Outreach']);
+  assert.ok(model.highlights.some((item) => item.label === 'Inquiry source' && item.value === 'Wix Historical Import'));
+  assert.ok(model.highlights.some((item) => item.label === 'Contactability' && item.value === 'Missing Phone'));
+  assert.ok(!model.workflowChips.includes('Wix History'));
+  assert.ok(!model.workflowChips.includes('Never Contacted'));
+  assert.ok(!model.workflowChips.includes('Missing Phone'));
+});
+
+test('AIT USA contact detail uses contact-info blocker as the only top chip when outreach is blocked', () => {
+  const model = buildContactDetailViewModel({
+    businessUnit: { name: 'AIT USA Institute' },
+    contact: {
+      workflowKey: 'ait_usa',
+      status: 'New Lead',
+      currentStage: 'New Lead',
+      email: '',
+      phone: '',
+      needsFirstOutreach: true,
+      enrollmentSignals: {
+        source: { channel: 'WordPress Website Form' },
+        process: {
+          stage: 'New Lead',
+          outreachState: 'never_contacted',
+          needsFirstOutreach: true,
+        },
+        contactability: {
+          status: 'no_contact_channel',
+          label: 'Needs Contact Info',
+          canFollowUp: false,
+          hasPhone: false,
+          hasEmail: false,
+        },
+      },
+    },
+  });
+
+  assert.deepEqual(model.workflowChips, ['Needs Contact Info']);
+  assert.ok(model.highlights.some((item) => item.label === 'Inquiry source' && item.value === 'WordPress Website Form'));
+  assert.ok(model.highlights.some((item) => item.label === 'Contactability' && item.value === 'Needs Contact Info'));
 });
 
 test('AIT USA contact detail only adds operational tabs when real records exist', () => {

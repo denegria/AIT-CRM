@@ -12,12 +12,29 @@ function titleLabel(value = '') {
     .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
+function normalized(value = '') {
+  return clean(value).toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
+}
+
 function firstPresent(values = []) {
   return values.map(clean).find(Boolean) || '';
 }
 
 function compactArray(values = []) {
   return values.filter((value) => value !== undefined && value !== null && value !== '');
+}
+
+function uniqueLabels(values = []) {
+  const seen = new Set();
+  const labels = [];
+  for (const value of values) {
+    const label = clean(value);
+    const key = normalized(label);
+    if (!label || seen.has(key)) continue;
+    seen.add(key);
+    labels.push(label);
+  }
+  return labels;
 }
 
 function countFor(counts = {}, key = '') {
@@ -203,6 +220,16 @@ function buildSignsHighlights(contact = {}, businessUnit = null) {
   ]).filter((item) => item.value);
 }
 
+function instituteActionChip(contact = {}, process = {}, contactability = {}) {
+  if (contactability.canFollowUp === false) return 'Needs Contact Info';
+  const outreachState = normalized(process.outreachState || contact.outreachState);
+  if (contact.needsFirstOutreach || process.needsFirstOutreach || outreachState === 'never contacted') {
+    return 'Needs First Outreach';
+  }
+  if (process.nextAction || contact.nextAction) return 'Needs Follow-up';
+  return '';
+}
+
 export function buildContactDetailViewModel({
   contact = {},
   businessUnit = null,
@@ -222,13 +249,8 @@ export function buildContactDetailViewModel({
   const hasFinancials = countFor(counts, 'payment') > 0 || countFor(counts, 'estimate') > 0;
 
   if (isInstitute) {
-    const workflowChips = compactArray([
-      contact.needsFirstOutreach ? 'Needs First Outreach' : '',
-      process.outreachState ? titleLabel(process.outreachState) : '',
-      contactability.status && contactability.status !== 'reachable'
-        ? (contactability.label || titleLabel(contactability.status))
-        : '',
-      ...(signals.source?.tags || []).filter((tag) => ['wix_history', 'needs_first_outreach'].includes(tag)).map(titleLabel),
+    const workflowChips = uniqueLabels([
+      instituteActionChip(contact, process, contactability),
     ]);
     return {
       workflowKey,
