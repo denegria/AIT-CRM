@@ -24,9 +24,22 @@ const nav = [
 
 const mobilePrimaryPriority = ['/', '/clients', '/contacts', '/pipeline', '/tasks'];
 
+const roleLabels = {
+  admin: 'Administrator',
+  account_manager: 'Account Coordinator',
+  designer: 'Designer',
+  sales_manager: 'Sales Manager',
+};
+
 function isRouteActive(pathname, href) {
   if (href === '/') return pathname === '/';
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function formatRoleLabel(roleKey) {
+  return roleLabels[roleKey] || String(roleKey || '')
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 export default function Sidebar() {
@@ -182,7 +195,7 @@ export default function Sidebar() {
         </div>
         <div className={s.roleBadge}>
           {dataSource === 'postgres' && currentUser?.primaryRoleKey
-            ? currentUser.primaryRoleKey.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+            ? formatRoleLabel(currentUser.primaryRoleKey)
             : role === 'admin' ? 'Full Access' : 'Restricted Access'}
         </div>
         {dataSource === 'postgres' && (

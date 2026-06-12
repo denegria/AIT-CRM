@@ -25,7 +25,7 @@ const PERMISSIONS = {
 const ROLE_NAMES = {
   admin: 'Administrator',
   designer: 'Designer',
-  account_manager: 'Account Manager',
+  account_manager: 'Account Coordinator',
   sales_manager: 'Sales Manager',
 };
 

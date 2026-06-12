@@ -4,6 +4,7 @@ import {
   normalizeBusinessUnitIds,
   normalizeManagedRoleKey,
   requiresBusinessUnitMembership,
+  toRoleOption,
   validateUserAccessDraft,
 } from './user-policy.js';
 import { buildMembershipRows } from './user-access-values.js';
@@ -12,6 +13,13 @@ test('managed role input only accepts first-party role keys', () => {
   assert.equal(normalizeManagedRoleKey('admin'), 'admin');
   assert.equal(normalizeManagedRoleKey('owner'), '');
   assert.equal(normalizeManagedRoleKey(' account_manager '), 'account_manager');
+});
+
+test('account manager role displays as account coordinator', () => {
+  assert.deepEqual(toRoleOption('account_manager'), {
+    key: 'account_manager',
+    label: 'Account Coordinator',
+  });
 });
 
 test('non-admin role drafts require explicit business-unit memberships', () => {

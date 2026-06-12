@@ -7,7 +7,7 @@ import { useToast } from '@/components/Toast';
 
 const defaultRoleOptions = [
   { key: 'admin', label: 'Administrator' },
-  { key: 'account_manager', label: 'Account Manager' },
+  { key: 'account_manager', label: 'Account Coordinator' },
   { key: 'sales_manager', label: 'Sales Manager' },
   { key: 'designer', label: 'Designer' },
 ];
