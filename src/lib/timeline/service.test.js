@@ -185,6 +185,72 @@ test('buildContactTimeline treats employee follow-up completion as structured ac
   assert.equal(followUp.metadataJson.outcome, 'no_answer');
 });
 
+test('buildContactTimeline labels first manual AIT USA follow-up as first outreach', () => {
+  const timeline = buildContactTimeline({
+    activityEvents: [{
+      id: 'manual-follow-up-1',
+      contactId: 'contact-1',
+      leadId: 'lead-1',
+      businessUnitId: 'bu-1',
+      eventType: 'ait_usa.follow_up',
+      message: 'Called twice then texted.',
+      actorUserId: 'user-1',
+      occurredAt: new Date('2026-06-12T13:31:00.000Z'),
+    }, {
+      id: 'manual-follow-up-2',
+      contactId: 'contact-1',
+      leadId: 'lead-1',
+      businessUnitId: 'bu-1',
+      eventType: 'ait_usa.follow_up',
+      message: 'Second follow-up after status change.',
+      actorUserId: 'user-1',
+      occurredAt: new Date('2026-06-12T13:33:00.000Z'),
+    }],
+    users: [{ id: 'user-1', name: 'AIT USA Account Manager' }],
+    businessUnits: [{ id: 'bu-1', name: 'AIT USA Institute', label: 'Divisions' }],
+  });
+
+  const firstOutreach = timeline.find((entry) => entry.id === 'activity:manual-follow-up-1');
+  const followUp = timeline.find((entry) => entry.id === 'activity:manual-follow-up-2');
+
+  assert.equal(firstOutreach.title, 'First outreach attempt');
+  assert.equal(firstOutreach.presentation.category, 'follow_up');
+  assert.equal(firstOutreach.presentation.categoryLabel, 'First outreach');
+  assert.equal(firstOutreach.presentation.provenance, null);
+  assert.equal(followUp.title, 'Follow-up attempt');
+  assert.equal(followUp.presentation.categoryLabel, 'Follow-up');
+  assert.equal(followUp.presentation.provenance, null);
+});
+
+test('buildContactTimeline hides generic regular note activity artifacts', () => {
+  const timeline = buildContactTimeline({
+    notes: [{
+      id: 'note-1',
+      contactId: 'contact-1',
+      businessUnitId: 'bu-1',
+      body: 'Classes Monday, Wednesday, and Friday.',
+      authorUserId: 'user-1',
+      createdAt: new Date('2026-06-12T00:00:00.000Z'),
+    }],
+    activityEvents: [{
+      id: 'note-added-activity-1',
+      contactId: 'contact-1',
+      businessUnitId: 'bu-1',
+      eventType: 'contact.note_added',
+      message: 'Added contact timeline note.',
+      actorUserId: 'user-1',
+      occurredAt: new Date('2026-06-12T13:33:00.000Z'),
+    }],
+    users: [{ id: 'user-1', name: 'AIT USA Account Manager' }],
+    businessUnits: [{ id: 'bu-1', name: 'AIT USA Institute', label: 'Divisions' }],
+  });
+
+  assert.deepEqual(timeline.map((entry) => entry.id), ['note:note-1']);
+  assert.equal(timeline[0].timestamp, '2026-06-12T13:33:00.000Z');
+  assert.equal(timeline[0].presentation.category, 'note');
+  assert.equal(timeline[0].presentation.provenance, null);
+});
+
 test('buildContactTimeline interprets Wix website imports without raw pipe text', () => {
   const timeline = buildContactTimeline({
     notes: [{

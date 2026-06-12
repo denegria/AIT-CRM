@@ -6,9 +6,9 @@ import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
 import s from './ContactDetail.module.css';
-import { 
-  AlertCircle, ArrowLeft, Mail, Phone, MapPin, Calendar, 
-  Plus, FileText, ClipboardList, 
+import {
+  AlertCircle, ArrowLeft, ArrowRight, Mail, Phone, MapPin, Calendar,
+  Plus, FileText, ClipboardList,
   MessageSquare, Edit3, Tag, Activity, CheckSquare, MessageCircle,
   Inbox, Send, DollarSign, Archive, BriefcaseBusiness, CheckCircle2,
   GraduationCap
@@ -238,6 +238,13 @@ function phoneHref(value = '') {
   return digits ? `tel:${digits}` : '';
 }
 
+function nextWorkflowStatus(currentStatus = '', statuses = []) {
+  const uniqueStatuses = [...new Set((statuses || []).filter(Boolean))];
+  const currentIndex = uniqueStatuses.findIndex((status) => status === currentStatus);
+  if (currentIndex < 0 || currentIndex >= uniqueStatuses.length - 1) return '';
+  return uniqueStatuses[currentIndex + 1];
+}
+
 export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const params = useParams();
   const router = useRouter();
@@ -280,6 +287,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   });
   const [noteInput, setNoteInput] = useState('');
   const [noteMode, setNoteMode] = useState('note');
+  const [statusUpdating, setStatusUpdating] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
   const contactSource = isClientMode ? (allContacts || contacts) : contacts;
@@ -300,6 +308,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   }), [contactFinancialCounts, contactWorkOrders.length]);
   const contactBusinessUnit = businessUnits.find((unit) => unit.id === contact?.businessUnitId || unit.id === contact?.primaryBusinessUnitId);
   const contactStatusOptions = workflowForBusinessUnit(contactBusinessUnit).statuses;
+  const nextStatus = nextWorkflowStatus(contact?.status, contactStatusOptions);
   const detailView = buildContactDetailViewModel({
     contact,
     businessUnit: contactBusinessUnit,
@@ -570,6 +579,24 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       });
   };
 
+  const moveToNextStatus = () => {
+    if (!contact?.id || !nextStatus || statusUpdating || !access.canWriteCrm) return;
+    const confirmed = window.confirm(`Move ${contact.name} from ${contact.status} to ${nextStatus}?`);
+    if (!confirmed) return;
+    setStatusUpdating(true);
+    updateContact(contact.id, { status: nextStatus })
+      .then(() => {
+        toast(`Status moved to ${nextStatus}`);
+        setTimelineReloadKey((key) => key + 1);
+      })
+      .catch((error) => {
+        toast(error.message || 'Status update failed', 'error');
+      })
+      .finally(() => {
+        setStatusUpdating(false);
+      });
+  };
+
   if (loaded && !contact) {
     return <div className="empty-state">{singularLabel} not found</div>;
   }
@@ -596,7 +623,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     }
     const newNote = {
       text: noteInput,
-      date: new Date().toISOString().slice(0, 10),
+      createdAt: new Date().toISOString(),
       id: crypto.randomUUID()
     };
     const updatedNotes = Array.isArray(contact.notes) ? [...contact.notes, newNote] : [newNote];
@@ -764,9 +791,20 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           
           {access.canWriteCrm && (
             <>
+              {nextStatus && (
+                <button
+                  className={`${s.statusStepButton} btn btn-block`}
+                  style={{marginTop: 20}}
+                  type="button"
+                  onClick={moveToNextStatus}
+                  disabled={statusUpdating}
+                >
+                  <ArrowRight size={16} style={{marginRight: 8}} /> {statusUpdating ? 'Updating...' : `Move to ${nextStatus}`}
+                </button>
+              )}
               <Link
                 className="btn btn-block btn-primary"
-                style={{marginTop: 20}}
+                style={{marginTop: nextStatus ? 8 : 20}}
                 href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}
               >
                 <CheckSquare size={16} style={{marginRight: 8}} /> Create Follow-up

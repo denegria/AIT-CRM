@@ -72,6 +72,8 @@ function toContactPayload(row, lead = null, noteRows = [], businessUnit = null, 
     notes: noteRows.map((note) => ({
       id: note.id,
       text: note.body,
+      createdAt: note.createdAt?.toISOString?.() || '',
+      timestamp: note.createdAt?.toISOString?.() || '',
       date: note.createdAt?.toISOString?.().slice(0, 10) || '',
     })),
   };
@@ -122,7 +124,7 @@ function normalizeNoteInputs(rawNotes) {
   return rawNotes
     .map((note) => ({
       body: String(note?.text || note?.body || '').trim(),
-      createdAt: parseNoteDate(note?.date || note?.createdAt),
+      createdAt: parseNoteDate(note?.createdAt || note?.timestamp || note?.date),
     }))
     .filter((note) => note.body);
 }
@@ -325,7 +327,7 @@ export async function PATCH(request) {
       result.lead,
       result.noteRows,
       resultBusinessUnit,
-      result.createdActivityEvents,
+      result.activityEventRows,
     ),
   });
 }

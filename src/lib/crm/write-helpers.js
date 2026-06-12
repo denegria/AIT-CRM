@@ -20,6 +20,14 @@ async function notesForContact(db, organizationId, contactId) {
     .orderBy(desc(notes.createdAt));
 }
 
+async function activityEventsForContact(db, organizationId, contactId) {
+  return db
+    .select()
+    .from(activityEvents)
+    .where(and(eq(activityEvents.contactId, contactId), eq(activityEvents.organizationId, organizationId)))
+    .orderBy(desc(activityEvents.occurredAt), desc(activityEvents.createdAt));
+}
+
 function workOrderEventValues({ organizationId, actorUserId, workOrder, eventType, message, workOrderId = workOrder.id }) {
   return {
     organizationId,
@@ -134,10 +142,8 @@ export async function updateContactWithLeadAndNotes({
       }
     }
 
-    const createdActivityEvents = [];
     let noteRows = await notesForContact(tx, organizationId, contactId);
     if (replaceNotes) {
-      const previousNoteCount = noteRows.length;
       await tx
         .delete(notes)
         .where(and(eq(notes.contactId, contactId), eq(notes.organizationId, organizationId)));
@@ -153,25 +159,11 @@ export async function updateContactWithLeadAndNotes({
             updatedAt: note.createdAt,
           }))).returning()
         : [];
-
-      if (noteRows.length > previousNoteCount) {
-        const [activityEvent] = await tx.insert(activityEvents).values({
-          organizationId,
-          businessUnitId: contact.primaryBusinessUnitId,
-          contactId,
-          leadId: lead?.id || null,
-          eventType: 'contact.note_added',
-          message: 'Added contact timeline note.',
-          actorUserId,
-          occurredAt: new Date(),
-        }).returning();
-        if (activityEvent) createdActivityEvents.push(activityEvent);
-      }
     }
 
     if (addFollowUpNote?.body) {
       const occurredAt = addFollowUpNote.occurredAt || new Date();
-      const [activityEvent] = await tx.insert(activityEvents).values({
+      await tx.insert(activityEvents).values({
         organizationId,
         businessUnitId: contact.primaryBusinessUnitId,
         contactId,
@@ -181,10 +173,14 @@ export async function updateContactWithLeadAndNotes({
         actorUserId,
         occurredAt,
       }).returning();
-      if (activityEvent) createdActivityEvents.push(activityEvent);
     }
 
-    return { contact, lead, noteRows, createdActivityEvents };
+    return {
+      contact,
+      lead,
+      noteRows,
+      activityEventRows: await activityEventsForContact(tx, organizationId, contactId),
+    };
   });
 }
 

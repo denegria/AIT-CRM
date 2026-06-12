@@ -178,6 +178,17 @@
   border-top: 1px solid var(--border-subtle);
   border-bottom: 1px solid var(--border-subtle);
 }
+
+.statusStepButton {
+  border-color: color-mix(in srgb, var(--success) 24%, var(--border-default));
+  background: color-mix(in srgb, var(--success-muted) 52%, var(--bg-elevated));
+  color: var(--success);
+  font-weight: 800;
+}
+.statusStepButton:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--success) 46%, var(--border-default));
+  background: color-mix(in srgb, var(--success-muted) 74%, var(--bg-elevated));
+}
 .infoItem {
   display: flex;
   align-items: flex-start;

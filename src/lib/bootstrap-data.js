@@ -145,6 +145,8 @@ function mapContacts(
     const noteItems = contactNotes.map((note) => ({
       id: note.id,
       text: note.body,
+      createdAt: note.createdAt?.toISOString?.() || '',
+      timestamp: note.createdAt?.toISOString?.() || '',
       date: toIsoDate(note.createdAt),
     }));
     const eventItems = contactEvents.map((event) => ({

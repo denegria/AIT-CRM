@@ -160,6 +160,51 @@ function sourceKey(sourceSheet, sourceRow) {
   return `${sourceSheet}::${sourceRow}`;
 }
 
+function timelineGroupKey(row = {}) {
+  return row.leadId || row.contactId || '';
+}
+
+function isManualAitUsaFollowUp(row = {}) {
+  return String(row.eventType || '').toLowerCase() === 'ait_usa.follow_up' && !row.sourceSheet && !row.sourceRow;
+}
+
+function firstManualAitUsaFollowUpIds(rows = []) {
+  const firstByGroup = new Map();
+  for (const row of rows) {
+    if (!isManualAitUsaFollowUp(row)) continue;
+    const groupKey = timelineGroupKey(row);
+    if (!groupKey) continue;
+    const time = isoTimestamp(row.occurredAt || row.createdAt);
+    const current = firstByGroup.get(groupKey);
+    if (!current || time.localeCompare(current.time) < 0) {
+      firstByGroup.set(groupKey, { id: row.id, time });
+    }
+  }
+  return new Set([...firstByGroup.values()].map((entry) => entry.id).filter(Boolean));
+}
+
+function isDateOnlyMidnight(value) {
+  const timestamp = isoTimestamp(value);
+  return Boolean(timestamp && timestamp.endsWith('T00:00:00.000Z'));
+}
+
+function noteTimestampOverride(note, noteAddedEvents = [], usedEventIds = new Set()) {
+  if (!isDateOnlyMidnight(note.createdAt)) return '';
+  const noteTime = new Date(note.createdAt).getTime();
+  if (!noteTime) return '';
+  const maxDriftMs = 36 * 60 * 60 * 1000;
+  const matchingEvent = noteAddedEvents.find((event) => {
+    if (usedEventIds.has(event.id)) return false;
+    if (event.contactId && note.contactId && event.contactId !== note.contactId) return false;
+    if (event.businessUnitId && note.businessUnitId && event.businessUnitId !== note.businessUnitId) return false;
+    const eventTime = new Date(event.occurredAt || event.createdAt).getTime();
+    return Number.isFinite(eventTime) && eventTime >= noteTime && eventTime - noteTime <= maxDriftMs;
+  });
+  if (!matchingEvent) return '';
+  usedEventIds.add(matchingEvent.id);
+  return isoTimestamp(matchingEvent.occurredAt || matchingEvent.createdAt);
+}
+
 function moneyLabel(value) {
   if (value === undefined || value === null || value === '') return '';
   const numeric = Number(value);
@@ -608,6 +653,7 @@ export function presentationForTimelineEntry(entry) {
   const hint = entry.presentationHint || {};
   const isImport = eventType.includes('import') || hasSource;
   const isFollowUp = eventType.includes('follow_up') || text.includes('volver a llamar') || text.includes('llamar de nuevo');
+  const hasProvenance = Boolean(isImport || hasSource || hint.sourceKind || hint.rawText || hint.sourceGroupLabel);
 
   let category = TIMELINE_CATEGORIES.IMPORT;
   if (isFollowUp) category = TIMELINE_CATEGORIES.FOLLOW_UP;
@@ -620,13 +666,15 @@ export function presentationForTimelineEntry(entry) {
   else if (entry.type === TIMELINE_TYPES.LEAD) category = TIMELINE_CATEGORIES.LEAD;
   else if (!isImport) category = TIMELINE_CATEGORIES.NOTE;
 
-  const provenance = compactObject({
-    eventType: entry.eventType || '',
-    sourceLabel: entry.source?.label || '',
-    sourceRow: entry.source?.row || '',
-    sourceKind: hint.sourceKind || sourceKindLabel(entry.source),
-    rawText: entry.rawText || hint.rawText || '',
-  });
+  const provenance = hasProvenance
+    ? compactObject({
+        eventType: entry.eventType || '',
+        sourceLabel: entry.source?.label || '',
+        sourceRow: entry.source?.row || '',
+        sourceKind: hint.sourceKind || sourceKindLabel(entry.source),
+        rawText: entry.rawText || hint.rawText || '',
+      })
+    : {};
   const categoryOverride = hint.category || '';
   const categoryLabelOverride = hint.categoryLabel || '';
   const priorityOverride = hint.priority || '';
@@ -713,11 +761,17 @@ export function buildContactTimeline({
   }
   const hasCanonicalTaskEvents = taskEventRows.length > 0;
   const seenWebsiteLeadGroups = new Set();
+  const firstManualFollowUpIds = firstManualAitUsaFollowUpIds(activityRows);
+  const noteAddedEvents = activityRows
+    .filter((row) => String(row.eventType || '').toLowerCase() === 'contact.note_added')
+    .sort((left, right) => isoTimestamp(left.occurredAt || left.createdAt).localeCompare(isoTimestamp(right.occurredAt || right.createdAt)));
+  const usedNoteAddedEventIds = new Set();
 
   const entries = [];
 
   for (const note of noteRows) {
     const importedNote = importedNoteInterpretation(note.body);
+    const timestamp = noteTimestampOverride(note, noteAddedEvents, usedNoteAddedEventIds) || isoTimestamp(note.createdAt);
     entries.push(withPresentation({
       id: `note:${note.id}`,
       type: TIMELINE_TYPES.NOTE,
@@ -727,8 +781,8 @@ export function buildContactTimeline({
       text: importedNote?.text || note.body,
       rawText: importedNote?.hint?.rawText || '',
       presentationHint: importedNote?.hint || null,
-      timestamp: isoTimestamp(note.createdAt),
-      date: isoDate(note.createdAt),
+      timestamp,
+      date: timestamp.slice(0, 10),
       actor: userPayload(note.authorUserId, userLookup),
       businessUnit: businessUnitPayload(note.businessUnitId, businessUnitLookup),
       linkedRecords: linkedRecordPayload(note),
@@ -737,6 +791,7 @@ export function buildContactTimeline({
 
   for (const event of activityRows) {
     if (hasCanonicalTaskEvents && String(event.eventType || '').startsWith('task.')) continue;
+    if (String(event.eventType || '').toLowerCase() === 'contact.note_added') continue;
     if (
       String(event.eventType || '').toLowerCase() === 'lead.assigned' &&
       /assigned inbound lead by default rule/i.test(String(event.message || ''))
@@ -771,13 +826,16 @@ export function buildContactTimeline({
       sourceGroupLabel: sourceGroupCount > 1 && event.sourceRow
         ? `Workbook row ${event.sourceRow}: ${sourceGroupCount} imported records`
         : '',
+      categoryLabel: firstManualFollowUpIds.has(event.id) ? 'First outreach' : '',
     });
     entries.push(withPresentation({
       id: `activity:${event.id}`,
       type: entryType,
       typeLabel: TIMELINE_TYPE_LABELS[entryType],
       eventType: event.eventType,
-      title: record?.title || (importedWorkbookNote ? 'Imported workbook note' : titleCaseEventType(event.eventType)),
+      title: firstManualFollowUpIds.has(event.id)
+        ? 'First outreach attempt'
+        : record?.title || (importedWorkbookNote ? 'Imported workbook note' : titleCaseEventType(event.eventType)),
       text: interpretedImportText(event, record),
       rawText: eventPresentationHint.rawText || '',
       timestamp: isoTimestamp(event.occurredAt || event.createdAt),

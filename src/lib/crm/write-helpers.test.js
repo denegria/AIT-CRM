@@ -88,5 +88,70 @@ test('updateContactWithLeadAndNotes writes follow-up note activity events', asyn
   assert.equal(insertedValues[0].contactId, 'contact-1');
   assert.equal(insertedValues[0].leadId, 'lead-1');
   assert.equal(insertedValues[0].occurredAt, occurredAt);
-  assert.equal(result.createdActivityEvents[0].eventType, 'ait_usa.follow_up');
+  assert.deepEqual(result.activityEventRows, []);
+});
+
+test('updateContactWithLeadAndNotes keeps regular notes as notes only', async () => {
+  const insertedValues = [];
+  const deletedTables = [];
+  const contact = {
+    id: 'contact-1',
+    organizationId: 'org-1',
+    primaryBusinessUnitId: 'bu-ait-usa',
+  };
+  const createdAt = new Date('2026-06-12T13:33:00.000Z');
+  const tx = {
+    update() {
+      return returningChain([contact]);
+    },
+    select() {
+      return selectChain([]);
+    },
+    delete(table) {
+      deletedTables.push(table);
+      return {
+        where() {
+          return Promise.resolve();
+        },
+      };
+    },
+    insert() {
+      return {
+        values(value) {
+          insertedValues.push(value);
+          return {
+            returning() {
+              const rows = Array.isArray(value) ? value : [value];
+              return Promise.resolve(rows.map((row, index) => ({ id: `row-${index + 1}`, ...row })));
+            },
+          };
+        },
+      };
+    },
+  };
+  const db = {
+    transaction(callback) {
+      return callback(tx);
+    },
+  };
+
+  const result = await updateContactWithLeadAndNotes({
+    db,
+    organizationId: 'org-1',
+    actorUserId: 'user-1',
+    contactId: 'contact-1',
+    contactPatch: { updatedAt: createdAt },
+    replaceNotes: {
+      noteInputs: [{
+        body: 'Classes Monday, Wednesday, and Friday.',
+        createdAt,
+      }],
+    },
+  });
+
+  assert.equal(deletedTables.length, 1);
+  assert.equal(insertedValues.length, 1);
+  assert.equal(insertedValues[0][0].body, 'Classes Monday, Wednesday, and Friday.');
+  assert.equal(insertedValues[0][0].createdAt, createdAt);
+  assert.deepEqual(result.activityEventRows, []);
 });
