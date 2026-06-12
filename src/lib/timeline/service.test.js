@@ -258,6 +258,45 @@ test('buildContactTimeline interprets Wix website imports without raw pipe text'
   assert.equal(timeline.some((entry) => entry.id === 'activity:default-assignment-activity'), false);
 });
 
+test('buildContactTimeline keeps historical Wix imports chip-only by default', () => {
+  const timeline = buildContactTimeline({
+    leads: [{
+      id: 'lead-wix-history',
+      contactId: 'contact-wix-history',
+      businessUnitId: 'bu-ait-usa',
+      sourceType: 'website_form',
+      sourceName: 'Wix Historical Import',
+      status: 'New Lead',
+      currentStage: 'Needs First Outreach',
+      originalNotes: [
+        'website_form',
+        'external_id=wix-history-123',
+        'source_key=wix-ait-usa',
+        'source_row_id=source-row-history',
+        'current_stage=Needs First Outreach',
+        'outreach_state=never_contacted',
+        'priority=High',
+        'service=Wix historical lead',
+        'message=Wix sources: Wix Contacts Export | Merged rows: 1 | Source files: contacts.csv',
+      ].join(' | '),
+      createdAt: new Date('2026-05-16T05:57:00.000Z'),
+    }],
+    businessUnits: [{ id: 'bu-ait-usa', name: 'AIT USA', label: 'Divisions' }],
+  });
+
+  const lead = timeline.find((entry) => entry.record?.kind === 'website_lead');
+
+  assert.equal(lead.title, 'Wix Historical Import');
+  assert.equal(lead.text, '');
+  assert.deepEqual(lead.record.meta, [
+    'Stage Needs First Outreach',
+    'Interest Wix historical lead',
+    'Source wix-ait-usa',
+    'Submission wix-history-123',
+  ]);
+  assert.match(lead.presentation.provenance.rawText, /Wix sources: Wix Contacts Export/);
+});
+
 test('buildContactTimeline makes AIT Signs promoted work and financial history readable', () => {
   const timeline = buildContactTimeline({
     activityEvents: [

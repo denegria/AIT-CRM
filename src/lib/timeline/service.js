@@ -361,7 +361,14 @@ function websiteLeadRecordPayload(lead) {
   });
 }
 
+function isWixWebsiteLead(lead, record) {
+  const sourceName = String(lead?.sourceName || '').toLowerCase();
+  const sourceKey = String(record?.fields?.source_key || '').toLowerCase();
+  return sourceName.includes('wix') || sourceKey.includes('wix');
+}
+
 function websiteLeadText(lead, record) {
+  if (isWixWebsiteLead(lead, record)) return '';
   const message = readableLine(record?.fields?.message || lead.originalNotes);
   if (looksLikeForWhom(message)) return '';
   if (message && !message.includes('external_id=') && !message.includes('source_key=')) return message;
