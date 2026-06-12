@@ -7,6 +7,7 @@ import {
 } from './constants.js';
 import {
   buildTaskTransition,
+  nextRecurringDueAt,
   normalizeTaskRecurrence,
   normalizeTaskPriority,
   normalizeTaskType,
@@ -63,6 +64,23 @@ test('normalizes recurring task metadata with a hard date anchor', () => {
     () => normalizeTaskRecurrence({ frequency: 'monthly' }, null),
     /Recurring tasks require a hard due date/,
   );
+});
+
+test('computes next recurring due dates from the current due date', () => {
+  assert.equal(
+    nextRecurringDueAt({ frequency: 'daily', interval: 1, active: true }, new Date('2026-06-12T09:00:00.000Z')).toISOString(),
+    '2026-06-13T09:00:00.000Z',
+  );
+  assert.equal(
+    nextRecurringDueAt({ frequency: 'weekly', interval: 2, active: true }, new Date('2026-06-12T09:00:00.000Z')).toISOString(),
+    '2026-06-26T09:00:00.000Z',
+  );
+  assert.equal(
+    nextRecurringDueAt({ frequency: 'monthly', interval: 1, active: true }, new Date('2026-06-12T09:00:00.000Z')).toISOString(),
+    '2026-07-12T09:00:00.000Z',
+  );
+  assert.equal(nextRecurringDueAt({ frequency: 'none', active: true }, new Date()), null);
+  assert.equal(nextRecurringDueAt({ frequency: 'weekly', active: false }, new Date()), null);
 });
 
 test('builds complete transition patch with audit event metadata', () => {

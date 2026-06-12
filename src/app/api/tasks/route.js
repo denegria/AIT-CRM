@@ -27,6 +27,7 @@ import {
 } from '@/lib/tasks/follow-up.js';
 import {
   buildTaskTransition,
+  nextRecurringDueAt,
   normalizeTaskPriority,
   normalizeTaskRecurrence,
   normalizeTaskStatus,
@@ -37,6 +38,7 @@ import {
 } from '@/lib/tasks/policy.js';
 import {
   compactTaskPatch,
+  completeRecurringTaskWithNextTask,
   completeFollowUpTaskWithActivity,
   createTaskWithEvents,
   listTasks,
@@ -547,6 +549,37 @@ export async function PATCH(request) {
       ...linkPatch,
       ...(metadataJson !== undefined ? { metadataJson } : {}),
     };
+
+    const recurrence = existingTask.metadataJson?.recurrence || null;
+    const recurringNextDueAt = String(body.action || '').trim() === 'complete'
+      ? nextRecurringDueAt(recurrence, existingTask.dueAt)
+      : null;
+    if (recurringNextDueAt) {
+      const nextRecurrence = {
+        ...recurrence,
+        anchorDate: recurringNextDueAt.toISOString(),
+        active: true,
+        source: recurrence.source || 'manual',
+      };
+      const { task, nextTask } = await completeRecurringTaskWithNextTask({
+        db,
+        organizationId: session.user.organizationId,
+        actorUserId: session.user.id,
+        existingTask,
+        taskPatch: compactTaskPatch(taskPatch),
+        nextDueAt: recurringNextDueAt,
+        nextTaskMetadataJson: compactObject({
+          ...(existingTask.metadataJson || {}),
+          recurrence: nextRecurrence,
+          createdFromTaskId: existingTask.id,
+        }),
+      });
+
+      return NextResponse.json({
+        task: toTaskPayload(task),
+        nextTask: toTaskPayload(nextTask),
+      });
+    }
 
     const { task } = await updateTaskWithEvents({
       db,

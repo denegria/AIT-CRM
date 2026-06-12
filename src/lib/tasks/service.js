@@ -237,6 +237,98 @@ export async function updateTaskWithEvents({
   });
 }
 
+export async function completeRecurringTaskWithNextTask({
+  db,
+  organizationId,
+  actorUserId,
+  existingTask,
+  taskPatch,
+  nextDueAt,
+  nextTaskMetadataJson = {},
+}) {
+  return db.transaction(async (tx) => {
+    const [task] = await tx
+      .update(tasks)
+      .set(taskPatch)
+      .where(and(
+        eq(tasks.id, existingTask.id),
+        eq(tasks.organizationId, organizationId),
+        eq(tasks.status, existingTask.status),
+      ))
+      .returning();
+
+    if (!task) {
+      throw createCrmError('Task was already updated. Refresh the queue and try again.', 409);
+    }
+
+    if ([TASK_STATUSES.COMPLETED, TASK_STATUSES.CANCELED].includes(existingTask.status)) {
+      throw createCrmError('Completed or canceled tasks must be reopened before further changes.');
+    }
+
+    await tx.insert(taskEvents).values(taskEventValues({
+      organizationId,
+      actorUserId,
+      task,
+      previousTask: existingTask,
+      eventType: TASK_EVENT_TYPES.COMPLETED,
+      message: 'Completed recurring task.',
+      metadataJson: { nextDueAt: nextDueAt.toISOString() },
+    }));
+
+    await tx.insert(activityEvents).values(activityEventValues({
+      organizationId,
+      actorUserId,
+      task,
+      eventType: TASK_EVENT_TYPES.COMPLETED,
+      message: 'Completed recurring task.',
+      metadataJson: { nextDueAt: nextDueAt.toISOString() },
+    }));
+
+    const [nextTask] = await tx
+      .insert(tasks)
+      .values({
+        organizationId,
+        businessUnitId: existingTask.businessUnitId,
+        contactId: existingTask.contactId || null,
+        leadId: existingTask.leadId || null,
+        workOrderId: existingTask.workOrderId || null,
+        title: existingTask.title,
+        description: existingTask.description || null,
+        taskType: existingTask.taskType,
+        status: TASK_STATUSES.OPEN,
+        priority: existingTask.priority,
+        dueAt: nextDueAt,
+        ownerUserId: existingTask.ownerUserId,
+        createdByUserId: actorUserId,
+        sourceType: 'manual',
+        sourceId: existingTask.id,
+        sourceLabel: 'Recurring task',
+        metadataJson: nextTaskMetadataJson,
+      })
+      .returning();
+
+    await tx.insert(taskEvents).values(taskEventValues({
+      organizationId,
+      actorUserId,
+      task: nextTask,
+      eventType: TASK_EVENT_TYPES.CREATED,
+      message: 'Created next recurring task.',
+      metadataJson: { createdFromTaskId: existingTask.id },
+    }));
+
+    await tx.insert(activityEvents).values(activityEventValues({
+      organizationId,
+      actorUserId,
+      task: nextTask,
+      eventType: TASK_EVENT_TYPES.CREATED,
+      message: 'Created next recurring task.',
+      metadataJson: { createdFromTaskId: existingTask.id },
+    }));
+
+    return { task, nextTask };
+  });
+}
+
 export async function completeFollowUpTaskWithActivity({
   db,
   organizationId,

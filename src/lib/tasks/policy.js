@@ -92,6 +92,31 @@ export function normalizeTaskRecurrence(value = {}, anchorDate = null) {
   };
 }
 
+export function nextRecurringDueAt(recurrence = {}, currentDueAt = null) {
+  if (!recurrence?.active || recurrence.frequency === TASK_RECURRENCE_FREQUENCIES.NONE) return null;
+  const currentDate = parseTaskDateTime(currentDueAt || recurrence.anchorDate, 'recurrence.currentDueAt');
+  if (!currentDate) return null;
+
+  const interval = Number.isFinite(Number(recurrence.interval)) && Number(recurrence.interval) > 0
+    ? Number(recurrence.interval)
+    : 1;
+  const next = new Date(currentDate);
+
+  if (recurrence.frequency === TASK_RECURRENCE_FREQUENCIES.DAILY) {
+    next.setUTCDate(next.getUTCDate() + interval);
+  } else if (recurrence.frequency === TASK_RECURRENCE_FREQUENCIES.WEEKLY) {
+    next.setUTCDate(next.getUTCDate() + (7 * interval));
+  } else if (recurrence.frequency === TASK_RECURRENCE_FREQUENCIES.BIWEEKLY) {
+    next.setUTCDate(next.getUTCDate() + (14 * interval));
+  } else if (recurrence.frequency === TASK_RECURRENCE_FREQUENCIES.MONTHLY) {
+    next.setUTCMonth(next.getUTCMonth() + interval);
+  } else {
+    return null;
+  }
+
+  return next;
+}
+
 export function buildTaskTransition({ task, action, now = new Date(), payload = {} }) {
   const normalizedAction = String(action || 'update').trim();
   const patch = { updatedAt: now };

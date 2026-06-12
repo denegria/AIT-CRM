@@ -421,7 +421,15 @@ export default function FollowUpQueuePage() {
         const nextTask = normalizeTask(result.task, contacts);
         setQueueTasks((prev) => prev.map((row) => (row.id === task.id ? nextTask : row)));
         if (result.nextTask) {
-          setQueueTasks((prev) => [normalizeTask(result.nextTask, contacts), ...prev]);
+          const normalizedNextTask = normalizeTask(result.nextTask, contacts);
+          setQueueTasks((prev) => [normalizedNextTask, ...prev]);
+          addTask({
+            ...normalizedNextTask,
+            taskStatus: normalizedNextTask.status,
+            completed: normalizedNextTask.status === 'completed',
+            assignedTo: normalizedNextTask.ownerUserId,
+            dueDate: dateKey(normalizedNextTask.dueAt),
+          });
         }
         updateTask(task.id, {
           taskStatus: nextTask.status,

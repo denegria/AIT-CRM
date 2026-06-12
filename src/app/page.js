@@ -7,30 +7,17 @@ import TaskList from '@/components/TaskList';
 import Calendar from '@/components/Calendar';
 import { BarChart, PieChart, ChartLegend } from '@/components/Charts';
 import { useToast } from '@/components/Toast';
+import {
+  buildTaskCalendarEvents,
+  isOpenTask,
+  taskDueKey,
+} from '@/lib/dashboard/task-calendar';
 
 function dateInputToIso(value) {
   if (!value) return null;
   const date = new Date(`${value}T09:00:00`);
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString();
-}
-
-function dateKey(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
-  return date.toISOString().slice(0, 10);
-}
-
-function taskDueKey(task) {
-  return dateKey(task?.dueAt || task?.dueDate);
-}
-
-const CLOSED_TASK_STATUSES = new Set(['completed', 'canceled']);
-
-function isOpenTask(task) {
-  const status = task?.taskStatus || task?.status || (task?.completed ? 'completed' : 'open');
-  return !task?.completed && !CLOSED_TASK_STATUSES.has(status);
 }
 
 export default function Dashboard() {
@@ -112,22 +99,7 @@ export default function Dashboard() {
   }, [myTasks]);
 
   const dashboardCalendarEvents = useMemo(() => {
-    const taskEvents = myTasks
-      .filter(isOpenTask)
-      .map((task) => {
-        const dueDate = taskDueKey(task);
-        if (!dueDate) return null;
-        return {
-          id: `task-${task.id}`,
-          title: `Task: ${task.title || 'Untitled task'}`,
-          date: dueDate,
-          type: 'deadline',
-          href: '/tasks',
-          contactId: task.contactId || '',
-          businessUnitId: task.businessUnitId || '',
-        };
-      })
-      .filter(Boolean);
+    const taskEvents = buildTaskCalendarEvents(myTasks);
     return [...calendarEvents, ...taskEvents];
   }, [calendarEvents, myTasks]);
 
