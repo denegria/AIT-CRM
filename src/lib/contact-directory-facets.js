@@ -56,6 +56,10 @@ function hasEmail(contact = {}) {
   return Boolean(clean(contact.email));
 }
 
+function needsContactInfo(contact = {}) {
+  return !hasPhone(contact) && !hasEmail(contact);
+}
+
 function lastTouchTime(contact = {}) {
   const value = clean(contact.lastTouch);
   if (!value || value.toLowerCase() === 'none') return 0;
@@ -93,13 +97,6 @@ function hasStatus(contact = {}, status = '') {
   return normalized(contact.status) === normalized(status) || normalized(contact.currentStage) === normalized(status);
 }
 
-function isSourceReview(contact = {}) {
-  return isAitSigns(contact) && (
-    contact.isPipelineEligible === false ||
-    hasToken(contactTokens(contact), ['source_review', 'import_artifact', 'source_history', 'source_only'])
-  );
-}
-
 function hasBalanceOrPayment(contact = {}) {
   return isAitSigns(contact) && (
     Number(contact.relatedPaymentCount || 0) > 0 ||
@@ -112,17 +109,15 @@ function hasLinkedPeople(contact = {}) {
   return isAitSigns(contact) && Number(contact.linkedPeopleCount || 0) > 0;
 }
 
-function readyForFollowUp(contact = {}) {
-  return isAitUsa(contact) && hasToken(contactTokens(contact), ['ready_for_follow_up']);
+function isSourceReview(contact = {}) {
+  return isAitSigns(contact) && (
+    contact.isPipelineEligible === false ||
+    hasToken(contactTokens(contact), ['source_review', 'import_artifact', 'source_history', 'source_only'])
+  );
 }
 
-function needsReview(contact = {}) {
-  return isAitUsa(contact) && hasToken(contactTokens(contact), [
-    'needs_review',
-    'no_contact_channel',
-    'needs_verification',
-    'low_confidence_alternate',
-  ]);
+function readyForFollowUp(contact = {}) {
+  return isAitUsa(contact) && hasToken(contactTokens(contact), ['ready_for_follow_up']);
 }
 
 function suppressFromFollowUp(contact = {}) {
@@ -131,15 +126,6 @@ function suppressFromFollowUp(contact = {}) {
     contact.isWrongNumber ||
     hasToken(contactTokens(contact), ['suppress_from_follow_up', 'do_not_contact', 'wrong_number', 'disconnected'])
   );
-}
-
-function repeatedNoAnswer(contact = {}) {
-  return isAitUsa(contact) && hasToken(contactTokens(contact), [
-    'repeated_no_answer',
-    'attempted_no_answer',
-    'no_answer',
-    'multiple_no_answer',
-  ]);
 }
 
 function wrongOrDisconnected(contact = {}) {
@@ -151,6 +137,13 @@ function wrongOrDisconnected(contact = {}) {
 
 function doNotContact(contact = {}) {
   return contact.isDoNotCall || hasToken(contactTokens(contact), ['do_not_contact', 'do_not_call', 'dnc']);
+}
+
+function hasBadContactChannel(contact = {}) {
+  return suppressFromFollowUp(contact) ||
+    wrongOrDisconnected(contact) ||
+    doNotContact(contact) ||
+    hasToken(contactTokens(contact), ['no_contact_channel']);
 }
 
 export const CONTACT_DIRECTORY_FACET_GROUPS = [
@@ -165,9 +158,8 @@ export const CONTACT_DIRECTORY_FACET_GROUPS = [
       { id: 'needs_first_outreach', label: 'Needs First Outreach', matches: (contact) => Boolean(contact.needsFirstOutreach) },
       { id: 'unassigned', label: 'Unassigned', matches: (contact) => !contact.assignedTo },
       { id: 'no_recent_touch', label: 'No Recent Touch', matches: (contact, options = {}) => isNoRecentTouch(contact, options.now) },
-      { id: 'missing_phone', label: 'Missing Phone', matches: (contact) => !hasPhone(contact) },
+      { id: 'needs_contact_info', label: 'Needs Contact Info', matches: needsContactInfo },
       { id: 'invalid_phone', label: 'Invalid Phone', matches: hasInvalidPhone },
-      { id: 'missing_email', label: 'Missing Email', matches: (contact) => !hasEmail(contact) },
       { id: 'closed', label: 'Closed / Completed', matches: isClosed },
     ],
   },
@@ -181,7 +173,6 @@ export const CONTACT_DIRECTORY_FACET_GROUPS = [
       { id: 'signs_work_order', label: 'Work Order', matches: (contact) => isAitSigns(contact) && hasStatus(contact, 'Work Order') },
       { id: 'signs_fulfillment', label: 'Fulfillment', matches: (contact) => isAitSigns(contact) && hasStatus(contact, 'Fulfillment') },
       { id: 'signs_invoice_payment', label: 'Invoice / Payment', matches: (contact) => isAitSigns(contact) && hasStatus(contact, 'Invoice / Payment') },
-      { id: 'signs_source_review', label: 'Source Review', matches: isSourceReview },
       { id: 'signs_linked_people', label: 'Has Linked People', matches: hasLinkedPeople },
       { id: 'signs_payment_balance', label: 'Balance / Payment', matches: hasBalanceOrPayment },
     ],
@@ -192,24 +183,17 @@ export const CONTACT_DIRECTORY_FACET_GROUPS = [
     workflowKey: WORKFLOW_KEYS.AIT_USA,
     facets: [
       { id: 'usa_new_lead', label: 'New Lead', matches: (contact) => isAitUsa(contact) && hasStatus(contact, 'New Lead') },
-      { id: 'usa_follow_up', label: 'Follow Up', matches: (contact) => isAitUsa(contact) && hasStatus(contact, 'Follow Up') },
+      { id: 'usa_follow_up', label: 'Needs Follow-up', matches: (contact) => isAitUsa(contact) && (hasStatus(contact, 'Follow Up') || readyForFollowUp(contact)) },
       { id: 'usa_enrolled', label: 'Enrolled', matches: (contact) => isAitUsa(contact) && hasStatus(contact, 'Enrolled') },
       {
         id: 'usa_completed_previous',
         label: 'Completed / Previous',
         matches: (contact) => isAitUsa(contact) && hasStatus(contact, 'Completed / Previous Student'),
       },
-      { id: 'usa_ready_follow_up', label: 'Ready Follow-up', matches: readyForFollowUp },
-      { id: 'usa_needs_review', label: 'Needs Review', matches: needsReview },
-      { id: 'usa_repeated_no_answer', label: 'Repeated No Answer', matches: repeatedNoAnswer },
       {
         id: 'usa_bad_contact_channel',
         label: 'Bad Contact Channel',
-        matches: (contact) => isAitUsa(contact) && (
-          suppressFromFollowUp(contact) ||
-          wrongOrDisconnected(contact) ||
-          doNotContact(contact)
-        ),
+        matches: (contact) => isAitUsa(contact) && hasBadContactChannel(contact),
       },
     ],
   },

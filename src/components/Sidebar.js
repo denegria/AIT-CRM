@@ -98,12 +98,35 @@ export default function Sidebar() {
     </Link>
   );
 
+  const renderScopeSelect = () => (
+    <select
+      className={s.scopeSelect}
+      value={currentBusinessUnitId}
+      onChange={(event) => setCurrentBusinessUnitId(event.target.value)}
+      aria-label={`${scopeLabel} scope`}
+    >
+      <option value="unassigned" title="Shows records that have not been assigned to any division">No Division</option>
+      {accessibleBusinessUnits.map((unit) => (
+        <option key={unit.id} value={unit.id}>{unit.name}</option>
+      ))}
+    </select>
+  );
+
   return (
     <aside className={s.sidebar}>
       <div className={s.logo}>
         <Image src="/logo.png" alt="AIT USA" width={40} height={40} className={s.logoImage} />
         <span>AIT USA</span>
       </div>
+      {accessibleBusinessUnits?.length > 0 && (
+        <div className={s.mobileScopeBar}>
+          <div className={s.mobileScopeTitle}>
+            <Building2 size={14} />
+            <span>{currentBusinessUnit?.name || scopeLabel}</span>
+          </div>
+          {renderScopeSelect()}
+        </div>
+      )}
       <nav className={s.navSection}>
         {accessibleBusinessUnits?.length > 0 && (
           <div className={s.scopePanel}>
@@ -111,17 +134,7 @@ export default function Sidebar() {
               <Building2 size={14} />
               <span>{scopeLabel}</span>
             </div>
-            <select
-              className={s.scopeSelect}
-              value={currentBusinessUnitId}
-              onChange={(event) => setCurrentBusinessUnitId(event.target.value)}
-              aria-label={`${scopeLabel} scope`}
-            >
-              <option value="unassigned" title="Shows records that have not been assigned to any division">No Division</option>
-              {accessibleBusinessUnits.map((unit) => (
-                <option key={unit.id} value={unit.id}>{unit.name}</option>
-              ))}
-            </select>
+            {renderScopeSelect()}
           </div>
         )}
         <div className={s.navLabel}>Menu</div>

@@ -223,8 +223,8 @@ a { color: inherit; text-decoration: none; }
     width: 100%;
     max-width: 100vw;
     overflow-x: hidden;
-    height: calc(100vh - 72px);
-    height: calc(100dvh - 72px - env(safe-area-inset-bottom));
+    height: calc(100vh - 126px);
+    height: calc(100dvh - 126px - env(safe-area-inset-bottom));
     padding: 12px;
     padding-bottom: calc(24px + env(safe-area-inset-bottom));
   }

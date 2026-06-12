@@ -70,12 +70,11 @@ test('contact directory facets expose counted division-aware buckets', () => {
   assert.equal(facetCount(groups, 'mine'), 1);
   assert.equal(facetCount(groups, 'active'), 3);
   assert.equal(facetCount(groups, 'no_recent_touch'), 2);
-  assert.equal(facetCount(groups, 'missing_phone'), 2);
+  assert.equal(facetCount(groups, 'needs_contact_info'), 1);
   assert.equal(facetCount(groups, 'invalid_phone'), 1);
-  assert.equal(facetCount(groups, 'signs_source_review'), 1);
   assert.equal(facetCount(groups, 'signs_linked_people'), 1);
-  assert.equal(facetCount(groups, 'usa_ready_follow_up'), 1);
-  assert.equal(facetCount(groups, 'usa_needs_review'), 1);
+  assert.equal(facetCount(groups, 'usa_follow_up'), 1);
+  assert.equal(facetCount(groups, 'usa_bad_contact_channel'), 1);
 });
 
 test('contact directory facet filtering isolates sales-cycle buckets', () => {
@@ -104,6 +103,10 @@ test('contact directory facet filtering isolates sales-cycle buckets', () => {
     },
   ];
 
+  assert.deepEqual(
+    filterContactsByDirectoryFacet(contacts, 'usa_follow_up', { businessUnitById }).map((contact) => contact.id),
+    ['ready', 'suppress'],
+  );
   assert.deepEqual(
     filterContactsByDirectoryFacet(contacts, 'usa_bad_contact_channel', { businessUnitById }).map((contact) => contact.id),
     ['suppress'],

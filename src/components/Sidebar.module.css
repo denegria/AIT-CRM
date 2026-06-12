@@ -57,6 +57,9 @@
 .mobileNav {
   display: none;
 }
+.mobileScopeBar {
+  display: none;
+}
 .scopePanel {
   margin: 16px 0 8px 0;
   padding: 10px;
@@ -185,6 +188,43 @@
     overflow: visible;
   }
   .logo, .navLabel, .scopePanel, .bottom { display: none; }
+  .mobileScopeBar {
+    position: fixed;
+    left: max(8px, env(safe-area-inset-left));
+    right: max(8px, env(safe-area-inset-right));
+    bottom: calc(72px + env(safe-area-inset-bottom) + 8px);
+    display: grid;
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    gap: 8px;
+    align-items: center;
+    padding: 8px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+    box-shadow: var(--shadow-lg);
+    backdrop-filter: blur(14px);
+    z-index: 104;
+  }
+  .mobileScopeTitle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: var(--text-secondary);
+    font-size: var(--text-xs);
+    font-weight: 750;
+  }
+  .mobileScopeTitle span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .mobileScopeBar .scopeSelect {
+    height: 34px;
+    padding: 5px 8px;
+    font-size: 16px;
+  }
   .navSection {
     display: block;
     align-items: center;
