@@ -16,6 +16,7 @@ test('task calendar events include open recurring task due dates', () => {
     {
       id: 'task-recurring',
       title: 'Daily account check-in',
+      description: 'Review open lead handoffs.',
       status: 'open',
       dueAt: '2026-06-12T09:00:00.000Z',
       businessUnitId: 'bu-usa',
@@ -35,6 +36,7 @@ test('task calendar events include open recurring task due dates', () => {
     {
       id: 'task-task-recurring',
       title: 'Task: Daily account check-in',
+      description: 'Review open lead handoffs.',
       date: '2026-06-12',
       type: 'deadline',
       href: '/tasks',
