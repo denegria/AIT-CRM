@@ -463,13 +463,26 @@ export async function PATCH(request) {
         followUpOutcome: completion.outcome,
         activityEventType: completion.eventType,
         nextDueAt: completion.nextDueAt?.toISOString?.() || null,
+        nextOwnerUserId: body.nextOwnerUserId || body.nextAssignedTo || null,
       });
+      const nextOwnerUserId = completion.createNextTask && completion.nextDueAt
+        ? await resolveOrganizationUserId(
+            db,
+            session,
+            body.nextOwnerUserId || body.nextAssignedTo || existingTask.ownerUserId,
+            'nextOwnerUserId',
+          )
+        : null;
+      if (completion.createNextTask && completion.nextDueAt && !nextOwnerUserId) {
+        throw createCrmError('Next follow-up owner is required.');
+      }
       const nextTaskValues = completion.createNextTask && completion.nextDueAt
         ? {
             title: stringParam(body.nextTaskTitle) || existingTask.title || 'Follow up',
             description: stringParam(body.nextTaskDescription) || null,
             status: TASK_STATUSES.OPEN,
             dueAt: completion.nextDueAt,
+            ownerUserId: nextOwnerUserId,
             snoozedUntil: null,
             completedAt: null,
             canceledAt: null,
@@ -508,6 +521,7 @@ export async function PATCH(request) {
         nextTaskEventMetadata: compactObject({
           createdFromTaskId: existingTask.id,
           followUpOutcome: completion.outcome,
+          ownerUserId: nextOwnerUserId,
         }),
       });
 

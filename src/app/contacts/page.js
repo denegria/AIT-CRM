@@ -13,6 +13,7 @@ import {
   clientDirectoryColumnMode,
   enrollmentSourceText,
   enrollmentStageText,
+  isCurrentLeadDateScope,
   lifecycleBucket,
 } from '@/lib/contact-directory-view';
 import { useToast } from '@/components/Toast';
@@ -145,6 +146,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const [statusFilter, setStatusFilter] = useState('All');
   const [ownerFilter, setOwnerFilter] = useState('all');
   const [directoryFacet, setDirectoryFacet] = useState('all');
+  const [leadDateScope, setLeadDateScope] = useState('current');
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [formError, setFormError] = useState('');
   const [facetNow] = useState(() => Date.now());
@@ -291,14 +293,23 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     { key: 'lastEdited', label: 'Last Edited', sortable: true },
   ];
 
-  const baseFilteredContacts = useMemo(() => directoryRows.filter((contact) => {
+  const dateScopedRows = useMemo(() => {
+    if (leadDateScope === 'all') return directoryRows;
+    return directoryRows.filter((contact) => isCurrentLeadDateScope(contact));
+  }, [directoryRows, leadDateScope]);
+  const allDateLeadCount = directoryRows.length;
+  const currentLeadCount = useMemo(
+    () => directoryRows.filter((contact) => isCurrentLeadDateScope(contact)).length,
+    [directoryRows],
+  );
+  const baseFilteredContacts = useMemo(() => dateScopedRows.filter((contact) => {
     const statusMatch = statusFilter === 'All' || contact.status === statusFilter;
     const ownerMatch =
       ownerFilter === 'all' ||
       (ownerFilter === 'unassigned' && !contact.assignedTo) ||
       contact.assignedTo === ownerFilter;
     return statusMatch && ownerMatch;
-  }), [directoryRows, ownerFilter, statusFilter]);
+  }), [dateScopedRows, ownerFilter, statusFilter]);
   const facetGroups = useMemo(
     () => buildContactDirectoryFacetGroups(baseFilteredContacts, facetContext),
     [baseFilteredContacts, facetContext],
@@ -362,6 +373,26 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           )}
         </div>
         <div className="contacts-facet-groups">
+          <div className="contacts-facet-group">
+            <div className="contacts-facet-label">Lead dates</div>
+            <div className="contacts-facet-pills">
+              {[
+                ['current', 'Current Leads', currentLeadCount],
+                ['all', 'All Date Leads', allDateLeadCount],
+              ].map(([id, label, count]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`contacts-facet-pill ${leadDateScope === id ? 'active' : ''}`}
+                  onClick={() => setLeadDateScope(id)}
+                  aria-pressed={leadDateScope === id}
+                >
+                  <span>{label}</span>
+                  <strong>{count}</strong>
+                </button>
+              ))}
+            </div>
+          </div>
           {facetGroups.map((group) => (
             <div key={group.id} className="contacts-facet-group">
               <div className="contacts-facet-label">{group.label}</div>

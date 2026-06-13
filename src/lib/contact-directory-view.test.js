@@ -6,7 +6,9 @@ import {
   contactabilityText,
   enrollmentSourceText,
   enrollmentStageText,
+  isCurrentLeadDateScope,
   lifecycleBucket,
+  leadDateForDirectoryScope,
   programText,
 } from './contact-directory-view.js';
 
@@ -85,4 +87,17 @@ test('AIT Signs lifecycle buckets distinguish source history from current work',
       detail: '2026-03-28',
     },
   );
+});
+
+test('lead date scope uses lead dates and keeps current plus previous year', () => {
+  const now = new Date('2026-06-13T00:00:00.000Z');
+
+  assert.equal(leadDateForDirectoryScope({
+    leadCreatedAt: '2026-05-01T12:00:00.000Z',
+    contactCreatedAt: '2024-01-01T12:00:00.000Z',
+  }), '2026-05-01T12:00:00.000Z');
+  assert.equal(isCurrentLeadDateScope({ leadCreatedAt: '2026-01-01T00:00:00.000Z' }, now), true);
+  assert.equal(isCurrentLeadDateScope({ leadCreatedAt: '2025-12-31T23:00:00.000Z' }, now), true);
+  assert.equal(isCurrentLeadDateScope({ leadCreatedAt: '2024-12-31T23:00:00.000Z' }, now), false);
+  assert.equal(isCurrentLeadDateScope({ leadCreatedAt: '' }, now), true);
 });
