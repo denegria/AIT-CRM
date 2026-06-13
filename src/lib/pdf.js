@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf';
 import { buildAitSignsDocument, formatAitSignsMoney } from '@/lib/ait-signs-document';
+import { buildAitUsaReceiptDocument } from '@/lib/ait-usa-receipt-document';
 
 const DOCUMENT_ACCENT = {
   estimate: [185, 28, 28],
@@ -256,6 +257,113 @@ function renderAitSignsPDF(record, context = {}, documentType) {
   }
 }
 
+function renderAitUsaReceiptPDF(record, context = {}) {
+  try {
+    const form = buildAitUsaReceiptDocument(record, context);
+    const doc = new jsPDF();
+    const accent = [30, 64, 175];
+    const ink = [17, 24, 39];
+    const muted = [86, 100, 118];
+
+    doc.setFillColor(...accent);
+    doc.rect(0, 0, 210, 34, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.text(form.company.name, 18, 18);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text(form.company.tagline, 18, 25);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(22);
+    doc.text(form.title.toUpperCase(), 192, 19, { align: 'right' });
+
+    doc.setTextColor(...muted);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.text('Receipt #', 145, 45);
+    doc.text('Payment Date', 145, 53);
+    doc.setTextColor(...ink);
+    doc.setFont('helvetica', 'bold');
+    doc.text(form.receiptNumber, 192, 45, { align: 'right' });
+    doc.text(form.dateDisplay, 192, 53, { align: 'right' });
+
+    doc.setDrawColor(209, 213, 219);
+    doc.roundedRect(18, 43, 104, 42, 2, 2);
+    doc.setFontSize(8);
+    doc.setTextColor(...muted);
+    doc.text('RECEIVED FROM / RECIBIDO DE', 24, 53);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.setTextColor(...ink);
+    doc.text(doc.splitTextToSize(form.studentName, 88), 24, 63);
+    if (form.program) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...muted);
+      doc.text(doc.splitTextToSize(form.program, 88), 24, 76);
+    }
+
+    doc.setFillColor(239, 246, 255);
+    doc.roundedRect(18, 96, 174, 46, 2, 2, 'F');
+    doc.setTextColor(...muted);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('AMOUNT PAID', 28, 110);
+    doc.text('PAYMENT METHOD', 102, 110);
+    doc.text('BALANCE DUE', 158, 110, { align: 'right' });
+    doc.setTextColor(...ink);
+    doc.setFontSize(18);
+    doc.text(form.amountDisplay, 28, 123);
+    doc.setFontSize(11);
+    doc.text(form.method, 102, 123);
+    doc.text(form.balanceDueDisplay || '$0.00', 178, 123, { align: 'right' });
+    if (form.checkNumber) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.setTextColor(...muted);
+      doc.text(`Reference / Check: ${form.checkNumber}`, 102, 133);
+    }
+
+    doc.setDrawColor(...accent);
+    doc.roundedRect(18, 157, 174, 48, 2, 2);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9);
+    doc.setTextColor(...accent);
+    doc.text('PAYMENT NOTE', 25, 169);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...ink);
+    doc.text(doc.splitTextToSize(form.note || form.bilingualNote[0], 154), 25, 181);
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(...muted);
+    doc.text(doc.splitTextToSize(form.bilingualNote.join(' '), 154), 25, 218);
+
+    doc.setDrawColor(209, 213, 219);
+    doc.line(18, 246, 92, 246);
+    doc.line(118, 246, 192, 246);
+    doc.setFontSize(7);
+    doc.text('Received by / Recibido por', 18, 252);
+    doc.text('Student / Cliente', 118, 252);
+    if (form.receivedBy) {
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(...ink);
+      doc.text(form.receivedBy, 18, 242);
+    }
+
+    doc.setTextColor(...muted);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.text('Thank you. Gracias.', 105, 278, { align: 'center' });
+    doc.save(`AIT-USA-${safeFilePart(form.receiptNumber)}.pdf`);
+  } catch (err) {
+    console.error('PDF Generation Error:', err);
+    alert('Failed to generate PDF. Please check console for details.');
+  }
+}
+
 export function generateInvoicePDF(record, context = {}) {
   renderAitSignsPDF(record, context, 'invoice');
 }
@@ -266,6 +374,10 @@ export function generateEstimatePDF(record, context = {}) {
 
 export function generateReceiptPDF(record, context = {}) {
   renderAitSignsPDF(record, context, 'receipt');
+}
+
+export function generateAitUsaReceiptPDF(record, context = {}) {
+  renderAitUsaReceiptPDF(record, context);
 }
 
 export function generateWorkOrderPDF(wo, context = {}) {

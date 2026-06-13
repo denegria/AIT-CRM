@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, desc, eq, inArray, or } from 'drizzle-orm';
 import {
   activityEvents,
   businessUnits,
@@ -747,6 +747,7 @@ export function buildContactTimeline({
       .map((row) => [sourceKey(row.sourceSheet, row.sourceRow), row])
       .filter(([key]) => key),
   );
+  const paymentSnapshotLookupById = byId(paymentSnapshotRows);
   const importedSourceCounts = new Map();
   const websiteFormLeadIds = new Set(
     leadRows
@@ -808,17 +809,22 @@ export function buildContactTimeline({
     const entryType = timelineTypeForEvent(event.eventType);
     const source = sourcePayload(event);
     const metadataJson = event.metadataJson || {};
+    const eventTypeLower = String(event.eventType || '').toLowerCase();
     const linkedTask = metadataJson.taskId ? taskLookup.get(metadataJson.taskId) : null;
     const linkedWorkOrder = event.workOrderId ? workOrderLookup.get(event.workOrderId) : null;
     const linkedEstimate = event.estimateId ? estimateLookup.get(event.estimateId) : null;
-    const linkedPayment = paymentSnapshotLookup.get(sourceKey(event.sourceSheet, event.sourceRow));
-    const record = workOrderRecordPayload(linkedWorkOrder, source)
-      || estimateRecordPayload(linkedEstimate, source)
-      || (String(event.eventType || '').toLowerCase().includes('payment') ? paymentRecordPayload(linkedPayment) : null);
-    const rawImportedText = String(event.eventType || '').toLowerCase().startsWith('import_promoted_')
+    const linkedPayment = paymentSnapshotLookupById.get(metadataJson.paymentSnapshotId)
+      || paymentSnapshotLookup.get(sourceKey(event.sourceSheet, event.sourceRow));
+    const paymentRecord = eventTypeLower.includes('payment') ? paymentRecordPayload(linkedPayment) : null;
+    const workRecord = workOrderRecordPayload(linkedWorkOrder, source);
+    const estimateRecord = estimateRecordPayload(linkedEstimate, source);
+    const record = eventTypeLower.includes('payment')
+      ? (paymentRecord || workRecord || estimateRecord)
+      : (workRecord || estimateRecord || paymentRecord);
+    const rawImportedText = eventTypeLower.startsWith('import_promoted_')
       ? event.message || ''
       : '';
-    const importedWorkbookNote = String(event.eventType || '').toLowerCase() === 'import_promoted_note' && workbookLikeText(rawImportedText);
+    const importedWorkbookNote = eventTypeLower === 'import_promoted_note' && workbookLikeText(rawImportedText);
     const eventSourceKey = sourceKey(event.sourceSheet, event.sourceRow);
     const sourceGroupCount = eventSourceKey ? importedSourceCounts.get(eventSourceKey) || 0 : 0;
     const eventPresentationHint = compactObject({
@@ -994,6 +1000,10 @@ export async function listContactTimeline({
   const paymentSourceRows = [...new Set(activityRows
     .filter((row) => String(row.eventType || '').toLowerCase().includes('payment') && row.sourceRow)
     .map((row) => row.sourceRow))];
+  const linkedPaymentSnapshotIds = uniqueIds(
+    activityRows.map((row) => ({ paymentSnapshotId: row.metadataJson?.paymentSnapshotId })),
+    ['paymentSnapshotId'],
+  );
 
   const taskEventRows = taskIds.length
     ? await db
@@ -1037,15 +1047,31 @@ export async function listContactTimeline({
           .from(estimates)
           .where(and(eq(estimates.organizationId, organizationId), inArray(estimates.id, linkedEstimateIds)))
       : [],
-    paymentSourceRows.length
+    (paymentSourceRows.length || linkedPaymentSnapshotIds.length || linkedWorkOrderIds.length || linkedEstimateIds.length)
       ? db
           .select()
           .from(paymentSnapshots)
-          .where(and(eq(paymentSnapshots.organizationId, organizationId), inArray(paymentSnapshots.sourceRow, paymentSourceRows)))
+          .where(and(
+            eq(paymentSnapshots.organizationId, organizationId),
+            or(
+              ...(paymentSourceRows.length ? [inArray(paymentSnapshots.sourceRow, paymentSourceRows)] : []),
+              ...(linkedPaymentSnapshotIds.length ? [inArray(paymentSnapshots.id, linkedPaymentSnapshotIds)] : []),
+              ...(linkedWorkOrderIds.length ? [inArray(paymentSnapshots.workOrderId, linkedWorkOrderIds)] : []),
+              ...(linkedEstimateIds.length ? [inArray(paymentSnapshots.estimateId, linkedEstimateIds)] : []),
+            ),
+          ))
       : [],
   ]);
   const paymentSourceKeys = new Set(activityRows.map((row) => sourceKey(row.sourceSheet, row.sourceRow)).filter(Boolean));
-  const paymentSnapshotRows = paymentSnapshotRowsRaw.filter((row) => paymentSourceKeys.has(sourceKey(row.sourceSheet, row.sourceRow)));
+  const linkedPaymentSnapshotIdSet = new Set(linkedPaymentSnapshotIds);
+  const linkedWorkOrderIdSet = new Set(linkedWorkOrderIds);
+  const linkedEstimateIdSet = new Set(linkedEstimateIds);
+  const paymentSnapshotRows = paymentSnapshotRowsRaw.filter((row) => (
+    paymentSourceKeys.has(sourceKey(row.sourceSheet, row.sourceRow))
+    || linkedPaymentSnapshotIdSet.has(row.id)
+    || linkedWorkOrderIdSet.has(row.workOrderId)
+    || linkedEstimateIdSet.has(row.estimateId)
+  ));
 
   return buildContactTimeline({
     notes: noteRows,
