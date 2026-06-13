@@ -21,6 +21,14 @@ function eventTone(type) {
   return s[`dot${key.charAt(0).toUpperCase()}${key.slice(1)}`] || s.dotMeeting;
 }
 
+function calendarItemTitle(event = {}) {
+  return String(event.title || 'Calendar item').replace(/^Task:\s*/i, '').trim() || 'Calendar item';
+}
+
+function calendarItemDescription(event = {}) {
+  return String(event.description || event.detail || event.subtitle || '').trim();
+}
+
 export default function Calendar({ events = [] }) {
   const today = new Date();
   const [year, setYear] = useState(today.getFullYear());
@@ -78,14 +86,41 @@ export default function Calendar({ events = [] }) {
       </div>
       <div className={s.grid}>
         {DAYS.map(d => <div key={d} className={s.dayLabel}>{d}</div>)}
-        {days.map((d, i) => (
-          <div key={i} className={`${s.day} ${isToday(d.day, d.current) ? s.today : ''} ${!d.current ? s.otherMonth : ''}`} title={eventMap[d.day]?.map(e=>e.title).join(', ')}>
-            {d.day}
-            {d.current && eventMap[d.day] && (
-              <span className={`${s.dot} ${eventTone(eventMap[d.day][0].type)}`} />
-            )}
-          </div>
-        ))}
+        {days.map((d, i) => {
+          const dayEvents = d.current ? eventMap[d.day] || [] : [];
+          return (
+            <div key={i} className={`${s.day} ${isToday(d.day, d.current) ? s.today : ''} ${!d.current ? s.otherMonth : ''}`} title={dayEvents.map(e=>e.title).join(', ')}>
+              <span className={s.dayNumber}>{d.day}</span>
+              {dayEvents.length > 0 && (
+                <div className={s.dayEvents}>
+                  {dayEvents.slice(0, 2).map((event) => {
+                    const content = (
+                      <>
+                        <span className={`${s.eventDot} ${eventTone(event.type)}`} />
+                        <span className={s.dayEventCopy}>
+                          <strong>{calendarItemTitle(event)}</strong>
+                          {calendarItemDescription(event) && <small>{calendarItemDescription(event)}</small>}
+                        </span>
+                      </>
+                    );
+                    return event.href ? (
+                      <Link key={event.id || `${event.date}-${event.title}`} className={s.dayEvent} href={event.href}>
+                        {content}
+                      </Link>
+                    ) : (
+                      <div key={event.id || `${event.date}-${event.title}`} className={s.dayEvent}>
+                        {content}
+                      </div>
+                    );
+                  })}
+                  {dayEvents.length > 2 && (
+                    <span className={s.dayEventMore}>+{dayEvents.length - 2} more</span>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
       {visibleEvents.length > 0 && (
         <div className={s.eventList} aria-label={`${MONTHS[month]} calendar items`}>
