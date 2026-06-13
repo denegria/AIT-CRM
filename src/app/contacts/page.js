@@ -11,6 +11,7 @@ import {
 } from '@/lib/contact-directory-facets';
 import {
   clientDirectoryColumnMode,
+  directorySourceText,
   enrollmentSourceText,
   enrollmentStageText,
   isCurrentLeadDateScope,
@@ -107,6 +108,17 @@ function EnrollmentSourceCell({ row }) {
         <span>{enrollmentSourceText(row)}</span>
       </div>
       {row.latestCommentLabel && <div className="workflow-next">{row.latestCommentLabel}</div>}
+    </div>
+  );
+}
+
+function SourceCell({ row }) {
+  return (
+    <div className="workflow-cell">
+      <div className="workflow-line">
+        <span>{directorySourceText(row)}</span>
+      </div>
+      {row.sourceActivityDate && <div className="workflow-next">{String(row.sourceActivityDate).slice(0, 10)}</div>}
     </div>
   );
 }
@@ -218,6 +230,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       ].filter(Boolean).join(' '),
       enrollmentStage: enrollmentStageText(contact),
       inquirySource: enrollmentSourceText(contact),
+      sourceCategoryText: directorySourceText(contact),
       signalLabels,
       signalText: signalLabels.join(' '),
     };
@@ -283,6 +296,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     ...(columnMode !== 'ait_signs' ? [{ key: 'email', label: 'Email', sortable: true, editable: true }] : []),
     { key: 'phone', label: 'Phone', editable: true },
     ...(columnMode === 'ait_signs' ? [
+      { key: 'sourceCategoryText', label: 'Source', sortable: true, render: (row) => <SourceCell row={row} /> },
       { key: 'linkedPeopleSummary', label: 'People', sortable: true, render: (row) => <PeopleCell row={row} /> },
       { key: 'accountSnapshotText', label: 'Recent Work', sortable: false, render: (row) => <RecentWorkCell row={row} /> },
     ] : []),
@@ -290,9 +304,9 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       { key: 'enrollmentStage', label: 'Enrollment', sortable: true, render: (row) => <EnrollmentCell row={row} /> },
       { key: 'inquirySource', label: 'Source', sortable: true, render: (row) => <EnrollmentSourceCell row={row} /> },
     ] : []),
-    ...(columnMode !== 'ait_usa' ? [{ key: 'status', label: 'Status', type: 'badge', sortable: true }] : []),
-    ...(columnMode === 'ait_signs' ? [{ key: 'lifecycleBucket', label: 'Bucket', sortable: false, render: (row) => <BucketCell row={row} /> }] : []),
-    ...(columnMode !== 'ait_usa' ? [{ key: 'workflow', label: 'Next Step', sortable: false, render: (row) => <WorkflowCell row={row} /> }] : []),
+    ...(columnMode !== 'ait_usa' ? [{ key: 'status', label: columnMode === 'ait_signs' ? 'Stage' : 'Status', type: 'badge', sortable: true }] : []),
+    ...(columnMode === 'ait_signs' ? [{ key: 'lifecycleBucket', label: 'Activity', sortable: false, render: (row) => <BucketCell row={row} /> }] : []),
+    ...(columnMode === 'contacts' ? [{ key: 'workflow', label: 'Next Step', sortable: false, render: (row) => <WorkflowCell row={row} /> }] : []),
     ...(columnMode === 'contacts' ? [{ key: 'signalText', label: 'Signals', sortable: false, render: (row) => <SignalCell row={row} /> }] : []),
     { key: 'assignedLabel', label: 'Owner', sortable: true },
     ...(columnMode === 'contacts' ? [{ key: 'divisionLabel', label: scopeLabel, sortable: true }] : []),
@@ -345,7 +359,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       .join(' · ');
   }, [businessUnitById, effectiveDirectoryFacet, filteredContacts]);
   const mobileFieldKeys = columnMode === 'ait_signs'
-    ? ['phone', 'linkedPeopleSummary', 'accountSnapshotText', 'lifecycleBucket', 'workflow', 'lastTouch', 'lastEdited']
+    ? ['phone', 'sourceCategoryText', 'linkedPeopleSummary', 'accountSnapshotText', 'lifecycleBucket', 'assignedLabel', 'lastTouch', 'lastEdited']
     : columnMode === 'ait_usa'
       ? ['phone', 'enrollmentStage', 'inquirySource', 'assignedLabel', 'lastTouch', 'lastEdited']
       : ['phone', 'workflow', 'signalText', 'assignedLabel', 'divisionLabel', 'lastTouch', 'lastEdited'];

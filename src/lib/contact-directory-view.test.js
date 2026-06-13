@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   clientDirectoryColumnMode,
   contactabilityText,
+  directorySourceText,
   enrollmentSourceText,
   enrollmentStageText,
   isCurrentLeadDateScope,
@@ -102,4 +103,28 @@ test('lead date scope uses lead dates and keeps current plus previous year', () 
   assert.equal(isCurrentLeadDateScope({ leadCreatedAt: '2024-12-31T23:00:00.000Z' }, now), false);
   assert.equal(isCurrentLeadDateScope({ submittedAt: '2024-12-31T23:00:00.000Z', leadCreatedAt: '2026-01-01T00:00:00.000Z' }, now), false);
   assert.equal(isCurrentLeadDateScope({ leadCreatedAt: '' }, now), true);
+});
+
+test('AIT Signs date scope uses source activity date instead of CRM load date', () => {
+  const now = new Date('2026-06-13T00:00:00.000Z');
+
+  assert.equal(isCurrentLeadDateScope({
+    workflowKey: 'ait_signs',
+    sourceActivityDate: '2025-10-20T00:00:00.000Z',
+    contactCreatedAt: '2026-06-09T15:17:05.583Z',
+  }, now), true);
+  assert.equal(isCurrentLeadDateScope({
+    workflowKey: 'ait_signs',
+    sourceActivityDate: '2024-12-31T00:00:00.000Z',
+    contactCreatedAt: '2026-06-09T15:17:05.583Z',
+  }, now), false);
+  assert.equal(isCurrentLeadDateScope({
+    workflowKey: 'ait_signs',
+    contactCreatedAt: '2026-06-09T15:17:05.583Z',
+  }, now), false);
+});
+
+test('directory source text prefers employee-facing source category', () => {
+  assert.equal(directorySourceText({ sourceCategory: 'Workbook Import', source: 'work_order' }), 'Workbook Import');
+  assert.equal(directorySourceText({ source: 'WordPress Website Form' }), 'WordPress Website Form');
 });
