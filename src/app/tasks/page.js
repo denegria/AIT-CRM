@@ -216,6 +216,7 @@ export default function FollowUpQueuePage() {
     access,
     dataSource,
     scopeLabel,
+    addTask,
     updateTask,
   } = useCRM();
   const { toast } = useToast();
@@ -466,11 +467,13 @@ export default function FollowUpQueuePage() {
     }
   }
 
-  function followUpDraft(taskId) {
-    return followUpDrafts[taskId] || {
+  function followUpDraft(taskId, task = null) {
+    return {
       outcome: 'reached_interested',
       note: '',
       nextDueDate: '',
+      nextOwnerUserId: task?.ownerUserId || defaultOwnerUserId(currentUser, visibleAssignees),
+      ...(followUpDrafts[taskId] || {}),
     };
   }
 
@@ -735,11 +738,12 @@ export default function FollowUpQueuePage() {
   }
 
   async function submitFollowUpCompletion(task) {
-    const draft = followUpDraft(task.id);
+    const draft = followUpDraft(task.id, task);
     await applyTaskAction(task, 'complete', {
       outcome: draft.outcome,
       note: draft.note,
       nextDueAt: dateInputToIso(draft.nextDueDate),
+      nextOwnerUserId: draft.nextOwnerUserId || task.ownerUserId || null,
     });
   }
 
@@ -960,7 +964,7 @@ export default function FollowUpQueuePage() {
             const isOverdue = key && key < todayKey() && !CLOSED_STATUSES.has(task.status);
             const isToday = key === todayKey() && !CLOSED_STATUSES.has(task.status);
             const assignee = visibleAssignees.find((user) => user.id === task.ownerUserId);
-            const draft = followUpDraft(task.id);
+            const draft = followUpDraft(task.id, task);
             const showFollowUpCompletion = completionTaskId === task.id && task.taskType === 'follow_up';
             const showEditPanel = editTaskId === task.id;
             return (
@@ -1143,6 +1147,18 @@ export default function FollowUpQueuePage() {
                         disabled={busyTaskId === task.id}
                         onChange={(event) => updateFollowUpDraft(task.id, { nextDueDate: event.target.value })}
                       />
+                    </label>
+                    <label className={s.filterGroup}>
+                      <span className="form-label">Next Owner</span>
+                      <select
+                        className="select"
+                        value={draft.nextOwnerUserId}
+                        disabled={busyTaskId === task.id}
+                        onChange={(event) => updateFollowUpDraft(task.id, { nextOwnerUserId: event.target.value })}
+                      >
+                        <option value="" disabled>Select owner</option>
+                        {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
+                      </select>
                     </label>
                     <label className={s.completionNote}>
                       <span className="form-label">Note</span>

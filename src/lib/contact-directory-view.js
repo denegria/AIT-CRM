@@ -95,3 +95,20 @@ export function clientDirectoryColumnMode({ isClientsMode = false, workflowKey =
   if (workflowKey === WORKFLOW_KEYS.AIT_USA) return 'ait_usa';
   return 'ait_signs';
 }
+
+export function leadDateForDirectoryScope(row = {}) {
+  return clean(row.leadCreatedAt) ||
+    clean(row.submittedAt) ||
+    clean(row.contactCreatedAt) ||
+    clean(row.createdAt);
+}
+
+export function isCurrentLeadDateScope(row = {}, now = new Date()) {
+  const rawDate = leadDateForDirectoryScope(row);
+  if (!rawDate) return true;
+  const date = new Date(rawDate);
+  if (Number.isNaN(date.getTime())) return true;
+  const currentYear = now.getUTCFullYear();
+  const leadYear = date.getUTCFullYear();
+  return leadYear === currentYear || leadYear === currentYear - 1;
+}

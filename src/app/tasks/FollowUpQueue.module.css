@@ -205,7 +205,7 @@
 .completionPanel {
   grid-column: 1 / -1;
   display: grid;
-  grid-template-columns: minmax(180px, 0.8fr) minmax(150px, 0.6fr) minmax(240px, 1.2fr) auto;
+  grid-template-columns: minmax(180px, 0.8fr) minmax(150px, 0.6fr) minmax(150px, 0.75fr) minmax(240px, 1.2fr) auto;
   gap: 10px;
   align-items: end;
   padding-top: 12px;
