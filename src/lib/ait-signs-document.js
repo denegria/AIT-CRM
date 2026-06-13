@@ -16,6 +16,36 @@ export const AIT_SIGNS_FORM_SERVICES = [
   { label: 'Digital', detail: 'Web Page | Ads | Motion Graphics' },
 ];
 export const AIT_SIGNS_FORM_FOOTER_NOTE = 'Printing guarantee applies to approved artwork and final proof. Web page and motion graphics timelines depend on supplied content.';
+export const AIT_SIGNS_DOCUMENT_TYPES = {
+  estimate: {
+    title: 'Estimate',
+    numberLabel: 'Estimate #',
+    dateLabel: 'Estimate Date',
+    termsTitle: 'Estimate terms',
+    terms: 'This estimate is valid for 30 days unless otherwise noted. Production begins after customer approval, required deposit, and final artwork/proof confirmation.',
+  },
+  invoice: {
+    title: 'Invoice',
+    numberLabel: 'Invoice #',
+    dateLabel: 'Invoice Date',
+    termsTitle: 'Payment terms',
+    terms: 'Invoice balance is due by the listed due date. Deposits and partial payments are applied to the balance due.',
+  },
+  receipt: {
+    title: 'Receipt',
+    numberLabel: 'Receipt #',
+    dateLabel: 'Payment Date',
+    termsTitle: 'Payment confirmation',
+    terms: 'This receipt confirms payment received. Keep this copy for your records and contact AIT Signs with any payment questions.',
+  },
+  workOrder: {
+    title: 'Work Order',
+    numberLabel: 'Work Order #',
+    dateLabel: 'Created Date',
+    termsTitle: 'Production notes',
+    terms: 'This work order is for internal production and customer scope confirmation. Final production depends on approved artwork, measurements, materials, and scheduling.',
+  },
+};
 
 function cleanText(value) {
   return String(value || '').trim();
@@ -47,6 +77,15 @@ function firstMoney(...values) {
 
 function roundCurrency(value) {
   return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+}
+
+function normalizedDocumentType(value) {
+  const text = cleanText(value).toLowerCase();
+  if (text.includes('receipt') || text.includes('payment')) return 'receipt';
+  if (text.includes('invoice')) return 'invoice';
+  if (text.includes('work')) return 'workOrder';
+  if (text.includes('estimate') || text.includes('proposal')) return 'estimate';
+  return 'workOrder';
 }
 
 export function formatAitSignsMoney(value, placeholder = AIT_SIGNS_FORM_MISSING_FIELD) {
@@ -247,7 +286,7 @@ function sumLineAmounts(items) {
   return roundCurrency(amounts.reduce((sum, amount) => sum + amount, 0));
 }
 
-function resolveAmounts(record, items, amountHints = {}) {
+function resolveAmounts(record, items, amountHints = {}, documentType = '') {
   const itemSubtotal = sumLineAmounts(items);
   const subtotal = firstMoney(
     record?.subtotal,
@@ -259,8 +298,12 @@ function resolveAmounts(record, items, amountHints = {}) {
     record?.total,
   );
   const explicitTax = firstMoney(record?.tax, record?.salesTax, amountHints.tax);
-  const taxEstimated = explicitTax === null && subtotal !== null;
-  const tax = explicitTax ?? (subtotal === null ? null : roundCurrency(subtotal * AIT_SIGNS_FORM_TAX_RATE));
+  const taxEstimated = documentType !== 'receipt' && explicitTax === null && subtotal !== null;
+  const tax = explicitTax ?? (
+    documentType === 'receipt'
+      ? 0
+      : (subtotal === null ? null : roundCurrency(subtotal * AIT_SIGNS_FORM_TAX_RATE))
+  );
   const total = firstMoney(
     record?.total,
     record?.amountWithTax,
@@ -269,20 +312,39 @@ function resolveAmounts(record, items, amountHints = {}) {
     record?.amount,
     record?.estimatedCost,
   );
+  const paidAmount = firstMoney(
+    record?.paidAmount,
+    record?.amountPaid,
+    record?.paymentAmount,
+    record?.depositAmount,
+    record?.deposit,
+    documentType === 'receipt' ? total : null,
+  );
+  const balanceDue = firstMoney(
+    record?.balanceDue,
+    record?.balance,
+    total === null ? null : roundCurrency(total - (paidAmount || 0)),
+  );
 
   return {
     subtotal,
     tax,
     total,
+    paidAmount,
+    balanceDue,
     taxEstimated,
     subtotalDisplay: formatAitSignsMoney(subtotal),
     taxDisplay: formatAitSignsMoney(tax),
     totalDisplay: formatAitSignsMoney(total),
+    paidAmountDisplay: formatAitSignsMoney(paidAmount, '$0.00'),
+    balanceDueDisplay: formatAitSignsMoney(balanceDue, AIT_SIGNS_FORM_MISSING_FIELD),
     taxRateLabel: `${(AIT_SIGNS_FORM_TAX_RATE * 100).toFixed(3).replace(/0+$/, '').replace(/\.$/, '')}%`,
   };
 }
 
 export function buildAitSignsDocument(record = {}, context = {}) {
+  const documentType = normalizedDocumentType(context.documentType || record.documentType || record.type || record.kind);
+  const typeConfig = AIT_SIGNS_DOCUMENT_TYPES[documentType];
   const customerName = firstText(
     record.customer,
     record.customerName,
@@ -305,13 +367,25 @@ export function buildAitSignsDocument(record = {}, context = {}) {
     AIT_SIGNS_FORM_MISSING_FIELD,
   );
   const documentNumber = firstText(
+    documentType === 'receipt' ? record.receiptNumber : '',
+    documentType === 'invoice' ? record.invoiceNumber : '',
+    documentType === 'estimate' ? record.estimateNumber : '',
+    documentType === 'workOrder' ? record.workOrderNumber : '',
     record.estimateNumber,
     record.number,
     record.workOrderNumber,
     record.invoiceNumber,
     AIT_SIGNS_FORM_MISSING_FIELD,
   );
-  const documentDate = firstText(record.date, record.estimateDate, record.createdAt, record.dueDate, record.deliveryDate);
+  const documentDate = firstText(
+    record.date,
+    record.estimateDate,
+    record.invoiceDate,
+    record.paidAt,
+    record.createdAt,
+    record.dueDate,
+    record.deliveryDate,
+  );
   const description = firstText(
     record.description,
     record.scope,
@@ -322,14 +396,19 @@ export function buildAitSignsDocument(record = {}, context = {}) {
   const fallbackAmount = firstMoney(record.subtotal, record.estimatedCost, record.amount, record.total);
   const lineItems = normalizeLineItems(record, description, fallbackAmount);
   const items = lineItems.items;
-  const amounts = resolveAmounts(record, items, lineItems.amountHints);
+  const amounts = resolveAmounts(record, items, lineItems.amountHints, documentType);
   const assignedName = firstText(context.assignedEmployee?.name, record.assignedToName, record.assignedName);
 
   return {
     company: AIT_SIGNS_FORM_COMPANY,
     services: AIT_SIGNS_FORM_SERVICES,
     footerNote: AIT_SIGNS_FORM_FOOTER_NOTE,
-    title: record.type === 'Estimate' ? 'Estimate' : 'Estimate / Work Order',
+    documentType,
+    title: typeConfig.title,
+    numberLabel: typeConfig.numberLabel,
+    dateLabel: typeConfig.dateLabel,
+    termsTitle: typeConfig.termsTitle,
+    terms: firstText(record.terms, record.termsNote, typeConfig.terms),
     number: documentNumber,
     date: documentDate,
     dateDisplay: formatAitSignsDate(documentDate),
@@ -341,6 +420,7 @@ export function buildAitSignsDocument(record = {}, context = {}) {
     status: firstText(record.status, AIT_SIGNS_FORM_MISSING_FIELD),
     dueDate: firstText(record.dueDate, record.deliveryDate),
     dueDateDisplay: formatAitSignsDate(firstText(record.dueDate, record.deliveryDate), AIT_SIGNS_FORM_MISSING_FIELD),
+    paymentMethod: firstText(record.paymentMethod, record.method, record.tender, AIT_SIGNS_FORM_MISSING_FIELD),
     division: firstText(context.businessUnit?.name, record.divisionLabel, record.businessUnitName, AIT_SIGNS_FORM_MISSING_FIELD),
     assignedName: assignedName || AIT_SIGNS_FORM_MISSING_FIELD,
     description,

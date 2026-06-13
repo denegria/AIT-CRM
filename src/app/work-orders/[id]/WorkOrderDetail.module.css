@@ -561,6 +561,30 @@
   font-size: 16px;
 }
 
+.documentTerms {
+  display: grid;
+  grid-template-columns: 148px minmax(0, 1fr);
+  gap: 16px;
+  margin-top: 24px;
+  padding: 12px 14px;
+  border: 2px solid #b91c1c;
+  border-radius: 6px;
+}
+
+.documentTerms strong {
+  color: #b91c1c;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.documentTerms span {
+  color: #475467;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
 .documentFooter {
   display: grid;
   gap: 10px;
@@ -634,7 +658,8 @@
   }
 
   .documentInfoBox dl div,
-  .documentSummaryBox div {
+  .documentSummaryBox div,
+  .documentTerms {
     grid-template-columns: 1fr;
   }
 
