@@ -305,7 +305,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       { key: 'inquirySource', label: 'Source', sortable: true, render: (row) => <EnrollmentSourceCell row={row} /> },
     ] : []),
     ...(columnMode !== 'ait_usa' ? [{ key: 'status', label: columnMode === 'ait_signs' ? 'Stage' : 'Status', type: 'badge', sortable: true }] : []),
-    ...(columnMode === 'ait_signs' ? [{ key: 'lifecycleBucket', label: 'Activity', sortable: false, render: (row) => <BucketCell row={row} /> }] : []),
+    ...(columnMode === 'contacts' ? [{ key: 'lifecycleBucket', label: 'Activity', sortable: false, render: (row) => <BucketCell row={row} /> }] : []),
     ...(columnMode === 'contacts' ? [{ key: 'workflow', label: 'Next Step', sortable: false, render: (row) => <WorkflowCell row={row} /> }] : []),
     ...(columnMode === 'contacts' ? [{ key: 'signalText', label: 'Signals', sortable: false, render: (row) => <SignalCell row={row} /> }] : []),
     { key: 'assignedLabel', label: 'Owner', sortable: true },
@@ -359,7 +359,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       .join(' · ');
   }, [businessUnitById, effectiveDirectoryFacet, filteredContacts]);
   const mobileFieldKeys = columnMode === 'ait_signs'
-    ? ['phone', 'sourceCategoryText', 'linkedPeopleSummary', 'accountSnapshotText', 'lifecycleBucket', 'assignedLabel', 'lastTouch', 'lastEdited']
+    ? ['phone', 'sourceCategoryText', 'linkedPeopleSummary', 'accountSnapshotText', 'assignedLabel', 'lastTouch', 'lastEdited']
     : columnMode === 'ait_usa'
       ? ['phone', 'enrollmentStage', 'inquirySource', 'assignedLabel', 'lastTouch', 'lastEdited']
       : ['phone', 'workflow', 'signalText', 'assignedLabel', 'divisionLabel', 'lastTouch', 'lastEdited'];
