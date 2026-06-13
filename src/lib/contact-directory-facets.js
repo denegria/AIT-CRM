@@ -265,7 +265,6 @@ export function contactDirectorySignalLabels(contact = {}, options = {}) {
   if (doNotContact(contact)) add('Do Not Contact');
   if (contact.isWrongNumber) add('Wrong Number');
   if (isSourceReview(contact)) add('Source Review');
-  if (hasLinkedPeople(contact)) add('Linked People');
   if (hasBalanceOrPayment(contact)) add('Balance / Payment');
   for (const pill of contact.processPills || []) add(labelForContactProcessPill(pill));
 

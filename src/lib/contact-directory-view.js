@@ -44,6 +44,10 @@ export function enrollmentSourceText(row = {}) {
     'Source not set';
 }
 
+export function directorySourceText(row = {}) {
+  return clean(row.sourceCategory) || enrollmentSourceText(row);
+}
+
 export function lifecycleBucket(row = {}) {
   const workflowKey = clean(row.workflowKey);
   if (workflowKey === WORKFLOW_KEYS.AIT_SIGNS) {
@@ -97,6 +101,9 @@ export function clientDirectoryColumnMode({ isClientsMode = false, workflowKey =
 }
 
 export function leadDateForDirectoryScope(row = {}) {
+  if (clean(row.workflowKey) === WORKFLOW_KEYS.AIT_SIGNS) {
+    return clean(row.sourceActivityDate);
+  }
   return clean(row.submittedAt) ||
     clean(row.leadCreatedAt) ||
     clean(row.contactCreatedAt) ||
@@ -105,6 +112,7 @@ export function leadDateForDirectoryScope(row = {}) {
 
 export function isCurrentLeadDateScope(row = {}, now = new Date()) {
   const rawDate = leadDateForDirectoryScope(row);
+  if (!rawDate && clean(row.workflowKey) === WORKFLOW_KEYS.AIT_SIGNS) return false;
   if (!rawDate) return true;
   const date = new Date(rawDate);
   if (Number.isNaN(date.getTime())) return true;

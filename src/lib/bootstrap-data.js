@@ -31,7 +31,7 @@ import { toBusinessUnitPayload } from './crm/payloads.js';
 import { isPipelineEligibleContact, workflowFromLead } from './sales-workflow';
 import { TASK_STATUSES } from './tasks/constants.js';
 import { buildContactTimeline, filterTimelineRowsForBusinessUnit } from './timeline/service.js';
-import { summarizeContactTouch } from './contact-touch.js';
+import { latestExcelDateFromText, summarizeContactTouch } from './contact-touch.js';
 import { buildAitUsaEnrollmentSignals } from './ait-usa-enrollment-signals.js';
 import { attachPaymentSnapshotContactLinks } from './financial-linkage.js';
 
@@ -45,8 +45,68 @@ function toIsoDate(value) {
   return dt.toISOString().slice(0, 10);
 }
 
+function toIsoDateTime(value) {
+  if (!value) return '';
+  const dt = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(dt.getTime())) return '';
+  return dt.toISOString();
+}
+
 function clean(value) {
   return String(value || '').trim();
+}
+
+function latestTime(...values) {
+  return values.reduce((latest, value) => {
+    const time = value instanceof Date ? value.getTime() : new Date(value || '').getTime();
+    return Number.isNaN(time) ? latest : Math.max(latest, time);
+  }, 0);
+}
+
+function sourceCategoryForContact({ source = '', sourceLabel = '', workflowKey = '' } = {}) {
+  const text = [source, sourceLabel].map(clean).join(' ').toLowerCase();
+  if (text.includes('website') || text.includes('web form') || text.includes('wix') || text.includes('wordpress')) {
+    return 'Website Form Submission';
+  }
+  if (
+    workflowKey === 'ait_signs' ||
+    text.includes('workbook') ||
+    text.includes('xlsx') ||
+    text.includes('spreadsheet') ||
+    text.includes('archive') ||
+    text.includes('work_order') ||
+    text.includes('estimate') ||
+    text.includes('interesados') ||
+    text.includes('ait signs')
+  ) {
+    return 'Workbook Import';
+  }
+  if (!text) return 'Manual / Unknown';
+  return 'Other Source';
+}
+
+function aitSignsSourceActivityDate({
+  lead = null,
+  events = [],
+  notes = [],
+  workOrders = [],
+  estimates = [],
+  paymentSnapshots = [],
+} = {}) {
+  const referenceTime = Date.now();
+  const textTime = [
+    lead?.originalNotes,
+    ...(events || []).map((event) => event.message || event.eventType || ''),
+    ...(notes || []).map((note) => note.body || ''),
+  ].reduce((latest, text) => Math.max(latest, latestExcelDateFromText(text, { referenceTime })), 0);
+
+  const explicitTime = latestTime(
+    ...(workOrders || []).map((row) => row.deliveryDate),
+    ...(estimates || []).flatMap((row) => [row.approvedAt, row.rejectedAt]),
+    ...(paymentSnapshots || []).map((row) => row.paidAt),
+  );
+
+  return toIsoDateTime(Math.max(textTime, explicitTime));
 }
 
 function rowsByContactId(rows = []) {
@@ -200,6 +260,16 @@ function mapContacts(
       lead,
       workflow,
     });
+    const sourceActivityDate = workflow.workflowKey === 'ait_signs'
+      ? aitSignsSourceActivityDate({
+        lead,
+        events: contactEvents,
+        notes: contactNotes,
+        workOrders: contactWorkOrders,
+        estimates: contactEstimates,
+        paymentSnapshots: contactPaymentSnapshots,
+      })
+      : submittedAt;
 
     return {
       id: contact.id,
@@ -226,6 +296,12 @@ function mapContacts(
       needsFirstOutreach: workflow.needsFirstOutreach,
       source,
       sourceLabel: contact.sourceLabel || '',
+      sourceCategory: sourceCategoryForContact({
+        source,
+        sourceLabel: contact.sourceLabel,
+        workflowKey: workflow.workflowKey,
+      }),
+      sourceActivityDate,
       assignedTo: lead?.assignedUserId || '',
       submittedAt,
       contactCreatedAt: contact.createdAt?.toISOString?.() || contact.createdAt || '',

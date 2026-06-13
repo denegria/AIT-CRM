@@ -143,6 +143,6 @@ test('contact directory signal labels flag invalid phone formats', () => {
       email: 'shop@example.com',
       linkedPeopleCount: 2,
     }),
-    ['Invalid Phone', 'Linked People'],
+    ['Invalid Phone'],
   );
 });
