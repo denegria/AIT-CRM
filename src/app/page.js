@@ -12,6 +12,10 @@ import {
   isOpenTask,
   taskDueKey,
 } from '@/lib/dashboard/task-calendar';
+import {
+  isTaskCompletedToday,
+  isTaskCurrentWork,
+} from '@/lib/tasks/visibility.js';
 
 function dateInputToIso(value) {
   if (!value) return null;
@@ -53,7 +57,7 @@ export default function Dashboard() {
     const newLeads = contacts.filter(c => c.status === 'New Lead').length;
     
     // Employee Specific
-    const myTasksCount = tasks.filter(t => (t.ownerUserId || t.assignedTo) === currentUserId && !t.completed).length;
+    const myTasksCount = tasks.filter(t => (t.ownerUserId || t.assignedTo) === currentUserId && isTaskCurrentWork(t)).length;
     const activeContacts = contacts.filter(c => c.status !== 'Won' && c.status !== 'Lost').length;
     const pendingInvoices = invoices.filter(f => f.status === 'Pending').length;
     const assignedWOs = workOrders.filter(w => w.assignedTo === currentUserId && w.status !== 'Completed').length;
@@ -96,6 +100,14 @@ export default function Dashboard() {
     return myTasks
       .filter((task) => isOpenTask(task) && taskDueKey(task) === todayKey)
       .sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
+  }, [myTasks]);
+
+  const dashboardCompletedTodayTasks = useMemo(() => {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    return myTasks
+      .filter((task) => isTaskCompletedToday(task, todayKey))
+      .sort((a, b) => String(b.completedAt || '').localeCompare(String(a.completedAt || '')))
+      .slice(0, 5);
   }, [myTasks]);
 
   const dashboardCalendarEvents = useMemo(() => {
@@ -240,6 +252,38 @@ export default function Dashboard() {
             showOwnerSelect={false}
             emptyText="No tasks due today."
           />
+          {dashboardCompletedTodayTasks.length > 0 && (
+            <div style={{marginTop:14, paddingTop:12, borderTop:'1px solid var(--border-subtle)'}}>
+              <div className="flex-between" style={{marginBottom:8, gap:8}}>
+                <div style={{fontSize:'var(--text-xs)', color:'var(--text-secondary)', fontWeight:700, textTransform:'uppercase', letterSpacing:0}}>
+                  Done today
+                </div>
+                <span className="badge badge-completed">{dashboardCompletedTodayTasks.length}</span>
+              </div>
+              <div style={{display:'grid', gap:8}}>
+                {dashboardCompletedTodayTasks.map((task) => (
+                  <div
+                    key={`dashboard-completed-${task.id}`}
+                    style={{
+                      display:'flex',
+                      alignItems:'center',
+                      justifyContent:'space-between',
+                      gap:10,
+                      padding:'8px 10px',
+                      border:'1px solid var(--border-subtle)',
+                      borderRadius:'var(--radius-md)',
+                      background:'var(--bg-secondary)',
+                    }}
+                  >
+                    <span style={{fontSize:'var(--text-sm)', color:'var(--text-primary)', fontWeight:650, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                      {task.title || 'Untitled task'}
+                    </span>
+                    <span className="badge badge-completed">Done</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
         <div className="card">
           <div className="card-title">Calendar</div>

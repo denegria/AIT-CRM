@@ -1,20 +1,13 @@
-export function dateKey(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
-  return date.toISOString().slice(0, 10);
-}
-
-export function taskDueKey(task) {
-  return dateKey(task?.dueAt || task?.dueDate);
-}
-
-const CLOSED_TASK_STATUSES = new Set(['completed', 'canceled']);
+import {
+  isTaskOpen,
+  taskDueKey,
+} from '../tasks/visibility.js';
 
 export function isOpenTask(task) {
-  const status = task?.taskStatus || task?.status || (task?.completed ? 'completed' : 'open');
-  return !task?.completed && !CLOSED_TASK_STATUSES.has(status);
+  return isTaskOpen(task);
 }
+
+export { taskDueKey };
 
 export function buildTaskCalendarEvents(tasks = []) {
   return tasks
