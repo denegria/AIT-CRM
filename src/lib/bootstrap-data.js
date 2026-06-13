@@ -359,6 +359,10 @@ function mapFinancials(estimateRows, paymentRows, contactLookup) {
     contactId: row.contactId || '',
     businessUnitId: row.businessUnitId || '',
     amount: Number(row.total || row.subtotal || 0),
+    paidAmount: Number(row.advancePaid || 0),
+    balanceDue: Number(row.balanceDue || 0),
+    subtotal: Number(row.subtotal || 0),
+    tax: Number(row.tax || 0),
     date: toIsoDate(row.createdAt),
     dueDate: toIsoDate(row.approvedAt || row.rejectedAt || row.createdAt),
     status: row.status || 'Pending',
@@ -367,15 +371,26 @@ function mapFinancials(estimateRows, paymentRows, contactLookup) {
 
   const receipts = paymentRows.map((row, index) => ({
     id: row.id,
-    number: `REC-${String(index + 1).padStart(3, '0')}`,
+    number: row.paymentNumber ? `REC-${String(row.paymentNumber).padStart(3, '0')}` : `REC-${String(index + 1).padStart(3, '0')}`,
     type: 'Receipt',
     client: contactLookup.get(row.contactId)?.name || '',
     contactId: row.contactId || '',
     businessUnitId: row.businessUnitId || '',
+    estimateId: row.estimateId || '',
+    workOrderId: row.workOrderId || '',
     amount: Number(row.amount || 0),
+    paidAmount: Number(row.amount || 0),
+    paymentMethod: row.paymentMethod || '',
+    checkNumber: row.checkNumber || '',
+    balanceDue: row.balanceAfter === null || row.balanceAfter === undefined ? null : Number(row.balanceAfter),
     date: toIsoDate(row.paidAt),
     status: 'Paid',
-    items: [],
+    items: [{
+      desc: 'Payment received',
+      qty: 1,
+      rate: Number(row.amount || 0),
+      amount: Number(row.amount || 0),
+    }],
   }));
 
   return [...estimates, ...receipts];

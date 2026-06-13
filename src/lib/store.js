@@ -345,6 +345,18 @@ export function CRMProvider({ children, initialData }) {
     return payload.workOrder || null;
   }, [isPostgres]);
 
+  const callPaymentsApi = useCallback(async (method, body) => {
+    if (!isPostgres) return null;
+    const response = await fetch('/api/payments', {
+      method,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || 'Payment save failed.');
+    return payload.receipt || null;
+  }, [isPostgres]);
+
   const updateContact = useCallback((id, u) => {
     if (isPostgres && !access.canWriteCrm) {
       return Promise.reject(crmWriteAccessError());
@@ -456,6 +468,36 @@ export function CRMProvider({ children, initialData }) {
   const updateFinancial = useCallback((id, u) => setFinancials(p => p.map(f => f.id===id ? {...f,...u} : f)), []);
   const addFinancial = useCallback((d) => setFinancials(p => [{id:gid('f'),...withBusinessUnitDefaults(d, effectiveBusinessUnitId)},...p]), [effectiveBusinessUnitId]);
   const deleteFinancial = useCallback((id) => setFinancials(p => p.filter(f => f.id!==id)), []);
+  const recordPayment = useCallback((d) => {
+    if (isPostgres && !access.canWriteFinancials) {
+      return Promise.reject(new Error('Insufficient financial write access.'));
+    }
+    const payload = withBusinessUnitDefaults(d, effectiveBusinessUnitId);
+    if (isPostgres && access.canWriteFinancials) {
+      return callPaymentsApi('POST', payload)
+        .then((receipt) => {
+          if (receipt) setFinancials((prev) => [receipt, ...prev]);
+          return receipt;
+        });
+    }
+    const amount = Number(payload.amount || 0);
+    const receipt = {
+      id: gid('pay'),
+      number: `REC-${String(financials.filter((row) => row.type === 'Receipt').length + 1).padStart(3, '0')}`,
+      type: 'Receipt',
+      client: payload.client || contacts.find((contact) => contact.id === payload.contactId)?.name || '',
+      amount,
+      paidAmount: amount,
+      paymentMethod: payload.paymentMethod || '',
+      checkNumber: payload.checkNumber || '',
+      date: payload.paidAt || new Date().toISOString().slice(0, 10),
+      status: 'Paid',
+      items: [{ desc: 'Payment received', qty: 1, rate: amount, amount }],
+      ...payload,
+    };
+    setFinancials((prev) => [receipt, ...prev]);
+    return Promise.resolve(receipt);
+  }, [access.canWriteFinancials, callPaymentsApi, contacts, effectiveBusinessUnitId, financials, isPostgres]);
 
   const updateTask = useCallback((id, u) => setTasks(p => p.map(t => t.id===id ? {...t,...u} : t)), []);
   const addTask = useCallback((d) => setTasks(p => [{id:gid('t'),...withBusinessUnitDefaults(d, effectiveBusinessUnitId)},...p]), [effectiveBusinessUnitId]);
@@ -492,7 +534,7 @@ export function CRMProvider({ children, initialData }) {
     scopeLabel,
     contacts: scopedContacts, allContacts: contacts, addContact, updateContact, deleteContact,
     workOrders: scopedWorkOrders, allWorkOrders: workOrders, addWorkOrder, updateWorkOrder, deleteWorkOrder,
-    financials: scopedFinancials, allFinancials: financials, addFinancial, updateFinancial, deleteFinancial,
+    financials: scopedFinancials, allFinancials: financials, addFinancial, updateFinancial, deleteFinancial, recordPayment,
     tasks: scopedTasks, allTasks: tasks, addTask, updateTask, deleteTask,
     calendarEvents: scopedCalendarEvents, allCalendarEvents: calendarEvents, addCalendarEvent, deleteCalendarEvent,
     salesLedger: scopedSalesLedger, allSalesLedger: salesLedger, addSalesEntry,

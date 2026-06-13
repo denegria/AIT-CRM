@@ -423,6 +423,41 @@ test('buildContactTimeline makes AIT Signs promoted work and financial history r
   assert.equal(payment.presentation.sourceGroupLabel, 'Workbook row 45: 2 imported records');
 });
 
+test('buildContactTimeline links manual payment activity to payment snapshot metadata', () => {
+  const timeline = buildContactTimeline({
+    activityEvents: [{
+      id: 'manual-payment-1',
+      contactId: 'contact-1',
+      workOrderId: 'work-order-1',
+      eventType: 'financial.payment_received',
+      message: 'Payment received $300.00 · Cash · Work Order AIT-WO-45 · Balance $900.00',
+      metadataJson: { paymentSnapshotId: 'payment-snapshot-manual' },
+      occurredAt: new Date('2026-06-13T12:00:00.000Z'),
+    }],
+    workOrders: [{
+      id: 'work-order-1',
+      workOrderNumber: 'AIT-WO-45',
+      title: 'Installed acrylic sign',
+      status: 'In Progress',
+      estimatedCost: '1200.00',
+    }],
+    paymentSnapshots: [{
+      id: 'payment-snapshot-manual',
+      amount: '300.00',
+      balanceAfter: '900.00',
+      paymentMethod: 'Cash',
+      workOrderId: 'work-order-1',
+    }],
+  });
+
+  const payment = timeline.find((entry) => entry.eventType === 'financial.payment_received');
+  assert.equal(payment.title, 'Payment snapshot $300');
+  assert.equal(payment.text, '$300 · Balance $900');
+  assert.equal(payment.record.kind, 'payment_snapshot');
+  assert.equal(payment.presentation.category, 'payment');
+  assert.equal(payment.presentation.provenance, null);
+});
+
 test('buildContactTimeline demotes raw imported notes behind source details', () => {
   const timeline = buildContactTimeline({
     notes: [{

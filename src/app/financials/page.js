@@ -4,7 +4,7 @@ import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
-import { generateInvoicePDF, generateEstimatePDF, generateReceiptPDF } from '@/lib/pdf';
+import { generateInvoicePDF, generateEstimatePDF, generateReceiptPDF, generateAitUsaReceiptPDF } from '@/lib/pdf';
 
 const types = ['Invoice', 'Estimate', 'Receipt'];
 const emptyForm = { number:'', type:'Invoice', client:'', contactId:'', amount:0, date:'', dueDate:'', status:'Pending', items:[{desc:'',qty:1,rate:0}] };
@@ -73,9 +73,13 @@ export default function FinancialsPage() {
   };
 
   const genPDF = (row) => {
-    if (row.type === 'Invoice') generateInvoicePDF(row);
-    else if (row.type === 'Estimate') generateEstimatePDF(row);
-    else generateReceiptPDF(row);
+    const businessUnit = accessibleBusinessUnits.find((unit) => unit.id === row.businessUnitId);
+    const contact = contacts.find((entry) => entry.id === row.contactId);
+    const context = { businessUnit, contact };
+    if (row.type === 'Invoice') generateInvoicePDF(row, context);
+    else if (row.type === 'Estimate') generateEstimatePDF(row, context);
+    else if (/ait usa|institute/i.test(businessUnit?.name || '')) generateAitUsaReceiptPDF(row, context);
+    else generateReceiptPDF(row, context);
     toast('PDF Generated');
   };
 
@@ -107,9 +111,9 @@ export default function FinancialsPage() {
       </div>
 
       <div className="card" style={{marginBottom:16}}>
-        <div className="card-title">Sample Data Notice</div>
+        <div className="card-title">Financials Notice</div>
         <p className="page-subtitle" style={{margin:0}}>
-          Financials and reporting are not v1 goals. Data on this page is sample/demo only until the post-v1 accounting phase.
+          Financial document generation is now staging-first. Imported estimates and recorded payments are live CRM records; manually-created invoices/estimates here remain lightweight until the accounting phase.
         </p>
       </div>
 
