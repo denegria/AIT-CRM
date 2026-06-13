@@ -268,6 +268,62 @@
   background: color-mix(in srgb, var(--bg-secondary) 80%, var(--bg-tertiary));
 }
 
+.completedBacklog {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.completedBacklogHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.completedTitle {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-md);
+  font-weight: 760;
+  line-height: 1.2;
+}
+
+.completedSubtitle {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+}
+
+.completedList {
+  display: grid;
+  gap: 8px;
+}
+
+.completedItem {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(220px, auto);
+  gap: 12px;
+  align-items: center;
+  padding: 11px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-left: 4px solid var(--success);
+  border-radius: var(--radius-lg);
+}
+
+.completedMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
 @media (max-width: 1120px) {
   .toolbar {
     grid-template-columns: repeat(4, minmax(130px, 1fr));
@@ -284,6 +340,14 @@
 
   .completionPanel {
     grid-template-columns: repeat(2, minmax(160px, 1fr));
+  }
+
+  .completedItem {
+    grid-template-columns: 1fr;
+  }
+
+  .completedMeta {
+    justify-content: flex-start;
   }
 
   .createGrid,

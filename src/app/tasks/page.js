@@ -17,6 +17,16 @@ import {
 } from 'lucide-react';
 import { useCRM } from '@/lib/store';
 import { lifecycleBucket } from '@/lib/contact-directory-view.js';
+import {
+  isTaskClosed,
+  isTaskCompletedToday,
+  isTaskCurrentWork,
+  isTaskDueToday,
+  isTaskOpen,
+  isTaskOverdue,
+  isTaskUpcoming,
+  taskDateKey,
+} from '@/lib/tasks/visibility.js';
 import { useToast } from '@/components/Toast';
 import s from './FollowUpQueue.module.css';
 
@@ -31,10 +41,11 @@ const TASK_TYPE_OPTIONS = [
 ];
 
 const DUE_OPTIONS = [
-  ['work', 'Open Tasks'],
+  ['work', 'Current Work'],
   ['today', 'Due Today'],
   ['overdue', 'Overdue'],
-  ['all', 'All Statuses'],
+  ['upcoming', 'Upcoming'],
+  ['all', 'All Tasks'],
 ];
 
 const STATUS_OPTIONS = [
@@ -80,14 +91,8 @@ const TASK_RECURRENCE_OPTIONS = [
   ['monthly', 'Monthly'],
 ];
 
-const OPEN_STATUSES = new Set(['open', 'in_progress', 'snoozed']);
-const CLOSED_STATUSES = new Set(['completed', 'canceled']);
-
 function dateKey(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  return date.toISOString().slice(0, 10);
+  return taskDateKey(value);
 }
 
 function todayKey() {
@@ -115,6 +120,13 @@ function formatDate(value) {
   if (key === today) return 'Today';
   const date = new Date(value);
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
+function formatTime(value) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 }
 
 function titleCase(value) {
@@ -177,22 +189,20 @@ function normalizeTask(task, contacts = []) {
   };
 }
 
-function taskMatchesDue(task, dueFilter, statusFilter = 'all') {
-  const key = dateKey(task.dueAt);
+function taskMatchesDue(task, dueFilter) {
   const today = todayKey();
-  const isClosed = CLOSED_STATUSES.has(task.status);
   if (dueFilter === 'all') return true;
-  if (dueFilter === 'work' && statusFilter !== 'all') return true;
-  if (dueFilter === 'unassigned') return !task.ownerUserId && !isClosed;
-  if (dueFilter === 'today') return !isClosed && key === today;
-  if (dueFilter === 'overdue') return !isClosed && key && key < today;
-  return !isClosed && OPEN_STATUSES.has(task.status);
+  if (dueFilter === 'unassigned') return !task.ownerUserId && isTaskOpen(task);
+  if (dueFilter === 'today') return isTaskDueToday(task, today);
+  if (dueFilter === 'overdue') return isTaskOverdue(task, today);
+  if (dueFilter === 'upcoming') return isTaskUpcoming(task, today);
+  return isTaskCurrentWork(task, today);
 }
 
 function taskBadgeClass(task) {
   if (task.status === 'completed') return 'badge-completed';
   if (task.status === 'canceled') return 'badge-lost';
-  if (dateKey(task.dueAt) && dateKey(task.dueAt) < todayKey() && !CLOSED_STATUSES.has(task.status)) return 'badge-overdue';
+  if (dateKey(task.dueAt) && dateKey(task.dueAt) < todayKey() && !isTaskClosed(task)) return 'badge-overdue';
   if (task.status === 'snoozed') return 'badge-pending';
   return 'badge-contacted';
 }
@@ -378,7 +388,7 @@ export default function FollowUpQueuePage() {
 
   const filteredTasks = useMemo(() => {
     return queueTasks
-      .filter((task) => taskMatchesDue(task, filters.due, filters.status))
+      .filter((task) => taskMatchesDue(task, filters.due))
       .filter((task) => filters.ownerUserId === 'all' || filters.ownerUserId === 'unassigned' || task.ownerUserId === (filters.ownerUserId === '__me' ? currentUser?.id : filters.ownerUserId))
       .filter((task) => filters.ownerUserId !== 'unassigned' || !task.ownerUserId)
       .filter((task) => filters.businessUnitId === 'all' || task.businessUnitId === filters.businessUnitId)
@@ -398,12 +408,29 @@ export default function FollowUpQueuePage() {
       });
   }, [currentUser?.id, filters, queueTasks]);
 
+  const completedTodayTasks = useMemo(() => {
+    return queueTasks
+      .filter((task) => isTaskCompletedToday(task, todayKey()))
+      .filter((task) => filters.ownerUserId === 'all' || filters.ownerUserId === 'unassigned' || task.ownerUserId === (filters.ownerUserId === '__me' ? currentUser?.id : filters.ownerUserId))
+      .filter((task) => filters.ownerUserId !== 'unassigned' || !task.ownerUserId)
+      .filter((task) => filters.businessUnitId === 'all' || task.businessUnitId === filters.businessUnitId)
+      .filter((task) => filters.taskType === 'all' || task.taskType === filters.taskType)
+      .filter((task) => {
+        if (filters.link === 'contact') return Boolean(task.contactId);
+        if (filters.link === 'unlinked') return !task.contactId;
+        if (filters.link === 'recurring') return Boolean(task.recurrence);
+        return true;
+      })
+      .sort((a, b) => String(b.completedAt || '').localeCompare(String(a.completedAt || '')));
+  }, [currentUser?.id, filters.businessUnitId, filters.link, filters.ownerUserId, filters.taskType, queueTasks]);
+
   const stats = useMemo(() => {
-    const open = queueTasks.filter((task) => OPEN_STATUSES.has(task.status)).length;
-    const dueToday = queueTasks.filter((task) => taskMatchesDue(task, 'today')).length;
-    const overdue = queueTasks.filter((task) => taskMatchesDue(task, 'overdue')).length;
-    const unassigned = queueTasks.filter((task) => taskMatchesDue(task, 'unassigned')).length;
-    return { open, dueToday, overdue, unassigned };
+    const today = todayKey();
+    const currentWork = queueTasks.filter((task) => isTaskCurrentWork(task, today)).length;
+    const dueToday = queueTasks.filter((task) => isTaskDueToday(task, today)).length;
+    const overdue = queueTasks.filter((task) => isTaskOverdue(task, today)).length;
+    const completedToday = queueTasks.filter((task) => isTaskCompletedToday(task, today)).length;
+    return { currentWork, dueToday, overdue, completedToday };
   }, [queueTasks]);
 
   async function applyTaskAction(task, action, payload = {}) {
@@ -777,7 +804,9 @@ export default function FollowUpQueuePage() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Tasks</h1>
-          <p className="page-subtitle">{currentBusinessUnit?.name || `All ${scopeLabel}`} · {filteredTasks.length} visible tasks</p>
+          <p className="page-subtitle">
+            {currentBusinessUnit?.name || `All ${scopeLabel}`} · {filteredTasks.length} current · {completedTodayTasks.length} done today
+          </p>
         </div>
         <div className="flex-gap">
           <button className="btn btn-sm btn-primary" onClick={() => openCreatePanel()} disabled={!access.canWriteCrm}>
@@ -888,10 +917,10 @@ export default function FollowUpQueuePage() {
       )}
 
       <div className={s.summaryGrid}>
-        <div className={s.summaryTile}><span className={s.summaryValue}>{stats.open}</span><span className={s.summaryLabel}>Open Tasks</span></div>
+        <div className={s.summaryTile}><span className={s.summaryValue}>{stats.currentWork}</span><span className={s.summaryLabel}>Current Work</span></div>
         <div className={s.summaryTile}><span className={s.summaryValue}>{stats.dueToday}</span><span className={s.summaryLabel}>Due Today</span></div>
         <div className={s.summaryTile}><span className={s.summaryValue}>{stats.overdue}</span><span className={s.summaryLabel}>Overdue</span></div>
-        <div className={s.summaryTile}><span className={s.summaryValue}>{stats.unassigned}</span><span className={s.summaryLabel}>Unassigned</span></div>
+        <div className={s.summaryTile}><span className={s.summaryValue}>{stats.completedToday}</span><span className={s.summaryLabel}>Done Today</span></div>
       </div>
 
       <div className="card">
@@ -961,8 +990,8 @@ export default function FollowUpQueuePage() {
         <div className={s.queueShell}>
           {filteredTasks.map((task) => {
             const key = dateKey(task.dueAt);
-            const isOverdue = key && key < todayKey() && !CLOSED_STATUSES.has(task.status);
-            const isToday = key === todayKey() && !CLOSED_STATUSES.has(task.status);
+            const isOverdue = key && key < todayKey() && !isTaskClosed(task);
+            const isToday = key === todayKey() && !isTaskClosed(task);
             const assignee = visibleAssignees.find((user) => user.id === task.ownerUserId);
             const draft = followUpDraft(task.id, task);
             const showFollowUpCompletion = completionTaskId === task.id && task.taskType === 'follow_up';
@@ -1025,7 +1054,7 @@ export default function FollowUpQueuePage() {
                   <button
                     className={`btn btn-sm ${s.iconButton}`}
                     data-tooltip="Snooze one day"
-                    disabled={!access.canWriteCrm || busyTaskId === task.id || CLOSED_STATUSES.has(task.status)}
+                    disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task)}
                     onClick={() => applyTaskAction(task, 'snooze', { snoozedUntil: addDays(1) })}
                     aria-label="Snooze one day"
                   >
@@ -1034,7 +1063,7 @@ export default function FollowUpQueuePage() {
                   {task.taskType === 'follow_up' ? (
                     <button
                       className="btn btn-sm btn-primary"
-                      disabled={!access.canWriteCrm || busyTaskId === task.id || CLOSED_STATUSES.has(task.status)}
+                      disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task)}
                       onClick={() => setCompletionTaskId((current) => (current === task.id ? '' : task.id))}
                     >
                       <CheckCircle2 size={14} />
@@ -1043,7 +1072,7 @@ export default function FollowUpQueuePage() {
                   ) : (
                     <button
                       className="btn btn-sm btn-primary"
-                      disabled={!access.canWriteCrm || busyTaskId === task.id || CLOSED_STATUSES.has(task.status)}
+                      disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task)}
                       onClick={() => applyTaskAction(task, 'complete')}
                     >
                       <CheckCircle2 size={14} />
@@ -1183,6 +1212,41 @@ export default function FollowUpQueuePage() {
             );
           })}
         </div>
+
+        {completedTodayTasks.length > 0 && (
+          <section className={s.completedBacklog} aria-label="Completed tasks today">
+            <div className={s.completedBacklogHeader}>
+              <div>
+                <h2 className={s.completedTitle}>Done today</h2>
+                <p className={s.completedSubtitle}>Completed tasks stay here for review without cluttering current work.</p>
+              </div>
+              <span className="badge badge-completed">{completedTodayTasks.length}</span>
+            </div>
+            <div className={s.completedList}>
+              {completedTodayTasks.map((task) => {
+                const assignee = visibleAssignees.find((user) => user.id === task.ownerUserId);
+                return (
+                  <article key={`completed-${task.id}`} className={s.completedItem}>
+                    <div>
+                      <div className={s.taskTitle}>{task.title}</div>
+                      <div className={s.metaLine}>
+                        <span className="badge badge-completed">Completed</span>
+                        <span className={`badge badge-${task.priority}`}>{titleCase(task.priority)}</span>
+                        <span className="badge badge-draft">{titleCase(task.taskType)}</span>
+                        {task.recurrence && <span className="badge badge-pending">{recurrenceLabel(task.recurrence)}</span>}
+                      </div>
+                    </div>
+                    <div className={s.completedMeta}>
+                      <span>{formatTime(task.completedAt) || 'Completed today'}</span>
+                      <span>{assignee?.name || assignee?.email || 'Unassigned'}</span>
+                      <span>{task.contactName || 'No contact linked'}</span>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );
