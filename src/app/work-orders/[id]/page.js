@@ -14,10 +14,6 @@ function badgeKey(value) {
   return String(value || '').toLowerCase().replace(/\s+/g, '');
 }
 
-function money(value) {
-  return Number(value || 0).toLocaleString();
-}
-
 export default function WorkOrderDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -136,7 +132,7 @@ export default function WorkOrderDetailPage() {
             </div>
             <div className={s.infoItem}>
               <span className={s.infoLabel}>Cost</span>
-              <span>$${money(workOrder.estimatedCost)}</span>
+              <span>{formatAitSignsMoney(workOrder.estimatedCost, '$0.00')}</span>
             </div>
             <div className={s.infoItem}>
               <span className={s.infoLabel}>{scopeLabel}</span>
@@ -184,7 +180,7 @@ export default function WorkOrderDetailPage() {
                   </div>
                   <div className={s.detailItem}>
                     <div className={s.detailLabel}>Estimated cost</div>
-                    <div className={s.detailValue}>$${money(workOrder.estimatedCost)}</div>
+                    <div className={s.detailValue}>{formatAitSignsMoney(workOrder.estimatedCost, '$0.00')}</div>
                   </div>
                 </div>
                 {relatedContact && (
@@ -225,8 +221,8 @@ export default function WorkOrderDetailPage() {
                     <div className={s.documentTitleBlock}>
                       <div className={s.documentTitle}>{documentPreview.title}</div>
                       <div className={s.documentNumberBox}>
-                        <div><span>Estimate #</span><strong>{documentPreview.number}</strong></div>
-                        <div><span>Date</span><strong>{documentPreview.dateDisplay}</strong></div>
+                        <div><span>{documentPreview.numberLabel}</span><strong>{documentPreview.number}</strong></div>
+                        <div><span>{documentPreview.dateLabel}</span><strong>{documentPreview.dateDisplay}</strong></div>
                       </div>
                     </div>
                   </header>
@@ -263,6 +259,7 @@ export default function WorkOrderDetailPage() {
                       <div><span>Status</span><strong>{documentPreview.status}</strong></div>
                       <div><span>{scopeLabel}</span><strong>{documentPreview.division}</strong></div>
                       <div><span>Assigned</span><strong>{documentPreview.assignedName}</strong></div>
+                      <div><span>Due</span><strong>{documentPreview.dueDateDisplay}</strong></div>
                     </div>
                   </div>
 
@@ -291,8 +288,15 @@ export default function WorkOrderDetailPage() {
                   <div className={s.documentTotals}>
                     <div><span>Subtotal</span><strong>{documentPreview.amounts.subtotalDisplay}</strong></div>
                     <div><span>Tax ({documentPreview.amounts.taxRateLabel})</span><strong>{documentPreview.amounts.taxDisplay}</strong></div>
+                    <div><span>Paid / Deposit</span><strong>{documentPreview.amounts.paidAmountDisplay}</strong></div>
+                    <div><span>Balance Due</span><strong>{documentPreview.amounts.balanceDueDisplay}</strong></div>
                     <div className={s.documentTotalFinal}><span>Total</span><strong>{documentPreview.amounts.totalDisplay}</strong></div>
                   </div>
+
+                  <section className={s.documentTerms}>
+                    <strong>{documentPreview.termsTitle}</strong>
+                    <span>{documentPreview.terms}</span>
+                  </section>
 
                   <footer className={s.documentFooter}>
                     <strong>Thank You for Your Business</strong>

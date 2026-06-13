@@ -28,6 +28,9 @@ test('AIT Signs document maps the attached paper estimate fields', () => {
   assert.equal(document.company.name, 'AIT SIGNS PRINTING');
   assert.equal(document.company.tagline, 'WEB PAGE & DIGITAL ADS');
   assert.equal(document.title, 'Estimate');
+  assert.equal(document.documentType, 'estimate');
+  assert.equal(document.numberLabel, 'Estimate #');
+  assert.equal(document.dateLabel, 'Estimate Date');
   assert.equal(document.number, '2026-079');
   assert.equal(document.dateDisplay, '5/19/2026');
   assert.equal(document.customerName, 'XTREEM KLEEN');
@@ -39,8 +42,11 @@ test('AIT Signs document maps the attached paper estimate fields', () => {
   assert.equal(document.amounts.subtotalDisplay, '$3,500.00');
   assert.equal(document.amounts.taxDisplay, '$231.88');
   assert.equal(document.amounts.totalDisplay, '$3,731.88');
+  assert.equal(document.amounts.paidAmountDisplay, '$0.00');
+  assert.equal(document.amounts.balanceDueDisplay, '$3,731.88');
   assert.equal(document.services.length, 5);
   assert.match(document.footerNote, /Printing guarantee/);
+  assert.match(document.terms, /valid for 30 days/i);
 });
 
 test('AIT Signs document estimates tax when only subtotal-like cost is present', () => {
@@ -56,6 +62,59 @@ test('AIT Signs document estimates tax when only subtotal-like cost is present',
   assert.equal(document.amounts.subtotalDisplay, '$3,500.00');
   assert.equal(document.amounts.taxDisplay, '$231.88');
   assert.equal(document.amounts.totalDisplay, '$3,731.88');
+});
+
+test('AIT Signs document uses invoice labels and partial payment balance fields', () => {
+  const document = buildAitSignsDocument({
+    type: 'Invoice',
+    invoiceNumber: 'INV-2026-011',
+    date: '2026-06-13',
+    client: 'XTREEM KLEEN',
+    description: 'Exterior sign install',
+    subtotal: 1200,
+    tax: 79.5,
+    total: 1279.5,
+    paidAmount: 500,
+    paymentMethod: 'Card',
+    dueDate: '2026-06-20',
+  });
+
+  assert.equal(document.documentType, 'invoice');
+  assert.equal(document.title, 'Invoice');
+  assert.equal(document.numberLabel, 'Invoice #');
+  assert.equal(document.dateLabel, 'Invoice Date');
+  assert.equal(document.amounts.paidAmountDisplay, '$500.00');
+  assert.equal(document.amounts.balanceDueDisplay, '$779.50');
+  assert.equal(document.paymentMethod, 'Card');
+  assert.match(document.terms, /partial payments/i);
+});
+
+test('AIT Signs document uses receipt and work order wording separately', () => {
+  const receipt = buildAitSignsDocument({
+    type: 'Receipt',
+    number: 'REC-2026-004',
+    client: 'XTREEM KLEEN',
+    amount: 250,
+    paymentMethod: 'Cash',
+  });
+  const workOrder = buildAitSignsDocument({
+    type: 'Work Order',
+    workOrderNumber: 'WO-2026-044',
+    client: 'XTREEM KLEEN',
+    estimatedCost: 900,
+  });
+
+  assert.equal(receipt.documentType, 'receipt');
+  assert.equal(receipt.title, 'Receipt');
+  assert.equal(receipt.numberLabel, 'Receipt #');
+  assert.equal(receipt.amounts.paidAmountDisplay, '$250.00');
+  assert.equal(receipt.amounts.balanceDueDisplay, '$0.00');
+  assert.match(receipt.terms, /confirms payment received/i);
+
+  assert.equal(workOrder.documentType, 'workOrder');
+  assert.equal(workOrder.title, 'Work Order');
+  assert.equal(workOrder.numberLabel, 'Work Order #');
+  assert.match(workOrder.terms, /internal production/i);
 });
 
 test('AIT Signs document breaks imported workbook descriptions into item lines', () => {
