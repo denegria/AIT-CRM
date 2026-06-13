@@ -85,6 +85,10 @@ export function useContactWorkflowView({
     () => new Map((accessibleBusinessUnits || []).map((unit) => [unit.id, unit])),
     [accessibleBusinessUnits],
   );
+  const employeeById = useMemo(
+    () => new Map((employees || []).map((employee) => [employee.id, employee])),
+    [employees],
+  );
 
   const contactCountByBusinessUnitId = useMemo(() => {
     const counts = new Map();
@@ -193,15 +197,19 @@ export function useContactWorkflowView({
     };
   }), [businessUnitById, contacts, financialsByContactId, workOrdersByContactId]);
 
-  const contactRows = useMemo(() => contactsWithWorkflow.map((contact) => ({
-    ...contact,
-    originalAssignedTo: contact.assignedTo || '',
-    assignedTo: '',
-    assignedLabel: 'Unassigned',
-    divisionLabel:
-      accessibleBusinessUnits.find((unit) => unit.id === (contact.businessUnitId || contact.primaryBusinessUnitId))?.name ||
-      'Unassigned',
-  })), [contactsWithWorkflow, accessibleBusinessUnits]);
+  const contactRows = useMemo(() => contactsWithWorkflow.map((contact) => {
+    const assignedTo = contact.assignedTo || '';
+    const employee = employeeById.get(assignedTo);
+    return {
+      ...contact,
+      originalAssignedTo: assignedTo,
+      assignedTo,
+      assignedLabel: employee?.name || employee?.email || (assignedTo ? 'Assigned user' : 'Unassigned'),
+      divisionLabel:
+        accessibleBusinessUnits.find((unit) => unit.id === (contact.businessUnitId || contact.primaryBusinessUnitId))?.name ||
+        'Unassigned',
+    };
+  }), [contactsWithWorkflow, accessibleBusinessUnits, employeeById]);
 
   const workflowStats = useMemo(() => ({
     needsFirstOutreach: contactsWithWorkflow.filter((contact) => contact.needsFirstOutreach).length,

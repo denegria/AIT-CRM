@@ -14,6 +14,8 @@ import {
   activityEvents as activityEventsTable,
   tasks as tasksTable,
   leads as leadsTable,
+  users as usersTable,
+  businessUnitMemberships as businessUnitMembershipsTable,
   importBatches as importBatchesTable,
   importSourceRows as importSourceRowsTable,
   importNormalizedRecords as importNormalizedRecordsTable,
@@ -56,6 +58,38 @@ function rowsByContactId(rows = []) {
     lookup.set(row.contactId, list);
   }
   return lookup;
+}
+
+function submittedAtForLead(contactEvents = [], lead = null) {
+  const leadEvents = contactEvents
+    .filter((event) => {
+      const eventType = clean(event.eventType).toLowerCase();
+      if (eventType !== 'website_lead_captured') return false;
+      return !lead?.id || !event.leadId || event.leadId === lead.id;
+    })
+    .map((event) => event.occurredAt || event.createdAt)
+    .filter(Boolean)
+    .sort((left, right) => new Date(left).getTime() - new Date(right).getTime());
+  const submittedAt = leadEvents[0];
+  return submittedAt?.toISOString?.() || submittedAt || '';
+}
+
+function mapEmployees(userRows = [], membershipRows = []) {
+  const membershipsByUserId = new Map();
+  for (const membership of membershipRows) {
+    if (!membership.userId || !membership.businessUnitId) continue;
+    const list = membershipsByUserId.get(membership.userId) || [];
+    list.push(membership.businessUnitId);
+    membershipsByUserId.set(membership.userId, list);
+  }
+
+  return userRows.map((user) => ({
+    id: user.id,
+    name: user.name || user.email || 'Unnamed User',
+    email: user.email || '',
+    phone: user.phone || '',
+    businessUnitIds: membershipsByUserId.get(user.id) || [],
+  }));
 }
 
 function mapContacts(
@@ -113,6 +147,7 @@ function mapContacts(
     });
     const contactNotes = filterTimelineRowsForBusinessUnit(notesByContactId.get(contact.id) || [], businessUnitIds);
     const contactEvents = filterTimelineRowsForBusinessUnit(eventsByContactId.get(contact.id) || [], businessUnitIds);
+    const submittedAt = submittedAtForLead(contactEvents, lead);
     const contactConversationMessages = filterTimelineRowsForBusinessUnit(
       conversationMessagesByContactId.get(contact.id) || [],
       businessUnitIds,
@@ -192,6 +227,7 @@ function mapContacts(
       source,
       sourceLabel: contact.sourceLabel || '',
       assignedTo: lead?.assignedUserId || '',
+      submittedAt,
       contactCreatedAt: contact.createdAt?.toISOString?.() || contact.createdAt || '',
       leadCreatedAt: lead?.createdAt?.toISOString?.() || lead?.createdAt || '',
       createdAt: lead?.createdAt?.toISOString?.() || contact.createdAt?.toISOString?.() || lead?.createdAt || contact.createdAt || '',
@@ -231,7 +267,7 @@ function mapWorkOrders(rows, contactLookup) {
     businessUnitId: row.businessUnitId || '',
     priority: row.priority || 'Medium',
     status: row.status || 'Pending',
-    assignedTo: row.assignedUserId || seedData.EMPLOYEES[index % seedData.EMPLOYEES.length].id,
+    assignedTo: row.assignedUserId || '',
     dueDate: toIsoDate(row.deliveryDate),
     description: row.description || '',
     estimatedCost: Number(row.estimatedCost || 0),
@@ -404,6 +440,7 @@ function emptyDbData(businessUnitRows = [], importStaging = null) {
     currentUser: null,
     access: authData().access,
     businessUnits: businessUnitRows.length ? businessUnitRows.map(toBootstrapBusinessUnitPayload) : (seedData.businessUnits || []),
+    employees: [],
     contacts: [],
     workOrders: [],
     financials: [],
@@ -470,6 +507,8 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       conversationMessageRows,
       contactPeopleRows,
       taskRows,
+      userRows,
+      membershipRows,
       importStaging,
     ] = await Promise.all([
       db.select().from(businessUnitsTable).where(scopedOrgWhere(businessUnitsTable, session)).orderBy(asc(businessUnitsTable.name)),
@@ -483,14 +522,21 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       db.select().from(conversationMessagesTable).where(scopedOrgWhere(conversationMessagesTable, session)).orderBy(desc(conversationMessagesTable.occurredAt)),
       db.select().from(contactPeopleTable).where(scopedOrgWhere(contactPeopleTable, session)).orderBy(desc(contactPeopleTable.isPrimary), asc(contactPeopleTable.name)),
       db.select().from(tasksTable).where(scopedBusinessUnitWhere(tasksTable, session)).orderBy(asc(tasksTable.dueAt), desc(tasksTable.createdAt)),
+      db.select().from(usersTable).where(and(
+        eq(usersTable.organizationId, session.user.organizationId),
+        eq(usersTable.isActive, true),
+      )).orderBy(asc(usersTable.name), asc(usersTable.email)),
+      db.select().from(businessUnitMembershipsTable),
       access.canReadImportReview ? getImportStagingSummary(db) : Promise.resolve(null),
     ]);
+    const employees = mapEmployees(userRows, membershipRows);
 
     if (!contactRows.length && !taskRows.length) {
       return {
         ...emptyDbData(businessUnitRows, importStaging),
         currentUser: session.user,
         access,
+        employees,
       };
     }
 
@@ -525,6 +571,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       currentUser: session.user,
       access,
       businessUnits: businessUnitRows.map(toBootstrapBusinessUnitPayload),
+      employees,
       contacts,
       workOrders,
       financials,

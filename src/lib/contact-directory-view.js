@@ -97,8 +97,8 @@ export function clientDirectoryColumnMode({ isClientsMode = false, workflowKey =
 }
 
 export function leadDateForDirectoryScope(row = {}) {
-  return clean(row.leadCreatedAt) ||
-    clean(row.submittedAt) ||
+  return clean(row.submittedAt) ||
+    clean(row.leadCreatedAt) ||
     clean(row.contactCreatedAt) ||
     clean(row.createdAt);
 }

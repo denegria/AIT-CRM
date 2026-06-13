@@ -41,6 +41,12 @@ function toContactPayload(row, lead = null, noteRows = [], businessUnit = null, 
     notes: noteRows,
     activityEvents: activityEventRows,
   });
+  const submittedAt = activityEventRows
+    .filter((event) => String(event.eventType || '').toLowerCase() === 'website_lead_captured')
+    .filter((event) => !lead?.id || !event.leadId || event.leadId === lead.id)
+    .map((event) => event.occurredAt || event.createdAt)
+    .filter(Boolean)
+    .sort((left, right) => new Date(left).getTime() - new Date(right).getTime())[0];
   return {
     id: row.id,
     name: row.name,
@@ -62,6 +68,7 @@ function toContactPayload(row, lead = null, noteRows = [], businessUnit = null, 
     needsFirstOutreach: workflow.needsFirstOutreach,
     source: lead?.sourceName || row.sourceLabel || '',
     assignedTo: lead?.assignedUserId || '',
+    submittedAt: submittedAt?.toISOString?.() || submittedAt || '',
     contactCreatedAt: row.createdAt?.toISOString?.() || row.createdAt || '',
     leadCreatedAt: lead?.createdAt?.toISOString?.() || lead?.createdAt || '',
     createdAt: lead?.createdAt?.toISOString?.() || row.createdAt?.toISOString?.() || lead?.createdAt || row.createdAt || '',

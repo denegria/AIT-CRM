@@ -65,6 +65,7 @@ function getInitialData(seedData = defaults) {
     access: fallback.access || {},
     importStaging: fallback.importStaging || null,
     businessUnits: fallback.businessUnits || [],
+    employees: fallback.employees || defaults.EMPLOYEES || [],
     contacts: fallback.contacts,
     workOrders: fallback.workOrders,
     financials: fallback.financials,
@@ -154,6 +155,7 @@ export function CRMProvider({ children, initialData }) {
   const [access] = useState(bootstrapData.access || {});
   const [importStaging] = useState(bootstrapData.importStaging);
   const [businessUnits, setBusinessUnits] = useState(bootstrapData.businessUnits);
+  const [employees] = useState(bootstrapData.employees);
   const [contacts, setContacts] = useState(bootstrapData.contacts);
   const [workOrders, setWorkOrders] = useState(bootstrapData.workOrders);
   const [financials, setFinancials] = useState(bootstrapData.financials);
@@ -494,7 +496,9 @@ export function CRMProvider({ children, initialData }) {
     tasks: scopedTasks, allTasks: tasks, addTask, updateTask, deleteTask,
     calendarEvents: scopedCalendarEvents, allCalendarEvents: calendarEvents, addCalendarEvent, deleteCalendarEvent,
     salesLedger: scopedSalesLedger, allSalesLedger: salesLedger, addSalesEntry,
-    employees: defaults.EMPLOYEES, statuses: defaults.STATUSES, sources: defaults.SOURCES,
+    employees: isPostgres ? employees : defaults.EMPLOYEES,
+    statuses: defaults.STATUSES,
+    sources: defaults.SOURCES,
     resetData,
   };
 

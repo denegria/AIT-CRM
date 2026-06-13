@@ -262,6 +262,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     updateContact,
     loaded,
     sources,
+    employees,
     access,
     dataSource,
     businessUnits,
@@ -285,6 +286,14 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     blockedReasons: [],
     error: '',
   });
+  const ownerOptions = useMemo(() => {
+    return (employees || [])
+      .filter((employee) => employee?.id)
+      .map((employee) => ({
+        id: employee.id,
+        label: employee.name || employee.email || 'Unnamed User',
+      }));
+  }, [employees]);
   const [noteInput, setNoteInput] = useState('');
   const [noteMode, setNoteMode] = useState('note');
   const [statusUpdating, setStatusUpdating] = useState(false);
@@ -508,7 +517,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
   const openEditModal = () => {
     if (!access.canWriteCrm) return;
-    setEditForm({ ...contact, assignedTo: '' });
+    setEditForm({ ...contact, assignedTo: contact?.assignedTo || '' });
     setIsEditModalOpen(true);
   };
 
@@ -1275,8 +1284,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           </div>
           <div className="form-group">
             <label className="form-label">Assigned To</label>
-            <select className="input select" value="" onChange={() => setEditForm({...editForm, assignedTo: ''})}>
+            <select className="input select" value={editForm.assignedTo || ''} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
               <option value="">Unassigned</option>
+              {ownerOptions.map((owner) => (
+                <option key={owner.id} value={owner.id}>{owner.label}</option>
+              ))}
             </select>
           </div>
         </Modal>

@@ -93,11 +93,13 @@ test('lead date scope uses lead dates and keeps current plus previous year', () 
   const now = new Date('2026-06-13T00:00:00.000Z');
 
   assert.equal(leadDateForDirectoryScope({
+    submittedAt: '2024-04-01T12:00:00.000Z',
     leadCreatedAt: '2026-05-01T12:00:00.000Z',
     contactCreatedAt: '2024-01-01T12:00:00.000Z',
-  }), '2026-05-01T12:00:00.000Z');
+  }), '2024-04-01T12:00:00.000Z');
   assert.equal(isCurrentLeadDateScope({ leadCreatedAt: '2026-01-01T00:00:00.000Z' }, now), true);
   assert.equal(isCurrentLeadDateScope({ leadCreatedAt: '2025-12-31T23:00:00.000Z' }, now), true);
   assert.equal(isCurrentLeadDateScope({ leadCreatedAt: '2024-12-31T23:00:00.000Z' }, now), false);
+  assert.equal(isCurrentLeadDateScope({ submittedAt: '2024-12-31T23:00:00.000Z', leadCreatedAt: '2026-01-01T00:00:00.000Z' }, now), false);
   assert.equal(isCurrentLeadDateScope({ leadCreatedAt: '' }, now), true);
 });

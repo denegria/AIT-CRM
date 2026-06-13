@@ -255,7 +255,7 @@ export default function FollowUpQueuePage() {
     const mappedEmployees = (employees || []).map((employee) => ({
       id: employee.id,
       name: employee.name,
-      email: '',
+      email: employee.email || '',
     }));
     if (!currentUser?.id || mappedEmployees.some((employee) => employee.id === currentUser.id)) {
       return mappedEmployees;
