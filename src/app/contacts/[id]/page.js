@@ -16,6 +16,7 @@ import {
 import { PIPELINE_STATUSES, workflowForBusinessUnit } from '@/lib/sales-workflow';
 import { buildContactDetailViewModel } from '@/lib/contact-detail-view-model';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
+import { schoolLocationOptions } from '@/lib/school-locations';
 
 const SNAPSHOT_ICONS = {
   estimate: BriefcaseBusiness,
@@ -298,6 +299,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [noteMode, setNoteMode] = useState('note');
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editForm, setEditForm] = useState(null);
 
   const contactSource = isClientMode ? (allContacts || contacts) : contacts;
   const workOrderSource = isClientMode ? (allWorkOrders || workOrders) : workOrders;
@@ -324,6 +326,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     counts: contactRecordCounts,
   });
   const showLinkedPeoplePanel = isClientMode && detailView.workflowKey === WORKFLOW_KEYS.AIT_SIGNS;
+  const showSchoolLocationField = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA;
+  const editSchoolLocationOptions = schoolLocationOptions(editForm?.address);
   const showWorkOrdersTab = detailView.tabs.showWorkOrders;
   const showFinancialsTab = detailView.tabs.showFinancials;
   const renderedActiveTab =
@@ -511,9 +515,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const channelTemplates = useMemo(() => messageTemplates.filter((template) => (
     template.channel === manualSend.channel || template.channel === 'all'
   )), [messageTemplates, manualSend.channel]);
-
-  // For Edit Modal
-  const [editForm, setEditForm] = useState(null);
 
   const openEditModal = () => {
     if (!access.canWriteCrm) return;
@@ -1282,6 +1283,22 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               {[...new Set([...(contactStatusOptions || PIPELINE_STATUSES), ...(editForm.status ? [editForm.status] : [])])].map(st => <option key={st} value={st}>{st}</option>)}
             </select>
           </div>
+          {showSchoolLocationField ? (
+            <div className="form-group">
+              <label className="form-label">School Location</label>
+              <select className="input select" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})}>
+                <option value="">Select school location</option>
+                {editSchoolLocationOptions.map((location) => (
+                  <option key={location} value={location}>{location}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <div className="form-group">
+              <label className="form-label">Address</label>
+              <input className="input" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})} />
+            </div>
+          )}
           <div className="form-group">
             <label className="form-label">Assigned To</label>
             <select className="input select" value={editForm.assignedTo || ''} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
