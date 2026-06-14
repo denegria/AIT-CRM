@@ -17,6 +17,7 @@ export default function FinancialsPage() {
     deleteFinancial,
     contacts,
     loaded,
+    role,
     access,
     accessibleBusinessUnits,
     currentBusinessUnitId,
@@ -29,6 +30,7 @@ export default function FinancialsPage() {
   const [drawer, setDrawer] = useState(null);
   const [form, setForm] = useState(emptyForm);
   const canWriteFinancials = Boolean(access?.canWriteFinancials);
+  const canUseFinancialsWorkspace = Boolean(access?.canReadSettings || access?.canReadReports || role === 'admin');
 
   const [selectedIds, setSelectedIds] = useState([]);
 
@@ -57,19 +59,23 @@ export default function FinancialsPage() {
   };
   const openEdit = (row) => { if (!canWriteFinancials) return; setForm({ ...row }); setDrawer(row); };
   const close = () => setDrawer(null);
-  const save = () => {
+  const save = async () => {
     if (!canWriteFinancials) return;
     if (!form.client.trim()) return;
     const total = form.items.reduce((s, it) => s + (it.qty||1)*(it.rate||0), 0);
     const data = { ...form, amount: total };
-    if (drawer === 'new') {
-      addFinancial(data);
-      toast(`${tab} created`);
-    } else {
-      updateFinancial(drawer.id, data);
-      toast(`${tab} updated`);
+    try {
+      if (drawer === 'new') {
+        await addFinancial(data);
+        toast(`${tab} created`);
+      } else {
+        updateFinancial(drawer.id, data);
+        toast(`${tab} updated`);
+      }
+      close();
+    } catch (error) {
+      toast(error.message || `${tab} save failed`, 'error');
     }
-    close();
   };
 
   const genPDF = (row) => {
@@ -99,13 +105,20 @@ export default function FinancialsPage() {
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
   if (!access.canReadFinancials) return <div className="empty-state">Financials access is required.</div>;
+  if (!canUseFinancialsWorkspace) {
+    return (
+      <div className="empty-state">
+        Employee financial actions live inside each contact/client record. Open a client to create estimates, download invoices, and record payments.
+      </div>
+    );
+  }
 
   return (
     <div className="fade-in">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Financials</h1>
-          <p className="page-subtitle">Manage estimates, invoices, and receipts for {currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}</p>
+          <h1 className="page-title">Finance Workspace</h1>
+          <p className="page-subtitle">Admin oversight for saved estimates, imported financial history, and recorded payment receipts across {currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}.</p>
         </div>
         {canWriteFinancials && <button className="btn btn-primary" onClick={openNew}>+ New {tab}</button>}
       </div>
@@ -113,7 +126,7 @@ export default function FinancialsPage() {
       <div className="card" style={{marginBottom:16}}>
         <div className="card-title">Financials Notice</div>
         <p className="page-subtitle" style={{margin:0}}>
-          PDF generation is available for estimates, invoices, and receipts. Imported estimates and recorded payments are saved CRM records; manually-created invoices and estimates here are draft documents until the accounting persistence slice.
+          Employees create customer-facing financial documents from contact/client records. This workspace is for admin review, export, and correction of saved financial records.
         </p>
       </div>
 

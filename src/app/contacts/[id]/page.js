@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
+import { generateInvoicePDF, generateEstimatePDF, generateReceiptPDF, generateAitUsaReceiptPDF } from '@/lib/pdf';
 import s from './ContactDetail.module.css';
 import {
   AlertCircle, ArrowLeft, ArrowRight, Mail, Phone, MapPin, Calendar,
@@ -36,6 +37,28 @@ const emptyPersonForm = {
   email: '',
   notes: '',
   isPrimary: false,
+};
+
+const emptyEstimateForm = {
+  number: '',
+  type: 'Estimate',
+  client: '',
+  contactId: '',
+  businessUnitId: '',
+  date: '',
+  dueDate: '',
+  status: 'Pending',
+  paidAmount: 0,
+  items: [{ desc: '', qty: 1, rate: 0 }],
+};
+
+const emptyPaymentForm = {
+  workOrderId: '',
+  amount: '',
+  paymentMethod: 'Cash',
+  paidAt: '',
+  checkNumber: '',
+  note: '',
 };
 
 function newManualSendRequestId() {
@@ -239,6 +262,19 @@ function phoneHref(value = '') {
   return digits ? `tel:${digits}` : '';
 }
 
+function moneyValue(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? number : 0;
+}
+
+function moneyLabel(value) {
+  return moneyValue(value).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function todayDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function nextWorkflowStatus(currentStatus = '', statuses = []) {
   const uniqueStatuses = [...new Set((statuses || []).filter(Boolean))];
   const currentIndex = uniqueStatuses.findIndex((status) => status === currentStatus);
@@ -261,6 +297,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     financials,
     allFinancials,
     updateContact,
+    addFinancial,
+    recordPayment,
     loaded,
     sources,
     employees,
@@ -300,6 +338,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState(null);
+  const [estimateModalOpen, setEstimateModalOpen] = useState(false);
+  const [estimateForm, setEstimateForm] = useState(emptyEstimateForm);
+  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
+  const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
 
   const contactSource = isClientMode ? (allContacts || contacts) : contacts;
   const workOrderSource = isClientMode ? (allWorkOrders || workOrders) : workOrders;
@@ -307,6 +349,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const contact = useMemo(() => contactSource.find(c => c.id === params.id), [contactSource, params.id]);
   const contactWorkOrders = useMemo(() => workOrderSource.filter(wo => wo.contactId === params.id), [workOrderSource, params.id]);
   const contactFinancials = useMemo(() => financialSource.filter(f => f.contactId === params.id), [financialSource, params.id]);
+  const latestWorkOrder = contactWorkOrders[0] || null;
   const contactFinancialCounts = useMemo(() => contactFinancials.reduce((counts, record) => {
     const category = financialCategory(record);
     counts[category] = (counts[category] || 0) + 1;
@@ -318,6 +361,19 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     payment: contactFinancialCounts.payment || 0,
   }), [contactFinancialCounts, contactWorkOrders.length]);
   const contactBusinessUnit = businessUnits.find((unit) => unit.id === contact?.businessUnitId || unit.id === contact?.primaryBusinessUnitId);
+  const financialContext = useMemo(() => ({ contact, businessUnit: contactBusinessUnit }), [contact, contactBusinessUnit]);
+  const estimateTotal = useMemo(() => estimateForm.items.reduce((sum, item) => (
+    sum + moneyValue(item.qty || 1) * moneyValue(item.rate)
+  ), 0), [estimateForm.items]);
+  const selectedPaymentWorkOrder = useMemo(() => (
+    contactWorkOrders.find((workOrder) => workOrder.id === paymentForm.workOrderId) || latestWorkOrder
+  ), [contactWorkOrders, latestWorkOrder, paymentForm.workOrderId]);
+  const selectedPaymentWorkOrderTotal = moneyValue(selectedPaymentWorkOrder?.estimatedCost || selectedPaymentWorkOrder?.amount);
+  const selectedPaymentWorkOrderPaid = useMemo(() => contactFinancials
+    .filter((record) => record.workOrderId && record.workOrderId === selectedPaymentWorkOrder?.id)
+    .reduce((sum, record) => sum + moneyValue(record.paidAmount || record.amount), 0), [contactFinancials, selectedPaymentWorkOrder?.id]);
+  const selectedPaymentBalance = Math.max(selectedPaymentWorkOrderTotal - selectedPaymentWorkOrderPaid, 0);
+  const balanceAfterPayment = Math.max(selectedPaymentBalance - moneyValue(paymentForm.amount), 0);
   const contactStatusOptions = workflowForBusinessUnit(contactBusinessUnit).statuses;
   const nextStatus = nextWorkflowStatus(contact?.status, contactStatusOptions);
   const detailView = buildContactDetailViewModel({
@@ -587,6 +643,175 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       .catch((error) => {
         toast(error.message || 'Profile update failed', 'error');
       });
+  };
+
+  const openEstimateModal = () => {
+    if (!contact?.id || !access.canWriteFinancials) return;
+    const baseAmount = moneyValue(latestWorkOrder?.estimatedCost || latestWorkOrder?.amount);
+    setEstimateForm({
+      ...emptyEstimateForm,
+      number: '',
+      client: contact.name || '',
+      contactId: contact.id,
+      businessUnitId: contact.primaryBusinessUnitId || contact.businessUnitId || contactBusinessUnit?.id || '',
+      date: todayDate(),
+      dueDate: '',
+      items: [{
+        desc: latestWorkOrder?.title || `${contact.name || 'Client'} estimate`,
+        qty: 1,
+        rate: baseAmount,
+      }],
+    });
+    setEstimateModalOpen(true);
+  };
+
+  const updateEstimateItem = (index, key, value) => {
+    setEstimateForm((current) => ({
+      ...current,
+      items: current.items.map((item, itemIndex) => (
+        itemIndex === index ? { ...item, [key]: value } : item
+      )),
+    }));
+  };
+
+  const addEstimateItem = () => {
+    setEstimateForm((current) => ({
+      ...current,
+      items: [...current.items, { desc: '', qty: 1, rate: 0 }],
+    }));
+  };
+
+  const removeEstimateItem = (index) => {
+    setEstimateForm((current) => ({
+      ...current,
+      items: current.items.length > 1
+        ? current.items.filter((_, itemIndex) => itemIndex !== index)
+        : current.items,
+    }));
+  };
+
+  const saveEstimate = () => {
+    if (!contact?.id || !access.canWriteFinancials) return;
+    if (estimateTotal <= 0) {
+      toast('Estimate needs at least one billable line item.', 'error');
+      return;
+    }
+    addFinancial({
+      ...estimateForm,
+      type: 'Estimate',
+      contactId: contact.id,
+      client: contact.name || estimateForm.client,
+      businessUnitId: estimateForm.businessUnitId || contact.primaryBusinessUnitId || contact.businessUnitId || '',
+      amount: estimateTotal,
+      subtotal: estimateTotal,
+      tax: 0,
+      paidAmount: moneyValue(estimateForm.paidAmount),
+      balanceDue: Math.max(estimateTotal - moneyValue(estimateForm.paidAmount), 0),
+      date: estimateForm.date || todayDate(),
+      items: estimateForm.items.map((item) => ({
+        ...item,
+        qty: moneyValue(item.qty || 1),
+        rate: moneyValue(item.rate),
+        amount: moneyValue(item.qty || 1) * moneyValue(item.rate),
+      })),
+    })
+      .then(() => {
+        setEstimateModalOpen(false);
+        setTimelineReloadKey((key) => key + 1);
+        toast('Estimate saved');
+      })
+      .catch((error) => toast(error.message || 'Estimate save failed.', 'error'));
+  };
+
+  const openPaymentModal = (workOrder = latestWorkOrder) => {
+    if (!contact?.id || !access.canWriteFinancials) return;
+    const workOrderTotal = moneyValue(workOrder?.estimatedCost || workOrder?.amount);
+    const paid = contactFinancials
+      .filter((record) => record.workOrderId && record.workOrderId === workOrder?.id)
+      .reduce((sum, record) => sum + moneyValue(record.paidAmount || record.amount), 0);
+    setPaymentForm({
+      ...emptyPaymentForm,
+      workOrderId: workOrder?.id || '',
+      amount: workOrderTotal ? String(Math.max(workOrderTotal - paid, 0)) : '',
+      paidAt: todayDate(),
+    });
+    setPaymentModalOpen(true);
+  };
+
+  const savePayment = () => {
+    if (!contact?.id || !access.canWriteFinancials) return;
+    const amount = moneyValue(paymentForm.amount);
+    if (amount <= 0) {
+      toast('Payment amount is required.', 'error');
+      return;
+    }
+    const workOrder = contactWorkOrders.find((entry) => entry.id === paymentForm.workOrderId) || null;
+    recordPayment({
+      contactId: contact.id,
+      client: contact.name || '',
+      businessUnitId: workOrder?.businessUnitId || contact.primaryBusinessUnitId || contact.businessUnitId || '',
+      workOrderId: workOrder?.id || '',
+      amount,
+      paymentMethod: paymentForm.paymentMethod,
+      paidAt: paymentForm.paidAt || todayDate(),
+      checkNumber: paymentForm.checkNumber,
+      note: paymentForm.note,
+    })
+      .then(() => {
+        setPaymentModalOpen(false);
+        setTimelineReloadKey((key) => key + 1);
+        toast('Payment recorded');
+      })
+      .catch((error) => toast(error.message || 'Payment save failed.', 'error'));
+  };
+
+  const downloadFinancialPdf = (record) => {
+    if (!record) return;
+    if (record.type === 'Estimate') generateEstimatePDF(record, financialContext);
+    else if (record.type === 'Invoice') generateInvoicePDF(record, financialContext);
+    else if (/ait usa|institute/i.test(contactBusinessUnit?.name || '')) generateAitUsaReceiptPDF(record, financialContext);
+    else generateReceiptPDF(record, financialContext);
+    toast('PDF downloaded');
+  };
+
+  const downloadInvoiceFromWorkOrder = (workOrder = latestWorkOrder) => {
+    if (!workOrder) {
+      toast('Create a work order before generating an invoice.', 'error');
+      return;
+    }
+    const amount = moneyValue(workOrder.estimatedCost || workOrder.amount);
+    const paidAmount = contactFinancials
+      .filter((record) => record.workOrderId === workOrder.id)
+      .reduce((sum, record) => sum + moneyValue(record.paidAmount || record.amount), 0);
+    const invoice = {
+      id: `invoice-${workOrder.id}`,
+      number: workOrder.number ? `INV-${workOrder.number}` : `INV-${workOrder.id}`,
+      type: 'Invoice',
+      client: contact.name || workOrder.client || '',
+      contactId: contact.id,
+      businessUnitId: workOrder.businessUnitId || contact.primaryBusinessUnitId || contact.businessUnitId || '',
+      amount,
+      paidAmount,
+      balanceDue: Math.max(amount - paidAmount, 0),
+      date: todayDate(),
+      dueDate: workOrder.dueDate || '',
+      status: amount > 0 && paidAmount >= amount ? 'Paid' : 'Pending',
+      workOrderId: workOrder.id,
+      paymentMethod: '',
+      items: [{
+        desc: workOrder.title || 'Work order',
+        qty: 1,
+        rate: amount,
+        amount,
+      }],
+    };
+    addFinancial(invoice)
+      .then((savedInvoice) => {
+        generateInvoicePDF(savedInvoice || invoice, financialContext);
+        setTimelineReloadKey((key) => key + 1);
+        toast('Invoice saved and downloaded');
+      })
+      .catch((error) => toast(error.message || 'Invoice save failed.', 'error'));
   };
 
   const moveToNextStatus = () => {
@@ -1239,6 +1464,37 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
             {renderedActiveTab === 'financials' && (
               <div className={s.recordsList}>
+                {access.canWriteFinancials && (
+                  <div
+                    className="card"
+                    style={{
+                      padding: 14,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 12,
+                      flexWrap: 'wrap',
+                    }}
+                  >
+                    <div>
+                      <div className="card-title" style={{marginBottom: 4}}>Client documents</div>
+                      <p className="page-subtitle" style={{margin: 0}}>
+                        Save estimates, download work-order invoices, and record partial payments from this client record.
+                      </p>
+                    </div>
+                    <div style={{display: 'flex', gap: 8, flexWrap: 'wrap'}}>
+                      <button className="btn btn-primary" type="button" onClick={openEstimateModal}>
+                        <FileText size={16} /> New Estimate
+                      </button>
+                      <button className="btn" type="button" onClick={() => downloadInvoiceFromWorkOrder()} disabled={!latestWorkOrder}>
+                        <FileText size={16} /> Save Invoice PDF
+                      </button>
+                      <button className="btn" type="button" onClick={() => openPaymentModal()} disabled={contactWorkOrders.length === 0}>
+                        <DollarSign size={16} /> Record Payment
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {contactFinancials.map(f => (
                   <div key={f.id} className={s.recordCard}>
                     <div className={s.recordMain}>
@@ -1251,6 +1507,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <div className={s.recordValue}>
                       <div className={s.valueAmount}>${f.amount.toLocaleString()}</div>
                       <span className={`badge badge-${f.status.toLowerCase()}`}>{f.status}</span>
+                      <button className="btn btn-sm" type="button" onClick={() => downloadFinancialPdf(f)}>
+                        Download PDF
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -1321,6 +1580,108 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 <option key={owner.id} value={owner.id}>{owner.label}</option>
               ))}
             </select>
+          </div>
+        </Modal>
+      )}
+
+      {estimateModalOpen && (
+        <Modal
+          open={estimateModalOpen}
+          onClose={() => setEstimateModalOpen(false)}
+          title="New Estimate"
+          footer={<><button className="btn" onClick={() => setEstimateModalOpen(false)}>Cancel</button><button className="btn btn-primary" onClick={saveEstimate}>Save Estimate</button></>}
+        >
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">Client</label>
+              <input className="input" value={estimateForm.client} readOnly />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Status</label>
+              <select className="input select" value={estimateForm.status} onChange={e => setEstimateForm({...estimateForm, status: e.target.value})}>
+                {['Draft', 'Pending', 'Approved', 'Rejected'].map((status) => <option key={status} value={status}>{status}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">Date</label>
+              <input className="input" type="date" value={estimateForm.date} onChange={e => setEstimateForm({...estimateForm, date: e.target.value})} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Valid Until</label>
+              <input className="input" type="date" value={estimateForm.dueDate || ''} onChange={e => setEstimateForm({...estimateForm, dueDate: e.target.value})} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Line Items</label>
+            {estimateForm.items.map((item, index) => (
+              <div key={index} style={{display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap'}}>
+                <input className="input" placeholder="Description" value={item.desc} onChange={e => updateEstimateItem(index, 'desc', e.target.value)} style={{flex: '2 1 220px'}} />
+                <input className="input" type="number" min="0" step="1" placeholder="Qty" value={item.qty} onChange={e => updateEstimateItem(index, 'qty', Number(e.target.value))} style={{width: 80}} />
+                <input className="input" type="number" min="0" step="0.01" placeholder="Rate" value={item.rate} onChange={e => updateEstimateItem(index, 'rate', Number(e.target.value))} style={{width: 110}} />
+                <button className="btn-icon" type="button" onClick={() => removeEstimateItem(index)} style={{color: 'var(--danger)'}} aria-label="Remove line item">x</button>
+              </div>
+            ))}
+            <button className="btn btn-sm" type="button" onClick={addEstimateItem}>+ Add Line</button>
+          </div>
+          <div style={{textAlign: 'right', fontSize: 'var(--text-md)', fontWeight: 700, marginTop: 10}}>
+            Total: ${moneyLabel(estimateTotal)}
+          </div>
+        </Modal>
+      )}
+
+      {paymentModalOpen && (
+        <Modal
+          open={paymentModalOpen}
+          onClose={() => setPaymentModalOpen(false)}
+          title="Record Payment"
+          footer={<><button className="btn" onClick={() => setPaymentModalOpen(false)}>Cancel</button><button className="btn btn-primary" onClick={savePayment}>Save Payment</button></>}
+        >
+          <div className="form-group">
+            <label className="form-label">Work Order</label>
+            <select className="input select" value={paymentForm.workOrderId} onChange={e => setPaymentForm({...paymentForm, workOrderId: e.target.value})}>
+              <option value="">No linked work order</option>
+              {contactWorkOrders.map((workOrder) => (
+                <option key={workOrder.id} value={workOrder.id}>{workOrder.number} - {workOrder.title}</option>
+              ))}
+            </select>
+          </div>
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">Amount</label>
+              <input className="input" type="number" min="0" step="0.01" value={paymentForm.amount} onChange={e => setPaymentForm({...paymentForm, amount: e.target.value})} />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Payment Date</label>
+              <input className="input" type="date" value={paymentForm.paidAt} onChange={e => setPaymentForm({...paymentForm, paidAt: e.target.value})} />
+            </div>
+          </div>
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">Method</label>
+              <select className="input select" value={paymentForm.paymentMethod} onChange={e => setPaymentForm({...paymentForm, paymentMethod: e.target.value})}>
+                {['Cash', 'Check', 'Card', 'Zelle', 'ACH', 'Other'].map((method) => <option key={method} value={method}>{method}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Check / Reference</label>
+              <input className="input" value={paymentForm.checkNumber} onChange={e => setPaymentForm({...paymentForm, checkNumber: e.target.value})} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Payment Note / Partial Payment Memo</label>
+            <textarea className="input" rows={3} value={paymentForm.note} onChange={e => setPaymentForm({...paymentForm, note: e.target.value})} />
+          </div>
+          <div className="card" style={{padding: 12, display: 'grid', gap: 4}}>
+            <div style={{display: 'flex', justifyContent: 'space-between'}}>
+              <span className="page-subtitle" style={{margin: 0}}>Current balance</span>
+              <strong>${moneyLabel(selectedPaymentBalance)}</strong>
+            </div>
+            <div style={{display: 'flex', justifyContent: 'space-between'}}>
+              <span className="page-subtitle" style={{margin: 0}}>Balance after payment</span>
+              <strong>${moneyLabel(balanceAfterPayment)}</strong>
+            </div>
           </div>
         </Modal>
       )}

@@ -238,6 +238,34 @@ export const workOrders = pgTable('work_orders', {
   updatedAt,
 });
 
+export const financialDocuments = pgTable('financial_documents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
+  contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+  workOrderId: uuid('work_order_id').references(() => workOrders.id, { onDelete: 'set null' }),
+  estimateId: uuid('estimate_id').references(() => estimates.id, { onDelete: 'set null' }),
+  documentNumber: text('document_number'),
+  documentType: text('document_type').notNull(),
+  status: text('status').notNull().default('Draft'),
+  subtotal: numeric('subtotal', { precision: 12, scale: 2 }),
+  tax: numeric('tax', { precision: 12, scale: 2 }),
+  total: numeric('total', { precision: 12, scale: 2 }),
+  paidAmount: numeric('paid_amount', { precision: 12, scale: 2 }),
+  balanceDue: numeric('balance_due', { precision: 12, scale: 2 }),
+  issueDate: date('issue_date'),
+  dueDate: date('due_date'),
+  itemsJson: jsonb('items_json').notNull().default([]),
+  notes: text('notes'),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  orgCreatedIdx: index('financial_documents_org_created_idx').on(table.organizationId, table.createdAt),
+  contactIdx: index('financial_documents_contact_idx').on(table.contactId),
+  workOrderIdx: index('financial_documents_work_order_idx').on(table.workOrderId),
+  typeIdx: index('financial_documents_type_idx').on(table.documentType),
+}));
+
 export const paymentSnapshots = pgTable('payment_snapshots', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),

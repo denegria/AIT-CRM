@@ -68,6 +68,7 @@ export default function Sidebar() {
   };
 
   const isClientViewScope = currentBusinessUnitId !== 'all' && isClientAccountBusinessUnit(currentBusinessUnit);
+  const canUseFinancialsWorkspace = Boolean(access.canReadSettings || access.canReadReports || role === 'admin');
   const scopedNav = useMemo(() => nav.map((item) => {
     if (item.href === '/contacts' && isClientViewScope) {
       return { href: '/clients', label: 'Clients', Icon: Building2 };
@@ -80,9 +81,9 @@ export default function Sidebar() {
     if (href === '/comms-ops' && !access.canReadSettings) return false;
     if (href === '/import-review' && !access.canReadImportReview) return false;
     if (href === '/reports' && !access.canReadReports) return false;
-    if (href === '/financials' && !access.canReadFinancials) return false;
+    if (href === '/financials' && (!access.canReadFinancials || !canUseFinancialsWorkspace)) return false;
     return true;
-  }), [access.canReadFinancials, access.canReadImportReview, access.canReadReports, access.canReadSettings, scopedNav]);
+  }), [access.canReadFinancials, access.canReadImportReview, access.canReadReports, access.canReadSettings, canUseFinancialsWorkspace, scopedNav]);
 
   const mobileNav = useMemo(() => {
     if (visibleNav.length <= 5) {

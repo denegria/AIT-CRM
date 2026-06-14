@@ -357,6 +357,18 @@ export function CRMProvider({ children, initialData }) {
     return payload.receipt || null;
   }, [isPostgres]);
 
+  const callFinancialDocumentsApi = useCallback(async (method, body) => {
+    if (!isPostgres) return null;
+    const response = await fetch('/api/financial-documents', {
+      method,
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || 'Financial document save failed.');
+    return payload.financial || null;
+  }, [isPostgres]);
+
   const updateContact = useCallback((id, u) => {
     if (isPostgres && !access.canWriteCrm) {
       return Promise.reject(crmWriteAccessError());
@@ -466,7 +478,28 @@ export function CRMProvider({ children, initialData }) {
   }, [access.canWriteWorkOrders, callWorkOrdersApi, isPostgres, workOrders]);
 
   const updateFinancial = useCallback((id, u) => setFinancials(p => p.map(f => f.id===id ? {...f,...u} : f)), []);
-  const addFinancial = useCallback((d) => setFinancials(p => [{id:gid('f'),...withBusinessUnitDefaults(d, effectiveBusinessUnitId)},...p]), [effectiveBusinessUnitId]);
+  const addFinancial = useCallback((d) => {
+    if (isPostgres && !access.canWriteFinancials) {
+      return Promise.reject(new Error('Insufficient financial write access.'));
+    }
+    const tempId = gid('f');
+    const payload = withBusinessUnitDefaults(d, effectiveBusinessUnitId);
+    const draft = { id: tempId, ...payload };
+    setFinancials(p => [draft, ...p]);
+    if (isPostgres && access.canWriteFinancials && ['Estimate', 'Invoice'].includes(payload.type)) {
+      return callFinancialDocumentsApi('POST', payload)
+        .then((financial) => {
+          if (financial) setFinancials(p => p.map(f => f.id === tempId ? financial : f));
+          return financial || draft;
+        })
+        .catch((error) => {
+          console.error(error);
+          setFinancials(p => p.filter(f => f.id !== tempId));
+          throw error;
+        });
+    }
+    return Promise.resolve(draft);
+  }, [access.canWriteFinancials, callFinancialDocumentsApi, effectiveBusinessUnitId, isPostgres]);
   const deleteFinancial = useCallback((id) => setFinancials(p => p.filter(f => f.id!==id)), []);
   const recordPayment = useCallback((d) => {
     if (isPostgres && !access.canWriteFinancials) {
