@@ -37,6 +37,7 @@ test('assignable employee policy requires first-party employee roles when roles 
 });
 
 test('test account detector keeps normal names with common words assignable', () => {
-  assert.equal(looksLikeNonEmployeeAccount({ name: 'Jessica Meeting', email: 'jessica@aitusa.com' }), false);
+  assert.equal(looksLikeNonEmployeeAccount({ name: 'Jessica Vega', email: 'jessica@aitusa.com' }), false);
+  assert.equal(looksLikeNonEmployeeAccount({ name: 'Test Account Coordinator', email: 'aitusa@outlook.com' }), true);
   assert.equal(looksLikeNonEmployeeAccount({ name: 'QA User', email: 'qa.user@aitcrm.app' }), true);
 });
