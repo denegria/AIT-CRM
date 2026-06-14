@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
 import { validateManualContactIdentity } from '@/lib/crm/contact-input';
+import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
 import {
   buildContactDirectoryFacetGroups,
   contactDirectorySignalLabels,
@@ -17,6 +18,8 @@ import {
   isCurrentLeadDateScope,
   lifecycleBucket,
 } from '@/lib/contact-directory-view';
+import { workflowForBusinessUnit } from '@/lib/sales-workflow';
+import { schoolLocationOptions } from '@/lib/school-locations';
 import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
@@ -27,6 +30,7 @@ const empty = {
   name: '',
   email: '',
   phone: '',
+  address: '',
   status: 'New Lead',
   currentStage: 'Needs First Outreach',
   source: 'Wix Historical Import',
@@ -363,6 +367,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     : columnMode === 'ait_usa'
       ? ['phone', 'enrollmentStage', 'inquirySource', 'assignedLabel', 'lastTouch', 'lastEdited']
       : ['phone', 'workflow', 'signalText', 'assignedLabel', 'divisionLabel', 'lastTouch', 'lastEdited'];
+  const formBusinessUnitId = form.businessUnitId || form.primaryBusinessUnitId || '';
+  const formBusinessUnit = businessUnitById.get(formBusinessUnitId) || null;
+  const isAitUsaForm = workflowForBusinessUnit(formBusinessUnit).key === WORKFLOW_KEYS.AIT_USA;
+  const formSchoolLocationOptions = schoolLocationOptions(form.address);
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
@@ -550,6 +558,30 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
             {accessibleBusinessUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
           </select>
         </div>
+        {isAitUsaForm ? (
+          <div className="form-group">
+            <label className="form-label">School Location</label>
+            <select
+              className="input select"
+              value={form.address || ''}
+              onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+            >
+              <option value="">Select school location</option>
+              {formSchoolLocationOptions.map((location) => (
+                <option key={location} value={location}>{location}</option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <div className="form-group">
+            <label className="form-label">Address</label>
+            <input
+              className="input"
+              value={form.address || ''}
+              onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+            />
+          </div>
+        )}
         <div className="form-group">
           <label className="form-label">Notes</label>
           <textarea className="input" rows={3} 
