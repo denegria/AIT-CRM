@@ -15,7 +15,9 @@ import {
   activityEvents as activityEventsTable,
   tasks as tasksTable,
   leads as leadsTable,
+  roles as rolesTable,
   users as usersTable,
+  userRoles as userRolesTable,
   businessUnitMemberships as businessUnitMembershipsTable,
   importBatches as importBatchesTable,
   importSourceRows as importSourceRowsTable,
@@ -35,6 +37,7 @@ import { buildContactTimeline, filterTimelineRowsForBusinessUnit } from './timel
 import { latestExcelDateFromText, summarizeContactTouch } from './contact-touch.js';
 import { buildAitUsaEnrollmentSignals } from './ait-usa-enrollment-signals.js';
 import { attachPaymentSnapshotContactLinks } from './financial-linkage.js';
+import { filterAssignableEmployees } from './crm/assignable-employees.js';
 
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const toBootstrapBusinessUnitPayload = (row) => toBusinessUnitPayload(row, { emptyColor: null });
@@ -135,7 +138,7 @@ function submittedAtForLead(contactEvents = [], lead = null) {
   return submittedAt?.toISOString?.() || submittedAt || '';
 }
 
-function mapEmployees(userRows = [], membershipRows = []) {
+function mapEmployees(userRows = [], membershipRows = [], roleRows = []) {
   const membershipsByUserId = new Map();
   for (const membership of membershipRows) {
     if (!membership.userId || !membership.businessUnitId) continue;
@@ -144,13 +147,23 @@ function mapEmployees(userRows = [], membershipRows = []) {
     membershipsByUserId.set(membership.userId, list);
   }
 
-  return userRows.map((user) => ({
+  const roleKeysByUserId = new Map();
+  for (const role of roleRows) {
+    if (!role.userId || !role.roleKey) continue;
+    const list = roleKeysByUserId.get(role.userId) || [];
+    list.push(role.roleKey);
+    roleKeysByUserId.set(role.userId, list);
+  }
+
+  return filterAssignableEmployees(userRows.map((user) => ({
     id: user.id,
     name: user.name || user.email || 'Unnamed User',
     email: user.email || '',
     phone: user.phone || '',
+    isActive: user.isActive,
+    roleKeys: roleKeysByUserId.get(user.id) || [],
     businessUnitIds: membershipsByUserId.get(user.id) || [],
-  }));
+  })));
 }
 
 function mapContacts(
@@ -627,6 +640,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       taskRows,
       userRows,
       membershipRows,
+      userRoleRows,
       importStaging,
     ] = await Promise.all([
       db.select().from(businessUnitsTable).where(scopedOrgWhere(businessUnitsTable, session)).orderBy(asc(businessUnitsTable.name)),
@@ -646,9 +660,17 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
         eq(usersTable.isActive, true),
       )).orderBy(asc(usersTable.name), asc(usersTable.email)),
       db.select().from(businessUnitMembershipsTable),
+      db
+        .select({
+          userId: userRolesTable.userId,
+          roleKey: rolesTable.key,
+        })
+        .from(userRolesTable)
+        .innerJoin(rolesTable, eq(userRolesTable.roleId, rolesTable.id))
+        .where(eq(rolesTable.organizationId, session.user.organizationId)),
       access.canReadImportReview ? getImportStagingSummary(db) : Promise.resolve(null),
     ]);
-    const employees = mapEmployees(userRows, membershipRows);
+    const employees = mapEmployees(userRows, membershipRows, userRoleRows);
 
     if (!contactRows.length && !taskRows.length) {
       return {

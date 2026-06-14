@@ -14,6 +14,7 @@ test('AIT USA receipt document separates bilingual receipt fields from signs inv
     program: 'Tax preparation course',
   }, {
     businessUnit: { name: 'AIT USA Institute' },
+    currentUser: { name: 'Sofia Lopez' },
   });
 
   assert.equal(document.title, 'Receipt / Recibo');
@@ -22,6 +23,7 @@ test('AIT USA receipt document separates bilingual receipt fields from signs inv
   assert.equal(document.amountDisplay, '$850.00');
   assert.equal(document.balanceDueDisplay, '$150.00');
   assert.equal(document.method, 'Zelle');
+  assert.equal(document.receivedBy, 'Sofia Lopez');
   assert.match(document.bilingualNote.join(' '), /Este recibo/);
 });
 

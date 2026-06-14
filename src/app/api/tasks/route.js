@@ -5,7 +5,9 @@ import {
   businessUnits,
   contacts,
   leads,
+  roles,
   tasks,
+  userRoles,
   users,
   workOrders,
 } from '@/db/schema.js';
@@ -45,6 +47,7 @@ import {
   toTaskPayload,
   updateTaskWithEvents,
 } from '@/lib/tasks/service.js';
+import { filterAssignableEmployees } from '@/lib/crm/assignable-employees.js';
 
 function stringParam(value) {
   return String(value || '').trim();
@@ -75,15 +78,44 @@ function endOfToday() {
 }
 
 async function listAssignableUsers(db, organizationId) {
-  return db
+  const userRows = await db
     .select({
       id: users.id,
       name: users.name,
       email: users.email,
+      isActive: users.isActive,
     })
     .from(users)
     .where(and(eq(users.organizationId, organizationId), eq(users.isActive, true)))
     .orderBy(asc(users.name), asc(users.email));
+
+  if (!userRows.length) return [];
+
+  const roleRows = await db
+    .select({
+      userId: userRoles.userId,
+      roleKey: roles.key,
+    })
+    .from(userRoles)
+    .innerJoin(roles, eq(userRoles.roleId, roles.id))
+    .where(eq(roles.organizationId, organizationId));
+
+  const roleKeysByUserId = new Map();
+  for (const role of roleRows) {
+    if (!role.userId || !role.roleKey) continue;
+    const roleKeys = roleKeysByUserId.get(role.userId) || [];
+    roleKeys.push(role.roleKey);
+    roleKeysByUserId.set(role.userId, roleKeys);
+  }
+
+  return filterAssignableEmployees(userRows.map((user) => ({
+    ...user,
+    roleKeys: roleKeysByUserId.get(user.id) || [],
+  }))).map((user) => ({
+    id: user.id,
+    name: user.name,
+    email: user.email,
+  }));
 }
 
 async function resolveOrganizationUserId(db, session, value, fieldName = 'ownerUserId') {
