@@ -113,7 +113,7 @@ export default function FinancialsPage() {
       <div className="card" style={{marginBottom:16}}>
         <div className="card-title">Financials Notice</div>
         <p className="page-subtitle" style={{margin:0}}>
-          Financial document generation is now staging-first. Imported estimates and recorded payments are live CRM records; manually-created invoices/estimates here remain lightweight until the accounting phase.
+          PDF generation is available for estimates, invoices, and receipts. Imported estimates and recorded payments are saved CRM records; manually-created invoices and estimates here are draft documents until the accounting persistence slice.
         </p>
       </div>
 
@@ -187,7 +187,7 @@ export default function FinancialsPage() {
           }
           actions={[
             ...(canWriteFinancials ? [{ label: 'Edit', onClick: openEdit }] : []),
-            { label: 'PDF', onClick: genPDF },
+            { label: 'Download PDF', onClick: genPDF },
             ...(canWriteFinancials ? [{ label: 'Delete', onClick: (r) => { deleteFinancial(r.id); toast('Record deleted', 'error'); }, danger: true }] : []),
           ]}
         />

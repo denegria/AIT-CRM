@@ -80,6 +80,17 @@ export default function WorkOrderDetailPage() {
     () => documentRecord ? buildAitSignsDocument(documentRecord, documentContext) : null,
     [documentContext, documentRecord]
   );
+  const paymentPreview = useMemo(() => {
+    if (!paymentForm || !documentPreview?.amounts) return null;
+    const amount = Number(paymentForm.amount);
+    const currentBalance = Number(documentPreview.amounts.balanceDue || 0);
+    const balanceAfter = Number.isFinite(amount) && amount > 0 ? Math.max(currentBalance - amount, 0) : currentBalance;
+    return {
+      currentBalance,
+      balanceAfter,
+      isPartial: Number.isFinite(amount) && amount > 0 && balanceAfter > 0,
+    };
+  }, [documentPreview, paymentForm]);
 
   function openEditModal() {
     if (!canWriteWorkOrders || !workOrder) return;
@@ -154,7 +165,7 @@ export default function WorkOrderDetailPage() {
             <Printer size={16} /> Print Form
           </button>
           <button className="btn" onClick={() => { generateWorkOrderPDF(documentRecord || workOrder, documentContext); toast('PDF generated'); }}>
-            <FileText size={16} /> Export PDF
+            <FileText size={16} /> Download Work Order PDF
           </button>
           {canWriteFinancials && (
             <button className="btn" onClick={openPaymentModal}>
@@ -485,9 +496,42 @@ export default function WorkOrderDetailPage() {
             </div>
           </div>
           <div className="form-group">
-            <label className="form-label">Payment Note</label>
-            <textarea className="input" rows={3} value={paymentForm.note} onChange={(event) => setPaymentForm((form) => ({ ...form, note: event.target.value }))} style={{resize:'vertical'}} />
+            <label className="form-label">Payment Note / Partial Payment Memo</label>
+            <textarea
+              className="input"
+              rows={3}
+              value={paymentForm.note}
+              onChange={(event) => setPaymentForm((form) => ({ ...form, note: event.target.value }))}
+              placeholder="Example: partial payment for deposit, check memo, or remaining balance context."
+              style={{resize:'vertical'}}
+            />
           </div>
+          {paymentPreview && (
+            <div
+              style={{
+                border: '1px solid var(--border-subtle)',
+                borderRadius: 8,
+                padding: 12,
+                display: 'grid',
+                gap: 8,
+                background: 'var(--bg-tertiary)',
+              }}
+            >
+              <div style={{display: 'flex', justifyContent: 'space-between', gap: 12}}>
+                <span style={{color: 'var(--text-muted)'}}>Current balance</span>
+                <strong>{formatAitSignsMoney(paymentPreview.currentBalance, '$0.00')}</strong>
+              </div>
+              <div style={{display: 'flex', justifyContent: 'space-between', gap: 12}}>
+                <span style={{color: 'var(--text-muted)'}}>Balance after payment</span>
+                <strong>{formatAitSignsMoney(paymentPreview.balanceAfter, '$0.00')}</strong>
+              </div>
+              {paymentPreview.isPartial && (
+                <div style={{fontSize: 'var(--text-sm)', color: 'var(--text-muted)'}}>
+                  This will be saved as a partial payment event and linked to this work order.
+                </div>
+              )}
+            </div>
+          )}
         </Modal>
       )}
     </div>

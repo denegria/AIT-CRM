@@ -819,6 +819,15 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               >
                 <CheckSquare size={16} style={{marginRight: 8}} /> Create Follow-up
               </Link>
+              {showWorkOrdersTab && access.canWriteWorkOrders && (
+                <Link
+                  className="btn btn-block"
+                  style={{marginTop: 8}}
+                  href={`/work-orders?contactId=${encodeURIComponent(contact.id)}`}
+                >
+                  <ClipboardList size={16} style={{marginRight: 8}} /> Create Work Order
+                </Link>
+              )}
               <button className="btn btn-block" style={{marginTop: 8}} onClick={openEditModal}>
                 <Edit3 size={16} style={{marginRight: 8}} /> Edit Profile
               </button>
@@ -1207,6 +1216,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
             {showWorkOrdersTab && renderedActiveTab === 'workorders' && (
               <div className={s.recordsList}>
+                {access.canWriteWorkOrders && (
+                  <Link className="btn btn-primary" href={`/work-orders?contactId=${encodeURIComponent(contact.id)}`}>
+                    <ClipboardList size={16} /> Create Work Order
+                  </Link>
+                )}
                 {contactWorkOrders.map(wo => (
                   <Link key={wo.id} className={`${s.recordCard} ${s.recordLinkCard}`} href={`/work-orders/${wo.id}`}>
                     <div className={s.recordMain}>
