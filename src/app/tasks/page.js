@@ -16,6 +16,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 import { useCRM } from '@/lib/store';
+import { isAssignableEmployee } from '@/lib/crm/assignable-employees.js';
 import { lifecycleBucket } from '@/lib/contact-directory-view.js';
 import {
   isTaskClosed,
@@ -267,7 +268,11 @@ export default function FollowUpQueuePage() {
       name: employee.name,
       email: employee.email || '',
     }));
-    if (!currentUser?.id || mappedEmployees.some((employee) => employee.id === currentUser.id)) {
+    if (
+      !currentUser?.id ||
+      mappedEmployees.some((employee) => employee.id === currentUser.id) ||
+      !isAssignableEmployee(currentUser)
+    ) {
       return mappedEmployees;
     }
     return [

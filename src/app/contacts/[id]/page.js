@@ -305,6 +305,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     access,
     dataSource,
     businessUnits,
+    currentUser,
   } = useCRM();
   const [activeTab, setActiveTab] = useState('timeline');
   const [timelineFilter, setTimelineFilter] = useState('all');
@@ -361,7 +362,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     payment: contactFinancialCounts.payment || 0,
   }), [contactFinancialCounts, contactWorkOrders.length]);
   const contactBusinessUnit = businessUnits.find((unit) => unit.id === contact?.businessUnitId || unit.id === contact?.primaryBusinessUnitId);
-  const financialContext = useMemo(() => ({ contact, businessUnit: contactBusinessUnit }), [contact, contactBusinessUnit]);
+  const financialContext = useMemo(
+    () => ({ contact, businessUnit: contactBusinessUnit, currentUser }),
+    [contact, contactBusinessUnit, currentUser],
+  );
   const estimateTotal = useMemo(() => estimateForm.items.reduce((sum, item) => (
     sum + moneyValue(item.qty || 1) * moneyValue(item.rate)
   ), 0), [estimateForm.items]);
@@ -383,9 +387,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   });
   const showLinkedPeoplePanel = isClientMode && detailView.workflowKey === WORKFLOW_KEYS.AIT_SIGNS;
   const showSchoolLocationField = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA;
+  const isAitUsaContact = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA || /ait usa|institute/i.test(contactBusinessUnit?.name || '');
   const editSchoolLocationOptions = schoolLocationOptions(editForm?.address);
   const showWorkOrdersTab = detailView.tabs.showWorkOrders;
-  const showFinancialsTab = detailView.tabs.showFinancials;
+  const showFinancialsTab = detailView.tabs.showFinancials || (isAitUsaContact && access.canWriteFinancials);
   const renderedActiveTab =
     (!showLinkedPeoplePanel && activeTab === 'contacts') ||
     (!showWorkOrdersTab && activeTab === 'workorders') ||
@@ -746,7 +751,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       return;
     }
     const workOrder = contactWorkOrders.find((entry) => entry.id === paymentForm.workOrderId) || null;
-    recordPayment({
+    const paymentPayload = {
       contactId: contact.id,
       client: contact.name || '',
       businessUnitId: workOrder?.businessUnitId || contact.primaryBusinessUnitId || contact.businessUnitId || '',
@@ -756,11 +761,20 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       paidAt: paymentForm.paidAt || todayDate(),
       checkNumber: paymentForm.checkNumber,
       note: paymentForm.note,
-    })
-      .then(() => {
+    };
+    recordPayment(paymentPayload)
+      .then((receipt) => {
+        if (isAitUsaContact) {
+          generateAitUsaReceiptPDF(receipt || {
+            ...paymentPayload,
+            type: 'Receipt',
+            number: `REC-${todayDate().replaceAll('-', '')}`,
+            status: 'Paid',
+          }, financialContext);
+        }
         setPaymentModalOpen(false);
         setTimelineReloadKey((key) => key + 1);
-        toast('Payment recorded');
+        toast(isAitUsaContact ? 'Payment recorded and receipt downloaded' : 'Payment recorded');
       })
       .catch((error) => toast(error.message || 'Payment save failed.', 'error'));
   };
@@ -1479,7 +1493,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <div>
                       <div className="card-title" style={{marginBottom: 4}}>Client documents</div>
                       <p className="page-subtitle" style={{margin: 0}}>
-                        Save estimates, download work-order invoices, and record partial payments from this client record.
+                        {isAitUsaContact
+                          ? 'Record payments and download bilingual AIT USA receipt PDFs from this student record.'
+                          : 'Save estimates, download work-order invoices, and record partial payments from this client record.'}
                       </p>
                     </div>
                     <div style={{display: 'flex', gap: 8, flexWrap: 'wrap'}}>
@@ -1489,8 +1505,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       <button className="btn" type="button" onClick={() => downloadInvoiceFromWorkOrder()} disabled={!latestWorkOrder}>
                         <FileText size={16} /> Save Invoice PDF
                       </button>
-                      <button className="btn" type="button" onClick={() => openPaymentModal()} disabled={contactWorkOrders.length === 0}>
-                        <DollarSign size={16} /> Record Payment
+                      <button className="btn" type="button" onClick={() => openPaymentModal()} disabled={!isAitUsaContact && contactWorkOrders.length === 0}>
+                        <DollarSign size={16} /> {isAitUsaContact ? 'Generate Receipt' : 'Record Payment'}
                       </button>
                     </div>
                   </div>
@@ -1635,8 +1651,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         <Modal
           open={paymentModalOpen}
           onClose={() => setPaymentModalOpen(false)}
-          title="Record Payment"
-          footer={<><button className="btn" onClick={() => setPaymentModalOpen(false)}>Cancel</button><button className="btn btn-primary" onClick={savePayment}>Save Payment</button></>}
+          title={isAitUsaContact ? 'Generate AIT USA Receipt' : 'Record Payment'}
+          footer={<><button className="btn" onClick={() => setPaymentModalOpen(false)}>Cancel</button><button className="btn btn-primary" onClick={savePayment}>{isAitUsaContact ? 'Save & Download Receipt' : 'Save Payment'}</button></>}
         >
           <div className="form-group">
             <label className="form-label">Work Order</label>
