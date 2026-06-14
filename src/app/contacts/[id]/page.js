@@ -305,7 +305,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     access,
     dataSource,
     businessUnits,
-    currentUser,
   } = useCRM();
   const [activeTab, setActiveTab] = useState('timeline');
   const [timelineFilter, setTimelineFilter] = useState('all');
@@ -362,10 +361,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     payment: contactFinancialCounts.payment || 0,
   }), [contactFinancialCounts, contactWorkOrders.length]);
   const contactBusinessUnit = businessUnits.find((unit) => unit.id === contact?.businessUnitId || unit.id === contact?.primaryBusinessUnitId);
-  const financialContext = useMemo(
-    () => ({ contact, businessUnit: contactBusinessUnit, currentUser }),
-    [contact, contactBusinessUnit, currentUser],
-  );
+  const financialContext = useMemo(() => ({ contact, businessUnit: contactBusinessUnit }), [contact, contactBusinessUnit]);
   const estimateTotal = useMemo(() => estimateForm.items.reduce((sum, item) => (
     sum + moneyValue(item.qty || 1) * moneyValue(item.rate)
   ), 0), [estimateForm.items]);

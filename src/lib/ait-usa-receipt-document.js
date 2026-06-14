@@ -70,7 +70,6 @@ export function buildAitUsaReceiptDocument(record = {}, context = {}) {
     amountDisplay: formatAitUsaReceiptMoney(amount),
     balanceDue,
     balanceDueDisplay: balanceDue === null ? '' : formatAitUsaReceiptMoney(balanceDue),
-    receivedBy: firstText(record.receivedBy, context.currentUser?.name),
     note,
     bilingualNote: [
       'This receipt confirms payment received for AIT USA Institute services.',

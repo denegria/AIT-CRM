@@ -341,18 +341,6 @@ function renderAitUsaReceiptPDF(record, context = {}) {
     doc.setTextColor(...muted);
     doc.text(doc.splitTextToSize(form.bilingualNote.join(' '), 154), 25, 218);
 
-    doc.setDrawColor(209, 213, 219);
-    doc.line(18, 246, 92, 246);
-    doc.line(118, 246, 192, 246);
-    doc.setFontSize(7);
-    doc.text('Received by / Recibido por', 18, 252);
-    doc.text('Student / Cliente', 118, 252);
-    if (form.receivedBy) {
-      doc.setFont('helvetica', 'bold');
-      doc.setTextColor(...ink);
-      doc.text(form.receivedBy, 18, 242);
-    }
-
     doc.setTextColor(...muted);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
