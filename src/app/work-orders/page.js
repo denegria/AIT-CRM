@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
@@ -30,15 +30,37 @@ export default function WorkOrdersPage() {
   const [drawer, setDrawer] = useState(null);
   const [form, setForm] = useState(empty);
   const [statusFilter, setStatusFilter] = useState('All');
+  const contactPrefillRef = useRef('');
   const canWriteWorkOrders = Boolean(access?.canWriteWorkOrders);
 
-  const openNew = () => {
+  const openNew = useCallback((prefillContact = null) => {
     if (!canWriteWorkOrders) return;
     const num = `WO-${String(workOrders.length + 1).padStart(3, '0')}`;
-    const businessUnitId = currentBusinessUnitId !== 'all' && currentBusinessUnitId !== 'unassigned' ? currentBusinessUnitId : accessibleBusinessUnits[0]?.id || '';
-    setForm({ ...empty, number: num, businessUnitId, assignedTo: employees[0]?.id || '', dueDate: new Date().toISOString().slice(0,10) });
+    const businessUnitId = prefillContact?.businessUnitId
+      || prefillContact?.primaryBusinessUnitId
+      || (currentBusinessUnitId !== 'all' && currentBusinessUnitId !== 'unassigned' ? currentBusinessUnitId : accessibleBusinessUnits[0]?.id || '');
+    setForm({
+      ...empty,
+      number: num,
+      businessUnitId,
+      contactId: prefillContact?.id || '',
+      client: prefillContact?.name || '',
+      title: prefillContact?.name ? `Work order for ${prefillContact.name}` : '',
+      assignedTo: employees[0]?.id || '',
+      dueDate: new Date().toISOString().slice(0,10),
+    });
     setDrawer('new');
-  };
+  }, [accessibleBusinessUnits, canWriteWorkOrders, currentBusinessUnitId, employees, workOrders.length]);
+
+  useEffect(() => {
+    if (!loaded || !canWriteWorkOrders || contactPrefillRef.current || typeof window === 'undefined') return;
+    const contactId = new URLSearchParams(window.location.search).get('contactId');
+    if (!contactId) return;
+    const contact = contacts.find((entry) => entry.id === contactId);
+    if (!contact) return;
+    contactPrefillRef.current = contactId;
+    queueMicrotask(() => openNew(contact));
+  }, [canWriteWorkOrders, contacts, loaded, openNew]);
   const openEdit = (row) => {
     if (!canWriteWorkOrders) return;
     setForm({ ...row });
