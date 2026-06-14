@@ -6,8 +6,8 @@ export const ASSIGNABLE_EMPLOYEE_ROLE_KEYS = Object.freeze([
 ]);
 
 const NON_ASSIGNABLE_ACCOUNT_PATTERNS = [
-  /(^|[._+-])(test|demo|sample|qa|sentry|meeting|automation|bot|robot)([._+-]|@|$)/i,
-  /^(test|demo|sample|qa|sentry|meeting|automation|bot|robot)([._+-]|@|$)/i,
+  /(^|[\s._+-])(test|demo|sample|qa|sentry|meeting|automation|bot|robot)([\s._+-]|@|$)/i,
+  /^(test|demo|sample|qa|sentry|meeting|automation|bot|robot)([\s._+-]|@|$)/i,
   /@(example|test|demo)\./i,
   /no-?reply/i,
 ];
