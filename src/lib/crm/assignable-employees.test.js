@@ -13,6 +13,7 @@ test('assignable employee policy excludes staging test and automation accounts',
     { id: 'user-3', name: 'Sentry Client', email: 'sentry.client@aitcrm.app', roleKeys: ['account_manager'] },
     { id: 'user-4', name: 'Inactive Employee', email: 'inactive@aitusa.com', roleKeys: ['designer'], isActive: false },
     { id: 'user-5', name: 'Jessica Vega', email: 'jessica@aitusa.com', roleKeys: ['designer'] },
+    { id: 'user-6', name: 'Alvaro Denegri', email: 'alvarodenegri98@gmail.com', roleKeys: ['admin'] },
   ];
 
   assert.deepEqual(
@@ -40,4 +41,5 @@ test('test account detector keeps normal names with common words assignable', ()
   assert.equal(looksLikeNonEmployeeAccount({ name: 'Jessica Vega', email: 'jessica@aitusa.com' }), false);
   assert.equal(looksLikeNonEmployeeAccount({ name: 'Test Account Coordinator', email: 'aitusa@outlook.com' }), true);
   assert.equal(looksLikeNonEmployeeAccount({ name: 'QA User', email: 'qa.user@aitcrm.app' }), true);
+  assert.equal(looksLikeNonEmployeeAccount({ name: 'Alvaro Denegri', email: 'alvarodenegri98@gmail.com' }), true);
 });

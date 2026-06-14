@@ -5,6 +5,10 @@ export const ASSIGNABLE_EMPLOYEE_ROLE_KEYS = Object.freeze([
   'sales_manager',
 ]);
 
+const NON_ASSIGNABLE_ACCOUNT_EMAILS = new Set([
+  'alvarodenegri98@gmail.com',
+]);
+
 const NON_ASSIGNABLE_ACCOUNT_PATTERNS = [
   /(^|[\s._+-])(test|demo|sample|qa|sentry|meeting|automation|bot|robot)([\s._+-]|@|$)/i,
   /^(test|demo|sample|qa|sentry|meeting|automation|bot|robot)([\s._+-]|@|$)/i,
@@ -17,7 +21,10 @@ function clean(value) {
 }
 
 export function looksLikeNonEmployeeAccount(user = {}) {
-  const identity = [user.email, user.name].map(clean).filter(Boolean).join(' ');
+  const email = clean(user.email).toLowerCase();
+  if (NON_ASSIGNABLE_ACCOUNT_EMAILS.has(email)) return true;
+
+  const identity = [email, user.name].map(clean).filter(Boolean).join(' ');
   if (!identity) return false;
   return NON_ASSIGNABLE_ACCOUNT_PATTERNS.some((pattern) => pattern.test(identity));
 }
