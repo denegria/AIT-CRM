@@ -9,6 +9,7 @@ import {
   contactPeople as contactPeopleTable,
   workOrders as workOrdersTable,
   estimates as estimatesTable,
+  financialDocuments as financialDocumentsTable,
   paymentSnapshots as paymentSnapshotsTable,
   notes as notesTable,
   activityEvents as activityEventsTable,
@@ -350,7 +351,7 @@ function mapWorkOrders(rows, contactLookup) {
   }));
 }
 
-function mapFinancials(estimateRows, paymentRows, contactLookup) {
+function mapFinancials(estimateRows, paymentRows, contactLookup, documentRows = []) {
   const estimates = estimateRows.map((row, index) => ({
     id: row.id,
     number: row.estimateNumber || `EST-${String(index + 1).padStart(3, '0')}`,
@@ -393,7 +394,32 @@ function mapFinancials(estimateRows, paymentRows, contactLookup) {
     }],
   }));
 
-  return [...estimates, ...receipts];
+  const documents = documentRows.map((row) => {
+    const total = Number(row.total || row.subtotal || 0);
+    const paidAmount = Number(row.paidAmount || 0);
+    return {
+      id: row.id,
+      number: row.documentNumber || '',
+      type: row.documentType || '',
+      client: contactLookup.get(row.contactId)?.name || '',
+      contactId: row.contactId || '',
+      businessUnitId: row.businessUnitId || '',
+      workOrderId: row.workOrderId || '',
+      estimateId: row.estimateId || '',
+      amount: total,
+      paidAmount,
+      balanceDue: row.balanceDue === null || row.balanceDue === undefined ? Math.max(total - paidAmount, 0) : Number(row.balanceDue),
+      subtotal: Number(row.subtotal || 0),
+      tax: Number(row.tax || 0),
+      date: toIsoDate(row.issueDate || row.createdAt),
+      dueDate: toIsoDate(row.dueDate || row.createdAt),
+      status: row.status || 'Pending',
+      items: Array.isArray(row.itemsJson) ? row.itemsJson : [],
+      note: row.notes || '',
+    };
+  });
+
+  return [...documents, ...estimates, ...receipts];
 }
 
 function toDisplayPriority(value) {
@@ -592,6 +618,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       leadRows,
       workOrderRows,
       estimateRows,
+      financialDocumentRows,
       paymentRows,
       noteRows,
       eventRows,
@@ -607,6 +634,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       db.select().from(leadsTable).where(scopedBusinessUnitWhere(leadsTable, session)).orderBy(desc(leadsTable.createdAt)),
       db.select().from(workOrdersTable).where(scopedBusinessUnitWhere(workOrdersTable, session)).orderBy(desc(workOrdersTable.createdAt)),
       db.select().from(estimatesTable).where(scopedBusinessUnitWhere(estimatesTable, session)).orderBy(desc(estimatesTable.createdAt)),
+      db.select().from(financialDocumentsTable).where(scopedBusinessUnitWhere(financialDocumentsTable, session)).orderBy(desc(financialDocumentsTable.createdAt)),
       db.select().from(paymentSnapshotsTable).where(scopedBusinessUnitWhere(paymentSnapshotsTable, session)).orderBy(desc(paymentSnapshotsTable.createdAt)),
       db.select().from(notesTable).where(scopedOrgWhere(notesTable, session)).orderBy(desc(notesTable.createdAt)),
       db.select().from(activityEventsTable).where(scopedOrgWhere(activityEventsTable, session)).orderBy(desc(activityEventsTable.createdAt)),
@@ -652,7 +680,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
     );
     const contactLookup = new Map(contacts.map((contact) => [contact.id, contact]));
     const workOrders = mapWorkOrders(workOrderRows, contactLookup);
-    const financials = mapFinancials(estimateRows, paymentRowsWithContactLinks, contactLookup);
+    const financials = mapFinancials(estimateRows, paymentRowsWithContactLinks, contactLookup, financialDocumentRows);
     const tasks = mapTasks(taskRows, contactLookup);
     return {
       ...seedData,

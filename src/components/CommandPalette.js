@@ -8,7 +8,7 @@ export default function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const router = useRouter();
-  const { contacts, workOrders, financials, loaded } = useCRM();
+  const { contacts, workOrders, financials, loaded, role, access } = useCRM();
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -37,11 +37,21 @@ export default function CommandPalette() {
     const matchedWO = workOrders.filter(w => w.title.toLowerCase().includes(q) || w.number.toLowerCase().includes(q))
       .map(w => ({ id: w.id, title: w.title, subtitle: w.number, type: 'work-order', icon: <ClipboardList size={16} />, path: `/work-orders/${w.id}` }));
     
-    const matchedFin = financials.filter(f => f.number.toLowerCase().includes(q) || f.client.toLowerCase().includes(q))
-      .map(f => ({ id: f.id, title: `${f.type} ${f.number}`, subtitle: f.client, type: 'financial', icon: <FileText size={16} />, path: '/financials' }));
+    const canUseFinancialsWorkspace = Boolean(access?.canReadSettings || access?.canReadReports || role === 'admin');
+    const matchedFin = canUseFinancialsWorkspace
+      ? financials.filter(f => f.number.toLowerCase().includes(q) || f.client.toLowerCase().includes(q))
+        .map(f => ({
+          id: f.id,
+          title: `${f.type} ${f.number}`,
+          subtitle: f.client,
+          type: 'financial',
+          icon: <FileText size={16} />,
+          path: f.contactId ? `/contacts/${f.contactId}` : '/financials',
+        }))
+      : [];
 
     return [...matchedContacts, ...matchedWO, ...matchedFin].slice(0, 10);
-  }, [query, contacts, workOrders, financials]);
+  }, [query, contacts, workOrders, financials, access?.canReadReports, access?.canReadSettings, role]);
 
   const navigate = (path) => {
     router.push(path);
