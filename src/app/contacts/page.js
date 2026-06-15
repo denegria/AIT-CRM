@@ -1,6 +1,6 @@
 'use client';
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
 import { validateManualContactIdentity } from '@/lib/crm/contact-input';
@@ -157,12 +157,16 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   } = useCRM();
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [drawer, setDrawer] = useState(null); // null | 'new' | contact object
   const [form, setForm] = useState(empty);
   const [statusFilter, setStatusFilter] = useState('All');
   const [ownerFilter, setOwnerFilter] = useState('all');
-  const [directoryFacet, setDirectoryFacet] = useState('all');
-  const [leadDateScope, setLeadDateScope] = useState('current');
+  const [directoryFacet, setDirectoryFacet] = useState(() => searchParams.get('facet') || searchParams.get('directoryFacet') || 'all');
+  const [leadDateScope, setLeadDateScope] = useState(() => {
+    const param = searchParams.get('leadDateScope');
+    return param === 'all' ? 'all' : 'current';
+  });
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [formError, setFormError] = useState('');
   const [facetNow] = useState(() => Date.now());
@@ -340,12 +344,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     () => buildContactDirectoryFacetGroups(baseFilteredContacts, facetContext),
     [baseFilteredContacts, facetContext],
   );
-  const visibleFacetCounts = useMemo(
-    () => new Map(facetGroups.flatMap((group) => group.facets.map((facet) => [facet.id, facet.count]))),
-    [facetGroups],
-  );
-  const directoryFacetCount = visibleFacetCounts.get(directoryFacet);
-  const effectiveDirectoryFacet = directoryFacet === 'all' || directoryFacetCount > 0 ? directoryFacet : 'all';
+  const effectiveDirectoryFacet = directoryFacet || 'all';
   const filteredContacts = useMemo(
     () => filterContactsByDirectoryFacet(baseFilteredContacts, effectiveDirectoryFacet, facetContext),
     [baseFilteredContacts, effectiveDirectoryFacet, facetContext],
