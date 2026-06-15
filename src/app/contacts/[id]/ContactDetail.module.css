@@ -1381,6 +1381,9 @@
   font-size: var(--text-md);
   margin-bottom: 4px;
 }
+.financialEmptyState {
+  margin-top: 0;
+}
 
 @media (max-width: 900px) {
   .detailLayout {

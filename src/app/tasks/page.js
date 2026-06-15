@@ -214,6 +214,10 @@ function recurrenceLabel(recurrence) {
   return match?.[1] || titleCase(recurrence.frequency);
 }
 
+function optionLabel(options, value) {
+  return options.find(([optionValue]) => optionValue === value)?.[1] || titleCase(value);
+}
+
 export default function FollowUpQueuePage() {
   const {
     tasks,
@@ -787,6 +791,26 @@ export default function FollowUpQueuePage() {
     status: 'all',
     link: 'all',
   });
+  const activeTaskScope = (() => {
+    const parts = [optionLabel(DUE_OPTIONS, filters.due)];
+    if (filters.ownerUserId === '__me') {
+      parts.push('My Tasks');
+    } else if (filters.ownerUserId === 'unassigned') {
+      parts.push('Unassigned');
+    } else if (filters.ownerUserId !== 'all') {
+      const owner = visibleAssignees.find((user) => user.id === filters.ownerUserId);
+      parts.push(owner?.name || owner?.email || 'Selected owner');
+    }
+    if (filters.businessUnitId !== 'all') {
+      parts.push(businessUnitById.get(filters.businessUnitId)?.name || currentBusinessUnit?.name || scopeLabel);
+    } else if (currentBusinessUnit?.name) {
+      parts.push(currentBusinessUnit.name);
+    }
+    if (filters.taskType !== 'all') parts.push(optionLabel(TASK_TYPE_OPTIONS, filters.taskType));
+    if (filters.status !== 'all') parts.push(optionLabel(STATUS_OPTIONS, filters.status));
+    if (filters.link !== 'all') parts.push(optionLabel(LINK_OPTIONS, filters.link));
+    return parts.filter(Boolean).join(' · ');
+  })();
   const createTitle = createDraft.title.trim();
   const canSubmitCreate = Boolean(access.canWriteCrm && createTitle && createDraft.dueDate && createDraft.ownerUserId && createDraft.businessUnitId);
 
@@ -987,8 +1011,31 @@ export default function FollowUpQueuePage() {
         )}
 
         {!loading && !error && filteredTasks.length === 0 && (
-          <div className="empty-state">
-            {queueTasks.length === 0 ? 'No tasks in this queue.' : 'No tasks match these filters.'}
+          <div className={`empty-state ${s.recoveryState}`}>
+            <div className={s.emptyTitle}>
+              {queueTasks.length === 0 ? 'No tasks in this scope' : 'No tasks match the current filters'}
+            </div>
+            <p className={s.emptyCopy}>
+              {queueTasks.length === 0
+                ? `There are no tasks available for ${activeTaskScope}.`
+                : `${activeTaskScope} is hiding every loaded task.`}
+            </p>
+            <div className={s.emptyActions}>
+              {queueTasks.length > 0 && (
+                <button className="btn btn-primary" type="button" onClick={resetFilters}>
+                  <FilterX size={14} />
+                  Reset Filters
+                </button>
+              )}
+              {access.canWriteCrm ? (
+                <button className={`btn ${queueTasks.length === 0 ? 'btn-primary' : ''}`} type="button" onClick={() => openCreatePanel()}>
+                  <Plus size={14} />
+                  Create Task
+                </button>
+              ) : (
+                <Link className="btn btn-primary" href="/contacts">Open Contacts</Link>
+              )}
+            </div>
           </div>
         )}
 
