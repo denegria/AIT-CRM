@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
@@ -11,6 +11,7 @@ const empty = { number:'', title:'', client:'', contactId:'', priority:'Medium',
 
 export default function WorkOrdersPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const {
     workOrders,
     addWorkOrder,
@@ -21,6 +22,7 @@ export default function WorkOrdersPage() {
     access,
     loaded,
     role,
+    currentUser,
     accessibleBusinessUnits,
     currentBusinessUnitId,
     currentBusinessUnit,
@@ -29,7 +31,11 @@ export default function WorkOrdersPage() {
   const { toast } = useToast();
   const [drawer, setDrawer] = useState(null);
   const [form, setForm] = useState(empty);
-  const [statusFilter, setStatusFilter] = useState('All');
+  const [statusFilter, setStatusFilter] = useState(() => {
+    const status = searchParams.get('status');
+    return status === 'open' ? 'Open' : status || 'All';
+  });
+  const [ownerFilter, setOwnerFilter] = useState(() => searchParams.get('ownerUserId') || 'all');
   const contactPrefillRef = useRef('');
   const canWriteWorkOrders = Boolean(access?.canWriteWorkOrders);
 
@@ -98,7 +104,9 @@ export default function WorkOrdersPage() {
     { key: 'estimatedCost', label: 'Est. Cost', type: 'currency', sortable: true, editable: true },
   ];
 
-  const filtered = workOrders.filter(w => statusFilter === 'All' || w.status === statusFilter);
+  const filtered = workOrders
+    .filter(w => statusFilter === 'All' || (statusFilter === 'Open' ? w.status !== 'Completed' : w.status === statusFilter))
+    .filter(w => ownerFilter === 'all' || w.assignedTo === (ownerFilter === '__me' ? currentUser?.id : ownerFilter));
 
   const [selectedIds, setSelectedIds] = useState([]);
 
@@ -178,7 +186,12 @@ export default function WorkOrdersPage() {
             <div className="flex-gap">
               <select className="input select" style={{width:130, padding:'4px 8px'}} value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
                 <option value="All">All Statuses</option>
-                {['Pending','In Progress','Completed','On Hold'].map(s=><option key={s} value={s}>{s}</option>)}
+                {['Open','Pending','In Progress','Completed','On Hold'].map(s=><option key={s} value={s}>{s}</option>)}
+              </select>
+              <select className="input select" style={{width:150, padding:'4px 8px'}} value={ownerFilter} onChange={e=>setOwnerFilter(e.target.value)}>
+                <option value="all">All Owners</option>
+                {currentUser?.id && <option value="__me">Me</option>}
+                {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
               </select>
               {role === 'admin' && selectedIds.length > 0 && (
                 <button className="btn fade-in" onClick={exportSelected} data-tooltip="Sample feature — exports selected rows to CSV">

@@ -65,6 +65,10 @@ const LINK_OPTIONS = [
   ['recurring', 'Recurring'],
 ];
 
+const DUE_OPTION_VALUES = new Set(DUE_OPTIONS.map(([value]) => value));
+const STATUS_OPTION_VALUES = new Set(STATUS_OPTIONS.map(([value]) => value));
+const LINK_OPTION_VALUES = new Set(LINK_OPTIONS.map(([value]) => value));
+
 const FOLLOW_UP_OUTCOME_OPTIONS = [
   ['reached_interested', 'Reached - interested'],
   ['left_voicemail', 'Left voicemail'],
@@ -240,12 +244,12 @@ export default function FollowUpQueuePage() {
   const [queueTasks, setQueueTasks] = useState([]);
   const [assignees, setAssignees] = useState([]);
   const [filters, setFilters] = useState({
-    due: 'work',
-    ownerUserId: 'all',
-    businessUnitId: currentBusinessUnitId === 'all' || currentBusinessUnitId === 'unassigned' ? 'all' : currentBusinessUnitId,
-    taskType: 'all',
-    status: 'all',
-    link: 'all',
+    due: DUE_OPTION_VALUES.has(searchParams.get('due')) ? searchParams.get('due') : 'work',
+    ownerUserId: searchParams.get('ownerUserId') || (searchParams.get('mine') === 'true' ? '__me' : 'all'),
+    businessUnitId: searchParams.get('businessUnitId') || (currentBusinessUnitId === 'all' || currentBusinessUnitId === 'unassigned' ? 'all' : currentBusinessUnitId),
+    taskType: TASK_TYPE_OPTIONS.some(([value]) => value === searchParams.get('taskType')) ? searchParams.get('taskType') : 'all',
+    status: STATUS_OPTION_VALUES.has(searchParams.get('status')) ? searchParams.get('status') : 'all',
+    link: LINK_OPTION_VALUES.has(searchParams.get('link')) ? searchParams.get('link') : 'all',
   });
   const [loading, setLoading] = useState(dataSource === 'postgres');
   const [error, setError] = useState('');

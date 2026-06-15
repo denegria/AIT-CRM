@@ -59,14 +59,11 @@ export default function Dashboard() {
     
     // Employee Specific
     const myTasksCount = tasks.filter(t => (t.ownerUserId || t.assignedTo) === currentUserId && isTaskCurrentWork(t)).length;
-    const activeContacts = contacts.filter(c => c.status !== 'Won' && c.status !== 'Lost').length;
+    const activeContacts = contacts.filter(c => isCurrentLeadDateScope(c)).length;
     const pendingInvoices = invoices.filter(f => f.status === 'Pending').length;
     const assignedWOs = workOrders.filter(w => w.assignedTo === currentUserId && w.status !== 'Completed').length;
-    const myPipeline = contacts.filter(c => c.assignedTo === currentUserId && c.status !== 'Won' && c.status !== 'Lost').length;
-    const needsFirstOutreach = contacts.filter(c => (
-      (c.status === 'New Lead' || c.currentStage === 'needs_first_outreach') &&
-      isCurrentLeadDateScope(c)
-    )).length;
+    const myPipeline = contacts.filter(c => c.assignedTo === currentUserId && isCurrentLeadDateScope(c)).length;
+    const needsFirstOutreach = contacts.filter(c => c.needsFirstOutreach && isCurrentLeadDateScope(c)).length;
 
     return { totalRevenue, pipeline, totalInvoiced, activeWOs, newLeads, myTasksCount, activeContacts, pendingInvoices, assignedWOs, myPipeline, needsFirstOutreach };
   }, [financials, workOrders, contacts, tasks, currentUserId]);
@@ -230,12 +227,12 @@ export default function Dashboard() {
         </div>
       ) : (
         <div className="dashboard-kpi-grid" style={{marginBottom:20}}>
-          <KPICard label="My Active Tasks" value={kpis.myTasksCount} change="Due soon" trend="up" />
-          <KPICard label="Active Contacts" value={kpis.activeContacts} change="Needs next action" trend="up" />
+          <KPICard label="My Active Tasks" value={kpis.myTasksCount} change="Due soon" trend="up" href="/tasks?due=work&ownerUserId=__me" />
+          <KPICard label="Active Contacts" value={kpis.activeContacts} change="Current scope" trend="up" href="/contacts?leadDateScope=current" />
           {canReadFinancials
-            ? <KPICard label="Needs First Outreach" value={kpis.needsFirstOutreach} change="Ready to assign" trend="up" />
-            : <KPICard label="My Pipeline" value={kpis.myPipeline} change="Assigned active leads" trend="up" />}
-          <KPICard label="Assigned Work Orders" value={kpis.assignedWOs} change="In progress" trend="up" />
+            ? <KPICard label="Needs First Outreach" value={kpis.needsFirstOutreach} change="Ready to assign" trend="up" href="/contacts?leadDateScope=current&facet=needs_first_outreach" />
+            : <KPICard label="My Pipeline" value={kpis.myPipeline} change="Assigned active leads" trend="up" href="/contacts?leadDateScope=current&facet=mine" />}
+          <KPICard label="Assigned Work Orders" value={kpis.assignedWOs} change="Open orders" trend="up" href="/work-orders?status=open&ownerUserId=__me" />
         </div>
       )}
 
