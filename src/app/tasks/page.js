@@ -953,6 +953,17 @@ export default function FollowUpQueuePage() {
       </div>
 
       <div className="card">
+        <div className={s.mobileFilterSummary} aria-label="Active task filters">
+          <div className={s.mobileFilterText}>
+            <span className={s.mobileFilterLabel}>Active filters</span>
+            <span className={s.mobileFilterScope}>{activeTaskScope}</span>
+            <span className={s.mobileFilterCount}>{loading ? 'Loading tasks' : `${filteredTasks.length} tasks shown`}</span>
+          </div>
+          <button className="btn btn-sm" type="button" onClick={resetFilters}>
+            <FilterX size={14} />
+            Reset
+          </button>
+        </div>
         <div className={s.toolbar}>
           <label className={s.filterGroup}>
             <span className="form-label">Due</span>
