@@ -40,6 +40,41 @@
   min-width: 0;
 }
 
+.mobileFilterSummary {
+  display: none;
+}
+
+.mobileFilterText {
+  min-width: 0;
+}
+
+.mobileFilterLabel {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
+
+.mobileFilterScope {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 720;
+  line-height: 1.25;
+}
+
+.mobileFilterCount {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.25;
+}
+
 .createPanel {
   display: grid;
   gap: 12px;
@@ -396,8 +431,82 @@
 }
 
 @media (max-width: 760px) {
-  .summaryGrid,
-  .toolbar,
+  .summaryGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .summaryTile {
+    min-height: 58px;
+    padding: 10px;
+  }
+
+  .summaryValue {
+    font-size: var(--text-xl);
+  }
+
+  .summaryLabel {
+    margin-top: 4px;
+    line-height: 1.2;
+  }
+
+  .mobileFilterSummary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+    padding: 10px 10px 10px 12px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--bg-secondary) 85%, var(--bg-tertiary));
+  }
+
+  .mobileFilterSummary button {
+    flex: 0 0 auto;
+  }
+
+  .toolbar {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 12px;
+  }
+
+  .filterGroup {
+    min-width: 0;
+  }
+
+  .filterGroup:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+
+  .toolbar > button {
+    display: none;
+  }
+
+  .toolbar :global(.form-label) {
+    margin-bottom: 4px;
+    font-size: 0.68rem;
+  }
+
+  .toolbar :global(.select) {
+    min-height: 36px;
+    padding: 6px 9px;
+    font-size: var(--text-sm);
+  }
+
+  .toolbar .dueText {
+    min-height: 36px;
+    display: flex;
+    align-items: center;
+    margin-top: 0;
+    padding: 6px 9px;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+  }
+
   .createGrid,
   .editPanel {
     grid-template-columns: 1fr;
