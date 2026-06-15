@@ -12,6 +12,7 @@ import {
   isOpenTask,
   taskDueKey,
 } from '@/lib/dashboard/task-calendar';
+import { isCurrentLeadDateScope } from '@/lib/contact-directory-view';
 import {
   isTaskCompletedToday,
   isTaskCurrentWork,
@@ -62,7 +63,10 @@ export default function Dashboard() {
     const pendingInvoices = invoices.filter(f => f.status === 'Pending').length;
     const assignedWOs = workOrders.filter(w => w.assignedTo === currentUserId && w.status !== 'Completed').length;
     const myPipeline = contacts.filter(c => c.assignedTo === currentUserId && c.status !== 'Won' && c.status !== 'Lost').length;
-    const needsFirstOutreach = contacts.filter(c => c.status === 'New Lead' || c.currentStage === 'needs_first_outreach').length;
+    const needsFirstOutreach = contacts.filter(c => (
+      (c.status === 'New Lead' || c.currentStage === 'needs_first_outreach') &&
+      isCurrentLeadDateScope(c)
+    )).length;
 
     return { totalRevenue, pipeline, totalInvoiced, activeWOs, newLeads, myTasksCount, activeContacts, pendingInvoices, assignedWOs, myPipeline, needsFirstOutreach };
   }, [financials, workOrders, contacts, tasks, currentUserId]);
