@@ -1525,7 +1525,34 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     </div>
                   </div>
                 ))}
-                {contactFinancials.length === 0 && <div className="empty-state">No financial records linked.</div>}
+                {contactFinancials.length === 0 && (
+                  <div className={`empty-state ${s.financialEmptyState}`}>
+                    <div className="empty-state-title">No financial records for this contact yet</div>
+                    <p className="empty-state-copy">
+                      {access.canWriteFinancials
+                        ? (isAitUsaContact
+                            ? 'You can create an estimate or generate the first AIT USA payment receipt from this contact record.'
+                            : 'You can create the first estimate from this contact record. Invoices and payments become available from linked work orders.')
+                        : 'No estimates, invoices, receipts, or payments are visible for this contact in the current scope.'}
+                    </p>
+                    <div className="empty-state-actions">
+                      {access.canWriteFinancials ? (
+                        <>
+                          <button className="btn btn-primary" type="button" onClick={openEstimateModal}>
+                            <FileText size={16} /> New Estimate
+                          </button>
+                          {isAitUsaContact && (
+                            <button className="btn" type="button" onClick={() => openPaymentModal()}>
+                              <DollarSign size={16} /> Generate Receipt
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <Link className="btn btn-primary" href="/contacts">Back to Contacts</Link>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

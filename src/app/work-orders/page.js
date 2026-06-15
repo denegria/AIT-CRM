@@ -132,6 +132,40 @@ export default function WorkOrdersPage() {
           columns={columns}
           data={filtered.map(w => ({ ...w, assignedLabel: empName(w.assignedTo), divisionLabel: unitName(w.businessUnitId) }))}
           searchPlaceholder="Search work orders..."
+          emptyState={({ hasRows, hasSearch, clearSearch }) => (
+            <div className="empty-state">
+              <div className="empty-state-title">
+                {hasSearch || statusFilter !== 'All' ? 'No work orders match this view' : 'No work orders in this scope'}
+              </div>
+              <p className="empty-state-copy">
+                {hasSearch || statusFilter !== 'All'
+                  ? `Search or status filters are hiding work orders in ${currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}.`
+                  : `No work orders have been created for ${currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`} yet. Work orders usually start from a contact/client record.`}
+              </p>
+              <div className="empty-state-actions">
+                {hasSearch && (
+                  <button className="btn btn-primary" type="button" onClick={clearSearch}>
+                    Clear Search
+                  </button>
+                )}
+                {!hasSearch && statusFilter !== 'All' && (
+                  <button className="btn btn-primary" type="button" onClick={() => setStatusFilter('All')}>
+                    Reset Status
+                  </button>
+                )}
+                {workOrders.length === 0 && canWriteWorkOrders && (
+                  <button className={`btn ${hasSearch || statusFilter !== 'All' ? '' : 'btn-primary'}`} type="button" onClick={() => router.push('/contacts')}>
+                    Create From Contact
+                  </button>
+                )}
+                {workOrders.length === 0 && !canWriteWorkOrders && (
+                  <button className="btn btn-primary" type="button" onClick={() => router.push('/contacts')}>
+                    Open Contacts
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
           onEdit={canWriteWorkOrders ? ((id, u) => {
             updateWorkOrder(id, u)
               .then(() => toast('Field updated'))

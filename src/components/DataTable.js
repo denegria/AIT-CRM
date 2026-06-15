@@ -19,6 +19,7 @@ export default function DataTable({
   onEdit,
   searchPlaceholder,
   toolbarExtra,
+  emptyState,
   selectable,
   selectedIds = [],
   onSelect,
@@ -100,10 +101,17 @@ export default function DataTable({
         {toolbarExtra}
       </div>
       {filtered.length === 0 ? (
-        <div className={s.empty}>
-          <FileQuestion size={32} style={{opacity:0.5, marginBottom: 8}} />
-          <div>No records found</div>
-        </div>
+        typeof emptyState === 'function' ? emptyState({
+          hasRows: data.length > 0,
+          hasSearch: Boolean(search.trim()),
+          search,
+          clearSearch: () => setSearch(''),
+        }) : (
+          <div className={s.empty}>
+            <FileQuestion size={32} style={{opacity:0.5, marginBottom: 8}} />
+            <div>No records found</div>
+          </div>
+        )
       ) : (
         <>
         <table className={s.table}>

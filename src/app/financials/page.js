@@ -1,5 +1,6 @@
 'use client';
 import { useState, useMemo } from 'react';
+import Link from 'next/link';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
@@ -108,7 +109,13 @@ export default function FinancialsPage() {
   if (!canUseFinancialsWorkspace) {
     return (
       <div className="empty-state">
-        Employee financial actions live inside each contact/client record. Open a client to create estimates, download invoices, and record payments.
+        <div className="empty-state-title">Financial actions start from contacts</div>
+        <p className="empty-state-copy">
+          This direct workspace is reserved for finance oversight. For your role, estimates, invoices, receipts, and payments live inside each contact/client record.
+        </p>
+        <div className="empty-state-actions">
+          <Link className="btn btn-primary" href="/contacts">Open Contacts</Link>
+        </div>
       </div>
     );
   }
