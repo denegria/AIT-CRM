@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useCRM } from '@/lib/store';
 import KPICard from '@/components/KPICard';
@@ -13,9 +13,12 @@ import {
   taskDueKey,
 } from '@/lib/dashboard/task-calendar';
 import { isCurrentLeadDateScope } from '@/lib/contact-directory-view';
+import { filterContactsByDirectoryFacet } from '@/lib/contact-directory-facets';
 import {
   isTaskCompletedToday,
   isTaskCurrentWork,
+  isTaskDueToday,
+  isTaskOverdue,
 } from '@/lib/tasks/visibility.js';
 
 function dateInputToIso(value) {
@@ -23,6 +26,18 @@ function dateInputToIso(value) {
   const date = new Date(`${value}T09:00:00`);
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString();
+}
+
+function contactLabel(contact = {}) {
+  return contact.name || contact.client || contact.company || 'Unnamed contact';
+}
+
+function taskLabel(task = {}) {
+  return task.title || 'Untitled task';
+}
+
+function previewLabels(items = [], formatter) {
+  return items.slice(0, 3).map(formatter).filter(Boolean);
 }
 
 export default function Dashboard() {
@@ -45,6 +60,7 @@ export default function Dashboard() {
     scopeLabel,
   } = useCRM();
   const { toast } = useToast();
+  const [dashboardNow] = useState(() => Date.now());
   const currentUserId = currentUser?.id || 'emp-1';
   const isAdminView = role === 'admin' || Boolean(currentUser?.canAccessAllBusinessUnits);
   const canReadFinancials = Boolean(access?.canReadFinancials);
@@ -115,6 +131,58 @@ export default function Dashboard() {
     const taskEvents = buildTaskCalendarEvents(myTasks);
     return [...calendarEvents, ...taskEvents];
   }, [calendarEvents, myTasks]);
+
+  const dashboardActionQueues = useMemo(() => {
+    const currentContacts = contacts.filter(c => isCurrentLeadDateScope(c));
+    const now = dashboardNow;
+    const needsFirstOutreach = filterContactsByDirectoryFacet(currentContacts, 'needs_first_outreach', { currentUserId, now });
+    const unassignedContacts = filterContactsByDirectoryFacet(currentContacts, 'unassigned', { currentUserId, now });
+    const noRecentTouch = filterContactsByDirectoryFacet(currentContacts, 'no_recent_touch', { currentUserId, now });
+    const dueTodayTasks = myTasks.filter(task => isTaskDueToday(task));
+    const overdueTasks = myTasks.filter(task => isTaskOverdue(task));
+
+    return [
+      {
+        key: 'needs-first-outreach',
+        label: 'Needs first outreach',
+        value: needsFirstOutreach.length,
+        href: '/contacts?leadDateScope=current&facet=needs_first_outreach',
+        cta: needsFirstOutreach.length ? 'Open outreach list' : 'Current leads are covered',
+        emptyText: 'No current leads are waiting on first outreach.',
+        previews: previewLabels(needsFirstOutreach, contactLabel),
+      },
+      {
+        key: 'unassigned-contacts',
+        label: 'Unassigned contacts',
+        value: unassignedContacts.length,
+        href: '/contacts?leadDateScope=current&facet=unassigned',
+        cta: unassignedContacts.length ? 'Assign owners' : 'No owner gaps',
+        emptyText: 'Every current lead/contact in this scope has an owner.',
+        previews: previewLabels(unassignedContacts, contactLabel),
+      },
+      {
+        key: 'no-recent-touch',
+        label: 'No recent touch',
+        value: noRecentTouch.length,
+        href: '/contacts?leadDateScope=current&facet=no_recent_touch',
+        cta: noRecentTouch.length ? 'Review stale contacts' : 'Touch history is current',
+        emptyText: 'No current contacts are past the 30-day touch window.',
+        previews: previewLabels(noRecentTouch, contactLabel),
+      },
+      {
+        key: 'task-pressure',
+        label: overdueTasks.length ? 'Overdue tasks' : 'Due today',
+        value: overdueTasks.length || dueTodayTasks.length,
+        href: overdueTasks.length
+          ? `/tasks?due=overdue${isAdminView ? '' : '&ownerUserId=__me'}`
+          : `/tasks?due=today${isAdminView ? '' : '&ownerUserId=__me'}`,
+        cta: overdueTasks.length ? 'Clear overdue work' : (dueTodayTasks.length ? 'Open today' : 'No task pressure'),
+        emptyText: 'No overdue tasks or due-today tasks in this dashboard scope.',
+        previews: previewLabels(overdueTasks.length ? overdueTasks : dueTodayTasks, taskLabel),
+        tone: overdueTasks.length ? 'urgent' : 'normal',
+      },
+    ];
+  }, [contacts, currentUserId, dashboardNow, isAdminView, myTasks]);
 
   const empProgress = useMemo(() => {
     return employees.map(emp => {
@@ -235,6 +303,42 @@ export default function Dashboard() {
           <KPICard label="Assigned Work Orders" value={kpis.assignedWOs} change="Open orders" trend="up" href="/work-orders?status=open&ownerUserId=__me" />
         </div>
       )}
+
+      <div className="card dashboard-action-card" style={{marginBottom:20}}>
+        <div className="flex-between" style={{marginBottom:12, gap:12}}>
+          <div>
+            <div className="card-title" style={{marginBottom:4}}>Action queues</div>
+            <p className="page-subtitle" style={{margin:0}}>
+              {currentBusinessUnit?.name || `All ${scopeLabel}`} · work that needs a next step
+            </p>
+          </div>
+          <Link className="btn btn-sm" href="/contacts?leadDateScope=current">Open contacts</Link>
+        </div>
+        <div className="dashboard-action-grid">
+          {dashboardActionQueues.map((queue) => (
+            <Link
+              key={queue.key}
+              className={`dashboard-queue-card ${queue.tone === 'urgent' ? 'urgent' : ''}`}
+              href={queue.href}
+            >
+              <div className="dashboard-queue-topline">
+                <span>{queue.label}</span>
+                <strong>{queue.value}</strong>
+              </div>
+              {queue.previews.length > 0 ? (
+                <div className="dashboard-queue-preview" title={queue.previews.join(', ')}>
+                  {queue.previews.join(' · ')}
+                </div>
+              ) : (
+                <div className="dashboard-queue-preview muted">
+                  {queue.emptyText}
+                </div>
+              )}
+              <span className="dashboard-queue-cta">{queue.cta}</span>
+            </Link>
+          ))}
+        </div>
+      </div>
 
       <div className="dashboard-panel-grid" style={{marginBottom:20}}>
         <div className="card">
