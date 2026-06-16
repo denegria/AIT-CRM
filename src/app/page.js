@@ -7,6 +7,7 @@ import TaskList from '@/components/TaskList';
 import Calendar from '@/components/Calendar';
 import { BarChart, PieChart, ChartLegend } from '@/components/Charts';
 import { useToast } from '@/components/Toast';
+import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
 import {
   buildTaskCalendarEvents,
   isOpenTask,
@@ -38,6 +39,28 @@ function taskLabel(task = {}) {
 
 function previewLabels(items = [], formatter) {
   return items.slice(0, 3).map(formatter).filter(Boolean);
+}
+
+function moneyLabel(value) {
+  return `$${Math.round(Number(value || 0)).toLocaleString()}`;
+}
+
+function isAitSigns(contact = {}) {
+  return contact.workflowKey === WORKFLOW_KEYS.AIT_SIGNS;
+}
+
+function isAitUsa(contact = {}) {
+  return contact.workflowKey === WORKFLOW_KEYS.AIT_USA;
+}
+
+function isOpenWorkOrder(workOrder = {}) {
+  return String(workOrder.status || '').toLowerCase() !== 'completed';
+}
+
+function isPendingEstimate(record = {}) {
+  const type = String(record.type || '').toLowerCase();
+  const status = String(record.status || '').toLowerCase();
+  return type === 'estimate' && status !== 'draft' && status !== 'paid';
 }
 
 export default function Dashboard() {
@@ -132,57 +155,82 @@ export default function Dashboard() {
     return [...calendarEvents, ...taskEvents];
   }, [calendarEvents, myTasks]);
 
-  const dashboardActionQueues = useMemo(() => {
+  const dashboardDivisionPanels = useMemo(() => {
     const currentContacts = contacts.filter(c => isCurrentLeadDateScope(c));
     const now = dashboardNow;
-    const needsFirstOutreach = filterContactsByDirectoryFacet(currentContacts, 'needs_first_outreach', { currentUserId, now });
-    const unassignedContacts = filterContactsByDirectoryFacet(currentContacts, 'unassigned', { currentUserId, now });
-    const noRecentTouch = filterContactsByDirectoryFacet(currentContacts, 'no_recent_touch', { currentUserId, now });
+    const aitSignsContacts = contacts.filter(isAitSigns);
+    const aitUsaContacts = currentContacts.filter(isAitUsa);
+    const signsEstimate = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_estimate', { currentUserId, now });
+    const signsWorkOrder = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_work_order', { currentUserId, now });
+    const signsFulfillment = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_fulfillment', { currentUserId, now });
+    const signsPayment = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_payment_balance', { currentUserId, now });
+    const openWorkOrders = workOrders.filter(isOpenWorkOrder);
+    const pendingEstimates = financials.filter(isPendingEstimate);
+    const pendingEstimateValue = pendingEstimates.reduce((sum, record) => sum + Number(record.amount || 0), 0);
+    const usaNewLeads = filterContactsByDirectoryFacet(aitUsaContacts, 'usa_new_lead', { currentUserId, now });
+    const usaFollowUp = filterContactsByDirectoryFacet(aitUsaContacts, 'usa_follow_up', { currentUserId, now });
+    const usaFirstOutreach = filterContactsByDirectoryFacet(aitUsaContacts, 'needs_first_outreach', { currentUserId, now }).filter(isAitUsa);
+    const usaBadContactChannel = filterContactsByDirectoryFacet(aitUsaContacts, 'usa_bad_contact_channel', { currentUserId, now });
     const dueTodayTasks = myTasks.filter(task => isTaskDueToday(task));
     const overdueTasks = myTasks.filter(task => isTaskOverdue(task));
+    const panels = [];
 
-    return [
-      {
-        key: 'needs-first-outreach',
-        label: 'Needs first outreach',
-        value: needsFirstOutreach.length,
-        href: '/contacts?leadDateScope=current&facet=needs_first_outreach',
-        cta: needsFirstOutreach.length ? 'Open outreach list' : 'Current leads are covered',
-        emptyText: 'No current leads are waiting on first outreach.',
-        previews: previewLabels(needsFirstOutreach, contactLabel),
-      },
-      {
-        key: 'unassigned-contacts',
-        label: 'Unassigned contacts',
-        value: unassignedContacts.length,
-        href: '/contacts?leadDateScope=current&facet=unassigned',
-        cta: unassignedContacts.length ? 'Assign owners' : 'No owner gaps',
-        emptyText: 'Every current lead/contact in this scope has an owner.',
-        previews: previewLabels(unassignedContacts, contactLabel),
-      },
-      {
-        key: 'no-recent-touch',
-        label: 'No recent touch',
-        value: noRecentTouch.length,
-        href: '/contacts?leadDateScope=current&facet=no_recent_touch',
-        cta: noRecentTouch.length ? 'Review stale contacts' : 'Touch history is current',
-        emptyText: 'No current contacts are past the 30-day touch window.',
-        previews: previewLabels(noRecentTouch, contactLabel),
-      },
-      {
-        key: 'task-pressure',
-        label: overdueTasks.length ? 'Overdue tasks' : 'Due today',
-        value: overdueTasks.length || dueTodayTasks.length,
-        href: overdueTasks.length
-          ? `/tasks?due=overdue${isAdminView ? '' : '&ownerUserId=__me'}`
-          : `/tasks?due=today${isAdminView ? '' : '&ownerUserId=__me'}`,
-        cta: overdueTasks.length ? 'Clear overdue work' : (dueTodayTasks.length ? 'Open today' : 'No task pressure'),
-        emptyText: 'No overdue tasks or due-today tasks in this dashboard scope.',
-        previews: previewLabels(overdueTasks.length ? overdueTasks : dueTodayTasks, taskLabel),
-        tone: overdueTasks.length ? 'urgent' : 'normal',
-      },
-    ];
-  }, [contacts, currentUserId, dashboardNow, isAdminView, myTasks]);
+    if (aitSignsContacts.length || openWorkOrders.length || pendingEstimates.length) {
+      panels.push({
+        key: 'ait-signs',
+        title: 'AIT Signs work movement',
+        subtitle: `${openWorkOrders.length} open work orders · ${moneyLabel(pendingEstimateValue)} pending estimates`,
+        href: '/work-orders?status=open',
+        cta: openWorkOrders.length ? 'Open work orders' : 'Review Signs pipeline',
+        emptyText: 'No AIT Signs operational records in this scope.',
+        previews: previewLabels(openWorkOrders, (order) => order.title || order.client || order.number),
+        metrics: [
+          { label: 'Estimate', value: signsEstimate.length, href: '/contacts?facet=signs_estimate' },
+          { label: 'Work order', value: Math.max(signsWorkOrder.length, openWorkOrders.length), href: '/work-orders?status=open' },
+          { label: 'Fulfillment', value: signsFulfillment.length, href: '/contacts?facet=signs_fulfillment' },
+          { label: 'Payment', value: signsPayment.length, href: '/contacts?facet=signs_payment_balance' },
+        ],
+      });
+    }
+
+    if (aitUsaContacts.length || usaNewLeads.length || usaFollowUp.length) {
+      panels.push({
+        key: 'ait-usa',
+        title: 'AIT USA enrollment response',
+        subtitle: `${usaFollowUp.length} follow-ups · ${usaFirstOutreach.length} first outreach`,
+        href: '/contacts?leadDateScope=current&facet=usa_follow_up',
+        cta: usaFollowUp.length ? 'Open follow-ups' : 'Review enrollment leads',
+        emptyText: 'No AIT USA enrollment leads in this scope.',
+        previews: previewLabels(usaFollowUp.length ? usaFollowUp : usaNewLeads, contactLabel),
+        metrics: [
+          { label: 'New lead', value: usaNewLeads.length, href: '/contacts?leadDateScope=current&facet=usa_new_lead' },
+          { label: 'Follow-up', value: usaFollowUp.length, href: '/contacts?leadDateScope=current&facet=usa_follow_up' },
+          { label: 'First outreach', value: usaFirstOutreach.length, href: '/contacts?leadDateScope=current&facet=needs_first_outreach' },
+          { label: 'Bad channel', value: usaBadContactChannel.length, href: '/contacts?leadDateScope=current&facet=usa_bad_contact_channel' },
+        ],
+      });
+    }
+
+    panels.push({
+      key: 'task-pressure',
+      title: 'Task pressure',
+      subtitle: overdueTasks.length ? `${overdueTasks.length} overdue tasks need attention` : `${dueTodayTasks.length} tasks due today`,
+      href: overdueTasks.length
+        ? `/tasks?due=overdue${isAdminView ? '' : '&ownerUserId=__me'}`
+        : `/tasks?due=today${isAdminView ? '' : '&ownerUserId=__me'}`,
+      cta: overdueTasks.length ? 'Clear overdue work' : (dueTodayTasks.length ? 'Open today' : 'No task pressure'),
+      emptyText: 'No overdue tasks or due-today tasks in this dashboard scope.',
+      previews: previewLabels(overdueTasks.length ? overdueTasks : dueTodayTasks, taskLabel),
+      tone: overdueTasks.length ? 'urgent' : 'normal',
+      metrics: [
+        { label: 'Overdue', value: overdueTasks.length, href: `/tasks?due=overdue${isAdminView ? '' : '&ownerUserId=__me'}` },
+        { label: 'Due today', value: dueTodayTasks.length, href: `/tasks?due=today${isAdminView ? '' : '&ownerUserId=__me'}` },
+        { label: 'Active', value: myTasks.filter(task => isTaskCurrentWork(task)).length, href: `/tasks?due=work${isAdminView ? '' : '&ownerUserId=__me'}` },
+      ],
+    });
+
+    return panels;
+  }, [contacts, currentUserId, dashboardNow, financials, isAdminView, myTasks, workOrders]);
 
   const empProgress = useMemo(() => {
     return employees.map(emp => {
@@ -304,38 +352,44 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="card dashboard-action-card" style={{marginBottom:20}}>
+      <div className="card dashboard-intel-card" style={{marginBottom:20}}>
         <div className="flex-between" style={{marginBottom:12, gap:12}}>
           <div>
-            <div className="card-title" style={{marginBottom:4}}>Action queues</div>
+            <div className="card-title" style={{marginBottom:4}}>Division intelligence</div>
             <p className="page-subtitle" style={{margin:0}}>
-              {currentBusinessUnit?.name || `All ${scopeLabel}`} · work that needs a next step
+              {currentBusinessUnit?.name || `All ${scopeLabel}`} · live signals by business line
             </p>
           </div>
-          <Link className="btn btn-sm" href="/contacts?leadDateScope=current">Open contacts</Link>
+          <Link className="btn btn-sm" href="/pipeline">Open pipeline</Link>
         </div>
-        <div className="dashboard-action-grid">
-          {dashboardActionQueues.map((queue) => (
-            <Link
-              key={queue.key}
-              className={`dashboard-queue-card ${queue.tone === 'urgent' ? 'urgent' : ''}`}
-              href={queue.href}
-            >
-              <div className="dashboard-queue-topline">
-                <span>{queue.label}</span>
-                <strong>{queue.value}</strong>
+        <div className="dashboard-intel-grid">
+          {dashboardDivisionPanels.map((panel) => (
+            <div key={panel.key} className={`dashboard-intel-panel ${panel.tone === 'urgent' ? 'urgent' : ''}`}>
+              <div className="dashboard-intel-panel-head">
+                <div>
+                  <div className="dashboard-intel-title">{panel.title}</div>
+                  <div className="dashboard-intel-subtitle">{panel.subtitle}</div>
+                </div>
+                <Link className="dashboard-intel-cta" href={panel.href}>{panel.cta}</Link>
               </div>
-              {queue.previews.length > 0 ? (
-                <div className="dashboard-queue-preview" title={queue.previews.join(', ')}>
-                  {queue.previews.join(' · ')}
+              <div className="dashboard-intel-metrics">
+                {panel.metrics.map((metric) => (
+                  <Link key={metric.label} className="dashboard-intel-metric" href={metric.href}>
+                    <span>{metric.label}</span>
+                    <strong>{metric.value}</strong>
+                  </Link>
+                ))}
+              </div>
+              {panel.previews.length > 0 ? (
+                <div className="dashboard-intel-preview" title={panel.previews.join(', ')}>
+                  {panel.previews.join(' · ')}
                 </div>
               ) : (
-                <div className="dashboard-queue-preview muted">
-                  {queue.emptyText}
+                <div className="dashboard-intel-preview muted">
+                  {panel.emptyText}
                 </div>
               )}
-              <span className="dashboard-queue-cta">{queue.cta}</span>
-            </Link>
+            </div>
           ))}
         </div>
       </div>
