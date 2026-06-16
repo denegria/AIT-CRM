@@ -139,6 +139,7 @@ export async function POST(request) {
         businessUnitId,
         contactId: contact.id,
         workOrderId: workOrder?.id || null,
+        estimateId: workOrder?.estimateId || null,
         documentNumber,
         documentType: type,
         status: String(body.status || 'Pending').trim() || 'Pending',
