@@ -360,6 +360,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const contactInvoices = useMemo(() => contactFinancials.filter(isInvoiceRecord), [contactFinancials]);
   const latestInvoice = contactInvoices[0] || null;
   const latestWorkOrder = contactWorkOrders[0] || null;
+  const invoiceByWorkOrderId = useMemo(() => {
+    const invoices = new Map();
+    contactInvoices.forEach((invoice) => {
+      if (invoice.workOrderId && !invoices.has(invoice.workOrderId)) invoices.set(invoice.workOrderId, invoice);
+    });
+    return invoices;
+  }, [contactInvoices]);
   const contactFinancialCounts = useMemo(() => contactFinancials.reduce((counts, record) => {
     const category = financialCategory(record);
     counts[category] = (counts[category] || 0) + 1;
@@ -384,7 +391,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const selectedPaymentWorkOrderTotal = moneyValue(selectedPaymentInvoice?.amount || selectedPaymentWorkOrder?.estimatedCost || selectedPaymentWorkOrder?.amount);
   const selectedPaymentWorkOrderPaid = useMemo(() => contactFinancials
     .filter((record) => record.workOrderId && record.workOrderId === selectedPaymentWorkOrder?.id)
-    .filter((record) => !String(record.type || '').toLowerCase().includes('invoice'))
+    .filter((record) => financialCategory(record) === 'payment')
     .reduce((sum, record) => sum + moneyValue(record.paidAmount || record.amount), 0), [contactFinancials, selectedPaymentWorkOrder?.id]);
   const selectedPaymentBalance = Math.max(selectedPaymentWorkOrderTotal - selectedPaymentWorkOrderPaid, 0);
   const balanceAfterPayment = Math.max(selectedPaymentBalance - moneyValue(paymentForm.amount), 0);
@@ -399,6 +406,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const showSchoolLocationField = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA;
   const isAitUsaContact = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA || /ait usa|institute/i.test(contactBusinessUnit?.name || '');
   const canGenerateStudentReceipt = !isAitUsaContact || isEnrolledStudent(contact);
+  const hasWorkOrders = contactWorkOrders.length > 0;
+  const hasInvoices = contactInvoices.length > 0;
   const visibleFinancials = useMemo(() => (
     isAitUsaContact
       ? contactFinancials.filter((record) => {
@@ -410,6 +419,36 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const editSchoolLocationOptions = schoolLocationOptions(editForm?.address);
   const showWorkOrdersTab = detailView.tabs.showWorkOrders;
   const showFinancialsTab = detailView.tabs.showFinancials || (isAitUsaContact && access.canWriteFinancials);
+  const financialPrerequisites = isAitUsaContact
+    ? [{
+        key: 'student-status',
+        label: 'Student status',
+        detail: canGenerateStudentReceipt ? 'Enrolled' : `Currently ${contact?.status || 'Unset'}`,
+        ready: canGenerateStudentReceipt,
+      }]
+    : [
+        {
+          key: 'work-order',
+          label: 'Invoice source',
+          detail: hasWorkOrders ? `${contactWorkOrders.length} work order${contactWorkOrders.length === 1 ? '' : 's'}` : 'Create work order',
+          ready: hasWorkOrders,
+        },
+        {
+          key: 'invoice',
+          label: 'Payment source',
+          detail: hasInvoices ? `${contactInvoices.length} invoice${contactInvoices.length === 1 ? '' : 's'}` : 'Generate invoice',
+          ready: hasInvoices,
+        },
+      ];
+  const financialNotice = isAitUsaContact
+    ? (canGenerateStudentReceipt
+        ? { tone: 'ready', text: 'Ready to generate a student receipt.' }
+        : { tone: 'blocked', text: 'Student must be Enrolled before generating a receipt.' })
+    : (!hasWorkOrders
+        ? { tone: 'blocked', text: 'Create a work order before generating an invoice.' }
+        : (!hasInvoices
+            ? { tone: 'warning', text: 'Generate an invoice from a work order before recording a payment.' }
+            : { tone: 'ready', text: 'Invoice is ready for payment recording.' }));
   const renderedActiveTab =
     (!showLinkedPeoplePanel && activeTab === 'contacts') ||
     (!showWorkOrdersTab && activeTab === 'workorders') ||
@@ -763,7 +802,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     const workOrderTotal = moneyValue(invoice?.amount || invoice?.balanceDue || workOrder?.estimatedCost || workOrder?.amount);
     const paid = contactFinancials
       .filter((record) => record.workOrderId && record.workOrderId === workOrder?.id)
-      .filter((record) => !String(record.type || '').toLowerCase().includes('invoice'))
+      .filter((record) => financialCategory(record) === 'payment')
       .reduce((sum, record) => sum + moneyValue(record.paidAmount || record.amount), 0);
     setPaymentForm({
       ...emptyPaymentForm,
@@ -829,12 +868,14 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
   const downloadInvoiceFromWorkOrder = (workOrder = latestWorkOrder) => {
     if (!workOrder) {
-      toast('Create a work order before generating an invoice.', 'error');
+      toast('Create a work order before generating an invoice. Use the Work Orders tab first.', 'error');
+      if (showWorkOrdersTab) setActiveTab('workorders');
       return;
     }
     const amount = moneyValue(workOrder.estimatedCost || workOrder.amount);
     const paidAmount = contactFinancials
       .filter((record) => record.workOrderId === workOrder.id)
+      .filter((record) => financialCategory(record) === 'payment')
       .reduce((sum, record) => sum + moneyValue(record.paidAmount || record.amount), 0);
     const invoice = {
       id: `invoice-${workOrder.id}`,
@@ -865,6 +906,18 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         toast('Invoice saved and downloaded');
       })
       .catch((error) => toast(error.message || 'Invoice save failed.', 'error'));
+  };
+
+  const recordPaymentAgainstInvoice = (invoice = latestInvoice) => {
+    if (isAitUsaContact) {
+      openPaymentModal();
+      return;
+    }
+    if (!invoice) {
+      toast('Generate an invoice from a work order before recording a payment.', 'error');
+      return;
+    }
+    openPaymentModal(invoice);
   };
 
   const moveToNextStatus = () => {
@@ -1494,13 +1547,27 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
             {showWorkOrdersTab && renderedActiveTab === 'workorders' && (
               <div className={s.recordsList}>
-                {access.canWriteWorkOrders && (
-                  <Link className="btn btn-primary" href={`/work-orders?contactId=${encodeURIComponent(contact.id)}`}>
-                    <ClipboardList size={16} /> Create Work Order
-                  </Link>
-                )}
-                {contactWorkOrders.map(wo => (
-                  <Link key={wo.id} className={`${s.recordCard} ${s.recordLinkCard}`} href={`/work-orders/${wo.id}`}>
+                <div className={s.commandCard}>
+                  <div className={s.commandCopy}>
+                    <div className={s.commandTitle}>Work orders</div>
+                    <p>
+                      {isAitUsaContact
+                        ? 'Review work connected to this student record.'
+                        : 'Create work orders here. Invoices are generated from a saved work order.'}
+                    </p>
+                  </div>
+                  {access.canWriteWorkOrders && (
+                    <div className={s.commandActions}>
+                      <Link className="btn btn-primary" href={`/work-orders?contactId=${encodeURIComponent(contact.id)}`}>
+                        <ClipboardList size={16} /> Create Work Order
+                      </Link>
+                    </div>
+                  )}
+                </div>
+                {contactWorkOrders.map((wo) => {
+                  const workOrderInvoice = invoiceByWorkOrderId.get(wo.id);
+                  return (
+                  <div key={wo.id} className={s.recordCard}>
                     <div className={s.recordMain}>
                       <div className={s.recordIcon}><ClipboardList size={20} /></div>
                       <div>
@@ -1508,41 +1575,87 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                         <div className={s.recordSubtitle}>{wo.number} • Due {wo.dueDate}</div>
                       </div>
                     </div>
-                    <span className={`badge badge-${wo.status.toLowerCase().replace(' ', '')}`}>{wo.status}</span>
-                  </Link>
-                ))}
-                {contactWorkOrders.length === 0 && <div className="empty-state">No work orders linked.</div>}
+                    <div className={s.recordActions}>
+                      <span className={`badge badge-${wo.status.toLowerCase().replace(' ', '')}`}>{wo.status}</span>
+                      {!isAitUsaContact && access.canWriteFinancials && (
+                        workOrderInvoice ? (
+                          <button className="btn btn-sm" type="button" onClick={() => recordPaymentAgainstInvoice(workOrderInvoice)}>
+                            <DollarSign size={14} /> Record Payment
+                          </button>
+                        ) : (
+                          <button className="btn btn-sm" type="button" onClick={() => downloadInvoiceFromWorkOrder(wo)}>
+                            <FileText size={14} /> Generate Invoice
+                          </button>
+                        )
+                      )}
+                      <Link className="btn btn-sm" href={`/work-orders/${wo.id}`}>Open</Link>
+                    </div>
+                  </div>
+                  );
+                })}
+                {contactWorkOrders.length === 0 && (
+                  <div className={`empty-state ${s.financialEmptyState}`}>
+                    <div className="empty-state-title">No work orders linked</div>
+                    <p className="empty-state-copy">
+                      Create the work order first. For AIT Signs, invoice generation starts from this tab after the work order exists.
+                    </p>
+                    {access.canWriteWorkOrders && (
+                      <div className="empty-state-actions">
+                        <Link className="btn btn-primary" href={`/work-orders?contactId=${encodeURIComponent(contact.id)}`}>
+                          <ClipboardList size={16} /> Create Work Order
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
             {renderedActiveTab === 'financials' && (
               <div className={s.recordsList}>
                 {access.canWriteFinancials && (
-                  <div className={s.financialCommandCard}>
-                    <div className={s.financialCommandCopy}>
-                      <div className={s.financialCommandTitle}>
-                        {isAitUsaContact ? 'Student receipts' : 'Client documents'}
-                      </div>
+                  <div className={s.commandCard}>
+                    <div className={s.commandCopy}>
+                      <div className={s.commandTitle}>{isAitUsaContact ? 'Student receipts' : 'Financial workflow'}</div>
                       <p>
                         {isAitUsaContact
                           ? 'Generate AIT USA receipt PDFs once the student is enrolled.'
-                          : 'Save estimates, generate invoices from work orders, and record payments against invoices.'}
+                          : 'Estimates can start here. Invoices come from work orders, and payments are recorded against invoices.'}
                       </p>
+                      <div className={s.prereqList} aria-label="Financial workflow prerequisites">
+                        {financialPrerequisites.map((item) => (
+                          <span key={item.key} className={`${s.prereqItem} ${item.ready ? s.prereqReady : s.prereqBlocked}`}>
+                            {item.ready ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+                            <strong>{item.label}</strong>
+                            <span>{item.detail}</span>
+                          </span>
+                        ))}
+                      </div>
                     </div>
-                    <div className={s.financialCommandActions}>
+                    <div className={s.commandActions}>
                       {!isAitUsaContact && (
                         <>
                           <button className="btn btn-primary" type="button" onClick={openEstimateModal}>
                             <FileText size={16} /> New Estimate
                           </button>
-                          <button className="btn" type="button" onClick={() => downloadInvoiceFromWorkOrder()} disabled={!latestWorkOrder}>
-                            <FileText size={16} /> Save Invoice PDF
+                          <button className="btn" type="button" onClick={() => downloadInvoiceFromWorkOrder()}>
+                            <FileText size={16} /> Generate Invoice
                           </button>
                         </>
                       )}
-                      <button className="btn" type="button" onClick={() => openPaymentModal()}>
+                      <button className="btn" type="button" onClick={() => recordPaymentAgainstInvoice()}>
                         <DollarSign size={16} /> {isAitUsaContact ? 'Generate Student Receipt' : 'Record Invoice Payment'}
                       </button>
+                    </div>
+                    <div className={`${s.workflowNotice} ${
+                      financialNotice.tone === 'ready'
+                        ? s.workflowNoticeReady
+                        : financialNotice.tone === 'warning'
+                          ? s.workflowNoticeWarning
+                          : s.workflowNoticeBlocked
+                    }`}>
+                      {financialNotice.tone === 'ready' ? <CheckCircle2 size={14} /> : <AlertCircle size={14} />}
+                      {financialNotice.text}
                     </div>
                   </div>
                 )}
@@ -1584,13 +1697,18 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       {access.canWriteFinancials ? (
                         <>
                           {isAitUsaContact ? (
-                            <button className="btn btn-primary" type="button" onClick={() => openPaymentModal()}>
+                            <button className="btn btn-primary" type="button" onClick={() => recordPaymentAgainstInvoice()}>
                               <DollarSign size={16} /> Generate Student Receipt
                             </button>
                           ) : (
-                            <button className="btn btn-primary" type="button" onClick={openEstimateModal}>
-                              <FileText size={16} /> New Estimate
-                            </button>
+                            <>
+                              <button className="btn btn-primary" type="button" onClick={openEstimateModal}>
+                                <FileText size={16} /> New Estimate
+                              </button>
+                              <button className="btn" type="button" onClick={() => downloadInvoiceFromWorkOrder()}>
+                                <FileText size={16} /> Generate Invoice
+                              </button>
+                            </>
                           )}
                         </>
                       ) : (
