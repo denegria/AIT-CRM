@@ -24,7 +24,7 @@ import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { AlertCircle, UserRoundCheck } from 'lucide-react';
+import { AlertCircle, RotateCcw, UserRoundCheck } from 'lucide-react';
 
 const empty = {
   name: '',
@@ -349,6 +349,35 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     () => filterContactsByDirectoryFacet(baseFilteredContacts, effectiveDirectoryFacet, facetContext),
     [baseFilteredContacts, effectiveDirectoryFacet, facetContext],
   );
+  const selectedFacetLabel = useMemo(() => {
+    if (effectiveDirectoryFacet === 'all') return '';
+    for (const group of facetGroups) {
+      const facet = group.facets.find((entry) => entry.id === effectiveDirectoryFacet);
+      if (facet) return facet.label;
+    }
+    return effectiveDirectoryFacet.replaceAll('_', ' ');
+  }, [effectiveDirectoryFacet, facetGroups]);
+  const selectedOwnerLabel = useMemo(() => {
+    if (ownerFilter === 'all') return '';
+    if (ownerFilter === 'unassigned') return 'Unassigned';
+    return ownerOptions.find((owner) => owner.id === ownerFilter)?.label || 'Selected owner';
+  }, [ownerFilter, ownerOptions]);
+  const activeFilterChips = useMemo(() => [
+    leadDateScope === 'all' ? { key: 'leadDateScope', label: 'All date leads' } : null,
+    statusFilter !== 'All' ? { key: 'status', label: statusFilter } : null,
+    selectedOwnerLabel ? { key: 'owner', label: selectedOwnerLabel } : null,
+    selectedFacetLabel ? { key: 'facet', label: selectedFacetLabel } : null,
+  ].filter(Boolean), [leadDateScope, selectedFacetLabel, selectedOwnerLabel, statusFilter]);
+  const hasActiveFilters = activeFilterChips.length > 0;
+  const filterSummaryText = hasActiveFilters
+    ? activeFilterChips.map((chip) => chip.label).join(' / ')
+    : 'Default contact view';
+  const resetFilters = () => {
+    setLeadDateScope('current');
+    setStatusFilter('All');
+    setOwnerFilter('all');
+    setDirectoryFacet('all');
+  };
   const invalidPhoneScopeSummary = useMemo(() => {
     if (effectiveDirectoryFacet !== 'invalid_phone') return '';
     const counts = new Map();
@@ -400,8 +429,15 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         <div className="contacts-facet-summary">
           <strong>{filteredContacts.length}</strong>
           <span>matching {pluralLabel.toLowerCase()}</span>
+          <small>{filterSummaryText}</small>
           {invalidPhoneScopeSummary && (
             <small>{invalidPhoneScopeSummary}</small>
+          )}
+          {hasActiveFilters && (
+            <button className="contacts-filter-reset" type="button" onClick={resetFilters}>
+              <RotateCcw size={13} />
+              Reset filters
+            </button>
           )}
         </div>
         <div className="contacts-facet-groups">
