@@ -129,9 +129,19 @@ function cardChips(item) {
   return (item.tags || []).map(titleLabel).slice(0, 3);
 }
 
-export default function KanbanBoard({ data, columns, onMove, onEdit, showMobileMoveControls = true }) {
+export default function KanbanBoard({
+  data,
+  columns,
+  onMove,
+  onEdit,
+  showMobileMoveControls = true,
+  compact = false,
+  selectedIds = [],
+  onSelect,
+}) {
   const [draggingId, setDraggingId] = useState(null);
   const [dragOverCol, setDragOverCol] = useState(null);
+  const selectedSet = new Set(selectedIds);
 
   const normalizedColumns = columns.map((column) => {
     if (typeof column === 'string') {
@@ -189,7 +199,7 @@ export default function KanbanBoard({ data, columns, onMove, onEdit, showMobileM
   };
 
   return (
-    <div className={s.kanbanContainer}>
+    <div className={`${s.kanbanContainer} ${compact ? s.compact : ''}`}>
       {normalizedColumns.map(col => {
         const columnCards = data.filter(d => d.status === col.id);
         return (
@@ -208,7 +218,7 @@ export default function KanbanBoard({ data, columns, onMove, onEdit, showMobileM
             
             <div className={s.kanbanList}>
               {columnCards.map(item => (
-                <div 
+                <div
                   key={item.id} 
                   className={`${s.kanbanCard} ${isAitUsa(item) ? s.instituteCard : ''} ${isAitSigns(item) ? s.signsCard : ''} ${item.needsFirstOutreach ? s.needsFirstOutreach : ''} ${draggingId === item.id ? s.dragging : ''}`}
                   draggable
@@ -217,6 +227,22 @@ export default function KanbanBoard({ data, columns, onMove, onEdit, showMobileM
                 >
                   <div className={s.cardTop}>
                     <span className={s.cardSource}>{sourceLabel(item)}</span>
+                    {onSelect && (
+                      <input
+                        type="checkbox"
+                        className={s.cardSelect}
+                        checked={selectedSet.has(item.id)}
+                        onChange={(event) => {
+                          event.stopPropagation();
+                          const next = new Set(selectedSet);
+                          if (event.target.checked) next.add(item.id);
+                          else next.delete(item.id);
+                          onSelect([...next]);
+                        }}
+                        onClick={(event) => event.stopPropagation()}
+                        aria-label={`Select ${item.name}`}
+                      />
+                    )}
                     {item.needsFirstOutreach && (
                       <span className={s.cardUrgency}><AlertCircle size={12} /> New</span>
                     )}
