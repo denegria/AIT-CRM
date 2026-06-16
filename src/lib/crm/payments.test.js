@@ -6,6 +6,7 @@ import {
   normalizePaymentDate,
   normalizePaymentMethod,
   parsePaymentAmount,
+  paymentWorkflowBlocker,
   toPaymentReceiptPayload,
 } from './payments.js';
 
@@ -56,4 +57,28 @@ test('payment helpers create receipt payload and readable activity message', () 
   assert.equal(receipt.workOrderId, 'wo-1');
   assert.equal(receipt.balanceDue, 1200);
   assert.equal(receipt.items[0].desc, 'Payment for Yard sign package');
+});
+
+test('payment workflow blocks student receipts until enrollment', () => {
+  assert.equal(paymentWorkflowBlocker({
+    businessUnit: { name: 'AIT USA Institute' },
+    lead: { status: 'Follow Up' },
+  }), 'Student must be Enrolled before generating a receipt. Change the status to Enrolled first.');
+
+  assert.equal(paymentWorkflowBlocker({
+    businessUnit: { name: 'AIT USA Institute' },
+    lead: { currentStage: 'Enrolled' },
+  }), '');
+});
+
+test('payment workflow requires AIT Signs invoice before payment', () => {
+  assert.equal(paymentWorkflowBlocker({
+    businessUnit: { name: 'AIT Signs' },
+    hasInvoice: false,
+  }), 'Generate an invoice from a work order before recording a payment.');
+
+  assert.equal(paymentWorkflowBlocker({
+    businessUnit: { name: 'AIT Signs' },
+    hasInvoice: true,
+  }), '');
 });

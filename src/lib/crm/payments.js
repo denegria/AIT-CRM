@@ -1,5 +1,6 @@
 import { and, desc, eq, or } from 'drizzle-orm';
 import { activityEvents, paymentSnapshots } from '../../db/schema.js';
+import { normalizeLifecycleStatus, WORKFLOW_KEYS, workflowKeyForBusinessUnit } from './lifecycle.js';
 
 export const PAYMENT_RECEIVED_EVENT_TYPE = 'financial.payment_received';
 
@@ -73,6 +74,37 @@ export function buildPaymentMessage({
     balanceAfter === null ? '' : `Balance ${money(balanceAfter)}`,
     clean(note),
   ].filter(Boolean).join(' · ');
+}
+
+export function isPaymentBusinessUnit(businessUnit = null, workflowKey = '') {
+  return (workflowKey || workflowKeyForBusinessUnit(businessUnit)) === WORKFLOW_KEYS.AIT_SIGNS;
+}
+
+export function isStudentReceiptBusinessUnit(businessUnit = null, workflowKey = '') {
+  return (workflowKey || workflowKeyForBusinessUnit(businessUnit)) === WORKFLOW_KEYS.AIT_USA;
+}
+
+export function isEnrolledStudentStatus(value) {
+  return normalizeLifecycleStatus(value, { workflowKey: WORKFLOW_KEYS.AIT_USA }) === 'Enrolled';
+}
+
+export function paymentWorkflowBlocker({
+  businessUnit = null,
+  lead = null,
+  contact = null,
+  hasInvoice = false,
+} = {}) {
+  const workflowKey = workflowKeyForBusinessUnit(businessUnit);
+  if (isStudentReceiptBusinessUnit(businessUnit, workflowKey)) {
+    const status = lead?.currentStage || lead?.status || contact?.currentStage || contact?.status || '';
+    if (!isEnrolledStudentStatus(status)) {
+      return 'Student must be Enrolled before generating a receipt. Change the status to Enrolled first.';
+    }
+  }
+  if (isPaymentBusinessUnit(businessUnit, workflowKey) && !hasInvoice) {
+    return 'Generate an invoice from a work order before recording a payment.';
+  }
+  return '';
 }
 
 export function toPaymentReceiptPayload(payment, {
