@@ -20,6 +20,7 @@
   min-height:34px;
   display:inline-flex;
   align-items:center;
+  justify-content:center;
   gap:6px;
   padding:6px 10px;
   border:1px solid var(--border-default);
@@ -30,8 +31,12 @@
   cursor:pointer;
   font-size:var(--text-xs);
   font-weight:750;
+  line-height:1;
   list-style:none;
+  user-select:none;
+  transition:background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
 }
+.columnButton:hover { background:var(--bg-hover); border-color:var(--border-strong); color:var(--text-primary); }
 .columnButton::-webkit-details-marker { display:none; }
 .columnPanel {
   position:absolute;
@@ -81,7 +86,11 @@
 .selectionBar strong { color:var(--text-primary); }
 .selectionBar small { color:var(--text-muted); }
 .selectionButton {
-  min-height:28px;
+  min-height:30px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
   padding:4px 8px;
   border:1px solid var(--border-default);
   border-radius:999px;
@@ -91,8 +100,13 @@
   font:inherit;
   font-size:var(--text-xs);
   font-weight:750;
+  line-height:1;
+  white-space:nowrap;
+  user-select:none;
+  transition:background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
 }
-.selectionButton:hover { color:var(--text-primary); border-color:var(--border-strong); }
+.selectionButton:hover { background:var(--bg-hover); color:var(--text-primary); border-color:var(--border-strong); transform:translateY(-1px); }
+.selectionButton:disabled { cursor:not-allowed; opacity:.5; transform:none; }
 .table { width:100%; min-width:760px; border-collapse:separate; border-spacing:0; }
 .table th {
   text-align:left; padding:8px 12px; font-size:var(--text-xs); font-weight:700;
@@ -117,11 +131,20 @@
 .actionHeader { text-align:right; }
 .actionCell { text-align:right; white-space:normal; max-width:220px; }
 .actBtn {
-  padding:4px 8px; font-size:var(--text-xs); font-family:var(--font-sans); font-weight:650;
+  min-height:28px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:5px;
+  padding:4px 8px; font-size:var(--text-xs); font-family:var(--font-sans); font-weight:750;
+  line-height:1;
   background:color-mix(in srgb, var(--bg-elevated) 86%, transparent); border:1px solid var(--border-default); border-radius:999px;
-  color:var(--text-muted); cursor:pointer; transition:all var(--transition-fast);
+  color:var(--text-secondary); cursor:pointer; white-space:nowrap; transition:background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast), opacity var(--transition-fast);
 }
 .actBtn:hover { background:var(--bg-hover); color:var(--text-primary); border-color:var(--border-strong); transform:translateY(-1px); }
+.actBtn:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.actBtn:disabled { cursor:not-allowed; opacity:.5; transform:none; }
+.actBtnDanger { color:var(--danger); border-color:color-mix(in srgb, var(--danger) 24%, var(--border-default)); }
 .actBtnDanger:hover { color:var(--danger); border-color:var(--danger); background:var(--danger-muted); }
 .editInput {
   background:var(--bg-secondary); border:1px solid var(--border-focus); border-radius:var(--radius-sm);

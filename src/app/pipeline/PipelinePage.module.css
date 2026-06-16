@@ -116,13 +116,23 @@
   justify-content: center;
   gap: 7px;
   padding: 0 10px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
   background: var(--bg-secondary);
   color: var(--text-secondary);
   font-size: var(--text-xs);
   font-weight: 800;
+  line-height: 1;
   white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.compactToggle:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+  color: var(--text-primary);
 }
 
 .compactToggle input {
@@ -139,7 +149,7 @@
   margin: -2px 0 12px;
   padding: 9px 10px;
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border-subtle));
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--accent-muted) 28%, var(--bg-secondary));
 }
 
@@ -247,12 +257,14 @@
     gap: 8px;
     padding: 8px 10px;
     border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
+    border-radius: var(--radius-lg);
     background: var(--bg-secondary);
     color: var(--text-secondary);
     font: inherit;
     font-size: var(--text-xs);
     font-weight: 800;
+    line-height: 1.1;
+    transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
   }
 
   .mobileStageTab span {
@@ -265,12 +277,15 @@
   .mobileStageTab strong {
     flex: 0 0 auto;
     min-width: 22px;
+    min-height: 20px;
     padding: 2px 6px;
     border-radius: 999px;
     background: var(--bg-elevated);
     color: var(--text-muted);
     font-size: 10px;
+    line-height: 1.15;
     text-align: center;
+    border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
   }
 
   .mobileStageTab.active {
@@ -340,15 +355,21 @@
   }
 
   .mobileCardStage {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     width: fit-content;
     max-width: 100%;
+    min-height: 20px;
     padding: 3px 7px;
     border-radius: 999px;
     background: var(--accent-muted);
     color: var(--accent);
     font-size: 10px;
     font-weight: 800;
+    line-height: 1.15;
     overflow-wrap: anywhere;
+    border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
   }
 
   .mobileCardTools {
