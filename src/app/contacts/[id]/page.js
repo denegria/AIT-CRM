@@ -305,6 +305,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     financials,
     allFinancials,
     updateContact,
+    addWorkOrder,
     addFinancial,
     recordPayment,
     loaded,
@@ -350,6 +351,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [estimateForm, setEstimateForm] = useState(emptyEstimateForm);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
+  const [invoiceWorkOrderId, setInvoiceWorkOrderId] = useState('');
+  const [workOrderEstimateId, setWorkOrderEstimateId] = useState('');
 
   const contactSource = isClientMode ? (allContacts || contacts) : contacts;
   const workOrderSource = isClientMode ? (allWorkOrders || workOrders) : workOrders;
@@ -358,6 +361,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const contactWorkOrders = useMemo(() => workOrderSource.filter(wo => wo.contactId === params.id), [workOrderSource, params.id]);
   const contactFinancials = useMemo(() => financialSource.filter(f => f.contactId === params.id), [financialSource, params.id]);
   const contactInvoices = useMemo(() => contactFinancials.filter(isInvoiceRecord), [contactFinancials]);
+  const contactEstimates = useMemo(() => contactFinancials.filter((record) => financialCategory(record) === 'estimate'), [contactFinancials]);
   const latestInvoice = contactInvoices[0] || null;
   const latestWorkOrder = contactWorkOrders[0] || null;
   const invoiceByWorkOrderId = useMemo(() => {
@@ -408,6 +412,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const canGenerateStudentReceipt = !isAitUsaContact || isEnrolledStudent(contact);
   const hasWorkOrders = contactWorkOrders.length > 0;
   const hasInvoices = contactInvoices.length > 0;
+  const selectedInvoiceWorkOrder = contactWorkOrders.find((workOrder) => workOrder.id === invoiceWorkOrderId) || null;
+  const selectedWorkOrderEstimate = contactEstimates.find((estimate) => estimate.id === workOrderEstimateId) || null;
   const visibleFinancials = useMemo(() => (
     isAitUsaContact
       ? contactFinancials.filter((record) => {
@@ -419,27 +425,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const editSchoolLocationOptions = schoolLocationOptions(editForm?.address);
   const showWorkOrdersTab = detailView.tabs.showWorkOrders;
   const showFinancialsTab = detailView.tabs.showFinancials || (isAitUsaContact && access.canWriteFinancials);
-  const financialPrerequisites = isAitUsaContact
-    ? [{
-        key: 'student-status',
-        label: 'Student status',
-        detail: canGenerateStudentReceipt ? 'Enrolled' : `Currently ${contact?.status || 'Unset'}`,
-        ready: canGenerateStudentReceipt,
-      }]
-    : [
-        {
-          key: 'work-order',
-          label: 'Invoice source',
-          detail: hasWorkOrders ? `${contactWorkOrders.length} work order${contactWorkOrders.length === 1 ? '' : 's'}` : 'Create work order',
-          ready: hasWorkOrders,
-        },
-        {
-          key: 'invoice',
-          label: 'Payment source',
-          detail: hasInvoices ? `${contactInvoices.length} invoice${contactInvoices.length === 1 ? '' : 's'}` : 'Generate invoice',
-          ready: hasInvoices,
-        },
-      ];
   const financialNotice = isAitUsaContact
     ? (canGenerateStudentReceipt
         ? { tone: 'ready', text: 'Ready to generate a student receipt.' }
@@ -786,6 +771,39 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       .catch((error) => toast(error.message || 'Estimate save failed.', 'error'));
   };
 
+  const createWorkOrderFromEstimate = () => {
+    if (!contact?.id || !access.canWriteWorkOrders) return;
+    const estimate = selectedWorkOrderEstimate;
+    const amount = moneyValue(estimate?.amount || estimate?.balanceDue || estimate?.subtotal);
+    const estimateLabel = estimate?.number || estimate?.id || '';
+    const firstLineItem = Array.isArray(estimate?.items) ? estimate.items[0] : null;
+    const payload = {
+      number: `WO-${String(workOrders.length + 1).padStart(3, '0')}`,
+      title: estimate
+        ? (firstLineItem?.desc || `${estimateLabel || 'Estimate'} work order`)
+        : `Work order for ${contact.name || 'contact'}`,
+      client: contact.name || '',
+      contactId: contact.id,
+      businessUnitId: contact.primaryBusinessUnitId || contact.businessUnitId || contactBusinessUnit?.id || '',
+      priority: 'Medium',
+      status: 'Pending',
+      assignedTo: '',
+      dueDate: todayDate(),
+      description: estimate
+        ? `Generated from estimate ${estimateLabel || estimate.id}.`
+        : '',
+      estimatedCost: amount,
+    };
+    addWorkOrder(payload)
+      .then((workOrder) => {
+        if (workOrder?.id) setInvoiceWorkOrderId(workOrder.id);
+        setWorkOrderEstimateId('');
+        setTimelineReloadKey((key) => key + 1);
+        toast(estimate ? 'Work order created from estimate' : 'Work order created');
+      })
+      .catch((error) => toast(error.message || 'Work order save failed.', 'error'));
+  };
+
   const openPaymentModal = (invoice = latestInvoice) => {
     if (!contact?.id || !access.canWriteFinancials) return;
     if (isAitUsaContact && !canGenerateStudentReceipt) {
@@ -866,10 +884,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     toast('PDF downloaded');
   };
 
-  const downloadInvoiceFromWorkOrder = (workOrder = latestWorkOrder) => {
+  const downloadInvoiceFromWorkOrder = (workOrder) => {
     if (!workOrder) {
-      toast('Create a work order before generating an invoice. Use the Work Orders tab first.', 'error');
-      if (showWorkOrdersTab) setActiveTab('workorders');
+      toast('Select a work order before generating an invoice.', 'error');
       return;
     }
     const amount = moneyValue(workOrder.estimatedCost || workOrder.amount);
@@ -906,6 +923,14 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         toast('Invoice saved and downloaded');
       })
       .catch((error) => toast(error.message || 'Invoice save failed.', 'error'));
+  };
+
+  const downloadSelectedWorkOrderInvoice = () => {
+    if (!selectedInvoiceWorkOrder) {
+      toast('Select a work order before generating an invoice.', 'error');
+      return;
+    }
+    downloadInvoiceFromWorkOrder(selectedInvoiceWorkOrder);
   };
 
   const recordPaymentAgainstInvoice = (invoice = latestInvoice) => {
@@ -1622,23 +1647,47 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                           ? 'Generate AIT USA receipt PDFs once the student is enrolled.'
                           : 'Estimates can start here. Invoices come from work orders, and payments are recorded against invoices.'}
                       </p>
-                      <div className={s.prereqList} aria-label="Financial workflow prerequisites">
-                        {financialPrerequisites.map((item) => (
-                          <span key={item.key} className={`${s.prereqItem} ${item.ready ? s.prereqReady : s.prereqBlocked}`}>
-                            {item.ready ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
-                            <strong>{item.label}</strong>
-                            <span>{item.detail}</span>
-                          </span>
-                        ))}
-                      </div>
                     </div>
+                    {!isAitUsaContact && (
+                      <div className={s.commandControls}>
+                        {access.canWriteWorkOrders && (
+                          <label className={s.commandField}>
+                            <span>Estimate for work order</span>
+                            <select className="input select" value={selectedWorkOrderEstimate ? workOrderEstimateId : ''} onChange={(event) => setWorkOrderEstimateId(event.target.value)}>
+                              <option value="">No estimate</option>
+                              {contactEstimates.map((estimate) => (
+                                <option key={estimate.id} value={estimate.id}>
+                                  {estimate.number || 'Estimate'} - ${moneyLabel(estimate.amount || estimate.balanceDue)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                        <label className={s.commandField}>
+                          <span>Work order for invoice</span>
+                          <select className="input select" value={selectedInvoiceWorkOrder ? invoiceWorkOrderId : ''} onChange={(event) => setInvoiceWorkOrderId(event.target.value)}>
+                            <option value="">Select work order</option>
+                            {contactWorkOrders.map((workOrder) => (
+                              <option key={workOrder.id} value={workOrder.id}>
+                                {workOrder.number || 'Work order'} - {workOrder.title || 'Untitled'}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      </div>
+                    )}
                     <div className={s.commandActions}>
                       {!isAitUsaContact && (
                         <>
                           <button className="btn btn-primary" type="button" onClick={openEstimateModal}>
                             <FileText size={16} /> New Estimate
                           </button>
-                          <button className="btn" type="button" onClick={() => downloadInvoiceFromWorkOrder()}>
+                          {access.canWriteWorkOrders && (
+                            <button className="btn" type="button" onClick={createWorkOrderFromEstimate}>
+                              <ClipboardList size={16} /> Create Work Order
+                            </button>
+                          )}
+                          <button className="btn" type="button" onClick={downloadSelectedWorkOrderInvoice}>
                             <FileText size={16} /> Generate Invoice
                           </button>
                         </>
@@ -1705,9 +1754,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                               <button className="btn btn-primary" type="button" onClick={openEstimateModal}>
                                 <FileText size={16} /> New Estimate
                               </button>
-                              <button className="btn" type="button" onClick={() => downloadInvoiceFromWorkOrder()}>
-                                <FileText size={16} /> Generate Invoice
-                              </button>
+                              {hasWorkOrders && (
+                                <button className="btn" type="button" onClick={downloadSelectedWorkOrderInvoice}>
+                                  <FileText size={16} /> Generate Invoice
+                                </button>
+                              )}
                             </>
                           )}
                         </>
