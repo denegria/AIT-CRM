@@ -148,9 +148,8 @@ function signsFilters() {
 
 function instituteFilters(counts = {}) {
   const optionalOperationalFilters = [
-    countFor(counts, 'work') > 0 ? COMMON_FILTERS.work : null,
-    countFor(counts, 'payment') > 0 ? COMMON_FILTERS.payment : null,
-    countFor(counts, 'estimate') > 0 ? COMMON_FILTERS.estimate : null,
+    countFor(counts, 'work') > 0 ? { ...COMMON_FILTERS.work, label: 'Related work' } : null,
+    countFor(counts, 'payment') > 0 ? { ...COMMON_FILTERS.payment, label: 'Receipts', empty: 'No receipt history recorded yet.' } : null,
   ];
   return compactArray([
     COMMON_FILTERS.all,
@@ -167,8 +166,7 @@ function instituteFilters(counts = {}) {
 function instituteSnapshotItems(counts = {}) {
   const optionalOperationalItems = [
     countFor(counts, 'work') > 0 ? { ...SIGNS_SNAPSHOT_ITEMS[0], label: 'Related work' } : null,
-    countFor(counts, 'payment') > 0 ? { ...SIGNS_SNAPSHOT_ITEMS[1], label: 'Payments' } : null,
-    countFor(counts, 'estimate') > 0 ? { ...SIGNS_SNAPSHOT_ITEMS[2], label: 'Estimates' } : null,
+    countFor(counts, 'payment') > 0 ? { ...SIGNS_SNAPSHOT_ITEMS[1], label: 'Receipts', empty: 'No receipts yet' } : null,
   ];
   return compactArray([...INSTITUTE_BASE_SNAPSHOT_ITEMS, ...optionalOperationalItems]);
 }
@@ -246,7 +244,6 @@ export function buildContactDetailViewModel({
   const source = signals.source || {};
 
   const hasWorkOrders = countFor(counts, 'work') > 0;
-  const hasFinancials = countFor(counts, 'payment') > 0 || countFor(counts, 'estimate') > 0;
 
   if (isInstitute) {
     const workflowChips = uniqueLabels([
@@ -269,8 +266,8 @@ export function buildContactDetailViewModel({
       snapshotItems: instituteSnapshotItems(counts),
       tabs: {
         showWorkOrders: hasWorkOrders,
-        showFinancials: hasFinancials,
-        financialLabel: 'Financials',
+        showFinancials: countFor(counts, 'payment') > 0,
+        financialLabel: 'Receipts',
         workOrdersLabel: 'Work Orders',
       },
     };
