@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { and, desc, eq } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
-import { businessUnits, contacts, estimates, leads, workOrders } from '@/db/schema.js';
+import { businessUnits, contacts, estimates, financialDocuments, leads, workOrders } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import {
   canAccessBusinessUnit,
@@ -10,7 +10,7 @@ import {
 } from '@/lib/crm/access.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
 import { isUuid } from '@/lib/crm/validation.js';
-import { createPaymentWithActivity, parsePaymentAmount } from '@/lib/crm/payments.js';
+import { createPaymentWithActivity, parsePaymentAmount, paymentWorkflowBlocker } from '@/lib/crm/payments.js';
 
 async function latestLeadForContact(db, organizationId, contactId) {
   if (!contactId) return null;
@@ -36,6 +36,21 @@ async function resolveBusinessUnit(db, session, businessUnitId) {
     .where(and(eq(businessUnits.organizationId, session.user.organizationId), eq(businessUnits.id, resolvedId)))
     .limit(1);
   return businessUnit || null;
+}
+
+async function latestInvoiceForWorkOrder(db, organizationId, workOrderId) {
+  if (!workOrderId) return null;
+  const [invoice] = await db
+    .select()
+    .from(financialDocuments)
+    .where(and(
+      eq(financialDocuments.organizationId, organizationId),
+      eq(financialDocuments.workOrderId, workOrderId),
+      eq(financialDocuments.documentType, 'Invoice'),
+    ))
+    .orderBy(desc(financialDocuments.createdAt))
+    .limit(1);
+  return invoice || null;
 }
 
 async function resolvePaymentContext(db, session, body) {
@@ -94,13 +109,22 @@ async function resolvePaymentContext(db, session, body) {
   }
 
   const lead = await latestLeadForContact(db, session.user.organizationId, contact?.id || null);
-  const targetTotal = workOrder?.estimatedCost ?? estimate?.balanceDue ?? estimate?.total ?? null;
+  const invoice = await latestInvoiceForWorkOrder(db, session.user.organizationId, workOrder?.id || null);
+  const blocker = paymentWorkflowBlocker({
+    businessUnit,
+    lead,
+    contact,
+    hasInvoice: Boolean(invoice),
+  });
+  if (blocker) throw createCrmError(blocker, 400);
+  const targetTotal = invoice?.total ?? workOrder?.estimatedCost ?? estimate?.balanceDue ?? estimate?.total ?? null;
 
   return {
     contact,
     businessUnit,
     workOrder,
     estimate,
+    invoice,
     lead,
     targetTotal,
   };

@@ -210,6 +210,14 @@ function financialCategory(record = {}) {
   return 'other';
 }
 
+function isInvoiceRecord(record = {}) {
+  return String(record.type || '').toLowerCase().includes('invoice') && Boolean(record.workOrderId);
+}
+
+function isEnrolledStudent(contact = {}) {
+  return String(contact?.currentStage || contact?.status || '').trim().toLowerCase() === 'enrolled';
+}
+
 function timelineEmptyText(filterValue, filters) {
   return filters.find((filter) => filter.value === filterValue)?.empty || 'No activity recorded yet.';
 }
@@ -349,6 +357,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const contact = useMemo(() => contactSource.find(c => c.id === params.id), [contactSource, params.id]);
   const contactWorkOrders = useMemo(() => workOrderSource.filter(wo => wo.contactId === params.id), [workOrderSource, params.id]);
   const contactFinancials = useMemo(() => financialSource.filter(f => f.contactId === params.id), [financialSource, params.id]);
+  const contactInvoices = useMemo(() => contactFinancials.filter(isInvoiceRecord), [contactFinancials]);
+  const latestInvoice = contactInvoices[0] || null;
   const latestWorkOrder = contactWorkOrders[0] || null;
   const contactFinancialCounts = useMemo(() => contactFinancials.reduce((counts, record) => {
     const category = financialCategory(record);
@@ -368,9 +378,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const selectedPaymentWorkOrder = useMemo(() => (
     contactWorkOrders.find((workOrder) => workOrder.id === paymentForm.workOrderId) || latestWorkOrder
   ), [contactWorkOrders, latestWorkOrder, paymentForm.workOrderId]);
-  const selectedPaymentWorkOrderTotal = moneyValue(selectedPaymentWorkOrder?.estimatedCost || selectedPaymentWorkOrder?.amount);
+  const selectedPaymentInvoice = useMemo(() => (
+    contactInvoices.find((invoice) => invoice.workOrderId && invoice.workOrderId === paymentForm.workOrderId) || latestInvoice
+  ), [contactInvoices, latestInvoice, paymentForm.workOrderId]);
+  const selectedPaymentWorkOrderTotal = moneyValue(selectedPaymentInvoice?.amount || selectedPaymentWorkOrder?.estimatedCost || selectedPaymentWorkOrder?.amount);
   const selectedPaymentWorkOrderPaid = useMemo(() => contactFinancials
     .filter((record) => record.workOrderId && record.workOrderId === selectedPaymentWorkOrder?.id)
+    .filter((record) => !String(record.type || '').toLowerCase().includes('invoice'))
     .reduce((sum, record) => sum + moneyValue(record.paidAmount || record.amount), 0), [contactFinancials, selectedPaymentWorkOrder?.id]);
   const selectedPaymentBalance = Math.max(selectedPaymentWorkOrderTotal - selectedPaymentWorkOrderPaid, 0);
   const balanceAfterPayment = Math.max(selectedPaymentBalance - moneyValue(paymentForm.amount), 0);
@@ -384,6 +398,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const showLinkedPeoplePanel = isClientMode && detailView.workflowKey === WORKFLOW_KEYS.AIT_SIGNS;
   const showSchoolLocationField = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA;
   const isAitUsaContact = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA || /ait usa|institute/i.test(contactBusinessUnit?.name || '');
+  const canGenerateStudentReceipt = !isAitUsaContact || isEnrolledStudent(contact);
   const visibleFinancials = useMemo(() => (
     isAitUsaContact
       ? contactFinancials.filter((record) => {
@@ -732,15 +747,27 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       .catch((error) => toast(error.message || 'Estimate save failed.', 'error'));
   };
 
-  const openPaymentModal = (workOrder = latestWorkOrder) => {
+  const openPaymentModal = (invoice = latestInvoice) => {
     if (!contact?.id || !access.canWriteFinancials) return;
-    const workOrderTotal = moneyValue(workOrder?.estimatedCost || workOrder?.amount);
+    if (isAitUsaContact && !canGenerateStudentReceipt) {
+      toast('Student must be Enrolled before generating a receipt. Change the status to Enrolled first.', 'error');
+      return;
+    }
+    if (!isAitUsaContact && !invoice) {
+      toast('Generate an invoice from a work order before recording a payment.', 'error');
+      return;
+    }
+    const workOrder = isAitUsaContact
+      ? null
+      : contactWorkOrders.find((entry) => entry.id === invoice?.workOrderId) || null;
+    const workOrderTotal = moneyValue(invoice?.amount || invoice?.balanceDue || workOrder?.estimatedCost || workOrder?.amount);
     const paid = contactFinancials
       .filter((record) => record.workOrderId && record.workOrderId === workOrder?.id)
+      .filter((record) => !String(record.type || '').toLowerCase().includes('invoice'))
       .reduce((sum, record) => sum + moneyValue(record.paidAmount || record.amount), 0);
     setPaymentForm({
       ...emptyPaymentForm,
-      workOrderId: workOrder?.id || '',
+      workOrderId: isAitUsaContact ? '' : (workOrder?.id || ''),
       amount: workOrderTotal ? String(Math.max(workOrderTotal - paid, 0)) : '',
       paidAt: todayDate(),
     });
@@ -754,7 +781,15 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       toast('Payment amount is required.', 'error');
       return;
     }
+    if (isAitUsaContact && !canGenerateStudentReceipt) {
+      toast('Student must be Enrolled before generating a receipt. Change the status to Enrolled first.', 'error');
+      return;
+    }
     const workOrder = contactWorkOrders.find((entry) => entry.id === paymentForm.workOrderId) || null;
+    if (!isAitUsaContact && !contactInvoices.some((invoice) => invoice.workOrderId && invoice.workOrderId === workOrder?.id)) {
+      toast('Generate an invoice from a work order before recording a payment.', 'error');
+      return;
+    }
     const paymentPayload = {
       contactId: contact.id,
       client: contact.name || '',
@@ -1490,8 +1525,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       </div>
                       <p>
                         {isAitUsaContact
-                          ? 'Record tuition payments and download AIT USA receipt PDFs from this student record.'
-                          : 'Save estimates, download work-order invoices, and record partial payments from this client record.'}
+                          ? 'Generate AIT USA receipt PDFs once the student is enrolled.'
+                          : 'Save estimates, generate invoices from work orders, and record payments against invoices.'}
                       </p>
                     </div>
                     <div className={s.financialCommandActions}>
@@ -1505,8 +1540,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                           </button>
                         </>
                       )}
-                      <button className="btn" type="button" onClick={() => openPaymentModal()} disabled={!isAitUsaContact && contactWorkOrders.length === 0}>
-                        <DollarSign size={16} /> {isAitUsaContact ? 'Generate Student Receipt' : 'Record Payment'}
+                      <button className="btn" type="button" onClick={() => openPaymentModal()}>
+                        <DollarSign size={16} /> {isAitUsaContact ? 'Generate Student Receipt' : 'Record Invoice Payment'}
                       </button>
                     </div>
                   </div>
@@ -1539,8 +1574,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <p className="empty-state-copy">
                       {access.canWriteFinancials
                         ? (isAitUsaContact
-                            ? 'Generate the first AIT USA payment receipt from this student record.'
-                            : 'You can create the first estimate from this contact record. Invoices and payments become available from linked work orders.')
+                            ? 'Change the student status to Enrolled before generating the first AIT USA receipt.'
+                            : 'You can create the first estimate from this contact record. Invoices are generated from linked work orders, and payments are recorded against invoices.')
                         : (isAitUsaContact
                             ? 'No receipts are visible for this student in the current scope.'
                             : 'No estimates, invoices, receipts, or payments are visible for this contact in the current scope.')}
@@ -1690,11 +1725,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         >
           {!isAitUsaContact && (
             <div className="form-group">
-              <label className="form-label">Work Order</label>
+              <label className="form-label">Invoice</label>
               <select className="input select" value={paymentForm.workOrderId} onChange={e => setPaymentForm({...paymentForm, workOrderId: e.target.value})}>
-                <option value="">No linked work order</option>
-                {contactWorkOrders.map((workOrder) => (
-                  <option key={workOrder.id} value={workOrder.id}>{workOrder.number} - {workOrder.title}</option>
+                <option value="">Select invoice</option>
+                {contactInvoices.map((invoice) => (
+                  <option key={invoice.id} value={invoice.workOrderId}>
+                    {invoice.number || 'Invoice'} - ${moneyLabel(invoice.balanceDue || invoice.amount)}
+                  </option>
                 ))}
               </select>
             </div>

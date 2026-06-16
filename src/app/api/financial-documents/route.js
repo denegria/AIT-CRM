@@ -121,6 +121,9 @@ export async function POST(request) {
     if (workOrder && workOrder.businessUnitId !== businessUnitId) {
       throw createCrmError('Work order division must match the document division.');
     }
+    if (type === 'Invoice' && !workOrder) {
+      throw createCrmError('Generate an invoice from a work order.', 400);
+    }
 
     const subtotal = money(body.subtotal || body.amount);
     const tax = money(body.tax);
