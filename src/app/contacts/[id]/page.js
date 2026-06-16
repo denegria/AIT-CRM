@@ -445,6 +445,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const currentLinkedPeople = linkedPeople.contactId === contact?.id
     ? linkedPeople
     : { contactId: contact?.id || '', items: [], loading: showLinkedPeoplePanel && dataSource === 'postgres', error: '' };
+  const hasQuickActions = access.canWriteCrm ||
+    (showWorkOrdersTab && access.canWriteWorkOrders) ||
+    (showFinancialsTab && access.canWriteFinancials);
 
   useEffect(() => {
     if (!contact?.id || dataSource !== 'postgres') return undefined;
@@ -1072,6 +1075,81 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
         {/* Right Section: Content */}
         <div className={s.contentSection}>
+          {hasQuickActions && (
+            <div className={s.quickActionRail} aria-label="Contact quick actions">
+              {access.canWriteCrm && (
+                <div className={s.quickActionGroup}>
+                  <span className={s.quickActionLabel}>CRM</span>
+                  <div className={s.quickActionList}>
+                    {nextStatus && (
+                      <button
+                        className={`${s.quickActionItem} ${s.quickActionPrimary}`}
+                        type="button"
+                        onClick={moveToNextStatus}
+                        disabled={statusUpdating}
+                      >
+                        <ArrowRight size={14} />
+                        {statusUpdating ? 'Updating...' : `Move to ${nextStatus}`}
+                      </button>
+                    )}
+                    <Link
+                      className={s.quickActionItem}
+                      href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}
+                    >
+                      <CheckSquare size={14} /> Follow-up
+                    </Link>
+                    <button className={s.quickActionItem} type="button" onClick={openEditModal}>
+                      <Edit3 size={14} /> Edit
+                    </button>
+                  </div>
+                </div>
+              )}
+              {showWorkOrdersTab && access.canWriteWorkOrders && (
+                <div className={s.quickActionGroup}>
+                  <span className={s.quickActionLabel}>{detailView.tabs.workOrdersLabel}</span>
+                  <div className={s.quickActionList}>
+                    <Link className={s.quickActionItem} href={`/work-orders?contactId=${encodeURIComponent(contact.id)}`}>
+                      <ClipboardList size={14} /> New Work Order
+                    </Link>
+                    {!!contactWorkOrders.length && (
+                      <button className={s.quickActionItem} type="button" onClick={() => setActiveTab('workorders')}>
+                        <Activity size={14} /> View {contactWorkOrders.length}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+              {showFinancialsTab && access.canWriteFinancials && (
+                <div className={s.quickActionGroup}>
+                  <span className={s.quickActionLabel}>{detailView.tabs.financialLabel}</span>
+                  <div className={s.quickActionList}>
+                    <button className={`${s.quickActionItem} ${s.quickActionPrimary}`} type="button" onClick={openEstimateModal}>
+                      <FileText size={14} /> Estimate
+                    </button>
+                    <button
+                      className={s.quickActionItem}
+                      type="button"
+                      onClick={() => openPaymentModal()}
+                      disabled={!isAitUsaContact && contactWorkOrders.length === 0}
+                    >
+                      <DollarSign size={14} /> {isAitUsaContact ? 'Receipt' : 'Payment'}
+                    </button>
+                    {!isAitUsaContact && (
+                      <button
+                        className={s.quickActionItem}
+                        type="button"
+                        onClick={() => downloadInvoiceFromWorkOrder()}
+                        disabled={!latestWorkOrder}
+                      >
+                        <FileText size={14} /> Invoice PDF
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className={s.contentTabs}>
             <button className={`${s.contentTab} ${renderedActiveTab === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')}>Timeline</button>
             <button className={`${s.contentTab} ${renderedActiveTab === 'conversations' ? s.active : ''}`} onClick={() => setActiveTab('conversations')}>Conversations ({conversationMessages.length})</button>
