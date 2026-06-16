@@ -84,7 +84,7 @@
 
 .filterBar {
   display: grid;
-  grid-template-columns: minmax(180px, 1.2fr) minmax(150px, 0.8fr) minmax(220px, 1.4fr);
+  grid-template-columns: minmax(160px, 1fr) minmax(145px, 0.9fr) minmax(145px, 0.9fr) minmax(150px, 0.9fr) minmax(200px, 1.2fr) auto;
   gap: 8px;
   margin-bottom: 12px;
 }
@@ -107,6 +107,53 @@
 .searchInput {
   width: 100%;
   padding-left: 32px;
+}
+
+.compactToggle {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.compactToggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+}
+
+.bulkBar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: -2px 0 12px;
+  padding: 9px 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--border-subtle));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent-muted) 28%, var(--bg-secondary));
+}
+
+.bulkBar > div {
+  margin-right: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+}
+
+.bulkBar strong {
+  color: var(--text-primary);
 }
 
 .mobilePipeline {
@@ -139,7 +186,12 @@
   }
 
   .filterBar {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .searchBox,
+  .compactToggle {
+    grid-column: 1 / -1;
   }
 }
 
@@ -234,11 +286,28 @@
   }
 
   .mobilePipelineCard {
+    position: relative;
     border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
     border-radius: var(--radius-lg);
     background: linear-gradient(180deg, var(--bg-elevated), var(--bg-secondary));
     box-shadow: var(--shadow-sm);
     overflow: hidden;
+  }
+
+  .mobileSelect {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 10px 12px 0;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .mobileSelect input {
+    width: 15px;
+    height: 15px;
+    accent-color: var(--accent);
   }
 
   .mobileCardMain {
@@ -247,7 +316,7 @@
     display: flex;
     flex-direction: column;
     gap: 6px;
-    padding: 12px;
+    padding: 10px 12px 12px;
     border: 0;
     background: transparent;
     color: inherit;
@@ -304,5 +373,14 @@
     border-radius: var(--radius-lg);
     color: var(--text-muted);
     font-size: var(--text-sm);
+  }
+
+  .bulkBar {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .bulkBar > div {
+    flex: 1 0 100%;
   }
 }

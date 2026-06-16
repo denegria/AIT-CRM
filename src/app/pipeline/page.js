@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { AlertCircle, ArrowRight, Clock3, Search, UserPlus, UserRoundCheck } from 'lucide-react';
+import { AlertCircle, ArrowRight, Clock3, ListFilter, Search, UserPlus, UserRoundCheck } from 'lucide-react';
 import KanbanBoard from '@/components/KanbanBoard';
 import { useToast } from '@/components/Toast';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
@@ -50,6 +50,35 @@ function mobileCardMeta(contact) {
   ].filter(Boolean).join(' · ');
 }
 
+function contactTouchDate(contact = {}) {
+  return contact.lastTouch || contact.lastContact || contact.lastEdited || contact.sourceActivityDate || '';
+}
+
+function daysSince(value) {
+  if (!value) return Number.POSITIVE_INFINITY;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return Number.POSITIVE_INFINITY;
+  return Math.floor((Date.now() - date.getTime()) / 86400000);
+}
+
+function sourceValue(contact = {}) {
+  return contact.inquirySource || contact.sourceCategoryText || contact.source || 'Unknown Source';
+}
+
+function isNewLead(contact = {}) {
+  return /new lead|intake/i.test(String(contact.status || contact.currentStage || ''));
+}
+
+function nextLeadScore(contact = {}) {
+  let score = 0;
+  if (contact.needsFirstOutreach) score += 100;
+  if (!contact.assignedTo) score += 40;
+  if (!contact.phone && !contact.email) score += 20;
+  if (isNewLead(contact)) score += 15;
+  score += Math.min(daysSince(contactTouchDate(contact)), 30);
+  return score;
+}
+
 export default function PipelinePage() {
   const {
     contacts,
@@ -73,9 +102,13 @@ export default function PipelinePage() {
   const [ownerFilter, setOwnerFilter] = useState(() => (
     currentUser?.id && !currentUser.canAccessAllBusinessUnits ? 'unassigned' : 'all'
   ));
+  const [sourceFilter, setSourceFilter] = useState('all');
+  const [activityFilter, setActivityFilter] = useState('all');
+  const [compactMode, setCompactMode] = useState(true);
   const [search, setSearch] = useState('');
   const [mobileStageFilter, setMobileStageFilter] = useState('all');
   const [mobileMoveCardId, setMobileMoveCardId] = useState('');
+  const [selectedIds, setSelectedIds] = useState([]);
   const canWrite = access.canWriteCrm;
   const {
     activeWorkflow,
@@ -114,6 +147,10 @@ export default function PipelinePage() {
       return !isWorkflowStatusClosed(contact.status, businessUnit);
     }).length,
   }), [businessUnitById, pipelineScopedRows]);
+  const sourceOptions = useMemo(() => {
+    const values = [...new Set(pipelineScopedRows.map(sourceValue).filter(Boolean))];
+    return values.sort((left, right) => left.localeCompare(right));
+  }, [pipelineScopedRows]);
 
   const normalizedSearch = search.trim().toLowerCase();
   const pipelineRows = pipelineScopedRows.filter((contact) => {
@@ -121,18 +158,32 @@ export default function PipelinePage() {
     const workflowMatch =
       workflowFilter === 'all' ||
       (workflowFilter === 'needs_first_outreach' && contact.needsFirstOutreach) ||
+      (workflowFilter === 'new_leads' && isNewLead(contact)) ||
       (workflowFilter === 'active' && !isWorkflowStatusClosed(contact.status, businessUnit)) ||
       (workflowFilter === 'unassigned' && !contact.assignedTo);
     const ownerMatch =
       ownerFilter === 'all' ||
       (ownerFilter === 'unassigned' && !contact.assignedTo) ||
       contact.assignedTo === ownerFilter;
-    return workflowMatch && ownerMatch && matchesSearch(contact, normalizedSearch);
+    const sourceMatch = sourceFilter === 'all' || sourceValue(contact) === sourceFilter;
+    const touchAge = daysSince(contactTouchDate(contact));
+    const activityMatch =
+      activityFilter === 'all' ||
+      (activityFilter === 'no_touch' && !contactTouchDate(contact)) ||
+      (activityFilter === 'stale_30' && touchAge > 30) ||
+      (activityFilter === 'recent_7' && touchAge <= 7);
+    return workflowMatch && ownerMatch && sourceMatch && activityMatch && matchesSearch(contact, normalizedSearch);
   });
   const normalizedColumns = useMemo(() => normalizedPipelineColumns(pipelineColumns), [pipelineColumns]);
   const mobileStageRows = mobileStageFilter === 'all'
     ? pipelineRows
     : pipelineRows.filter((contact) => contact.status === mobileStageFilter);
+  const nextLead = useMemo(() => (
+    [...pipelineRows]
+      .filter((contact) => isNewLead(contact) || contact.needsFirstOutreach || !contact.assignedTo)
+      .sort((left, right) => nextLeadScore(right) - nextLeadScore(left))[0] || null
+  ), [pipelineRows]);
+  const selectedRows = useMemo(() => pipelineRows.filter((contact) => selectedIds.includes(contact.id)), [pipelineRows, selectedIds]);
 
   const movePipelineCard = (id, status, column) => {
     if (column?.isOperational) {
@@ -145,6 +196,15 @@ export default function PipelinePage() {
         toast('Stage updated');
       })
       .catch((error) => toast(error?.message || 'Stage update failed.', 'error'));
+  };
+  const assignSelectedToMe = () => {
+    if (!currentUser?.id || !selectedRows.length) return;
+    Promise.all(selectedRows.map((contact) => updateContact(contact.id, { assignedTo: currentUser.id })))
+      .then(() => {
+        setSelectedIds([]);
+        toast(`Assigned ${selectedRows.length} pipeline cards to you`);
+      })
+      .catch((error) => toast(error?.message || 'Bulk assignment failed.', 'error'));
   };
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
@@ -159,6 +219,9 @@ export default function PipelinePage() {
           </p>
         </div>
         <div className={s.pipelineActions}>
+          <button className="btn" onClick={() => nextLead ? router.push(`/contacts/${nextLead.id}`) : toast('No lead matches the current filters.', 'error')}>
+            <ArrowRight size={14} /> Work Next Lead
+          </button>
           <button className="btn" onClick={() => setOwnerFilter('unassigned')}>
             <AlertCircle size={14} /> Unassigned
           </button>
@@ -207,6 +270,7 @@ export default function PipelinePage() {
       <div className={s.filterBar}>
         <select className="input select" value={workflowFilter} onChange={(event) => setWorkflowFilter(event.target.value)}>
           <option value="all">All Pipeline Cards</option>
+          <option value="new_leads">New Leads</option>
           <option value="needs_first_outreach">Needs First Outreach</option>
           <option value="active">Active Pipeline</option>
           <option value="unassigned">Unassigned</option>
@@ -214,6 +278,22 @@ export default function PipelinePage() {
         <select className="input select" value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}>
           <option value="all">{canUseConsolidatedScope ? 'Team Pipeline' : 'All Owners'}</option>
           <option value="unassigned">Unassigned</option>
+          {currentUser?.id && <option value={currentUser.id}>Me</option>}
+          {employees.map((employee) => (
+            <option key={employee.id} value={employee.id}>{employee.name || employee.email || 'Unnamed User'}</option>
+          ))}
+        </select>
+        <select className="input select" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
+          <option value="all">All Sources</option>
+          {sourceOptions.map((source) => (
+            <option key={source} value={source}>{source}</option>
+          ))}
+        </select>
+        <select className="input select" value={activityFilter} onChange={(event) => setActivityFilter(event.target.value)}>
+          <option value="all">Any Activity</option>
+          <option value="recent_7">Touched Last 7 Days</option>
+          <option value="stale_30">No Touch 30+ Days</option>
+          <option value="no_touch">No Touch Recorded</option>
         </select>
         <div className={s.searchBox}>
           <Search size={14} />
@@ -224,7 +304,26 @@ export default function PipelinePage() {
             placeholder="Search pipeline..."
           />
         </div>
+        <label className={s.compactToggle}>
+          <input type="checkbox" checked={compactMode} onChange={(event) => setCompactMode(event.target.checked)} />
+          Compact cards
+        </label>
       </div>
+
+      {selectedRows.length > 0 && (
+        <div className={s.bulkBar}>
+          <div>
+            <ListFilter size={14} />
+            <strong>{selectedRows.length}</strong>
+            <span>selected</span>
+          </div>
+          {canWrite && currentUser?.id && (
+            <button className="btn btn-sm" type="button" onClick={assignSelectedToMe}>Assign to me</button>
+          )}
+          <button className="btn btn-sm" type="button" onClick={() => router.push(`/contacts/${selectedRows[0].id}`)}>Open first</button>
+          <button className="btn btn-sm" type="button" onClick={() => setSelectedIds([])}>Clear</button>
+        </div>
+      )}
 
       <div className={s.desktopBoard}>
         <KanbanBoard
@@ -233,6 +332,9 @@ export default function PipelinePage() {
           onMove={canWrite ? movePipelineCard : undefined}
           onEdit={(item) => router.push(`/contacts/${item.id}`)}
           showMobileMoveControls={false}
+          compact={compactMode}
+          selectedIds={selectedIds}
+          onSelect={setSelectedIds}
         />
       </div>
 
@@ -266,6 +368,19 @@ export default function PipelinePage() {
             const isMoving = mobileMoveCardId === contact.id;
             return (
               <article key={contact.id} className={s.mobilePipelineCard}>
+                <label className={s.mobileSelect} onClick={(event) => event.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(contact.id)}
+                    onChange={(event) => {
+                      const next = new Set(selectedIds);
+                      if (event.target.checked) next.add(contact.id);
+                      else next.delete(contact.id);
+                      setSelectedIds([...next]);
+                    }}
+                  />
+                  Select
+                </label>
                 <button className={s.mobileCardMain} type="button" onClick={() => router.push(`/contacts/${contact.id}`)}>
                   <span className={s.mobileCardStage}>{contact.currentStage || contact.status}</span>
                   <strong>{contact.name}</strong>
