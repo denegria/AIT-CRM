@@ -1578,14 +1578,29 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <p>
                       {isAitUsaContact
                         ? 'Review work connected to this student record.'
-                        : 'Create work orders here. Invoices are generated from a saved work order.'}
+                        : 'Create work orders here. Optionally start from an estimate, then generate invoices from saved work orders.'}
                     </p>
                   </div>
+                  {!isAitUsaContact && access.canWriteWorkOrders && (
+                    <div className={s.commandControls}>
+                      <label className={s.commandField}>
+                        <span>Estimate for work order</span>
+                        <select className="input select" value={selectedWorkOrderEstimate ? workOrderEstimateId : ''} onChange={(event) => setWorkOrderEstimateId(event.target.value)}>
+                          <option value="">No estimate</option>
+                          {contactEstimates.map((estimate) => (
+                            <option key={estimate.id} value={estimate.id}>
+                              {estimate.number || 'Estimate'} - ${moneyLabel(estimate.amount || estimate.balanceDue)}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
+                  )}
                   {access.canWriteWorkOrders && (
                     <div className={s.commandActions}>
-                      <Link className="btn btn-primary" href={`/work-orders?contactId=${encodeURIComponent(contact.id)}`}>
+                      <button className="btn btn-primary" type="button" onClick={createWorkOrderFromEstimate}>
                         <ClipboardList size={16} /> Create Work Order
-                      </Link>
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1626,9 +1641,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     </p>
                     {access.canWriteWorkOrders && (
                       <div className="empty-state-actions">
-                        <Link className="btn btn-primary" href={`/work-orders?contactId=${encodeURIComponent(contact.id)}`}>
+                        <button className="btn btn-primary" type="button" onClick={createWorkOrderFromEstimate}>
                           <ClipboardList size={16} /> Create Work Order
-                        </Link>
+                        </button>
                       </div>
                     )}
                   </div>
@@ -1650,19 +1665,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     </div>
                     {!isAitUsaContact && (
                       <div className={s.commandControls}>
-                        {access.canWriteWorkOrders && (
-                          <label className={s.commandField}>
-                            <span>Estimate for work order</span>
-                            <select className="input select" value={selectedWorkOrderEstimate ? workOrderEstimateId : ''} onChange={(event) => setWorkOrderEstimateId(event.target.value)}>
-                              <option value="">No estimate</option>
-                              {contactEstimates.map((estimate) => (
-                                <option key={estimate.id} value={estimate.id}>
-                                  {estimate.number || 'Estimate'} - ${moneyLabel(estimate.amount || estimate.balanceDue)}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                        )}
                         <label className={s.commandField}>
                           <span>Work order for invoice</span>
                           <select className="input select" value={selectedInvoiceWorkOrder ? invoiceWorkOrderId : ''} onChange={(event) => setInvoiceWorkOrderId(event.target.value)}>
@@ -1682,11 +1684,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                           <button className="btn btn-primary" type="button" onClick={openEstimateModal}>
                             <FileText size={16} /> New Estimate
                           </button>
-                          {access.canWriteWorkOrders && (
-                            <button className="btn" type="button" onClick={createWorkOrderFromEstimate}>
-                              <ClipboardList size={16} /> Create Work Order
-                            </button>
-                          )}
                           <button className="btn" type="button" onClick={downloadSelectedWorkOrderInvoice}>
                             <FileText size={16} /> Generate Invoice
                           </button>
