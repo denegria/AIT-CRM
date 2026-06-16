@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
@@ -39,6 +39,31 @@ const empty = {
   nextAction: '',
   notes: [],
 };
+
+function statusFromParams(searchParams) {
+  return searchParams.get('status') || 'All';
+}
+
+function ownerFromParams(searchParams) {
+  return searchParams.get('owner') || searchParams.get('ownerUserId') || 'all';
+}
+
+function facetFromParams(searchParams) {
+  return searchParams.get('facet') || searchParams.get('directoryFacet') || 'all';
+}
+
+function leadDateScopeFromParams(searchParams) {
+  return searchParams.get('leadDateScope') === 'all' ? 'all' : 'current';
+}
+
+function contactFilterQuery({ statusFilter, ownerFilter, directoryFacet, leadDateScope }) {
+  const params = new URLSearchParams();
+  if (leadDateScope === 'all') params.set('leadDateScope', 'all');
+  if (statusFilter && statusFilter !== 'All') params.set('status', statusFilter);
+  if (ownerFilter && ownerFilter !== 'all') params.set('owner', ownerFilter);
+  if (directoryFacet && directoryFacet !== 'all') params.set('facet', directoryFacet);
+  return params.toString();
+}
 
 function TagList({ tags = [] }) {
   if (!tags.length) return null;
@@ -160,13 +185,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const searchParams = useSearchParams();
   const [drawer, setDrawer] = useState(null); // null | 'new' | contact object
   const [form, setForm] = useState(empty);
-  const [statusFilter, setStatusFilter] = useState('All');
-  const [ownerFilter, setOwnerFilter] = useState('all');
-  const [directoryFacet, setDirectoryFacet] = useState(() => searchParams.get('facet') || searchParams.get('directoryFacet') || 'all');
-  const [leadDateScope, setLeadDateScope] = useState(() => {
-    const param = searchParams.get('leadDateScope');
-    return param === 'all' ? 'all' : 'current';
-  });
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [formError, setFormError] = useState('');
   const [facetNow] = useState(() => Date.now());
@@ -174,6 +192,25 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const singularLabel = isClientsMode ? 'Client' : 'Contact';
   const pluralLabel = isClientsMode ? 'Clients' : 'Contacts';
   const routeBase = isClientsMode ? '/clients' : '/contacts';
+  const statusFilter = statusFromParams(searchParams);
+  const ownerFilter = ownerFromParams(searchParams);
+  const directoryFacet = facetFromParams(searchParams);
+  const leadDateScope = leadDateScopeFromParams(searchParams);
+  const updateFilterQuery = useCallback((patch) => {
+    const nextQuery = contactFilterQuery({
+      statusFilter,
+      ownerFilter,
+      directoryFacet,
+      leadDateScope,
+      ...patch,
+    });
+    router.replace(nextQuery ? `${routeBase}?${nextQuery}` : routeBase, { scroll: false });
+  }, [directoryFacet, leadDateScope, ownerFilter, routeBase, router, statusFilter]);
+  const setStatusFilter = useCallback((value) => updateFilterQuery({ statusFilter: value }), [updateFilterQuery]);
+  const setOwnerFilter = useCallback((value) => updateFilterQuery({ ownerFilter: value }), [updateFilterQuery]);
+  const setDirectoryFacet = useCallback((value) => updateFilterQuery({ directoryFacet: value }), [updateFilterQuery]);
+  const setLeadDateScope = useCallback((value) => updateFilterQuery({ leadDateScope: value }), [updateFilterQuery]);
+
   const directoryContacts = useMemo(() => {
     return contacts;
   }, [contacts]);
@@ -373,10 +410,12 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     ? activeFilterChips.map((chip) => chip.label).join(' / ')
     : 'Default contact view';
   const resetFilters = () => {
-    setLeadDateScope('current');
-    setStatusFilter('All');
-    setOwnerFilter('all');
-    setDirectoryFacet('all');
+    updateFilterQuery({
+      leadDateScope: 'current',
+      statusFilter: 'All',
+      ownerFilter: 'all',
+      directoryFacet: 'all',
+    });
   };
   const invalidPhoneScopeSummary = useMemo(() => {
     if (effectiveDirectoryFacet !== 'invalid_phone') return '';
