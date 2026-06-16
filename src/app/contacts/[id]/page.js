@@ -305,7 +305,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     financials,
     allFinancials,
     updateContact,
-    addWorkOrder,
     addFinancial,
     recordPayment,
     loaded,
@@ -352,7 +351,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
   const [invoiceWorkOrderId, setInvoiceWorkOrderId] = useState('');
-  const [workOrderEstimateId, setWorkOrderEstimateId] = useState('');
 
   const contactSource = isClientMode ? (allContacts || contacts) : contacts;
   const workOrderSource = isClientMode ? (allWorkOrders || workOrders) : workOrders;
@@ -413,7 +411,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const hasWorkOrders = contactWorkOrders.length > 0;
   const hasInvoices = contactInvoices.length > 0;
   const selectedInvoiceWorkOrder = contactWorkOrders.find((workOrder) => workOrder.id === invoiceWorkOrderId) || null;
-  const selectedWorkOrderEstimate = contactEstimates.find((estimate) => estimate.id === workOrderEstimateId) || null;
+  const workOrdersHref = `/work-orders${contact?.id ? `?contactId=${encodeURIComponent(contact.id)}` : ''}`;
   const visibleFinancials = useMemo(() => (
     isAitUsaContact
       ? contactFinancials.filter((record) => {
@@ -769,39 +767,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         toast('Estimate saved');
       })
       .catch((error) => toast(error.message || 'Estimate save failed.', 'error'));
-  };
-
-  const createWorkOrderFromEstimate = () => {
-    if (!contact?.id || !access.canWriteWorkOrders) return;
-    const estimate = selectedWorkOrderEstimate;
-    const amount = moneyValue(estimate?.amount || estimate?.balanceDue || estimate?.subtotal);
-    const estimateLabel = estimate?.number || estimate?.id || '';
-    const firstLineItem = Array.isArray(estimate?.items) ? estimate.items[0] : null;
-    const payload = {
-      number: `WO-${String(workOrders.length + 1).padStart(3, '0')}`,
-      title: estimate
-        ? (firstLineItem?.desc || `${estimateLabel || 'Estimate'} work order`)
-        : `Work order for ${contact.name || 'contact'}`,
-      client: contact.name || '',
-      contactId: contact.id,
-      businessUnitId: contact.primaryBusinessUnitId || contact.businessUnitId || contactBusinessUnit?.id || '',
-      priority: 'Medium',
-      status: 'Pending',
-      assignedTo: '',
-      dueDate: todayDate(),
-      description: estimate
-        ? `Generated from estimate ${estimateLabel || estimate.id}.`
-        : '',
-      estimatedCost: amount,
-    };
-    addWorkOrder(payload)
-      .then((workOrder) => {
-        if (workOrder?.id) setInvoiceWorkOrderId(workOrder.id);
-        setWorkOrderEstimateId('');
-        setTimelineReloadKey((key) => key + 1);
-        toast(estimate ? 'Work order created from estimate' : 'Work order created');
-      })
-      .catch((error) => toast(error.message || 'Work order save failed.', 'error'));
   };
 
   const openPaymentModal = (invoice = latestInvoice) => {
@@ -1578,29 +1543,14 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <p>
                       {isAitUsaContact
                         ? 'Review work connected to this student record.'
-                        : 'Create work orders here. Optionally start from an estimate, then generate invoices from saved work orders.'}
+                        : 'Create and manage work orders on the Work Orders page, then generate invoices from saved work orders here.'}
                     </p>
                   </div>
-                  {!isAitUsaContact && access.canWriteWorkOrders && (
-                    <div className={s.commandControls}>
-                      <label className={s.commandField}>
-                        <span>Estimate for work order</span>
-                        <select className="input select" value={selectedWorkOrderEstimate ? workOrderEstimateId : ''} onChange={(event) => setWorkOrderEstimateId(event.target.value)}>
-                          <option value="">No estimate</option>
-                          {contactEstimates.map((estimate) => (
-                            <option key={estimate.id} value={estimate.id}>
-                              {estimate.number || 'Estimate'} - ${moneyLabel(estimate.amount || estimate.balanceDue)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                  )}
                   {access.canWriteWorkOrders && (
                     <div className={s.commandActions}>
-                      <button className="btn btn-primary" type="button" onClick={createWorkOrderFromEstimate}>
+                      <Link className="btn btn-primary" href={workOrdersHref}>
                         <ClipboardList size={16} /> Create Work Order
-                      </button>
+                      </Link>
                     </div>
                   )}
                 </div>
@@ -1641,9 +1591,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     </p>
                     {access.canWriteWorkOrders && (
                       <div className="empty-state-actions">
-                        <button className="btn btn-primary" type="button" onClick={createWorkOrderFromEstimate}>
+                        <Link className="btn btn-primary" href={workOrdersHref}>
                           <ClipboardList size={16} /> Create Work Order
-                        </button>
+                        </Link>
                       </div>
                     )}
                   </div>

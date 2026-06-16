@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
@@ -7,7 +7,43 @@ import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import { generateWorkOrderPDF } from '@/lib/pdf';
 
-const empty = { number:'', title:'', client:'', contactId:'', priority:'Medium', status:'Pending', assignedTo:'', dueDate:'', description:'', estimatedCost:0 };
+const empty = { number:'', title:'', client:'', contactId:'', businessUnitId:'', estimateId:'', priority:'Medium', status:'Pending', assignedTo:'', dueDate:'', description:'', estimatedCost:0 };
+
+function isEstimateRecord(record = {}) {
+  const type = String(record.type || '').toLowerCase();
+  return type.includes('estimate');
+}
+
+function moneyLabel(value) {
+  const amount = Number(value || 0);
+  return Number.isFinite(amount) ? amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
+}
+
+function canAssignEmployeeToBusinessUnit(employee = {}, businessUnitId = '') {
+  if (!employee?.id || !businessUnitId) return Boolean(employee?.id);
+  const roleKeys = Array.isArray(employee.roleKeys) ? employee.roleKeys : [];
+  if (roleKeys.includes('admin')) return true;
+  const unitIds = Array.isArray(employee.businessUnitIds) ? employee.businessUnitIds.filter(Boolean) : [];
+  return unitIds.includes(businessUnitId);
+}
+
+function firstAssigneeForBusinessUnit(employees = [], businessUnitId = '') {
+  return employees.find((employee) => canAssignEmployeeToBusinessUnit(employee, businessUnitId));
+}
+
+function draftFromEstimate(form, estimate) {
+  if (!estimate) return { ...form, estimateId: '' };
+  const estimateLabel = estimate.number || 'estimate';
+  const firstItem = Array.isArray(estimate.items) ? estimate.items[0] : null;
+  const amount = Number(estimate.amount || estimate.balanceDue || estimate.subtotal || form.estimatedCost || 0);
+  return {
+    ...form,
+    estimateId: estimate.id,
+    title: form.title || firstItem?.desc || `Work order for ${form.client || 'client'}`,
+    description: form.description || `Linked to ${estimateLabel}.`,
+    estimatedCost: Number.isFinite(amount) ? amount : form.estimatedCost,
+  };
+}
 
 export default function WorkOrdersPage() {
   const router = useRouter();
@@ -18,6 +54,7 @@ export default function WorkOrdersPage() {
     updateWorkOrder,
     deleteWorkOrder,
     contacts,
+    financials,
     employees,
     access,
     loaded,
@@ -38,6 +75,16 @@ export default function WorkOrdersPage() {
   const [ownerFilter, setOwnerFilter] = useState(() => searchParams.get('ownerUserId') || 'all');
   const contactPrefillRef = useRef('');
   const canWriteWorkOrders = Boolean(access?.canWriteWorkOrders);
+  const selectedContact = contacts.find((entry) => entry.id === form.contactId) || null;
+  const availableAssignees = useMemo(() => (
+    employees.filter((employee) => canAssignEmployeeToBusinessUnit(employee, form.businessUnitId))
+  ), [employees, form.businessUnitId]);
+  const estimateOptions = useMemo(() => (
+    financials
+      .filter(isEstimateRecord)
+      .filter((estimate) => !form.contactId || estimate.contactId === form.contactId)
+      .filter((estimate) => !form.businessUnitId || estimate.businessUnitId === form.businessUnitId)
+  ), [financials, form.businessUnitId, form.contactId]);
 
   const openNew = useCallback((prefillContact = null) => {
     if (!canWriteWorkOrders) return;
@@ -52,7 +99,7 @@ export default function WorkOrdersPage() {
       contactId: prefillContact?.id || '',
       client: prefillContact?.name || '',
       title: prefillContact?.name ? `Work order for ${prefillContact.name}` : '',
-      assignedTo: employees[0]?.id || '',
+      assignedTo: firstAssigneeForBusinessUnit(employees, businessUnitId)?.id || '',
       dueDate: new Date().toISOString().slice(0,10),
     });
     setDrawer('new');
@@ -92,6 +139,40 @@ export default function WorkOrdersPage() {
 
   const empName = (id) => employees.find(e => e.id === id)?.name || id;
   const unitName = (id) => accessibleBusinessUnits.find((unit) => unit.id === id)?.name || 'Unassigned';
+  const chooseContact = (contactId) => {
+    const contact = contacts.find(ct => ct.id === contactId);
+    setForm((current) => {
+      const businessUnitId = contact?.businessUnitId || contact?.primaryBusinessUnitId || current.businessUnitId || '';
+      const assignedTo = canAssignEmployeeToBusinessUnit(employees.find((entry) => entry.id === current.assignedTo), businessUnitId)
+        ? current.assignedTo
+        : firstAssigneeForBusinessUnit(employees, businessUnitId)?.id || '';
+      return {
+        ...current,
+        contactId,
+        client: contact?.name || '',
+        businessUnitId,
+        estimateId: '',
+        assignedTo,
+      };
+    });
+  };
+  const chooseBusinessUnit = (businessUnitId) => {
+    setForm((current) => {
+      const assignedTo = canAssignEmployeeToBusinessUnit(employees.find((entry) => entry.id === current.assignedTo), businessUnitId)
+        ? current.assignedTo
+        : firstAssigneeForBusinessUnit(employees, businessUnitId)?.id || '';
+      return {
+        ...current,
+        businessUnitId,
+        estimateId: '',
+        assignedTo,
+      };
+    });
+  };
+  const chooseEstimate = (estimateId) => {
+    const estimate = estimateOptions.find((entry) => entry.id === estimateId) || null;
+    setForm((current) => draftFromEstimate(current, estimate));
+  };
 
   const columns = [
     { key: 'number', label: 'WO #', sortable: true },
@@ -241,17 +322,27 @@ export default function WorkOrdersPage() {
         <div className="form-group">
           <label className="form-label">Client</label>
           <select className="input select" value={form.contactId} onChange={e => {
-            const c = contacts.find(ct => ct.id === e.target.value);
-            setForm(f=>({...f, contactId: e.target.value, client: c?.name || '', businessUnitId: c?.businessUnitId || c?.primaryBusinessUnitId || f.businessUnitId || ''}));
+            chooseContact(e.target.value);
           }}>
             <option value="">Select client</option>
             {contacts.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
+        <div className="form-group">
+          <label className="form-label">Linked Estimate (optional)</label>
+          <select className="input select" value={form.estimateId || ''} onChange={e => chooseEstimate(e.target.value)}>
+            <option value="">No linked estimate</option>
+            {estimateOptions.map((estimate) => (
+              <option key={estimate.id} value={estimate.id}>
+                {estimate.number || 'Estimate'}{estimate.client || selectedContact?.name ? ` - ${estimate.client || selectedContact?.name}` : ''} (${moneyLabel(estimate.amount || estimate.balanceDue)})
+              </option>
+            ))}
+          </select>
+        </div>
         <div className="grid-3">
           <div className="form-group">
             <label className="form-label">{scopeLabel}</label>
-            <select className="input select" value={form.businessUnitId || ''} onChange={e => setForm(f=>({...f,businessUnitId:e.target.value}))}>
+            <select className="input select" value={form.businessUnitId || ''} onChange={e => chooseBusinessUnit(e.target.value)}>
               {accessibleBusinessUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
             </select>
           </div>
@@ -270,7 +361,11 @@ export default function WorkOrdersPage() {
           <div className="form-group">
             <label className="form-label">Assigned To</label>
             <select className="input select" value={form.assignedTo} onChange={e => setForm(f=>({...f,assignedTo:e.target.value}))}>
-              {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+              <option value="">Unassigned</option>
+              {form.assignedTo && !availableAssignees.some((employee) => employee.id === form.assignedTo) && (
+                <option value={form.assignedTo}>{empName(form.assignedTo)} (outside {scopeLabel.toLowerCase()})</option>
+              )}
+              {availableAssignees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
             </select>
           </div>
         </div>

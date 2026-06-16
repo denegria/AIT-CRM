@@ -355,6 +355,7 @@ function mapWorkOrders(rows, contactLookup) {
     client: contactLookup.get(row.contactId)?.name || '',
     contactId: row.contactId || '',
     businessUnitId: row.businessUnitId || '',
+    estimateId: row.estimateId || '',
     priority: row.priority || 'Medium',
     status: row.status || 'Pending',
     assignedTo: row.assignedUserId || '',

@@ -1,13 +1,24 @@
 import { NextResponse } from 'next/server';
 import { and, eq, desc } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
-import { businessUnits, contacts, leads, workOrders } from '@/db/schema.js';
+import {
+  businessUnitMemberships,
+  businessUnits,
+  contacts,
+  estimates,
+  leads,
+  roles,
+  userRoles,
+  users,
+  workOrders,
+} from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import {
   canAccessBusinessUnit,
   resolveBusinessUnitId,
   resolveContactById,
 } from '@/lib/crm/access.js';
+import { isAssignableEmployee } from '@/lib/crm/assignable-employees.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
 import { isUuid } from '@/lib/crm/validation.js';
 import {
@@ -46,6 +57,7 @@ function toWorkOrderPayload(row, contact = null) {
     priority: row.priority || 'Medium',
     status: row.status || 'Pending',
     assignedTo: row.assignedUserId || '',
+    estimateId: row.estimateId || '',
     dueDate: toDateOnly(row.deliveryDate),
     description: row.description || '',
     estimatedCost: Number(row.estimatedCost || 0),
@@ -61,6 +73,73 @@ async function resolveLeadId(db, contactId) {
     .orderBy(desc(leads.createdAt))
     .limit(1);
   return lead?.id || null;
+}
+
+async function resolveEstimateId(db, session, estimateId, { businessUnitId, contact } = {}) {
+  const requestedId = String(estimateId || '').trim();
+  if (!requestedId) return null;
+  if (!isUuid(requestedId)) throw createCrmError('A valid estimate id is required.');
+
+  const [estimate] = await db
+    .select()
+    .from(estimates)
+    .where(and(
+      eq(estimates.id, requestedId),
+      eq(estimates.organizationId, session.user.organizationId),
+    ))
+    .limit(1);
+
+  if (!estimate) throw createCrmError('Estimate not found.', 404);
+  if (!canAccessBusinessUnit(session, estimate.businessUnitId)) {
+    throw createCrmError('Insufficient business-unit access for this estimate.', 403);
+  }
+  if (businessUnitId && estimate.businessUnitId !== businessUnitId) {
+    throw createCrmError('Estimate division must match the work order division.');
+  }
+  if (contact?.id && estimate.contactId && estimate.contactId !== contact.id) {
+    throw createCrmError('Estimate must belong to the selected contact.');
+  }
+  return estimate.id;
+}
+
+async function resolveAssignedUserId(db, session, assignedTo, businessUnitId) {
+  const assignedUserId = String(assignedTo || '').trim();
+  if (!assignedUserId) return null;
+  if (!isUuid(assignedUserId)) throw createCrmError('A valid assignee is required.');
+
+  const [user] = await db
+    .select({ id: users.id, name: users.name, email: users.email, isActive: users.isActive })
+    .from(users)
+    .where(and(
+      eq(users.id, assignedUserId),
+      eq(users.organizationId, session.user.organizationId),
+    ))
+    .limit(1);
+
+  if (!user || user.isActive === false) throw createCrmError('Selected assignee is not active in this organization.');
+
+  const [roleRows, membershipRows] = await Promise.all([
+    db
+      .select({ key: roles.key })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(and(
+        eq(userRoles.userId, assignedUserId),
+        eq(roles.organizationId, session.user.organizationId),
+      )),
+    db
+      .select({ businessUnitId: businessUnitMemberships.businessUnitId })
+      .from(businessUnitMemberships)
+      .where(eq(businessUnitMemberships.userId, assignedUserId)),
+  ]);
+
+  const roleKeys = roleRows.map((row) => row.key).filter(Boolean);
+  if (!isAssignableEmployee({ ...user, roleKeys })) {
+    throw createCrmError('Selected assignee is not assignable to work orders.');
+  }
+  if (roleKeys.includes('admin')) return assignedUserId;
+  if (businessUnitId && membershipRows.some((row) => row.businessUnitId === businessUnitId)) return assignedUserId;
+  throw createCrmError('Selected assignee does not belong to this work order division.');
 }
 
 async function resolveCreateBusinessUnitId(db, session, body, contact) {
@@ -100,6 +179,8 @@ export async function POST(request) {
     });
     const businessUnitId = await resolveCreateBusinessUnitId(db, session, body, contact);
     const leadId = await resolveLeadId(db, contact?.id || null);
+    const estimateId = await resolveEstimateId(db, session, body.estimateId, { businessUnitId, contact });
+    const assignedUserId = await resolveAssignedUserId(db, session, body.assignedTo, businessUnitId);
 
     const { workOrder } = await createWorkOrderWithActivity({
       db,
@@ -109,11 +190,12 @@ export async function POST(request) {
         businessUnitId,
         contactId: contact?.id || null,
         leadId,
+        estimateId,
         workOrderNumber: String(body.number || '').trim() || null,
         title,
         status: String(body.status || 'Pending').trim() || 'Pending',
         priority: String(body.priority || 'Medium').trim() || 'Medium',
-        assignedUserId: isUuid(body.assignedTo) ? body.assignedTo : null,
+        assignedUserId,
         deliveryDate: parseDeliveryDate(body.dueDate),
         description: String(body.description || '').trim() || null,
         estimatedCost: parseEstimatedCost(body.estimatedCost),
@@ -184,7 +266,16 @@ export async function PATCH(request) {
     }
     if (Object.prototype.hasOwnProperty.call(body, 'status')) patch.status = String(body.status || '').trim() || 'Pending';
     if (Object.prototype.hasOwnProperty.call(body, 'priority')) patch.priority = String(body.priority || '').trim() || 'Medium';
-    if (Object.prototype.hasOwnProperty.call(body, 'assignedTo')) patch.assignedUserId = isUuid(body.assignedTo) ? body.assignedTo : null;
+    if (Object.prototype.hasOwnProperty.call(body, 'assignedTo')) {
+      patch.assignedUserId = await resolveAssignedUserId(db, session, body.assignedTo, businessUnitId);
+    } else if (businessUnitId !== existing.businessUnitId && existing.assignedUserId) {
+      patch.assignedUserId = await resolveAssignedUserId(db, session, existing.assignedUserId, businessUnitId);
+    }
+    if (Object.prototype.hasOwnProperty.call(body, 'estimateId')) {
+      patch.estimateId = await resolveEstimateId(db, session, body.estimateId, { businessUnitId, contact });
+    } else if ((businessUnitId !== existing.businessUnitId || contactProvided) && existing.estimateId) {
+      patch.estimateId = await resolveEstimateId(db, session, existing.estimateId, { businessUnitId, contact });
+    }
     if (Object.prototype.hasOwnProperty.call(body, 'dueDate')) patch.deliveryDate = parseDeliveryDate(body.dueDate);
     if (Object.prototype.hasOwnProperty.call(body, 'description')) patch.description = String(body.description || '').trim() || null;
     if (Object.prototype.hasOwnProperty.call(body, 'estimatedCost')) patch.estimatedCost = parseEstimatedCost(body.estimatedCost);
