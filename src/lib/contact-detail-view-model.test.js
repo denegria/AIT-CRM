@@ -167,7 +167,7 @@ test('AIT USA contact detail uses contact-info blocker as the only top chip when
   assert.ok(model.highlights.some((item) => item.label === 'Contactability' && item.value === 'Needs Contact Info'));
 });
 
-test('AIT USA contact detail only adds operational tabs when real records exist', () => {
+test('AIT USA contact detail only adds student receipt finance affordances when real receipt records exist', () => {
   const model = buildContactDetailViewModel({
     businessUnit: { name: 'AIT USA Institute' },
     contact: {
@@ -185,5 +185,18 @@ test('AIT USA contact detail only adds operational tabs when real records exist'
 
   assert.equal(model.tabs.showWorkOrders, true);
   assert.equal(model.tabs.showFinancials, true);
-  assert.deepEqual(model.snapshotItems.map((item) => item.key), ['lead', 'follow_up', 'message', 'task', 'work', 'payment', 'estimate']);
+  assert.equal(model.tabs.financialLabel, 'Receipts');
+  assert.deepEqual(model.snapshotItems.map((item) => item.key), ['lead', 'follow_up', 'message', 'task', 'work', 'payment']);
+  assert.deepEqual(model.snapshotItems.map((item) => item.label), ['Inquiry', 'Outreach', 'Messages', 'Tasks', 'Related work', 'Receipts']);
+  assert.deepEqual(model.timelineFilters.map((filter) => filter.label), [
+    'All history',
+    'Enrollment leads',
+    'Follow-ups',
+    'Messages',
+    'Tasks',
+    'Notes',
+    'Related work',
+    'Receipts',
+    'Source details',
+  ]);
 });

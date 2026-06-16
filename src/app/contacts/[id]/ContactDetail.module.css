@@ -420,81 +420,6 @@
   gap: 16px;
   min-width: 0;
 }
-.quickActionRail {
-  display: flex;
-  align-items: stretch;
-  gap: 8px;
-  max-width: 100%;
-  overflow-x: auto;
-  padding: 8px;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
-  border-radius: var(--radius-xl);
-  background: linear-gradient(180deg, var(--bg-elevated), color-mix(in srgb, var(--bg-secondary) 92%, var(--bg-tertiary)));
-  box-shadow: var(--shadow-soft);
-  scrollbar-width: thin;
-}
-.quickActionGroup {
-  flex: 0 0 auto;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-right: 8px;
-  border-right: 1px solid var(--border-subtle);
-}
-.quickActionGroup:last-child {
-  padding-right: 0;
-  border-right: 0;
-}
-.quickActionLabel {
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-.quickActionList {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.quickActionItem {
-  min-height: 34px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 10px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: var(--text-xs);
-  font-weight: 800;
-  line-height: 1;
-  text-decoration: none;
-  white-space: nowrap;
-  transition: border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
-}
-.quickActionItem:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--border-default));
-  color: var(--text-primary);
-  transform: translateY(-1px);
-}
-.quickActionItem:disabled {
-  cursor: not-allowed;
-  opacity: 0.52;
-}
-.quickActionItem svg {
-  flex: 0 0 auto;
-}
-.quickActionPrimary {
-  border-color: color-mix(in srgb, var(--accent) 32%, var(--border-default));
-  background: color-mix(in srgb, var(--accent-muted) 44%, var(--bg-secondary));
-  color: var(--accent);
-}
 .contentTabs {
   display: flex;
   gap: 8px;
@@ -1404,6 +1329,41 @@
   flex-direction: column;
   gap: 12px;
 }
+.financialCommandCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-secondary) 82%, var(--bg-tertiary));
+}
+.financialCommandCopy {
+  min-width: 220px;
+  display: flex;
+  flex: 1 1 300px;
+  flex-direction: column;
+  gap: 4px;
+}
+.financialCommandTitle {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 800;
+}
+.financialCommandCopy p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+.financialCommandActions {
+  display: flex;
+  flex: 0 1 auto;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 .recordCard {
   display: flex;
   justify-content: space-between;
@@ -1480,28 +1440,6 @@
   .contentTab {
     flex: 0 0 auto;
     white-space: nowrap;
-  }
-  .quickActionRail {
-    align-items: flex-start;
-    flex-direction: column;
-    overflow-x: visible;
-  }
-  .quickActionGroup {
-    width: 100%;
-    align-items: flex-start;
-    justify-content: space-between;
-    padding-right: 0;
-    padding-bottom: 8px;
-    border-right: 0;
-    border-bottom: 1px solid var(--border-subtle);
-  }
-  .quickActionGroup:last-child {
-    padding-bottom: 0;
-    border-bottom: 0;
-  }
-  .quickActionList {
-    justify-content: flex-end;
-    flex-wrap: wrap;
   }
   .tabContent {
     min-height: 360px;
@@ -1593,17 +1531,12 @@
     margin-bottom: 12px;
     padding: 10px;
   }
-  .quickActionGroup {
+  .financialCommandCard {
     align-items: stretch;
     flex-direction: column;
-    gap: 6px;
   }
-  .quickActionList {
+  .financialCommandActions {
     justify-content: flex-start;
-  }
-  .quickActionItem {
-    flex: 1 1 auto;
-    min-width: 0;
   }
   .profileAssignment {
     padding: 10px;

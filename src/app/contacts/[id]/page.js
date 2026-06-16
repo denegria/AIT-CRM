@@ -384,6 +384,14 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const showLinkedPeoplePanel = isClientMode && detailView.workflowKey === WORKFLOW_KEYS.AIT_SIGNS;
   const showSchoolLocationField = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA;
   const isAitUsaContact = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA || /ait usa|institute/i.test(contactBusinessUnit?.name || '');
+  const visibleFinancials = useMemo(() => (
+    isAitUsaContact
+      ? contactFinancials.filter((record) => {
+          const type = String(record.type || '').toLowerCase();
+          return financialCategory(record) === 'payment' && !type.includes('invoice');
+        })
+      : contactFinancials
+  ), [contactFinancials, isAitUsaContact]);
   const editSchoolLocationOptions = schoolLocationOptions(editForm?.address);
   const showWorkOrdersTab = detailView.tabs.showWorkOrders;
   const showFinancialsTab = detailView.tabs.showFinancials || (isAitUsaContact && access.canWriteFinancials);
@@ -445,9 +453,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const currentLinkedPeople = linkedPeople.contactId === contact?.id
     ? linkedPeople
     : { contactId: contact?.id || '', items: [], loading: showLinkedPeoplePanel && dataSource === 'postgres', error: '' };
-  const hasQuickActions = access.canWriteCrm ||
-    (showWorkOrdersTab && access.canWriteWorkOrders) ||
-    (showFinancialsTab && access.canWriteFinancials);
 
   useEffect(() => {
     if (!contact?.id || dataSource !== 'postgres') return undefined;
@@ -1075,81 +1080,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
         {/* Right Section: Content */}
         <div className={s.contentSection}>
-          {hasQuickActions && (
-            <div className={s.quickActionRail} aria-label="Contact quick actions">
-              {access.canWriteCrm && (
-                <div className={s.quickActionGroup}>
-                  <span className={s.quickActionLabel}>CRM</span>
-                  <div className={s.quickActionList}>
-                    {nextStatus && (
-                      <button
-                        className={`${s.quickActionItem} ${s.quickActionPrimary}`}
-                        type="button"
-                        onClick={moveToNextStatus}
-                        disabled={statusUpdating}
-                      >
-                        <ArrowRight size={14} />
-                        {statusUpdating ? 'Updating...' : `Move to ${nextStatus}`}
-                      </button>
-                    )}
-                    <Link
-                      className={s.quickActionItem}
-                      href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}
-                    >
-                      <CheckSquare size={14} /> Follow-up
-                    </Link>
-                    <button className={s.quickActionItem} type="button" onClick={openEditModal}>
-                      <Edit3 size={14} /> Edit
-                    </button>
-                  </div>
-                </div>
-              )}
-              {showWorkOrdersTab && access.canWriteWorkOrders && (
-                <div className={s.quickActionGroup}>
-                  <span className={s.quickActionLabel}>{detailView.tabs.workOrdersLabel}</span>
-                  <div className={s.quickActionList}>
-                    <Link className={s.quickActionItem} href={`/work-orders?contactId=${encodeURIComponent(contact.id)}`}>
-                      <ClipboardList size={14} /> New Work Order
-                    </Link>
-                    {!!contactWorkOrders.length && (
-                      <button className={s.quickActionItem} type="button" onClick={() => setActiveTab('workorders')}>
-                        <Activity size={14} /> View {contactWorkOrders.length}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-              {showFinancialsTab && access.canWriteFinancials && (
-                <div className={s.quickActionGroup}>
-                  <span className={s.quickActionLabel}>{detailView.tabs.financialLabel}</span>
-                  <div className={s.quickActionList}>
-                    <button className={`${s.quickActionItem} ${s.quickActionPrimary}`} type="button" onClick={openEstimateModal}>
-                      <FileText size={14} /> Estimate
-                    </button>
-                    <button
-                      className={s.quickActionItem}
-                      type="button"
-                      onClick={() => openPaymentModal()}
-                      disabled={!isAitUsaContact && contactWorkOrders.length === 0}
-                    >
-                      <DollarSign size={14} /> {isAitUsaContact ? 'Receipt' : 'Payment'}
-                    </button>
-                    {!isAitUsaContact && (
-                      <button
-                        className={s.quickActionItem}
-                        type="button"
-                        onClick={() => downloadInvoiceFromWorkOrder()}
-                        disabled={!latestWorkOrder}
-                      >
-                        <FileText size={14} /> Invoice PDF
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
           <div className={s.contentTabs}>
             <button className={`${s.contentTab} ${renderedActiveTab === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')}>Timeline</button>
             <button className={`${s.contentTab} ${renderedActiveTab === 'conversations' ? s.active : ''}`} onClick={() => setActiveTab('conversations')}>Conversations ({conversationMessages.length})</button>
@@ -1160,7 +1090,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               <button className={`${s.contentTab} ${renderedActiveTab === 'workorders' ? s.active : ''}`} onClick={() => setActiveTab('workorders')}>{detailView.tabs.workOrdersLabel} ({contactWorkOrders.length})</button>
             )}
             {showFinancialsTab && (
-              <button className={`${s.contentTab} ${renderedActiveTab === 'financials' ? s.active : ''}`} onClick={() => setActiveTab('financials')}>{detailView.tabs.financialLabel} ({contactFinancials.length})</button>
+              <button className={`${s.contentTab} ${renderedActiveTab === 'financials' ? s.active : ''}`} onClick={() => setActiveTab('financials')}>{detailView.tabs.financialLabel} ({visibleFinancials.length})</button>
             )}
           </div>
 
@@ -1553,44 +1483,42 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             {renderedActiveTab === 'financials' && (
               <div className={s.recordsList}>
                 {access.canWriteFinancials && (
-                  <div
-                    className="card"
-                    style={{
-                      padding: 14,
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      gap: 12,
-                      flexWrap: 'wrap',
-                    }}
-                  >
-                    <div>
-                      <div className="card-title" style={{marginBottom: 4}}>Client documents</div>
-                      <p className="page-subtitle" style={{margin: 0}}>
+                  <div className={s.financialCommandCard}>
+                    <div className={s.financialCommandCopy}>
+                      <div className={s.financialCommandTitle}>
+                        {isAitUsaContact ? 'Student receipts' : 'Client documents'}
+                      </div>
+                      <p>
                         {isAitUsaContact
-                          ? 'Record payments and download bilingual AIT USA receipt PDFs from this student record.'
+                          ? 'Record tuition payments and download AIT USA receipt PDFs from this student record.'
                           : 'Save estimates, download work-order invoices, and record partial payments from this client record.'}
                       </p>
                     </div>
-                    <div style={{display: 'flex', gap: 8, flexWrap: 'wrap'}}>
-                      <button className="btn btn-primary" type="button" onClick={openEstimateModal}>
-                        <FileText size={16} /> New Estimate
-                      </button>
-                      <button className="btn" type="button" onClick={() => downloadInvoiceFromWorkOrder()} disabled={!latestWorkOrder}>
-                        <FileText size={16} /> Save Invoice PDF
-                      </button>
+                    <div className={s.financialCommandActions}>
+                      {!isAitUsaContact && (
+                        <>
+                          <button className="btn btn-primary" type="button" onClick={openEstimateModal}>
+                            <FileText size={16} /> New Estimate
+                          </button>
+                          <button className="btn" type="button" onClick={() => downloadInvoiceFromWorkOrder()} disabled={!latestWorkOrder}>
+                            <FileText size={16} /> Save Invoice PDF
+                          </button>
+                        </>
+                      )}
                       <button className="btn" type="button" onClick={() => openPaymentModal()} disabled={!isAitUsaContact && contactWorkOrders.length === 0}>
-                        <DollarSign size={16} /> {isAitUsaContact ? 'Generate Receipt' : 'Record Payment'}
+                        <DollarSign size={16} /> {isAitUsaContact ? 'Generate Student Receipt' : 'Record Payment'}
                       </button>
                     </div>
                   </div>
                 )}
-                {contactFinancials.map(f => (
+                {visibleFinancials.map(f => (
                   <div key={f.id} className={s.recordCard}>
                     <div className={s.recordMain}>
                       <div className={s.recordIcon}><FileText size={20} /></div>
                       <div>
-                        <div className={s.recordTitle}>{f.type} {f.number}</div>
+                        <div className={s.recordTitle}>
+                          {isAitUsaContact ? 'Receipt' : f.type} {f.number}
+                        </div>
                         <div className={s.recordSubtitle}>{f.date}</div>
                       </div>
                     </div>
@@ -1603,25 +1531,30 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     </div>
                   </div>
                 ))}
-                {contactFinancials.length === 0 && (
+                {visibleFinancials.length === 0 && (
                   <div className={`empty-state ${s.financialEmptyState}`}>
-                    <div className="empty-state-title">No financial records for this contact yet</div>
+                    <div className="empty-state-title">
+                      {isAitUsaContact ? 'No receipts for this student yet' : 'No financial records for this contact yet'}
+                    </div>
                     <p className="empty-state-copy">
                       {access.canWriteFinancials
                         ? (isAitUsaContact
-                            ? 'You can create an estimate or generate the first AIT USA payment receipt from this contact record.'
+                            ? 'Generate the first AIT USA payment receipt from this student record.'
                             : 'You can create the first estimate from this contact record. Invoices and payments become available from linked work orders.')
-                        : 'No estimates, invoices, receipts, or payments are visible for this contact in the current scope.'}
+                        : (isAitUsaContact
+                            ? 'No receipts are visible for this student in the current scope.'
+                            : 'No estimates, invoices, receipts, or payments are visible for this contact in the current scope.')}
                     </p>
                     <div className="empty-state-actions">
                       {access.canWriteFinancials ? (
                         <>
-                          <button className="btn btn-primary" type="button" onClick={openEstimateModal}>
-                            <FileText size={16} /> New Estimate
-                          </button>
-                          {isAitUsaContact && (
-                            <button className="btn" type="button" onClick={() => openPaymentModal()}>
-                              <DollarSign size={16} /> Generate Receipt
+                          {isAitUsaContact ? (
+                            <button className="btn btn-primary" type="button" onClick={() => openPaymentModal()}>
+                              <DollarSign size={16} /> Generate Student Receipt
+                            </button>
+                          ) : (
+                            <button className="btn btn-primary" type="button" onClick={openEstimateModal}>
+                              <FileText size={16} /> New Estimate
                             </button>
                           )}
                         </>
@@ -1752,18 +1685,20 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         <Modal
           open={paymentModalOpen}
           onClose={() => setPaymentModalOpen(false)}
-          title={isAitUsaContact ? 'Generate AIT USA Receipt' : 'Record Payment'}
+          title={isAitUsaContact ? 'Generate Student Receipt' : 'Record Payment'}
           footer={<><button className="btn" onClick={() => setPaymentModalOpen(false)}>Cancel</button><button className="btn btn-primary" onClick={savePayment}>{isAitUsaContact ? 'Save & Download Receipt' : 'Save Payment'}</button></>}
         >
-          <div className="form-group">
-            <label className="form-label">Work Order</label>
-            <select className="input select" value={paymentForm.workOrderId} onChange={e => setPaymentForm({...paymentForm, workOrderId: e.target.value})}>
-              <option value="">No linked work order</option>
-              {contactWorkOrders.map((workOrder) => (
-                <option key={workOrder.id} value={workOrder.id}>{workOrder.number} - {workOrder.title}</option>
-              ))}
-            </select>
-          </div>
+          {!isAitUsaContact && (
+            <div className="form-group">
+              <label className="form-label">Work Order</label>
+              <select className="input select" value={paymentForm.workOrderId} onChange={e => setPaymentForm({...paymentForm, workOrderId: e.target.value})}>
+                <option value="">No linked work order</option>
+                {contactWorkOrders.map((workOrder) => (
+                  <option key={workOrder.id} value={workOrder.id}>{workOrder.number} - {workOrder.title}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Amount</label>
@@ -1787,19 +1722,21 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             </div>
           </div>
           <div className="form-group">
-            <label className="form-label">Payment Note / Partial Payment Memo</label>
+            <label className="form-label">{isAitUsaContact ? 'Receipt Memo' : 'Payment Note / Partial Payment Memo'}</label>
             <textarea className="input" rows={3} value={paymentForm.note} onChange={e => setPaymentForm({...paymentForm, note: e.target.value})} />
           </div>
-          <div className="card" style={{padding: 12, display: 'grid', gap: 4}}>
-            <div style={{display: 'flex', justifyContent: 'space-between'}}>
-              <span className="page-subtitle" style={{margin: 0}}>Current balance</span>
-              <strong>${moneyLabel(selectedPaymentBalance)}</strong>
+          {!isAitUsaContact && (
+            <div className="card" style={{padding: 12, display: 'grid', gap: 4}}>
+              <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                <span className="page-subtitle" style={{margin: 0}}>Current balance</span>
+                <strong>${moneyLabel(selectedPaymentBalance)}</strong>
+              </div>
+              <div style={{display: 'flex', justifyContent: 'space-between'}}>
+                <span className="page-subtitle" style={{margin: 0}}>Balance after payment</span>
+                <strong>${moneyLabel(balanceAfterPayment)}</strong>
+              </div>
             </div>
-            <div style={{display: 'flex', justifyContent: 'space-between'}}>
-              <span className="page-subtitle" style={{margin: 0}}>Balance after payment</span>
-              <strong>${moneyLabel(balanceAfterPayment)}</strong>
-            </div>
-          </div>
+          )}
         </Modal>
       )}
 
