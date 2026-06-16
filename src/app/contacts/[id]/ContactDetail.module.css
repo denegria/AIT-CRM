@@ -1365,41 +1365,23 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-.prereqList {
+.commandControls {
+  flex: 1 0 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 10px;
+}
+.commandField {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
-}
-.prereqItem {
-  display: inline-flex;
-  align-items: center;
+  flex-direction: column;
   gap: 5px;
-  min-height: 24px;
-  padding: 3px 7px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  background: var(--bg-elevated);
+  min-width: 0;
+}
+.commandField span {
   color: var(--text-muted);
-  font-size: var(--text-xs);
-  line-height: 1.2;
-}
-.prereqItem strong {
-  color: var(--text-secondary);
+  font-size: 10px;
   font-weight: 800;
-}
-.prereqItem span {
-  font-weight: 700;
-}
-.prereqReady {
-  color: var(--success);
-  border-color: color-mix(in srgb, var(--success) 24%, var(--border-subtle));
-  background: color-mix(in srgb, var(--success-muted) 40%, var(--bg-elevated));
-}
-.prereqBlocked {
-  color: var(--warning);
-  border-color: color-mix(in srgb, var(--warning) 30%, var(--border-subtle));
-  background: color-mix(in srgb, var(--warning-muted) 44%, var(--bg-elevated));
+  text-transform: uppercase;
 }
 .workflowNotice {
   flex: 1 0 100%;
@@ -1625,6 +1607,9 @@
   .commandCard {
     align-items: stretch;
     flex-direction: column;
+  }
+  .commandControls {
+    grid-template-columns: minmax(0, 1fr);
   }
   .commandActions {
     justify-content: flex-start;
