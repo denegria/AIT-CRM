@@ -95,11 +95,14 @@ export default function Dashboard() {
     const myPipeline = currentContacts.filter(c => c.assignedTo === currentUserId).length;
     const needsFirstOutreach = currentContacts.filter(c => c.needsFirstOutreach).length;
     const aitSignsContacts = contacts.filter(isAitSigns);
+    const aitSignsCurrentContacts = currentContacts.filter(isAitSigns);
     const aitUsaContacts = currentContacts.filter(isAitUsa);
+    const signsIntake = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_intake', { currentUserId, now }).length;
     const signsEstimate = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_estimate', { currentUserId, now }).length;
     const signsWorkOrder = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_work_order', { currentUserId, now }).length;
     const signsFulfillment = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_fulfillment', { currentUserId, now }).length;
     const signsPayment = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_payment_balance', { currentUserId, now }).length;
+    const signsFirstOutreach = filterContactsByDirectoryFacet(aitSignsCurrentContacts, 'needs_first_outreach', { currentUserId, now }).filter(isAitSigns).length;
     const pendingEstimates = financials.filter(isPendingEstimate);
     const pendingEstimateValue = pendingEstimates.reduce((sum, record) => sum + Number(record.amount || 0), 0);
     const usaNewLeads = filterContactsByDirectoryFacet(aitUsaContacts, 'usa_new_lead', { currentUserId, now }).length;
@@ -121,10 +124,12 @@ export default function Dashboard() {
       needsFirstOutreach,
       dueTodayTasks: dueTodayTasks.length,
       overdueTasks: overdueTasks.length,
+      signsIntake,
       signsEstimate,
       signsWorkOrder,
       signsFulfillment,
       signsPayment,
+      signsFirstOutreach,
       pendingEstimates: pendingEstimates.length,
       pendingEstimateValue,
       usaNewLeads,
@@ -185,10 +190,13 @@ export default function Dashboard() {
     }
 
     if (workflowKey === WORKFLOW_KEYS.AIT_SIGNS) {
+      const signsLeadCard = kpis.signsFirstOutreach
+        ? { label: 'Needs First Outreach', value: kpis.signsFirstOutreach, change: `${kpis.signsIntake} in intake`, trend: 'up', href: '/contacts?leadDateScope=current&facet=needs_first_outreach' }
+        : { label: 'Signs Intake', value: kpis.signsIntake, change: 'New Signs work', trend: 'up', href: '/contacts?facet=signs_intake' };
       return [
         taskCard,
+        signsLeadCard,
         { label: 'Open Work Orders', value: kpis.activeWOs, change: `${kpis.signsFulfillment} in fulfillment`, trend: 'up', href: '/work-orders?status=open' },
-        { label: 'Pending Estimates', value: moneyLabel(kpis.pendingEstimateValue), change: `${kpis.pendingEstimates || kpis.signsEstimate} estimates`, trend: 'up', href: '/financials' },
         { label: 'Payment / Balance', value: kpis.signsPayment, change: 'Needs collection review', trend: kpis.signsPayment ? 'down' : 'up', href: '/contacts?facet=signs_payment_balance' },
       ];
     }
