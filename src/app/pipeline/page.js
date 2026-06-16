@@ -108,6 +108,7 @@ export default function PipelinePage() {
   const [search, setSearch] = useState('');
   const [mobileStageFilter, setMobileStageFilter] = useState('all');
   const [mobileMoveCardId, setMobileMoveCardId] = useState('');
+  const [bulkAssignMode, setBulkAssignMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const canWrite = access.canWriteCrm;
   const {
@@ -202,9 +203,14 @@ export default function PipelinePage() {
     Promise.all(selectedRows.map((contact) => updateContact(contact.id, { assignedTo: currentUser.id })))
       .then(() => {
         setSelectedIds([]);
+        setBulkAssignMode(false);
         toast(`Assigned ${selectedRows.length} pipeline cards to you`);
       })
       .catch((error) => toast(error?.message || 'Bulk assignment failed.', 'error'));
+  };
+  const toggleBulkAssignMode = () => {
+    if (bulkAssignMode) setSelectedIds([]);
+    setBulkAssignMode(!bulkAssignMode);
   };
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
@@ -225,6 +231,11 @@ export default function PipelinePage() {
           <button className="btn" onClick={() => setOwnerFilter('unassigned')}>
             <AlertCircle size={14} /> Unassigned
           </button>
+          {canWrite && currentUser?.id && (
+            <button className={`btn ${bulkAssignMode ? 'btn-primary' : ''}`} type="button" onClick={toggleBulkAssignMode}>
+              <UserRoundCheck size={14} /> Bulk Assign
+            </button>
+          )}
           {canWrite && (
             <button className="btn btn-primary" onClick={() => router.push('/contacts')}>
               <UserPlus size={14} /> Add Contact
@@ -310,18 +321,18 @@ export default function PipelinePage() {
         </label>
       </div>
 
-      {selectedRows.length > 0 && (
+      {bulkAssignMode && (
         <div className={s.bulkBar}>
           <div>
             <ListFilter size={14} />
             <strong>{selectedRows.length}</strong>
-            <span>selected</span>
+            <span>{selectedRows.length === 1 ? 'card selected' : 'cards selected'} for assignment</span>
           </div>
           {canWrite && currentUser?.id && (
-            <button className="btn btn-sm" type="button" onClick={assignSelectedToMe}>Assign to me</button>
+            <button className="btn btn-sm btn-primary" type="button" onClick={assignSelectedToMe} disabled={selectedRows.length === 0}>Assign to me</button>
           )}
-          <button className="btn btn-sm" type="button" onClick={() => router.push(`/contacts/${selectedRows[0].id}`)}>Open first</button>
-          <button className="btn btn-sm" type="button" onClick={() => setSelectedIds([])}>Clear</button>
+          <button className="btn btn-sm" type="button" onClick={() => setSelectedIds([])} disabled={selectedRows.length === 0}>Clear</button>
+          <button className="btn btn-sm" type="button" onClick={toggleBulkAssignMode}>Done</button>
         </div>
       )}
 
@@ -334,7 +345,7 @@ export default function PipelinePage() {
           showMobileMoveControls={false}
           compact={compactMode}
           selectedIds={selectedIds}
-          onSelect={setSelectedIds}
+          onSelect={bulkAssignMode ? setSelectedIds : undefined}
         />
       </div>
 
@@ -368,19 +379,21 @@ export default function PipelinePage() {
             const isMoving = mobileMoveCardId === contact.id;
             return (
               <article key={contact.id} className={s.mobilePipelineCard}>
-                <label className={s.mobileSelect} onClick={(event) => event.stopPropagation()}>
-                  <input
-                    type="checkbox"
-                    checked={selectedIds.includes(contact.id)}
-                    onChange={(event) => {
-                      const next = new Set(selectedIds);
-                      if (event.target.checked) next.add(contact.id);
-                      else next.delete(contact.id);
-                      setSelectedIds([...next]);
-                    }}
-                  />
-                  Select
-                </label>
+                {bulkAssignMode && (
+                  <label className={s.mobileSelect} onClick={(event) => event.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(contact.id)}
+                      onChange={(event) => {
+                        const next = new Set(selectedIds);
+                        if (event.target.checked) next.add(contact.id);
+                        else next.delete(contact.id);
+                        setSelectedIds([...next]);
+                      }}
+                    />
+                    Select
+                  </label>
+                )}
                 <button className={s.mobileCardMain} type="button" onClick={() => router.push(`/contacts/${contact.id}`)}>
                   <span className={s.mobileCardStage}>{contact.currentStage || contact.status}</span>
                   <strong>{contact.name}</strong>
