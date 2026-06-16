@@ -3,7 +3,7 @@ import { useState, useMemo } from 'react';
 import ConfirmDialog from './ConfirmDialog';
 import s from './DataTable.module.css';
 
-import { Search, ArrowUp, ArrowDown, FileQuestion } from 'lucide-react';
+import { Search, ArrowUp, ArrowDown, FileQuestion, Columns3 } from 'lucide-react';
 
 function badgeClass(val) {
   if (!val) return '';
@@ -32,6 +32,19 @@ export default function DataTable({
   const [editCell, setEditCell] = useState(null); // {rowId, key}
   const [editVal, setEditVal] = useState('');
   const [confirm, setConfirm] = useState(null); // { title, message, onConfirm }
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState(() => columns.map((column) => column.key));
+  const columnSignature = columns.map((column) => column.key).join('|');
+  const columnKeys = useMemo(() => (columnSignature ? columnSignature.split('|') : []), [columnSignature]);
+  const effectiveVisibleColumnKeys = useMemo(() => {
+    const retained = visibleColumnKeys.filter((key) => columnKeys.includes(key));
+    return retained.length ? retained : columnKeys;
+  }, [columnKeys, visibleColumnKeys]);
+
+  const visibleColumns = useMemo(() => {
+    const visibleSet = new Set(effectiveVisibleColumnKeys);
+    const nextColumns = columns.filter((column) => visibleSet.has(column.key));
+    return nextColumns.length ? nextColumns : columns.slice(0, 1);
+  }, [columns, effectiveVisibleColumnKeys]);
 
   const filtered = useMemo(() => {
     let rows = data;
@@ -77,18 +90,36 @@ export default function DataTable({
     }
     return <span>{row[column.key]||'—'}</span>;
   };
+  const visibleIds = filtered.map((row) => row.id);
+  const selectedVisibleIds = selectedIds.filter((id) => visibleIds.includes(id));
+  const allVisibleSelected = visibleIds.length > 0 && selectedVisibleIds.length === visibleIds.length;
+  const toggleVisibleSelection = (checked) => {
+    if (!onSelect) return;
+    if (checked) onSelect([...new Set([...selectedIds, ...visibleIds])]);
+    else onSelect(selectedIds.filter((id) => !visibleIds.includes(id)));
+  };
+  const toggleColumn = (key) => {
+    setVisibleColumnKeys((current) => {
+      const nextCurrent = current.length ? current : effectiveVisibleColumnKeys;
+      if (nextCurrent.includes(key)) {
+        if (nextCurrent.length <= 1) return nextCurrent;
+        return nextCurrent.filter((entry) => entry !== key);
+      }
+      return columns.some((column) => column.key === key) ? [...nextCurrent, key] : nextCurrent;
+    });
+  };
 
-  const mobilePrimary = columns[0];
-  const mobileSecondary = columns[1];
-  const defaultBadgeColumns = columns.filter((column) => column.type === 'badge').slice(0, 2);
+  const mobilePrimary = visibleColumns[0];
+  const mobileSecondary = visibleColumns[1];
+  const defaultBadgeColumns = visibleColumns.filter((column) => column.type === 'badge').slice(0, 2);
   const mobileBadgeColumns = mobileBadges?.length
-    ? mobileBadges.map((entry) => (typeof entry === 'string' ? columns.find((column) => column.key === entry) : entry)).filter(Boolean)
+    ? mobileBadges.map((entry) => (typeof entry === 'string' ? visibleColumns.find((column) => column.key === entry) : entry)).filter(Boolean)
     : defaultBadgeColumns;
-  const defaultMobileFields = columns
+  const defaultMobileFields = visibleColumns
     .filter((column) => ![mobilePrimary?.key, mobileSecondary?.key, ...mobileBadgeColumns.map((badge) => badge.key)].includes(column.key))
     .slice(0, 4);
   const mobileFieldColumns = mobileFields?.length
-    ? mobileFields.map((entry) => (typeof entry === 'string' ? columns.find((column) => column.key === entry) : entry)).filter(Boolean)
+    ? mobileFields.map((entry) => (typeof entry === 'string' ? visibleColumns.find((column) => column.key === entry) : entry)).filter(Boolean)
     : defaultMobileFields;
 
   return (
@@ -98,8 +129,41 @@ export default function DataTable({
           <Search className={s.searchIcon} size={16} />
           <input className={s.search} placeholder={searchPlaceholder||'Search...'} value={search} onChange={e=>setSearch(e.target.value)} />
         </div>
+        {columns.length > 3 && (
+          <details className={s.columnMenu}>
+            <summary className={s.columnButton}>
+              <Columns3 size={14} /> Columns
+            </summary>
+            <div className={s.columnPanel}>
+              {columns.map((column) => (
+                <label key={column.key} className={s.columnOption}>
+                  <input
+                    type="checkbox"
+                    checked={effectiveVisibleColumnKeys.includes(column.key)}
+                    disabled={effectiveVisibleColumnKeys.length <= 1 && effectiveVisibleColumnKeys.includes(column.key)}
+                    onChange={() => toggleColumn(column.key)}
+                  />
+                  <span>{column.label}</span>
+                </label>
+              ))}
+            </div>
+          </details>
+        )}
         {toolbarExtra}
       </div>
+      {selectable && selectedIds.length > 0 && (
+        <div className={s.selectionBar}>
+          <div>
+            <strong>{selectedIds.length}</strong>
+            <span>selected</span>
+            {selectedVisibleIds.length !== selectedIds.length && <small>{selectedVisibleIds.length} in this view</small>}
+          </div>
+          {!allVisibleSelected && (
+            <button type="button" className={s.selectionButton} onClick={() => toggleVisibleSelection(true)}>Select visible</button>
+          )}
+          <button type="button" className={s.selectionButton} onClick={() => onSelect?.([])}>Clear</button>
+        </div>
+      )}
       {filtered.length === 0 ? (
         typeof emptyState === 'function' ? emptyState({
           hasRows: data.length > 0,
@@ -119,12 +183,12 @@ export default function DataTable({
             {selectable && (
               <th style={{ width: 40, textAlign: 'center' }}>
                 <input type="checkbox"
-                  checked={filtered.length > 0 && selectedIds.length === filtered.length}
-                  onChange={(e) => onSelect(e.target.checked ? filtered.map(r => r.id) : [])}
+                  checked={allVisibleSelected}
+                  onChange={(e) => toggleVisibleSelection(e.target.checked)}
                 />
               </th>
             )}
-            {columns.map(c => (
+            {visibleColumns.map(c => (
               <th key={c.key} onClick={() => c.sortable !== false && toggleSort(c.key)}>
                 <div style={{display:'flex', alignItems:'center', gap:4}}>
                   {c.label}
@@ -148,7 +212,7 @@ export default function DataTable({
                     />
                   </td>
                 )}
-                {columns.map(c => (
+                {visibleColumns.map(c => (
                   <td key={c.key}>{renderCell(c, row)}</td>
                 ))}
                 {actions && (
@@ -175,6 +239,20 @@ export default function DataTable({
         <div className={s.mobileCards}>
           {filtered.map((row) => (
             <div key={row.id} className={s.mobileCard}>
+              {selectable && (
+                <label className={s.mobileSelect}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(row.id)}
+                    onChange={(e) => {
+                      if (!onSelect) return;
+                      if (e.target.checked) onSelect([...new Set([...selectedIds, row.id])]);
+                      else onSelect(selectedIds.filter(id => id !== row.id));
+                    }}
+                  />
+                  Select
+                </label>
+              )}
               <div className={s.mobileCardMain}>
                 <div className={s.mobileTitle}>{mobilePrimary ? renderCell(mobilePrimary, row, false) : row.id}</div>
                 {mobileSecondary && <div className={s.mobileSubtitle}>{renderCell(mobileSecondary, row, false)}</div>}
