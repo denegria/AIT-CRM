@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useCRM } from '@/lib/store';
 import KPICard from '@/components/KPICard';
@@ -7,15 +7,19 @@ import TaskList from '@/components/TaskList';
 import Calendar from '@/components/Calendar';
 import { BarChart, PieChart, ChartLegend } from '@/components/Charts';
 import { useToast } from '@/components/Toast';
+import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from '@/lib/crm/lifecycle';
 import {
   buildTaskCalendarEvents,
   isOpenTask,
   taskDueKey,
 } from '@/lib/dashboard/task-calendar';
 import { isCurrentLeadDateScope } from '@/lib/contact-directory-view';
+import { filterContactsByDirectoryFacet } from '@/lib/contact-directory-facets';
 import {
   isTaskCompletedToday,
   isTaskCurrentWork,
+  isTaskDueToday,
+  isTaskOverdue,
 } from '@/lib/tasks/visibility.js';
 
 function dateInputToIso(value) {
@@ -23,6 +27,28 @@ function dateInputToIso(value) {
   const date = new Date(`${value}T09:00:00`);
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString();
+}
+
+function moneyLabel(value) {
+  return `$${Math.round(Number(value || 0)).toLocaleString()}`;
+}
+
+function isAitSigns(contact = {}) {
+  return contact.workflowKey === WORKFLOW_KEYS.AIT_SIGNS;
+}
+
+function isAitUsa(contact = {}) {
+  return contact.workflowKey === WORKFLOW_KEYS.AIT_USA;
+}
+
+function isOpenWorkOrder(workOrder = {}) {
+  return String(workOrder.status || '').toLowerCase() !== 'completed';
+}
+
+function isPendingEstimate(record = {}) {
+  const type = String(record.type || '').toLowerCase();
+  const status = String(record.status || '').toLowerCase();
+  return type === 'estimate' && status !== 'draft' && status !== 'paid';
 }
 
 export default function Dashboard() {
@@ -45,28 +71,73 @@ export default function Dashboard() {
     scopeLabel,
   } = useCRM();
   const { toast } = useToast();
+  const [dashboardNow] = useState(() => Date.now());
   const currentUserId = currentUser?.id || 'emp-1';
   const isAdminView = role === 'admin' || Boolean(currentUser?.canAccessAllBusinessUnits);
   const canReadFinancials = Boolean(access?.canReadFinancials);
 
   const kpis = useMemo(() => {
+    const currentContacts = contacts.filter(c => isCurrentLeadDateScope(c));
+    const now = dashboardNow;
     const invoices = financials.filter(f => f.type === 'Invoice');
     const totalRevenue = invoices.filter(f => f.status === 'Paid').reduce((s, f) => s + f.amount, 0);
     const pipeline = financials.filter(f => f.type === 'Estimate' && f.status !== 'Draft').reduce((s, f) => s + f.amount, 0);
     const totalInvoiced = invoices.reduce((s, f) => s + f.amount, 0);
-    const activeWOs = workOrders.filter(w => w.status !== 'Completed').length;
+    const activeWOs = workOrders.filter(isOpenWorkOrder).length;
     const newLeads = contacts.filter(c => c.status === 'New Lead').length;
-    
-    // Employee Specific
-    const myTasksCount = tasks.filter(t => (t.ownerUserId || t.assignedTo) === currentUserId && isTaskCurrentWork(t)).length;
-    const activeContacts = contacts.filter(c => isCurrentLeadDateScope(c)).length;
+    const myTasks = isAdminView ? tasks : tasks.filter(t => (t.ownerUserId || t.assignedTo) === currentUserId);
+    const dueTodayTasks = myTasks.filter(task => isTaskDueToday(task));
+    const overdueTasks = myTasks.filter(task => isTaskOverdue(task));
+    const myTasksCount = myTasks.filter(isTaskCurrentWork).length;
+    const activeContacts = currentContacts.length;
     const pendingInvoices = invoices.filter(f => f.status === 'Pending').length;
-    const assignedWOs = workOrders.filter(w => w.assignedTo === currentUserId && w.status !== 'Completed').length;
-    const myPipeline = contacts.filter(c => c.assignedTo === currentUserId && isCurrentLeadDateScope(c)).length;
-    const needsFirstOutreach = contacts.filter(c => c.needsFirstOutreach && isCurrentLeadDateScope(c)).length;
+    const assignedWOs = workOrders.filter(w => w.assignedTo === currentUserId && isOpenWorkOrder(w)).length;
+    const myPipeline = currentContacts.filter(c => c.assignedTo === currentUserId).length;
+    const needsFirstOutreach = currentContacts.filter(c => c.needsFirstOutreach).length;
+    const aitSignsContacts = contacts.filter(isAitSigns);
+    const aitSignsCurrentContacts = currentContacts.filter(isAitSigns);
+    const aitUsaContacts = currentContacts.filter(isAitUsa);
+    const signsIntake = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_intake', { currentUserId, now }).length;
+    const signsEstimate = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_estimate', { currentUserId, now }).length;
+    const signsWorkOrder = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_work_order', { currentUserId, now }).length;
+    const signsFulfillment = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_fulfillment', { currentUserId, now }).length;
+    const signsPayment = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_payment_balance', { currentUserId, now }).length;
+    const signsFirstOutreach = filterContactsByDirectoryFacet(aitSignsCurrentContacts, 'needs_first_outreach', { currentUserId, now }).filter(isAitSigns).length;
+    const pendingEstimates = financials.filter(isPendingEstimate);
+    const pendingEstimateValue = pendingEstimates.reduce((sum, record) => sum + Number(record.amount || 0), 0);
+    const usaNewLeads = filterContactsByDirectoryFacet(aitUsaContacts, 'usa_new_lead', { currentUserId, now }).length;
+    const usaFollowUp = filterContactsByDirectoryFacet(aitUsaContacts, 'usa_follow_up', { currentUserId, now }).length;
+    const usaFirstOutreach = filterContactsByDirectoryFacet(aitUsaContacts, 'needs_first_outreach', { currentUserId, now }).filter(isAitUsa).length;
+    const usaBadContactChannel = filterContactsByDirectoryFacet(aitUsaContacts, 'usa_bad_contact_channel', { currentUserId, now }).length;
 
-    return { totalRevenue, pipeline, totalInvoiced, activeWOs, newLeads, myTasksCount, activeContacts, pendingInvoices, assignedWOs, myPipeline, needsFirstOutreach };
-  }, [financials, workOrders, contacts, tasks, currentUserId]);
+    return {
+      totalRevenue,
+      pipeline,
+      totalInvoiced,
+      activeWOs,
+      newLeads,
+      myTasksCount,
+      activeContacts,
+      pendingInvoices,
+      assignedWOs,
+      myPipeline,
+      needsFirstOutreach,
+      dueTodayTasks: dueTodayTasks.length,
+      overdueTasks: overdueTasks.length,
+      signsIntake,
+      signsEstimate,
+      signsWorkOrder,
+      signsFulfillment,
+      signsPayment,
+      signsFirstOutreach,
+      pendingEstimates: pendingEstimates.length,
+      pendingEstimateValue,
+      usaNewLeads,
+      usaFollowUp,
+      usaFirstOutreach,
+      usaBadContactChannel,
+    };
+  }, [contacts, currentUserId, dashboardNow, financials, isAdminView, tasks, workOrders]);
 
   const statusData = useMemo(() => {
     const counts = {};
@@ -95,6 +166,50 @@ export default function Dashboard() {
     if (isAdminView) return tasks;
     return tasks.filter(t => (t.ownerUserId || t.assignedTo) === currentUserId);
   }, [tasks, isAdminView, currentUserId]);
+
+  const dashboardKpiCards = useMemo(() => {
+    const taskHref = kpis.overdueTasks
+      ? `/tasks?due=overdue${isAdminView ? '' : '&ownerUserId=__me'}`
+      : `/tasks?due=today${isAdminView ? '' : '&ownerUserId=__me'}`;
+    const taskCard = {
+      label: kpis.overdueTasks ? 'Overdue Tasks' : 'Tasks Due Today',
+      value: kpis.overdueTasks || kpis.dueTodayTasks,
+      change: kpis.overdueTasks ? `${kpis.dueTodayTasks} also due today` : 'Due today',
+      trend: kpis.overdueTasks ? 'down' : 'up',
+      href: taskHref,
+    };
+    const workflowKey = workflowKeyForBusinessUnit(currentBusinessUnit || '');
+
+    if (workflowKey === WORKFLOW_KEYS.AIT_USA) {
+      return [
+        taskCard,
+        { label: 'Current Leads', value: kpis.usaNewLeads + kpis.usaFollowUp, change: 'Enrollment pipeline', trend: 'up', href: '/contacts?leadDateScope=current&facet=usa_new_lead' },
+        { label: 'Follow-ups Due', value: kpis.usaFollowUp, change: `${kpis.usaFirstOutreach} first outreach`, trend: 'up', href: '/contacts?leadDateScope=current&facet=usa_follow_up' },
+        { label: 'Bad Contact Channel', value: kpis.usaBadContactChannel, change: 'Needs cleanup', trend: kpis.usaBadContactChannel ? 'down' : 'up', href: '/contacts?leadDateScope=current&facet=usa_bad_contact_channel' },
+      ];
+    }
+
+    if (workflowKey === WORKFLOW_KEYS.AIT_SIGNS) {
+      const signsLeadCard = kpis.signsFirstOutreach
+        ? { label: 'Needs First Outreach', value: kpis.signsFirstOutreach, change: `${kpis.signsIntake} in intake`, trend: 'up', href: '/contacts?leadDateScope=current&facet=needs_first_outreach' }
+        : { label: 'Signs Intake', value: kpis.signsIntake, change: 'New Signs work', trend: 'up', href: '/contacts?facet=signs_intake' };
+      return [
+        taskCard,
+        signsLeadCard,
+        { label: 'Open Work Orders', value: kpis.activeWOs, change: `${kpis.signsFulfillment} in fulfillment`, trend: 'up', href: '/work-orders?status=open' },
+        { label: 'Payment / Balance', value: kpis.signsPayment, change: 'Needs collection review', trend: kpis.signsPayment ? 'down' : 'up', href: '/contacts?facet=signs_payment_balance' },
+      ];
+    }
+
+    return [
+      taskCard,
+      { label: 'Current Contacts', value: kpis.activeContacts, change: 'Current scope', trend: 'up', href: '/contacts?leadDateScope=current' },
+      { label: 'Open Work Orders', value: kpis.activeWOs, change: `${workOrders.filter(w=>w.status==='In Progress').length} in progress`, trend: 'up', href: '/work-orders?status=open' },
+      canReadFinancials
+        ? { label: 'Pending Estimates', value: moneyLabel(kpis.pendingEstimateValue), change: `${kpis.pendingEstimates} estimates`, trend: 'up', href: '/financials' }
+        : { label: 'Needs First Outreach', value: kpis.needsFirstOutreach, change: 'Ready to assign', trend: 'up', href: '/contacts?leadDateScope=current&facet=needs_first_outreach' },
+    ];
+  }, [canReadFinancials, currentBusinessUnit, isAdminView, kpis, workOrders]);
 
   const dashboardDueTodayTasks = useMemo(() => {
     const todayKey = new Date().toISOString().slice(0, 10);
@@ -218,23 +333,18 @@ export default function Dashboard() {
         </div>
       )}
 
-      {isAdminView ? (
-        <div className="dashboard-kpi-grid" style={{marginBottom:20}}>
-          <KPICard label="Total Revenue" value={`$${kpis.totalRevenue.toLocaleString()}`} change="12% vs last month" trend="up" />
-          <KPICard label="Pipeline Value" value={`$${kpis.pipeline.toLocaleString()}`} change={`${financials.filter(f=>f.type==='Estimate'&&f.status==='Pending').length} estimates`} trend="up" />
-          <KPICard label="Active Work Orders" value={kpis.activeWOs} change={`${workOrders.filter(w=>w.status==='In Progress').length} in progress`} trend="up" />
-          <KPICard label="New Leads" value={kpis.newLeads} change="This week" trend="up" />
-        </div>
-      ) : (
-        <div className="dashboard-kpi-grid" style={{marginBottom:20}}>
-          <KPICard label="My Active Tasks" value={kpis.myTasksCount} change="Due soon" trend="up" href="/tasks?due=work&ownerUserId=__me" />
-          <KPICard label="Active Contacts" value={kpis.activeContacts} change="Current scope" trend="up" href="/contacts?leadDateScope=current" />
-          {canReadFinancials
-            ? <KPICard label="Needs First Outreach" value={kpis.needsFirstOutreach} change="Ready to assign" trend="up" href="/contacts?leadDateScope=current&facet=needs_first_outreach" />
-            : <KPICard label="My Pipeline" value={kpis.myPipeline} change="Assigned active leads" trend="up" href="/contacts?leadDateScope=current&facet=mine" />}
-          <KPICard label="Assigned Work Orders" value={kpis.assignedWOs} change="Open orders" trend="up" href="/work-orders?status=open&ownerUserId=__me" />
-        </div>
-      )}
+      <div className="dashboard-kpi-grid" style={{marginBottom:20}}>
+        {dashboardKpiCards.map((card) => (
+          <KPICard
+            key={card.label}
+            label={card.label}
+            value={card.value}
+            change={card.change}
+            trend={card.trend}
+            href={card.href}
+          />
+        ))}
+      </div>
 
       <div className="dashboard-panel-grid" style={{marginBottom:20}}>
         <div className="card">

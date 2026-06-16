@@ -449,7 +449,6 @@ a { color: inherit; text-decoration: none; }
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
-
 @media (max-width: 1024px) {
   .grid-4, .grid-3 { grid-template-columns: 1fr 1fr; }
   .dashboard-kpi-grid,
@@ -467,14 +466,6 @@ a { color: inherit; text-decoration: none; }
   .dashboard-panel-grid {
     grid-template-columns: 1fr;
     gap: 12px;
-  }
-  .dashboard-action-card .flex-between {
-    align-items: stretch !important;
-    flex-direction: column;
-    gap: 10px !important;
-  }
-  .dashboard-action-card .btn {
-    width: 100%;
   }
 }
 
