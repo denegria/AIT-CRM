@@ -7,7 +7,7 @@ import TaskList from '@/components/TaskList';
 import Calendar from '@/components/Calendar';
 import { BarChart, PieChart, ChartLegend } from '@/components/Charts';
 import { useToast } from '@/components/Toast';
-import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
+import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from '@/lib/crm/lifecycle';
 import {
   buildTaskCalendarEvents,
   isOpenTask,
@@ -27,18 +27,6 @@ function dateInputToIso(value) {
   const date = new Date(`${value}T09:00:00`);
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString();
-}
-
-function contactLabel(contact = {}) {
-  return contact.name || contact.client || contact.company || 'Unnamed contact';
-}
-
-function taskLabel(task = {}) {
-  return task.title || 'Untitled task';
-}
-
-function previewLabels(items = [], formatter) {
-  return items.slice(0, 3).map(formatter).filter(Boolean);
 }
 
 function moneyLabel(value) {
@@ -89,23 +77,62 @@ export default function Dashboard() {
   const canReadFinancials = Boolean(access?.canReadFinancials);
 
   const kpis = useMemo(() => {
+    const currentContacts = contacts.filter(c => isCurrentLeadDateScope(c));
+    const now = dashboardNow;
     const invoices = financials.filter(f => f.type === 'Invoice');
     const totalRevenue = invoices.filter(f => f.status === 'Paid').reduce((s, f) => s + f.amount, 0);
     const pipeline = financials.filter(f => f.type === 'Estimate' && f.status !== 'Draft').reduce((s, f) => s + f.amount, 0);
     const totalInvoiced = invoices.reduce((s, f) => s + f.amount, 0);
-    const activeWOs = workOrders.filter(w => w.status !== 'Completed').length;
+    const activeWOs = workOrders.filter(isOpenWorkOrder).length;
     const newLeads = contacts.filter(c => c.status === 'New Lead').length;
-    
-    // Employee Specific
-    const myTasksCount = tasks.filter(t => (t.ownerUserId || t.assignedTo) === currentUserId && isTaskCurrentWork(t)).length;
-    const activeContacts = contacts.filter(c => isCurrentLeadDateScope(c)).length;
+    const myTasks = isAdminView ? tasks : tasks.filter(t => (t.ownerUserId || t.assignedTo) === currentUserId);
+    const dueTodayTasks = myTasks.filter(task => isTaskDueToday(task));
+    const overdueTasks = myTasks.filter(task => isTaskOverdue(task));
+    const myTasksCount = myTasks.filter(isTaskCurrentWork).length;
+    const activeContacts = currentContacts.length;
     const pendingInvoices = invoices.filter(f => f.status === 'Pending').length;
-    const assignedWOs = workOrders.filter(w => w.assignedTo === currentUserId && w.status !== 'Completed').length;
-    const myPipeline = contacts.filter(c => c.assignedTo === currentUserId && isCurrentLeadDateScope(c)).length;
-    const needsFirstOutreach = contacts.filter(c => c.needsFirstOutreach && isCurrentLeadDateScope(c)).length;
+    const assignedWOs = workOrders.filter(w => w.assignedTo === currentUserId && isOpenWorkOrder(w)).length;
+    const myPipeline = currentContacts.filter(c => c.assignedTo === currentUserId).length;
+    const needsFirstOutreach = currentContacts.filter(c => c.needsFirstOutreach).length;
+    const aitSignsContacts = contacts.filter(isAitSigns);
+    const aitUsaContacts = currentContacts.filter(isAitUsa);
+    const signsEstimate = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_estimate', { currentUserId, now }).length;
+    const signsWorkOrder = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_work_order', { currentUserId, now }).length;
+    const signsFulfillment = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_fulfillment', { currentUserId, now }).length;
+    const signsPayment = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_payment_balance', { currentUserId, now }).length;
+    const pendingEstimates = financials.filter(isPendingEstimate);
+    const pendingEstimateValue = pendingEstimates.reduce((sum, record) => sum + Number(record.amount || 0), 0);
+    const usaNewLeads = filterContactsByDirectoryFacet(aitUsaContacts, 'usa_new_lead', { currentUserId, now }).length;
+    const usaFollowUp = filterContactsByDirectoryFacet(aitUsaContacts, 'usa_follow_up', { currentUserId, now }).length;
+    const usaFirstOutreach = filterContactsByDirectoryFacet(aitUsaContacts, 'needs_first_outreach', { currentUserId, now }).filter(isAitUsa).length;
+    const usaBadContactChannel = filterContactsByDirectoryFacet(aitUsaContacts, 'usa_bad_contact_channel', { currentUserId, now }).length;
 
-    return { totalRevenue, pipeline, totalInvoiced, activeWOs, newLeads, myTasksCount, activeContacts, pendingInvoices, assignedWOs, myPipeline, needsFirstOutreach };
-  }, [financials, workOrders, contacts, tasks, currentUserId]);
+    return {
+      totalRevenue,
+      pipeline,
+      totalInvoiced,
+      activeWOs,
+      newLeads,
+      myTasksCount,
+      activeContacts,
+      pendingInvoices,
+      assignedWOs,
+      myPipeline,
+      needsFirstOutreach,
+      dueTodayTasks: dueTodayTasks.length,
+      overdueTasks: overdueTasks.length,
+      signsEstimate,
+      signsWorkOrder,
+      signsFulfillment,
+      signsPayment,
+      pendingEstimates: pendingEstimates.length,
+      pendingEstimateValue,
+      usaNewLeads,
+      usaFollowUp,
+      usaFirstOutreach,
+      usaBadContactChannel,
+    };
+  }, [contacts, currentUserId, dashboardNow, financials, isAdminView, tasks, workOrders]);
 
   const statusData = useMemo(() => {
     const counts = {};
@@ -135,6 +162,47 @@ export default function Dashboard() {
     return tasks.filter(t => (t.ownerUserId || t.assignedTo) === currentUserId);
   }, [tasks, isAdminView, currentUserId]);
 
+  const dashboardKpiCards = useMemo(() => {
+    const taskHref = kpis.overdueTasks
+      ? `/tasks?due=overdue${isAdminView ? '' : '&ownerUserId=__me'}`
+      : `/tasks?due=today${isAdminView ? '' : '&ownerUserId=__me'}`;
+    const taskCard = {
+      label: kpis.overdueTasks ? 'Overdue Tasks' : 'Tasks Due Today',
+      value: kpis.overdueTasks || kpis.dueTodayTasks,
+      change: kpis.overdueTasks ? `${kpis.dueTodayTasks} also due today` : 'Due today',
+      trend: kpis.overdueTasks ? 'down' : 'up',
+      href: taskHref,
+    };
+    const workflowKey = workflowKeyForBusinessUnit(currentBusinessUnit || '');
+
+    if (workflowKey === WORKFLOW_KEYS.AIT_USA) {
+      return [
+        taskCard,
+        { label: 'Current Leads', value: kpis.usaNewLeads + kpis.usaFollowUp, change: 'Enrollment pipeline', trend: 'up', href: '/contacts?leadDateScope=current&facet=usa_new_lead' },
+        { label: 'Follow-ups Due', value: kpis.usaFollowUp, change: `${kpis.usaFirstOutreach} first outreach`, trend: 'up', href: '/contacts?leadDateScope=current&facet=usa_follow_up' },
+        { label: 'Bad Contact Channel', value: kpis.usaBadContactChannel, change: 'Needs cleanup', trend: kpis.usaBadContactChannel ? 'down' : 'up', href: '/contacts?leadDateScope=current&facet=usa_bad_contact_channel' },
+      ];
+    }
+
+    if (workflowKey === WORKFLOW_KEYS.AIT_SIGNS) {
+      return [
+        taskCard,
+        { label: 'Open Work Orders', value: kpis.activeWOs, change: `${kpis.signsFulfillment} in fulfillment`, trend: 'up', href: '/work-orders?status=open' },
+        { label: 'Pending Estimates', value: moneyLabel(kpis.pendingEstimateValue), change: `${kpis.pendingEstimates || kpis.signsEstimate} estimates`, trend: 'up', href: '/financials' },
+        { label: 'Payment / Balance', value: kpis.signsPayment, change: 'Needs collection review', trend: kpis.signsPayment ? 'down' : 'up', href: '/contacts?facet=signs_payment_balance' },
+      ];
+    }
+
+    return [
+      taskCard,
+      { label: 'Current Contacts', value: kpis.activeContacts, change: 'Current scope', trend: 'up', href: '/contacts?leadDateScope=current' },
+      { label: 'Open Work Orders', value: kpis.activeWOs, change: `${workOrders.filter(w=>w.status==='In Progress').length} in progress`, trend: 'up', href: '/work-orders?status=open' },
+      canReadFinancials
+        ? { label: 'Pending Estimates', value: moneyLabel(kpis.pendingEstimateValue), change: `${kpis.pendingEstimates} estimates`, trend: 'up', href: '/financials' }
+        : { label: 'Needs First Outreach', value: kpis.needsFirstOutreach, change: 'Ready to assign', trend: 'up', href: '/contacts?leadDateScope=current&facet=needs_first_outreach' },
+    ];
+  }, [canReadFinancials, currentBusinessUnit, isAdminView, kpis, workOrders]);
+
   const dashboardDueTodayTasks = useMemo(() => {
     const todayKey = new Date().toISOString().slice(0, 10);
     return myTasks
@@ -154,83 +222,6 @@ export default function Dashboard() {
     const taskEvents = buildTaskCalendarEvents(myTasks);
     return [...calendarEvents, ...taskEvents];
   }, [calendarEvents, myTasks]);
-
-  const dashboardDivisionPanels = useMemo(() => {
-    const currentContacts = contacts.filter(c => isCurrentLeadDateScope(c));
-    const now = dashboardNow;
-    const aitSignsContacts = contacts.filter(isAitSigns);
-    const aitUsaContacts = currentContacts.filter(isAitUsa);
-    const signsEstimate = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_estimate', { currentUserId, now });
-    const signsWorkOrder = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_work_order', { currentUserId, now });
-    const signsFulfillment = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_fulfillment', { currentUserId, now });
-    const signsPayment = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_payment_balance', { currentUserId, now });
-    const openWorkOrders = workOrders.filter(isOpenWorkOrder);
-    const pendingEstimates = financials.filter(isPendingEstimate);
-    const pendingEstimateValue = pendingEstimates.reduce((sum, record) => sum + Number(record.amount || 0), 0);
-    const usaNewLeads = filterContactsByDirectoryFacet(aitUsaContacts, 'usa_new_lead', { currentUserId, now });
-    const usaFollowUp = filterContactsByDirectoryFacet(aitUsaContacts, 'usa_follow_up', { currentUserId, now });
-    const usaFirstOutreach = filterContactsByDirectoryFacet(aitUsaContacts, 'needs_first_outreach', { currentUserId, now }).filter(isAitUsa);
-    const usaBadContactChannel = filterContactsByDirectoryFacet(aitUsaContacts, 'usa_bad_contact_channel', { currentUserId, now });
-    const dueTodayTasks = myTasks.filter(task => isTaskDueToday(task));
-    const overdueTasks = myTasks.filter(task => isTaskOverdue(task));
-    const panels = [];
-
-    if (aitSignsContacts.length || openWorkOrders.length || pendingEstimates.length) {
-      panels.push({
-        key: 'ait-signs',
-        title: 'AIT Signs work movement',
-        subtitle: `${openWorkOrders.length} open work orders · ${moneyLabel(pendingEstimateValue)} pending estimates`,
-        href: '/work-orders?status=open',
-        cta: openWorkOrders.length ? 'Open work orders' : 'Review Signs pipeline',
-        emptyText: 'No AIT Signs operational records in this scope.',
-        previews: previewLabels(openWorkOrders, (order) => order.title || order.client || order.number),
-        metrics: [
-          { label: 'Estimate', value: signsEstimate.length, href: '/contacts?facet=signs_estimate' },
-          { label: 'Work order', value: Math.max(signsWorkOrder.length, openWorkOrders.length), href: '/work-orders?status=open' },
-          { label: 'Fulfillment', value: signsFulfillment.length, href: '/contacts?facet=signs_fulfillment' },
-          { label: 'Payment', value: signsPayment.length, href: '/contacts?facet=signs_payment_balance' },
-        ],
-      });
-    }
-
-    if (aitUsaContacts.length || usaNewLeads.length || usaFollowUp.length) {
-      panels.push({
-        key: 'ait-usa',
-        title: 'AIT USA enrollment response',
-        subtitle: `${usaFollowUp.length} follow-ups · ${usaFirstOutreach.length} first outreach`,
-        href: '/contacts?leadDateScope=current&facet=usa_follow_up',
-        cta: usaFollowUp.length ? 'Open follow-ups' : 'Review enrollment leads',
-        emptyText: 'No AIT USA enrollment leads in this scope.',
-        previews: previewLabels(usaFollowUp.length ? usaFollowUp : usaNewLeads, contactLabel),
-        metrics: [
-          { label: 'New lead', value: usaNewLeads.length, href: '/contacts?leadDateScope=current&facet=usa_new_lead' },
-          { label: 'Follow-up', value: usaFollowUp.length, href: '/contacts?leadDateScope=current&facet=usa_follow_up' },
-          { label: 'First outreach', value: usaFirstOutreach.length, href: '/contacts?leadDateScope=current&facet=needs_first_outreach' },
-          { label: 'Bad channel', value: usaBadContactChannel.length, href: '/contacts?leadDateScope=current&facet=usa_bad_contact_channel' },
-        ],
-      });
-    }
-
-    panels.push({
-      key: 'task-pressure',
-      title: 'Task pressure',
-      subtitle: overdueTasks.length ? `${overdueTasks.length} overdue tasks need attention` : `${dueTodayTasks.length} tasks due today`,
-      href: overdueTasks.length
-        ? `/tasks?due=overdue${isAdminView ? '' : '&ownerUserId=__me'}`
-        : `/tasks?due=today${isAdminView ? '' : '&ownerUserId=__me'}`,
-      cta: overdueTasks.length ? 'Clear overdue work' : (dueTodayTasks.length ? 'Open today' : 'No task pressure'),
-      emptyText: 'No overdue tasks or due-today tasks in this dashboard scope.',
-      previews: previewLabels(overdueTasks.length ? overdueTasks : dueTodayTasks, taskLabel),
-      tone: overdueTasks.length ? 'urgent' : 'normal',
-      metrics: [
-        { label: 'Overdue', value: overdueTasks.length, href: `/tasks?due=overdue${isAdminView ? '' : '&ownerUserId=__me'}` },
-        { label: 'Due today', value: dueTodayTasks.length, href: `/tasks?due=today${isAdminView ? '' : '&ownerUserId=__me'}` },
-        { label: 'Active', value: myTasks.filter(task => isTaskCurrentWork(task)).length, href: `/tasks?due=work${isAdminView ? '' : '&ownerUserId=__me'}` },
-      ],
-    });
-
-    return panels;
-  }, [contacts, currentUserId, dashboardNow, financials, isAdminView, myTasks, workOrders]);
 
   const empProgress = useMemo(() => {
     return employees.map(emp => {
@@ -334,64 +325,17 @@ export default function Dashboard() {
         </div>
       )}
 
-      {isAdminView ? (
-        <div className="dashboard-kpi-grid" style={{marginBottom:20}}>
-          <KPICard label="Total Revenue" value={`$${kpis.totalRevenue.toLocaleString()}`} change="12% vs last month" trend="up" />
-          <KPICard label="Pipeline Value" value={`$${kpis.pipeline.toLocaleString()}`} change={`${financials.filter(f=>f.type==='Estimate'&&f.status==='Pending').length} estimates`} trend="up" />
-          <KPICard label="Active Work Orders" value={kpis.activeWOs} change={`${workOrders.filter(w=>w.status==='In Progress').length} in progress`} trend="up" />
-          <KPICard label="New Leads" value={kpis.newLeads} change="This week" trend="up" />
-        </div>
-      ) : (
-        <div className="dashboard-kpi-grid" style={{marginBottom:20}}>
-          <KPICard label="My Active Tasks" value={kpis.myTasksCount} change="Due soon" trend="up" href="/tasks?due=work&ownerUserId=__me" />
-          <KPICard label="Active Contacts" value={kpis.activeContacts} change="Current scope" trend="up" href="/contacts?leadDateScope=current" />
-          {canReadFinancials
-            ? <KPICard label="Needs First Outreach" value={kpis.needsFirstOutreach} change="Ready to assign" trend="up" href="/contacts?leadDateScope=current&facet=needs_first_outreach" />
-            : <KPICard label="My Pipeline" value={kpis.myPipeline} change="Assigned active leads" trend="up" href="/contacts?leadDateScope=current&facet=mine" />}
-          <KPICard label="Assigned Work Orders" value={kpis.assignedWOs} change="Open orders" trend="up" href="/work-orders?status=open&ownerUserId=__me" />
-        </div>
-      )}
-
-      <div className="card dashboard-intel-card" style={{marginBottom:20}}>
-        <div className="flex-between" style={{marginBottom:12, gap:12}}>
-          <div>
-            <div className="card-title" style={{marginBottom:4}}>Division intelligence</div>
-            <p className="page-subtitle" style={{margin:0}}>
-              {currentBusinessUnit?.name || `All ${scopeLabel}`} · live signals by business line
-            </p>
-          </div>
-          <Link className="btn btn-sm" href="/pipeline">Open pipeline</Link>
-        </div>
-        <div className="dashboard-intel-grid">
-          {dashboardDivisionPanels.map((panel) => (
-            <div key={panel.key} className={`dashboard-intel-panel ${panel.tone === 'urgent' ? 'urgent' : ''}`}>
-              <div className="dashboard-intel-panel-head">
-                <div>
-                  <div className="dashboard-intel-title">{panel.title}</div>
-                  <div className="dashboard-intel-subtitle">{panel.subtitle}</div>
-                </div>
-                <Link className="dashboard-intel-cta" href={panel.href}>{panel.cta}</Link>
-              </div>
-              <div className="dashboard-intel-metrics">
-                {panel.metrics.map((metric) => (
-                  <Link key={metric.label} className="dashboard-intel-metric" href={metric.href}>
-                    <span>{metric.label}</span>
-                    <strong>{metric.value}</strong>
-                  </Link>
-                ))}
-              </div>
-              {panel.previews.length > 0 ? (
-                <div className="dashboard-intel-preview" title={panel.previews.join(', ')}>
-                  {panel.previews.join(' · ')}
-                </div>
-              ) : (
-                <div className="dashboard-intel-preview muted">
-                  {panel.emptyText}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+      <div className="dashboard-kpi-grid" style={{marginBottom:20}}>
+        {dashboardKpiCards.map((card) => (
+          <KPICard
+            key={card.label}
+            label={card.label}
+            value={card.value}
+            change={card.change}
+            trend={card.trend}
+            href={card.href}
+          />
+        ))}
       </div>
 
       <div className="dashboard-panel-grid" style={{marginBottom:20}}>
