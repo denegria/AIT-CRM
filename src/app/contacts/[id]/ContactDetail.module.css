@@ -1329,45 +1329,114 @@
   flex-direction: column;
   gap: 12px;
 }
-.financialCommandCard {
+.commandCard {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 14px;
   padding: 14px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   background: color-mix(in srgb, var(--bg-secondary) 82%, var(--bg-tertiary));
 }
-.financialCommandCopy {
+.commandCopy {
   min-width: 220px;
   display: flex;
   flex: 1 1 300px;
   flex-direction: column;
   gap: 4px;
 }
-.financialCommandTitle {
+.commandTitle {
   color: var(--text-primary);
   font-size: var(--text-sm);
   font-weight: 800;
 }
-.financialCommandCopy p {
+.commandCopy p {
   margin: 0;
   color: var(--text-muted);
   font-size: var(--text-sm);
   line-height: 1.45;
 }
-.financialCommandActions {
+.commandActions {
   display: flex;
   flex: 0 1 auto;
   justify-content: flex-end;
   flex-wrap: wrap;
   gap: 8px;
 }
+.prereqList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+.prereqItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 3px 7px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.2;
+}
+.prereqItem strong {
+  color: var(--text-secondary);
+  font-weight: 800;
+}
+.prereqItem span {
+  font-weight: 700;
+}
+.prereqReady {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 24%, var(--border-subtle));
+  background: color-mix(in srgb, var(--success-muted) 40%, var(--bg-elevated));
+}
+.prereqBlocked {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 30%, var(--border-subtle));
+  background: color-mix(in srgb, var(--warning-muted) 44%, var(--bg-elevated));
+}
+.workflowNotice {
+  flex: 1 0 100%;
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  line-height: 1.35;
+}
+.workflowNotice svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+.workflowNoticeReady {
+  color: var(--success);
+  border-color: color-mix(in srgb, var(--success) 24%, var(--border-subtle));
+  background: color-mix(in srgb, var(--success-muted) 42%, var(--bg-secondary));
+}
+.workflowNoticeWarning {
+  color: var(--warning);
+  border-color: color-mix(in srgb, var(--warning) 30%, var(--border-subtle));
+  background: color-mix(in srgb, var(--warning-muted) 46%, var(--bg-secondary));
+}
+.workflowNoticeBlocked {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 24%, var(--border-subtle));
+  background: color-mix(in srgb, var(--danger-muted) 48%, var(--bg-secondary));
+}
 .recordCard {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 14px;
   padding: 16px;
   background: color-mix(in srgb, var(--bg-secondary) 72%, var(--bg-tertiary));
   border: 1px solid var(--border-subtle);
@@ -1388,6 +1457,10 @@
   display: flex;
   align-items: center;
   gap: 16px;
+  min-width: 0;
+}
+.recordMain > div:last-child {
+  min-width: 0;
 }
 .recordIcon {
   width: 40px;
@@ -1402,13 +1475,26 @@
 .recordTitle {
   font-weight: 600;
   font-size: var(--text-sm);
+  overflow-wrap: anywhere;
 }
 .recordSubtitle {
   font-size: var(--text-xs);
   color: var(--text-muted);
   margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+.recordActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .recordValue {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
   text-align: right;
 }
 .valueAmount {
@@ -1504,6 +1590,11 @@
     flex-direction: column;
     gap: 12px;
   }
+  .recordActions,
+  .recordValue {
+    align-items: flex-start;
+    text-align: left;
+  }
 }
 
 @media (max-width: 560px) {
@@ -1531,11 +1622,11 @@
     margin-bottom: 12px;
     padding: 10px;
   }
-  .financialCommandCard {
+  .commandCard {
     align-items: stretch;
     flex-direction: column;
   }
-  .financialCommandActions {
+  .commandActions {
     justify-content: flex-start;
   }
   .profileAssignment {
