@@ -266,6 +266,7 @@ test('queues successful leadgen events for import review without CRM writes', as
   const proposedContact = JSON.parse(normalizedInsert.params[2]);
   const proposedLead = JSON.parse(normalizedInsert.params[3]);
   assert.equal(proposedContact.contact_id, null);
+  assert.equal(proposedContact.source_label, 'Facebook Ads');
   assert.equal(proposedLead.source_type, 'facebook_webhook');
   assert.equal(proposedLead.lead_id, null);
   assert.equal(proposedLead.assigned_user_id, null);
@@ -361,6 +362,32 @@ test('uses webhook page id when Graph lead details omit page id', async () => {
   const proposedLead = JSON.parse(normalizedInsert.params[3]);
   assert.equal(proposedLead.page_id, 'page-1');
   assert.equal(proposedLead.lead_id, 'lead-1');
+});
+
+test('adds non-core Facebook form answers to promoted lead notes', async () => {
+  const { client, calls } = createServiceClient();
+  const graphLead = graphLeadFixture({
+    field_data: [
+      ...graphLeadFixture().field_data,
+      { name: 'education_level', values: ['Master degree'] },
+      { name: 'inbox_url', values: ['https://business.facebook.com/latest/inbox'] },
+    ],
+  });
+
+  const result = await ingestFacebookLeadAdsEvents(client, {
+    organizationId: 'org-1',
+    batchId: 'batch-1',
+    events: [leadgenFixture()],
+    metaConfig: metaConfig(),
+    autoPromote: true,
+    fetchLeadDetails: async () => ({ ok: true, lead: graphLead }),
+  });
+
+  assert.equal(result.promoted, 1);
+  const leadInsert = calls.find((call) => call.sql.startsWith('insert into leads'));
+  assert.match(leadInsert.params[3], /Facebook form answers:/);
+  assert.match(leadInsert.params[3], /Education Level: Master degree/);
+  assert.doesNotMatch(leadInsert.params[3], /inbox_url|Inbox Url|test@meta\.com|Ada Lovelace/);
 });
 
 test('auto-promotion fails closed when page and form business-unit mapping is missing', async () => {
