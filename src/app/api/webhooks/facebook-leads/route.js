@@ -13,7 +13,13 @@ import {
   validateMetaAppSecretSignature,
   verifyMetaWebhookChallenge,
 } from '@/lib/messaging/providers/meta.js';
-import { ingestFacebookLeadAdsEvents } from '@/lib/ingestion/facebook-lead-ads.js';
+import {
+  FACEBOOK_LEAD_ADS_AUTO_PROMOTE_ENV,
+  FACEBOOK_LEAD_ADS_FORM_BUSINESS_UNIT_MAP_ENV,
+  facebookLeadAdsAutoPromotionEnabled,
+  ingestFacebookLeadAdsEvents,
+  parseFacebookLeadAdsFormBusinessUnitMap,
+} from '@/lib/ingestion/facebook-lead-ads.js';
 import { ingestMessengerInboundEvents } from '@/lib/ingestion/messenger-inbound.js';
 
 function jsonError(message, status = 400) {
@@ -145,6 +151,10 @@ export async function POST(request) {
       organizationId,
       events: leadgenEvents,
       metaConfig,
+      autoPromote: facebookLeadAdsAutoPromotionEnabled(process.env[FACEBOOK_LEAD_ADS_AUTO_PROMOTE_ENV]),
+      formBusinessUnitMap: parseFacebookLeadAdsFormBusinessUnitMap(
+        process.env[FACEBOOK_LEAD_ADS_FORM_BUSINESS_UNIT_MAP_ENV],
+      ),
     });
     const messengerResult = await ingestMessengerInboundEvents(client, {
       organizationId,

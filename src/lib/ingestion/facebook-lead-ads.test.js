@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   FACEBOOK_LEAD_ADS_SOURCE_SHEET,
+  facebookLeadAdsAutoPromotionEnabled,
   facebookLeadgenEventKey,
   ingestFacebookLeadAdsEvents,
+  parseFacebookLeadAdsFormBusinessUnitMap,
 } from './facebook-lead-ads.js';
 import {
   createMetaProviderConfig,
@@ -48,6 +50,7 @@ function createServiceClient({
   leadId = 'lead-1',
   sourceRowId = 'source-row-5',
   normalizedId = 'normalized-5',
+  existingContact = null,
 } = {}) {
   const calls = [];
   return {
@@ -94,7 +97,7 @@ function createServiceClient({
           normalized.startsWith('select id, primary_business_unit_id from contacts')
           && normalized.includes('lower(email) = lower($2)')
         ) {
-          return { rows: [] };
+          return { rows: existingContact ? [existingContact] : [] };
         }
         if (
           normalized.startsWith('select id, primary_business_unit_id from contacts')
@@ -107,6 +110,9 @@ function createServiceClient({
         }
         if (normalized.startsWith('insert into contacts')) {
           return { rows: [{ id: contactId }] };
+        }
+        if (normalized.startsWith('update contacts set')) {
+          return { rows: [] };
         }
         if (normalized.startsWith('insert into leads')) {
           return { rows: [{ id: leadId }] };
@@ -161,6 +167,14 @@ test('builds stable Facebook leadgen event keys', () => {
     facebookLeadgenEventKey({ pageId: 'page-1', formId: 'form-1', createdTime: 1779275460 }),
     'facebook-leadgen-fallback:page-1:form-1:1779275460',
   );
+});
+
+test('parses Facebook Lead Ads auto-promotion config safely', () => {
+  assert.equal(facebookLeadAdsAutoPromotionEnabled('true'), true);
+  assert.equal(facebookLeadAdsAutoPromotionEnabled('ON'), true);
+  assert.equal(facebookLeadAdsAutoPromotionEnabled('0'), false);
+  assert.deepEqual(parseFacebookLeadAdsFormBusinessUnitMap('{"form-1":"AIT Signs"}'), { 'form-1': 'AIT Signs' });
+  assert.deepEqual(parseFacebookLeadAdsFormBusinessUnitMap('{bad'), {});
 });
 
 test('skips duplicate leadgen events without fetching Graph or writing audit rows', async () => {
@@ -225,6 +239,7 @@ test('queues successful leadgen events for import review without CRM writes', as
     promoted: false,
     graphFetched: true,
     businessUnitId: 'bu-1',
+    businessUnitMappingSource: 'page_map',
     sourceRowId: 'source-row-5',
     normalizedRecordId: 'normalized-5',
     contactId: null,
@@ -254,18 +269,149 @@ test('queues successful leadgen events for import review without CRM writes', as
   assert.equal(proposedLead.source_type, 'facebook_webhook');
   assert.equal(proposedLead.lead_id, null);
   assert.equal(proposedLead.assigned_user_id, null);
-  assert.equal(proposedLead.notes, 'Webhook captured and Graph fields fetched. Awaiting import review.');
+  assert.equal(proposedLead.notes, 'Webhook captured and Graph fields fetched. Awaiting import review approval before CRM promotion.');
   assert.equal(normalizedInsert.params[4], 0.85);
   assert.equal(normalizedInsert.params[5], 'needs_review');
 
   const reviewInsert = calls.find((call) => call.sql.startsWith('insert into import_review_items'));
   assert.equal(reviewInsert.params[2], 'Facebook lead captured with Graph fields and queued for import review.');
-  assert.deepEqual(JSON.parse(reviewInsert.params[3]), {
+  assert.equal(reviewInsert.params[3], 'pending');
+  assert.deepEqual(JSON.parse(reviewInsert.params[4]), {
     action: 'fetch_graph_lead_fields',
     normalizedRecordId: 'normalized-5',
     contactId: null,
     leadId: null,
+    blockedReason: null,
+    mappingSource: 'page_map',
   });
+});
+
+test('auto-promotes safe mapped leadgen events while preserving import audit rows', async () => {
+  const { client, calls } = createServiceClient();
+  const graphLead = graphLeadFixture();
+
+  const result = await ingestFacebookLeadAdsEvents(client, {
+    organizationId: 'org-1',
+    batchId: 'batch-1',
+    events: [leadgenFixture()],
+    metaConfig: metaConfig(),
+    autoPromote: true,
+    fetchLeadDetails: async () => ({ ok: true, lead: graphLead }),
+  });
+
+  assert.equal(result.received, 1);
+  assert.equal(result.inserted, 1);
+  assert.equal(result.promoted, 1);
+  assert.equal(result.graphFetched, 1);
+  assert.equal(result.eventResults[0].review, false);
+  assert.equal(result.eventResults[0].contactId, 'contact-1');
+  assert.equal(result.eventResults[0].leadId, 'lead-1');
+  assert.equal(result.eventResults[0].businessUnitMappingSource, 'page_map');
+
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), true);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), true);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into activity_events')), true);
+
+  const normalizedInsert = calls.find((call) => call.sql.startsWith('insert into import_normalized_records'));
+  const proposedLead = JSON.parse(normalizedInsert.params[3]);
+  assert.equal(proposedLead.lead_id, 'lead-1');
+  assert.equal(proposedLead.assigned_user_id, 'user-owner-1');
+  assert.deepEqual(proposedLead.auto_promotion, {
+    attempted: true,
+    promoted: true,
+    blocked_reason: null,
+    mapping_source: 'page_map',
+  });
+  assert.equal(normalizedInsert.params[5], 'promoted');
+
+  const reviewInsert = calls.find((call) => call.sql.startsWith('insert into import_review_items'));
+  assert.equal(reviewInsert.params[2], 'Facebook lead auto-promoted to CRM after Graph fetch and mapping checks.');
+  assert.equal(reviewInsert.params[3], 'approved');
+  assert.deepEqual(JSON.parse(reviewInsert.params[4]), {
+    action: 'auto_promote_facebook_lead',
+    normalizedRecordId: 'normalized-5',
+    contactId: 'contact-1',
+    leadId: 'lead-1',
+    blockedReason: null,
+    mappingSource: 'page_map',
+  });
+});
+
+test('auto-promotion fails closed when page and form business-unit mapping is missing', async () => {
+  const { client, calls } = createServiceClient();
+
+  const result = await ingestFacebookLeadAdsEvents(client, {
+    organizationId: 'org-1',
+    batchId: 'batch-1',
+    events: [leadgenFixture()],
+    metaConfig: createMetaProviderConfig({ defaultPageAccessToken: 'page-token' }),
+    autoPromote: true,
+    fetchLeadDetails: async () => ({ ok: true, lead: graphLeadFixture() }),
+  });
+
+  assert.equal(result.received, 1);
+  assert.equal(result.inserted, 1);
+  assert.equal(result.promoted, 0);
+  assert.equal(result.eventResults[0].review, true);
+  assert.equal(result.eventResults[0].businessUnitId, null);
+  assert.equal(result.eventResults[0].businessUnitMappingSource, null);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false);
+
+  const normalizedInsert = calls.find((call) => call.sql.startsWith('insert into import_normalized_records'));
+  const proposedLead = JSON.parse(normalizedInsert.params[3]);
+  assert.equal(proposedLead.business_unit_id, null);
+  assert.deepEqual(proposedLead.auto_promotion, {
+    attempted: true,
+    promoted: false,
+    blocked_reason: 'business_unit_mapping_required',
+    mapping_source: null,
+  });
+  assert.equal(normalizedInsert.params[5], 'needs_review');
+
+  const reviewInsert = calls.find((call) => call.sql.startsWith('insert into import_review_items'));
+  assert.match(reviewInsert.params[2], /auto-promotion is blocked/);
+  assert.equal(reviewInsert.params[3], 'pending');
+  assert.deepEqual(JSON.parse(reviewInsert.params[4]), {
+    action: 'review_auto_promotion_blocked',
+    normalizedRecordId: 'normalized-5',
+    contactId: null,
+    leadId: null,
+    blockedReason: 'business_unit_mapping_required',
+    mappingSource: null,
+  });
+});
+
+test('auto-promotion links existing contacts without overwriting populated PII', async () => {
+  const { client, calls } = createServiceClient({
+    existingContact: { id: 'existing-contact-1', primary_business_unit_id: 'bu-old' },
+  });
+
+  const result = await ingestFacebookLeadAdsEvents(client, {
+    organizationId: 'org-1',
+    batchId: 'batch-1',
+    events: [leadgenFixture()],
+    metaConfig: metaConfig(),
+    autoPromote: true,
+    fetchLeadDetails: async () => ({ ok: true, lead: graphLeadFixture() }),
+  });
+
+  assert.equal(result.promoted, 1);
+  assert.equal(result.eventResults[0].contactId, 'existing-contact-1');
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), false);
+
+  const contactUpdate = calls.find((call) => call.sql.startsWith('update contacts set'));
+  assert.equal(contactUpdate.sql.includes("name = coalesce(nullif(name, ''), nullif($2, ''))"), true);
+  assert.equal(contactUpdate.sql.includes("email = coalesce(nullif(email, ''), nullif($5, ''))"), true);
+  assert.deepEqual(contactUpdate.params, [
+    'existing-contact-1',
+    'Ada Lovelace',
+    'Analytical Signs',
+    '555-0100',
+    'ada@example.com',
+    '123 Loop St',
+    'bu-1',
+  ]);
 });
 
 test('records Graph failures for review without creating CRM rows', async () => {
@@ -311,10 +457,13 @@ test('records Graph failures for review without creating CRM rows', async () => 
 
   const reviewInsert = calls.find((call) => call.sql.startsWith('insert into import_review_items'));
   assert.equal(reviewInsert.params[2], 'Facebook lead captured but needs review: Invalid lead id.');
-  assert.deepEqual(JSON.parse(reviewInsert.params[3]), {
+  assert.equal(reviewInsert.params[3], 'pending');
+  assert.deepEqual(JSON.parse(reviewInsert.params[4]), {
     action: 'review_facebook_lead',
     normalizedRecordId: 'normalized-5',
     contactId: null,
     leadId: null,
+    blockedReason: 'Invalid lead id',
+    mappingSource: 'page_map',
   });
 });
