@@ -265,6 +265,46 @@ export async function fetchMetaLeadDetails({
   return { ok: true, lead: body };
 }
 
+export async function fetchMetaLeadFormLeads({
+  formId = '',
+  pageId = '',
+  config = {},
+  limit = 100,
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const tokenResult = resolveMetaPageAccessToken(pageId, config);
+  if (!formId || !tokenResult.ok) {
+    return { ok: false, code: tokenResult.code || 'FORM_ID_MISSING', reason: tokenResult.reason || 'Meta lead form id missing.' };
+  }
+
+  const leads = [];
+  let url = graphEdgeUrl({
+    id: formId,
+    edge: 'leads',
+    accessToken: tokenResult.accessToken,
+    graphApiVersion: config.graphApiVersion,
+  });
+  url.searchParams.set('fields', 'id,created_time,ad_id,form_id,field_data');
+  url.searchParams.set('limit', String(Math.max(1, Math.min(Number(limit) || 100, 100))));
+
+  for (let page = 0; url && page < 25; page += 1) {
+    let response;
+    try {
+      response = await fetchImpl(url, { cache: 'no-store' });
+    } catch (error) {
+      return graphNetworkError(error);
+    }
+
+    const body = await readGraphJson(response);
+    if (!response.ok) return graphSendError(body, response.status);
+
+    leads.push(...(Array.isArray(body?.data) ? body.data : []));
+    url = body?.paging?.next ? new URL(body.paging.next) : null;
+  }
+
+  return { ok: true, leads };
+}
+
 export async function sendMetaMessengerTextMessage({
   pageId = '',
   recipientId = '',
