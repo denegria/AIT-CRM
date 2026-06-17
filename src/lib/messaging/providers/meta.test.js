@@ -6,6 +6,7 @@ import {
   META_WHATSAPP_ACCESS_TOKEN_MISSING_REASON,
   createMetaProviderConfig,
   fetchMetaLeadDetails,
+  fetchMetaLeadFormLeads,
   fetchMetaMessengerProfile,
   flattenMetaWhatsAppMessages,
   parseMetaPageAccessTokenMap,
@@ -240,6 +241,51 @@ test('returns structured errors for failed lead Graph responses', async () => {
     graphStatus: 400,
     graphError: { message: 'Invalid lead id', code: 190 },
   });
+});
+
+test('fetches Lead Ads form leads with pagination', async () => {
+  const calls = [];
+  const config = createMetaProviderConfig({
+    defaultPageAccessToken: 'default-token',
+    pageAccessTokenMapRaw: JSON.stringify({ 'page-1': 'mapped-token' }),
+  });
+
+  const result = await fetchMetaLeadFormLeads({
+    formId: 'form-1',
+    pageId: 'page-1',
+    config,
+    limit: 2,
+    fetchImpl: async (url, options) => {
+      calls.push({ url, options });
+      if (calls.length === 1) {
+        return {
+          ok: true,
+          status: 200,
+          async json() {
+            return {
+              data: [{ id: 'lead-1' }],
+              paging: { next: 'https://graph.facebook.com/v24.0/form-1/leads?after=cursor' },
+            };
+          },
+        };
+      }
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return { data: [{ id: 'lead-2' }] };
+        },
+      };
+    },
+  });
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].options.cache, 'no-store');
+  assert.equal(calls[0].url.pathname, '/v24.0/form-1/leads');
+  assert.equal(calls[0].url.searchParams.get('access_token'), 'mapped-token');
+  assert.equal(calls[0].url.searchParams.get('fields'), 'id,created_time,ad_id,form_id,field_data');
+  assert.equal(calls[0].url.searchParams.get('limit'), '2');
+  assert.deepEqual(result, { ok: true, leads: [{ id: 'lead-1' }, { id: 'lead-2' }] });
 });
 
 test('returns structured errors for failed Messenger profile Graph responses', async () => {
