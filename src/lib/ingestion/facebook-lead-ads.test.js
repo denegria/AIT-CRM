@@ -337,6 +337,32 @@ test('auto-promotes safe mapped leadgen events while preserving import audit row
   });
 });
 
+test('uses webhook page id when Graph lead details omit page id', async () => {
+  const { client, calls } = createServiceClient();
+  const graphLead = graphLeadFixture({ page_id: undefined });
+
+  const result = await ingestFacebookLeadAdsEvents(client, {
+    organizationId: 'org-1',
+    batchId: 'batch-1',
+    events: [leadgenFixture()],
+    metaConfig: metaConfig(),
+    autoPromote: true,
+    fetchLeadDetails: async () => ({ ok: true, lead: graphLead }),
+  });
+
+  assert.equal(result.promoted, 1);
+  assert.equal(result.eventResults[0].businessUnitMappingSource, 'page_map');
+
+  const sourceRowInsert = calls.find((call) => call.sql.startsWith('insert into import_source_rows'));
+  const rawValues = JSON.parse(sourceRowInsert.params[3]);
+  assert.equal(rawValues.page_id, 'page-1');
+
+  const normalizedInsert = calls.find((call) => call.sql.startsWith('insert into import_normalized_records'));
+  const proposedLead = JSON.parse(normalizedInsert.params[3]);
+  assert.equal(proposedLead.page_id, 'page-1');
+  assert.equal(proposedLead.lead_id, 'lead-1');
+});
+
 test('auto-promotion fails closed when page and form business-unit mapping is missing', async () => {
   const { client, calls } = createServiceClient();
 

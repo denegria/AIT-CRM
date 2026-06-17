@@ -232,7 +232,7 @@ test('returns structured errors for failed lead Graph responses', async () => {
   assert.equal(calls[0].options.cache, 'no-store');
   assert.equal(calls[0].url.pathname, '/v24.0/lead-1');
   assert.equal(calls[0].url.searchParams.get('access_token'), 'mapped-token');
-  assert.equal(calls[0].url.searchParams.get('fields'), 'id,created_time,ad_id,form_id,page_id,field_data');
+  assert.equal(calls[0].url.searchParams.get('fields'), 'id,created_time,ad_id,form_id,field_data');
   assert.deepEqual(result, {
     ok: false,
     code: 'GRAPH_RESPONSE_ERROR',

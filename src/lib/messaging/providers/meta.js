@@ -233,7 +233,7 @@ export async function fetchMetaLeadDetails({
 
   const url = graphUrl({
     id: leadgenId,
-    fields: 'id,created_time,ad_id,form_id,page_id,field_data',
+    fields: 'id,created_time,ad_id,form_id,field_data',
     accessToken: tokenResult.accessToken,
     graphApiVersion: config.graphApiVersion,
   });
