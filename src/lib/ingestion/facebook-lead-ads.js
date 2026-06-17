@@ -3,11 +3,6 @@ import {
   normalizeMetaLeadFields,
   resolveMetaPageBusinessUnitMapping,
 } from '../messaging/providers/meta.js';
-import {
-  recordInboundLeadAssignmentActivity,
-  resolveDefaultInboundLeadOwnerUserId,
-} from '../crm/assignment.js';
-
 export const FACEBOOK_LEAD_ADS_BATCH_SOURCE_NAME = 'Facebook Lead Ads';
 export const FACEBOOK_LEAD_ADS_BATCH_SOURCE_TYPE = 'facebook_leads';
 export const FACEBOOK_LEAD_ADS_SOURCE_SHEET = 'facebook_webhook';
@@ -274,12 +269,7 @@ async function findExistingContact(client, organizationId, details) {
 
 async function upsertContactAndLead(client, organizationId, businessUnitId, event, details, sourceRowId, rowNumber) {
   if (!businessUnitId) return { contactId: null, leadId: null, reason: 'No business unit found' };
-  const assignedUserId = await resolveDefaultInboundLeadOwnerUserId(client, {
-    organizationId,
-    businessUnitId,
-    sourceType: 'facebook_lead_ads',
-    sourceKey: event.leadgenId || event.formId || String(rowNumber),
-  });
+  const assignedUserId = null;
 
   const existing = await findExistingContact(client, organizationId, details);
   let contactId = existing?.id || null;
@@ -352,14 +342,6 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
       rowNumber,
     ],
   );
-  await recordInboundLeadAssignmentActivity(client, {
-    organizationId,
-    businessUnitId,
-    contactId,
-    leadId,
-    ownerUserId: assignedUserId,
-  });
-
   return { contactId, leadId, assignedUserId, reason: null };
 }
 

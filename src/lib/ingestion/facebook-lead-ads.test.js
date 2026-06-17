@@ -312,11 +312,12 @@ test('auto-promotes safe mapped leadgen events while preserving import audit row
   assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), true);
   assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), true);
   assert.equal(calls.some((call) => call.sql.startsWith('insert into activity_events')), true);
+  assert.equal(calls.filter((call) => call.sql.startsWith('insert into activity_events')).length, 1);
 
   const normalizedInsert = calls.find((call) => call.sql.startsWith('insert into import_normalized_records'));
   const proposedLead = JSON.parse(normalizedInsert.params[3]);
   assert.equal(proposedLead.lead_id, 'lead-1');
-  assert.equal(proposedLead.assigned_user_id, 'user-owner-1');
+  assert.equal(proposedLead.assigned_user_id, null);
   assert.deepEqual(proposedLead.auto_promotion, {
     attempted: true,
     promoted: true,
