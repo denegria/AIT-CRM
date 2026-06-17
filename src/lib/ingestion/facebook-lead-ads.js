@@ -16,6 +16,33 @@ export const FACEBOOK_LEAD_ADS_AUTO_PROMOTE_ENV = 'FACEBOOK_LEAD_ADS_AUTO_PROMOT
 export const FACEBOOK_LEAD_ADS_FORM_BUSINESS_UNIT_MAP_ENV = 'FACEBOOK_LEAD_ADS_FORM_BUSINESS_UNIT_MAP';
 
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on', 'enabled']);
+const CRM_CONTACT_FIELD_KEYS = new Set([
+  'first_name',
+  'firstname',
+  'last_name',
+  'lastname',
+  'full_name',
+  'name',
+  'nombre',
+  'contact_name',
+  'email',
+  'email_address',
+  'correo',
+  'correo_electronico',
+  'phone_number',
+  'phone',
+  'mobile_phone_number',
+  'telefono',
+  'celular',
+  'company_name',
+  'company',
+  'business_name',
+  'empresa',
+  'street_address',
+  'address',
+  'direccion',
+]);
+const TECHNICAL_META_FIELD_KEYS = new Set(['inbox_url']);
 
 export function facebookLeadAdsAutoPromotionEnabled(value = '') {
   return TRUE_VALUES.has(String(value || '').trim().toLowerCase());
@@ -34,6 +61,34 @@ export function parseFacebookLeadAdsFormBusinessUnitMap(raw = '') {
 export function facebookLeadgenEventKey(event) {
   if (event.leadgenId) return `facebook-leadgen:${event.pageId || 'unknown'}:${event.leadgenId}`;
   return `facebook-leadgen-fallback:${event.pageId || 'unknown'}:${event.formId || 'unknown'}:${event.createdTime || 'unknown'}`;
+}
+
+function normalizeMetaFieldKey(name = '') {
+  return String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+}
+
+function metaFieldLabel(key = '') {
+  return String(key || '')
+    .split('_')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function formatFacebookLeadExtraFieldNotes(fieldData = []) {
+  const lines = [];
+  for (const field of fieldData || []) {
+    const key = normalizeMetaFieldKey(field?.name);
+    if (!key || CRM_CONTACT_FIELD_KEYS.has(key) || TECHNICAL_META_FIELD_KEYS.has(key)) continue;
+
+    const values = Array.isArray(field?.values)
+      ? field.values.map((value) => String(value || '').trim()).filter(Boolean)
+      : [];
+    if (!values.length) continue;
+
+    lines.push(`${metaFieldLabel(key)}: ${values.join(', ')}`);
+  }
+  return lines;
 }
 
 export async function findOrCreateFacebookLeadAdsBatch(client, organizationId, options = {}) {
@@ -258,6 +313,12 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
     contactId = inserted.rows[0]?.id || null;
   }
 
+  const extraFieldNotes = formatFacebookLeadExtraFieldNotes(details.field_data);
+  const originalNotes = [
+    `Facebook leadgen_id=${event.leadgenId || 'unknown'} source_row_id=${sourceRowId || 'unknown'}`,
+    extraFieldNotes.length ? `Facebook form answers:\n${extraFieldNotes.map((line) => `- ${line}`).join('\n')}` : '',
+  ].filter(Boolean).join('\n\n');
+
   const lead = await client.query(
     `
       insert into leads
@@ -269,7 +330,7 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
       organizationId,
       businessUnitId,
       contactId,
-      `Facebook leadgen_id=${event.leadgenId || 'unknown'} source_row_id=${sourceRowId || 'unknown'}`,
+      originalNotes,
       assignedUserId,
     ],
   );
@@ -314,6 +375,7 @@ export async function promoteFacebookLeadProposalToCrm(
     phone: proposedContact.phone || '',
     email: proposedContact.email || '',
     address: proposedContact.address || '',
+    field_data: proposedLead.field_data || [],
   };
   const event = {
     leadgenId: proposedLead.leadgen_id || '',
