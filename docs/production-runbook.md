@@ -62,6 +62,27 @@ Each Facebook Page is connected separately in Meta.
 
 Do not replace the existing Page token unless the new token covers every Page currently in production.
 
+### Facebook Lead Ads Automatic Promotion
+
+Lead Ads webhook events are always preserved in import source/audit tables. Automatic CRM promotion is opt-in with:
+
+- `FACEBOOK_LEAD_ADS_AUTO_PROMOTE=true`
+
+Before enabling it, configure explicit routing for every page or form that may auto-promote:
+
+- `META_PAGE_BUSINESS_UNIT_MAP`
+- optional form override: `FACEBOOK_LEAD_ADS_FORM_BUSINESS_UNIT_MAP`
+
+`FACEBOOK_LEAD_ADS_FORM_BUSINESS_UNIT_MAP` is a JSON object keyed by Meta Lead Form ID, with values matching a business-unit id or exact business-unit name:
+
+```json
+{
+  "1234567890": "AIT USA Institute"
+}
+```
+
+Auto-promotion fails closed when Graph fetch fails, no page/form mapping exists, the mapped business unit cannot be found, or the lead lacks both email and phone. Those events stay in Import Review with the source row and normalized record intact.
+
 ## Comms Observability
 
 Use `/comms-ops` for Messenger/WhatsApp operational checks before provider or client-number testing. It reports provider readiness, inbound idempotency metadata, manual outbound audit outcomes, template/settings blockers, and follow-up sequence run state without exposing secrets or full message bodies.

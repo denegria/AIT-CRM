@@ -12,6 +12,24 @@ export const FACEBOOK_LEAD_ADS_BATCH_SOURCE_NAME = 'Facebook Lead Ads';
 export const FACEBOOK_LEAD_ADS_BATCH_SOURCE_TYPE = 'facebook_leads';
 export const FACEBOOK_LEAD_ADS_SOURCE_SHEET = 'facebook_webhook';
 export const FACEBOOK_LEAD_ADS_FILE_PREFIX = 'facebook-webhook';
+export const FACEBOOK_LEAD_ADS_AUTO_PROMOTE_ENV = 'FACEBOOK_LEAD_ADS_AUTO_PROMOTE';
+export const FACEBOOK_LEAD_ADS_FORM_BUSINESS_UNIT_MAP_ENV = 'FACEBOOK_LEAD_ADS_FORM_BUSINESS_UNIT_MAP';
+
+const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on', 'enabled']);
+
+export function facebookLeadAdsAutoPromotionEnabled(value = '') {
+  return TRUE_VALUES.has(String(value || '').trim().toLowerCase());
+}
+
+export function parseFacebookLeadAdsFormBusinessUnitMap(raw = '') {
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
 
 export function facebookLeadgenEventKey(event) {
   if (event.leadgenId) return `facebook-leadgen:${event.pageId || 'unknown'}:${event.leadgenId}`;
@@ -81,8 +99,23 @@ async function withSerializedWebhookEvent(client, eventKey, handler) {
   }
 }
 
-async function resolveBusinessUnitId(client, organizationId, pageId, metaConfig) {
-  const mapped = resolveMetaPageBusinessUnitMapping(pageId, metaConfig).businessUnit;
+function resolveLeadAdsBusinessUnitMapping({ pageId = '', formId = '', metaConfig = {}, formBusinessUnitMap = {} } = {}) {
+  const mappedForm = formBusinessUnitMap?.[formId];
+  if (mappedForm) return { businessUnit: mappedForm, source: 'form_map' };
+
+  const mappedPage = resolveMetaPageBusinessUnitMapping(pageId, metaConfig).businessUnit;
+  if (mappedPage) return { businessUnit: mappedPage, source: 'page_map' };
+
+  return { businessUnit: null, source: null };
+}
+
+async function resolveBusinessUnitId(
+  client,
+  organizationId,
+  { pageId, formId, metaConfig, formBusinessUnitMap = {}, allowFallback = true } = {},
+) {
+  const mapping = resolveLeadAdsBusinessUnitMapping({ pageId, formId, metaConfig, formBusinessUnitMap });
+  const mapped = mapping.businessUnit;
   if (mapped) {
     const mappedResult = await client.query(
       `
@@ -95,7 +128,28 @@ async function resolveBusinessUnitId(client, organizationId, pageId, metaConfig)
       `,
       [organizationId, String(mapped)],
     );
-    if (mappedResult.rows[0]?.id) return mappedResult.rows[0].id;
+    if (mappedResult.rows[0]?.id) {
+      return {
+        businessUnitId: mappedResult.rows[0].id,
+        mappingSource: mapping.source,
+        explicitMapping: true,
+      };
+    }
+    return {
+      businessUnitId: null,
+      mappingSource: mapping.source,
+      explicitMapping: true,
+      reason: `Mapped business unit "${mapped}" was not found.`,
+    };
+  }
+
+  if (!allowFallback) {
+    return {
+      businessUnitId: null,
+      mappingSource: null,
+      explicitMapping: false,
+      reason: 'Facebook Lead Ads auto-promotion requires an explicit page or form business-unit mapping.',
+    };
   }
 
   const result = await client.query(
@@ -108,7 +162,12 @@ async function resolveBusinessUnitId(client, organizationId, pageId, metaConfig)
     `,
     [organizationId],
   );
-  return result.rows[0]?.id || null;
+  return {
+    businessUnitId: result.rows[0]?.id || null,
+    mappingSource: result.rows[0]?.id ? 'fallback' : null,
+    explicitMapping: false,
+    reason: result.rows[0]?.id ? null : 'No business unit found',
+  };
 }
 
 async function hasLeadgenId(client, leadgenId) {
@@ -174,12 +233,12 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
       `
         update contacts
         set
-          name = coalesce(nullif($2, ''), name),
-          company_name = coalesce(nullif($3, ''), company_name),
-          phone = coalesce(nullif($4, ''), phone),
-          email = coalesce(nullif($5, ''), email),
-          address = coalesce(nullif($6, ''), address),
-          source_label = 'Facebook Ads',
+          name = coalesce(nullif(name, ''), nullif($2, '')),
+          company_name = coalesce(nullif(company_name, ''), nullif($3, '')),
+          phone = coalesce(nullif(phone, ''), nullif($4, '')),
+          email = coalesce(nullif(email, ''), nullif($5, '')),
+          address = coalesce(nullif(address, ''), nullif($6, '')),
+          source_label = coalesce(nullif(source_label, ''), 'Facebook Ads'),
           primary_business_unit_id = coalesce(primary_business_unit_id, $7),
           updated_at = now()
         where id = $1
@@ -264,9 +323,88 @@ export async function promoteFacebookLeadProposalToCrm(
   return upsertContactAndLead(client, organizationId, businessUnitId, event, details, sourceRowId, rowNumber);
 }
 
+function hasUsableContactMethod(details = {}) {
+  return Boolean(details.email || details.phone);
+}
+
+async function maybeAutoPromoteFacebookLead(client, {
+  organizationId,
+  autoPromote,
+  fetched,
+  details,
+  businessUnit,
+  event,
+  sourceRowId,
+  rowNumber,
+}) {
+  if (!fetched.ok) {
+    return {
+      contactId: null,
+      leadId: null,
+      assignedUserId: null,
+      reason: fetched.reason,
+      blockedReason: fetched.reason,
+    };
+  }
+
+  if (!autoPromote) {
+    return {
+      contactId: null,
+      leadId: null,
+      assignedUserId: null,
+      reason: 'Awaiting import review approval before CRM promotion.',
+      blockedReason: null,
+    };
+  }
+
+  if (!businessUnit.explicitMapping || !businessUnit.businessUnitId) {
+    return {
+      contactId: null,
+      leadId: null,
+      assignedUserId: null,
+      reason: businessUnit.reason || 'Facebook Lead Ads auto-promotion requires an explicit business-unit mapping.',
+      blockedReason: 'business_unit_mapping_required',
+    };
+  }
+
+  if (!hasUsableContactMethod(details)) {
+    return {
+      contactId: null,
+      leadId: null,
+      assignedUserId: null,
+      reason: 'Facebook Lead Ads auto-promotion requires an email or phone number.',
+      blockedReason: 'contact_method_required',
+    };
+  }
+
+  const crmWrite = await upsertContactAndLead(
+    client,
+    organizationId,
+    businessUnit.businessUnitId,
+    event,
+    details,
+    sourceRowId,
+    rowNumber,
+  );
+
+  return {
+    ...crmWrite,
+    blockedReason: crmWrite.leadId ? null : 'crm_write_failed',
+  };
+}
+
 export async function persistFacebookLeadAdsEvent(
   client,
-  { organizationId, batchId, rowNumber, event, metaConfig, fetchLeadDetails = fetchMetaLeadDetails },
+  {
+    organizationId,
+    batchId,
+    rowNumber,
+    event,
+    metaConfig,
+    fetchLeadDetails = fetchMetaLeadDetails,
+    autoPromote = false,
+    formBusinessUnitMap = {},
+  },
 ) {
   const eventKey = facebookLeadgenEventKey(event);
   if (event.leadgenId && await hasLeadgenId(client, event.leadgenId)) {
@@ -284,7 +422,14 @@ export async function persistFacebookLeadAdsEvent(
   const fetched = await fetchLeadDetails({ leadgenId: event.leadgenId, pageId: event.pageId, config: metaConfig });
   const graphLead = fetched.ok ? fetched.lead : null;
   const details = normalizeMetaLeadFields(graphLead?.field_data || []);
-  const businessUnitId = await resolveBusinessUnitId(client, organizationId, graphLead?.page_id || event.pageId, metaConfig);
+  const businessUnit = await resolveBusinessUnitId(client, organizationId, {
+    pageId: graphLead?.page_id || event.pageId,
+    formId: graphLead?.form_id || event.formId,
+    metaConfig,
+    formBusinessUnitMap,
+    allowFallback: !autoPromote,
+  });
+  const businessUnitId = businessUnit.businessUnitId;
 
   const rawValues = {
     source: 'facebook_lead_ads',
@@ -322,12 +467,16 @@ export async function persistFacebookLeadAdsEvent(
     };
   }
 
-  const crmWrite = {
-    contactId: null,
-    leadId: null,
-    assignedUserId: null,
-    reason: fetched.ok ? 'Awaiting import review approval before CRM promotion.' : fetched.reason,
-  };
+  const crmWrite = await maybeAutoPromoteFacebookLead(client, {
+    organizationId,
+    autoPromote,
+    fetched,
+    details,
+    businessUnit,
+    event,
+    sourceRowId,
+    rowNumber,
+  });
 
   const proposedContact = {
     name: details.name,
@@ -354,9 +503,17 @@ export async function persistFacebookLeadAdsEvent(
     contact_id: crmWrite.contactId,
     lead_id: crmWrite.leadId,
     assigned_user_id: crmWrite.assignedUserId || null,
-    notes: fetched.ok
-      ? 'Webhook captured and Graph fields fetched. Awaiting import review.'
-      : `Webhook captured, but Graph field fetch failed: ${fetched.reason}`,
+    auto_promotion: autoPromote ? {
+      attempted: true,
+      promoted: Boolean(crmWrite.leadId),
+      blocked_reason: crmWrite.leadId ? null : crmWrite.blockedReason,
+      mapping_source: businessUnit.mappingSource,
+    } : { attempted: false },
+    notes: crmWrite.leadId
+      ? 'Webhook captured, Graph fields fetched, and lead auto-promoted to CRM.'
+      : fetched.ok
+        ? `Webhook captured and Graph fields fetched. ${crmWrite.reason}`
+        : `Webhook captured, but Graph field fetch failed: ${fetched.reason}`,
   };
 
   const normalized = await client.query(
@@ -377,23 +534,38 @@ export async function persistFacebookLeadAdsEvent(
   );
   const normalizedId = normalized.rows[0]?.id;
 
+  const reviewStatus = crmWrite.leadId ? 'approved' : 'pending';
+  const reviewReason = crmWrite.leadId
+    ? 'Facebook lead auto-promoted to CRM after Graph fetch and mapping checks.'
+    : fetched.ok
+      ? autoPromote
+        ? `Facebook lead captured with Graph fields but auto-promotion is blocked: ${crmWrite.reason}`
+        : 'Facebook lead captured with Graph fields and queued for import review.'
+      : `Facebook lead captured but needs review: ${crmWrite.reason || fetched.reason || 'unknown reason'}.`;
+  const reviewAction = crmWrite.leadId
+    ? 'auto_promote_facebook_lead'
+    : fetched.ok
+      ? autoPromote ? 'review_auto_promotion_blocked' : 'fetch_graph_lead_fields'
+      : 'review_facebook_lead';
+
   await client.query(
     `
       insert into import_review_items
-      (import_batch_id, source_row_id, review_type, reason, review_status, proposed_resolution_json)
-      values ($1, $2, 'facebook_lead_review', $3, 'pending', $4::jsonb)
+      (import_batch_id, source_row_id, review_type, reason, review_status, reviewed_at, proposed_resolution_json)
+      values ($1, $2, 'facebook_lead_review', $3, $4, ${crmWrite.leadId ? 'now()' : 'null'}, $5::jsonb)
     `,
     [
       batchId,
       sourceRowId,
-      fetched.ok
-        ? 'Facebook lead captured with Graph fields and queued for import review.'
-        : `Facebook lead captured but needs review: ${crmWrite.reason || fetched.reason || 'unknown reason'}.`,
+      reviewReason,
+      reviewStatus,
       JSON.stringify({
-        action: fetched.ok ? 'fetch_graph_lead_fields' : 'review_facebook_lead',
+        action: reviewAction,
         normalizedRecordId: normalizedId || null,
         contactId: crmWrite.contactId,
         leadId: crmWrite.leadId,
+        blockedReason: crmWrite.blockedReason || null,
+        mappingSource: businessUnit.mappingSource || null,
       }),
     ],
   );
@@ -406,6 +578,7 @@ export async function persistFacebookLeadAdsEvent(
     promoted: Boolean(crmWrite.leadId),
     graphFetched: fetched.ok,
     businessUnitId,
+    businessUnitMappingSource: businessUnit.mappingSource || null,
     sourceRowId,
     normalizedRecordId: normalizedId || null,
     contactId: crmWrite.contactId,
@@ -429,7 +602,15 @@ function emptyFacebookLeadAdsResult(batchId = null) {
 
 export async function ingestFacebookLeadAdsEvents(
   client,
-  { organizationId, batchId: preparedBatchId = null, events = [], metaConfig, fetchLeadDetails = fetchMetaLeadDetails },
+  {
+    organizationId,
+    batchId: preparedBatchId = null,
+    events = [],
+    metaConfig,
+    fetchLeadDetails = fetchMetaLeadDetails,
+    autoPromote = false,
+    formBusinessUnitMap = {},
+  },
 ) {
   if (!events.length) return emptyFacebookLeadAdsResult(preparedBatchId);
 
@@ -460,6 +641,8 @@ export async function ingestFacebookLeadAdsEvents(
         event,
         metaConfig,
         fetchLeadDetails,
+        autoPromote,
+        formBusinessUnitMap,
       });
     });
     eventResults.push(stored);
