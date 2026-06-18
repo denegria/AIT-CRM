@@ -301,6 +301,7 @@ export async function PATCH(request) {
           toStatus: body.status,
           businessUnit: statusBusinessUnit,
           canReopenClosedStatus: session.user.canAccessAllBusinessUnits,
+          reopenClosedStatusReason: body.statusChangeReason || body.reopenClosedStatusReason || '',
         });
       } catch (error) {
         return NextResponse.json({ error: error.message }, { status: 400 });

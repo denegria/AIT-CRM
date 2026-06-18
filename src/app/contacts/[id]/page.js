@@ -14,7 +14,7 @@ import {
   Inbox, Send, DollarSign, Archive, BriefcaseBusiness, CheckCircle2,
   GraduationCap
 } from 'lucide-react';
-import { PIPELINE_STATUSES, workflowForBusinessUnit } from '@/lib/sales-workflow';
+import { PIPELINE_STATUSES, isWorkflowStatusClosed, workflowForBusinessUnit } from '@/lib/sales-workflow';
 import { buildContactDetailViewModel } from '@/lib/contact-detail-view-model';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
 import { schoolLocationOptions } from '@/lib/school-locations';
@@ -463,8 +463,17 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     .reduce((sum, record) => sum + moneyValue(record.paidAmount || record.amount), 0), [contactFinancials, selectedPaymentWorkOrder?.id]);
   const selectedPaymentBalance = Math.max(selectedPaymentWorkOrderTotal - selectedPaymentWorkOrderPaid, 0);
   const balanceAfterPayment = Math.max(selectedPaymentBalance - moneyValue(paymentForm.amount), 0);
-  const contactStatusOptions = workflowForBusinessUnit(contactBusinessUnit).statuses;
+  const contactWorkflow = workflowForBusinessUnit(contactBusinessUnit);
+  const contactStatusOptions = contactWorkflow.statuses;
   const nextStatus = nextWorkflowStatus(contact?.status, contactStatusOptions);
+  const isClosedStatusReopen = Boolean(
+    editForm &&
+    editForm.status &&
+    contact?.status &&
+    editForm.status !== contact.status &&
+    isWorkflowStatusClosed(contact.status, contactBusinessUnit) &&
+    !isWorkflowStatusClosed(editForm.status, contactBusinessUnit),
+  );
   const detailView = buildContactDetailViewModel({
     contact,
     businessUnit: contactBusinessUnit,
@@ -689,6 +698,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     setEditForm({
       ...contact,
       assignedTo: contact?.assignedTo || '',
+      statusChangeReason: '',
       leadProfile: {
         programInterest: contact?.programInterest || '',
         preferredDay: contact?.preferredDay || '',
@@ -760,8 +770,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   };
 
   const handleEditSave = () => {
+    if (isClosedStatusReopen && !editForm.statusChangeReason) {
+      toast('Choose why this closed status is being reopened.', 'error');
+      return;
+    }
     updateContact(contact.id, {
       ...editForm,
+      statusChangeReason: isClosedStatusReopen ? editForm.statusChangeReason : '',
       ...(editForm.leadProfile ? { leadProfile: editForm.leadProfile } : {}),
     })
       .then(() => {
@@ -2047,6 +2062,23 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               {[...new Set([...(contactStatusOptions || PIPELINE_STATUSES), ...(editForm.status ? [editForm.status] : [])])].map(st => <option key={st} value={st}>{st}</option>)}
             </select>
           </div>
+          {isClosedStatusReopen && (
+            <div className="form-group">
+              <label className="form-label">Reopen reason</label>
+              <select
+                className="input select"
+                value={editForm.statusChangeReason || ''}
+                onChange={e => setEditForm({...editForm, statusChangeReason: e.target.value})}
+              >
+                <option value="">Choose why this closed status is changing</option>
+                <option value="correction">Correction - closed status was entered by mistake</option>
+                <option value="new_course_follow_up">New course follow-up - previous student is active again</option>
+              </select>
+              <div className="empty-state" style={{padding: 10, marginTop: 8}}>
+                Use correction only for data-entry mistakes. For a new class or program, choose new course follow-up so history shows this is re-engagement, not an erased completion.
+              </div>
+            </div>
+          )}
           {showSchoolLocationField ? (
             <div className="form-group">
               <label className="form-label">School Location</label>

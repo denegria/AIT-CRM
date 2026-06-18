@@ -89,11 +89,27 @@ test('evaluateLifecycleTransition requires all-division authority to reopen clos
       fromStatus: 'Won',
       toStatus: 'Contacted',
       changed: true,
-      reason: 'Only all-division users can change a closed lead status.',
+      reason: 'Changing a closed lead status requires a correction or new-course follow-up reason.',
     },
   );
   assert.deepEqual(
     evaluateLifecycleTransition({ fromStatus: 'Lost', toStatus: 'Qualified', canReopenClosedStatus: true }),
     { allowed: true, fromStatus: 'Lost', toStatus: 'Qualified', changed: true },
+  );
+  assert.deepEqual(
+    evaluateLifecycleTransition({
+      fromStatus: 'Completed / Previous Student',
+      toStatus: 'Follow Up',
+      businessUnit: { name: 'AIT USA Institute' },
+      reopenClosedStatusReason: 'new_course_follow_up',
+    }),
+    {
+      allowed: true,
+      fromStatus: 'Completed / Previous Student',
+      toStatus: 'Follow Up',
+      changed: true,
+      reopenReason: 'new_course_follow_up',
+      reason: 'Reopened for new course follow-up.',
+    },
   );
 });
