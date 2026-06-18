@@ -61,6 +61,18 @@ const emptyPaymentForm = {
   note: '',
 };
 
+const FOLLOW_UP_OUTCOME_OPTIONS = [
+  ['reached_interested', 'Reached - interested'],
+  ['left_voicemail', 'Left voicemail'],
+  ['no_answer', 'No answer'],
+  ['appointment_scheduled', 'Appointment scheduled'],
+  ['needs_next_follow_up', 'Needs next follow-up'],
+  ['reached_not_interested', 'Reached - not interested'],
+  ['wrong_number', 'Wrong number'],
+  ['do_not_contact', 'Do not contact'],
+  ['enrolled_or_won', 'Enrolled / won'],
+];
+
 function newManualSendRequestId() {
   return crypto.randomUUID();
 }
@@ -283,6 +295,44 @@ function todayDate() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function dateInputToIso(value) {
+  if (!value) return null;
+  const date = new Date(`${value}T09:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function taskDateLabel(value) {
+  if (!value) return 'No due date';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'No due date';
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date);
+}
+
+function defaultFollowUpDraft(contact = {}, currentUser = null, ownerOptions = []) {
+  return {
+    outcome: 'reached_interested',
+    channel: 'phone',
+    contactMethod: '',
+    note: '',
+    nextDueDate: '',
+    nextOwnerUserId: currentUser?.id || ownerOptions[0]?.id || '',
+    leadProfile: {
+      programInterest: contact?.programInterest || '',
+      preferredDay: contact?.preferredDay || '',
+      preferredSchedule: contact?.preferredSchedule || '',
+      testInterest: contact?.testInterest || '',
+      educationLevel: contact?.educationLevel || '',
+      schoolName: contact?.schoolName || '',
+      locationPreference: contact?.locationPreference || '',
+    },
+  };
+}
+
 function nextWorkflowStatus(currentStatus = '', statuses = []) {
   const uniqueStatuses = [...new Set((statuses || []).filter(Boolean))];
   const currentIndex = uniqueStatuses.findIndex((status) => status === currentStatus);
@@ -310,6 +360,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     loaded,
     sources,
     employees,
+    currentUser,
     access,
     dataSource,
     businessUnits,
@@ -334,15 +385,26 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     error: '',
   });
   const ownerOptions = useMemo(() => {
-    return (employees || [])
+    const mapped = (employees || [])
       .filter((employee) => employee?.id)
       .map((employee) => ({
         id: employee.id,
         label: employee.name || employee.email || 'Unnamed User',
       }));
-  }, [employees]);
+    if (currentUser?.id && !mapped.some((employee) => employee.id === currentUser.id)) {
+      return [
+        { id: currentUser.id, label: currentUser.name || currentUser.email || 'Me' },
+        ...mapped,
+      ];
+    }
+    return mapped;
+  }, [currentUser, employees]);
   const [noteInput, setNoteInput] = useState('');
-  const [noteMode, setNoteMode] = useState('note');
+  const [followUpOpen, setFollowUpOpen] = useState(false);
+  const [followUpDraft, setFollowUpDraft] = useState(null);
+  const [followUpTask, setFollowUpTask] = useState(null);
+  const [followUpBusy, setFollowUpBusy] = useState(false);
+  const [followUpError, setFollowUpError] = useState('');
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState(null);
@@ -718,6 +780,91 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     }));
   };
 
+  const openFollowUpModal = () => {
+    if (!contact?.id || !access.canWriteCrm) return;
+    setFollowUpDraft(defaultFollowUpDraft(contact, currentUser, ownerOptions));
+    setFollowUpTask(null);
+    setFollowUpError('');
+    setFollowUpOpen(true);
+    if (dataSource !== 'postgres') return;
+
+    fetch(`/api/contacts/${contact.id}/follow-up`, { cache: 'no-store' })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Follow-up task lookup failed.');
+        setFollowUpTask(payload.task || null);
+      })
+      .catch((error) => {
+        setFollowUpError(error.message || 'Follow-up task lookup failed.');
+      });
+  };
+
+  const closeFollowUpModal = () => {
+    if (followUpBusy) return;
+    setFollowUpOpen(false);
+    setFollowUpDraft(null);
+    setFollowUpTask(null);
+    setFollowUpError('');
+  };
+
+  const updateFollowUpDraft = (patch) => {
+    setFollowUpDraft((current) => ({
+      ...defaultFollowUpDraft(contact, currentUser, ownerOptions),
+      ...(current || {}),
+      ...patch,
+    }));
+  };
+
+  const updateFollowUpLeadProfile = (field, value) => {
+    setFollowUpDraft((current) => ({
+      ...defaultFollowUpDraft(contact, currentUser, ownerOptions),
+      ...(current || {}),
+      leadProfile: {
+        ...((current || {}).leadProfile || {}),
+        [field]: value,
+      },
+    }));
+  };
+
+  const submitFollowUpLog = async () => {
+    if (!contact?.id || !access.canWriteCrm || !followUpDraft || followUpBusy) return;
+    if (!followUpDraft.note.trim()) {
+      setFollowUpError('Follow-up note is required.');
+      return;
+    }
+    setFollowUpBusy(true);
+    setFollowUpError('');
+    try {
+      const response = await fetch(`/api/contacts/${contact.id}/follow-up`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          outcome: followUpDraft.outcome,
+          channel: followUpDraft.channel,
+          contactMethod: followUpDraft.contactMethod,
+          note: followUpDraft.note,
+          nextDueAt: dateInputToIso(followUpDraft.nextDueDate),
+          nextOwnerUserId: followUpDraft.nextOwnerUserId || currentUser?.id || null,
+          leadProfile: followUpDraft.leadProfile,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Follow-up log failed.');
+      setFollowUpOpen(false);
+      setFollowUpDraft(null);
+      setFollowUpTask(null);
+      setTimelineFilter('all');
+      setTimelineReloadKey((key) => key + 1);
+      toast(payload.taskMatched ? 'Follow-up task completed' : 'Follow-up logged');
+    } catch (error) {
+      const message = error.message || 'Follow-up log failed.';
+      setFollowUpError(message);
+      toast(message, 'error');
+    } finally {
+      setFollowUpBusy(false);
+    }
+  };
+
   const openEstimateModal = () => {
     if (!contact?.id || !access.canWriteFinancials) return;
     const baseAmount = moneyValue(latestWorkOrder?.estimatedCost || latestWorkOrder?.amount);
@@ -962,23 +1109,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const addNote = () => {
     if (!noteInput.trim()) return;
     if (!access.canWriteCrm) return;
-    if (noteMode === 'follow_up') {
-      updateContact(contact.id, {
-        followUpNote: {
-          text: noteInput,
-          occurredAt: new Date().toISOString(),
-        },
-      })
-        .then(() => {
-          setNoteInput('');
-          setTimelineReloadKey((key) => key + 1);
-          toast('Follow-up note added');
-        })
-        .catch((error) => {
-          toast(error.message || 'Follow-up note save failed', 'error');
-        });
-      return;
-    }
     const newNote = {
       text: noteInput,
       createdAt: new Date().toISOString(),
@@ -1203,33 +1333,18 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             {renderedActiveTab === 'timeline' && (
               <div className={s.timelineView}>
                 <div className={s.noteBox}>
-                  <div className={s.noteModeControl} aria-label="Note type">
-                    <button
-                      type="button"
-                      className={`${s.noteModeButton} ${noteMode === 'note' ? s.active : ''}`}
-                      onClick={() => setNoteMode('note')}
-                      disabled={!access.canWriteCrm}
-                    >
-                      <MessageSquare size={14} /> Note
-                    </button>
-                    <button
-                      type="button"
-                      className={`${s.noteModeButton} ${noteMode === 'follow_up' ? s.active : ''}`}
-                      onClick={() => setNoteMode('follow_up')}
-                      disabled={!access.canWriteCrm}
-                    >
-                      <AlertCircle size={14} /> Follow-up
-                    </button>
-                  </div>
                   <textarea 
-                    placeholder={noteMode === 'follow_up' ? 'Write what happened during follow-up...' : 'Type an internal note...'}
+                    placeholder="Type an internal note..."
                     value={noteInput}
                     onChange={e => setNoteInput(e.target.value)}
                     disabled={!access.canWriteCrm}
                   />
                   <div className={s.noteBoxFooter}>
                     <button className="btn btn-primary btn-sm" onClick={addNote} disabled={!access.canWriteCrm}>
-                      <Plus size={14} /> {noteMode === 'follow_up' ? 'Add Follow-up' : 'Add Note'}
+                      <Plus size={14} /> Add Note
+                    </button>
+                    <button className="btn btn-sm" type="button" onClick={openFollowUpModal} disabled={!access.canWriteCrm}>
+                      <AlertCircle size={14} /> Log Follow-up
                     </button>
                   </div>
                 </div>
@@ -1747,6 +1862,150 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           </div>
         </div>
       </div>
+
+      {followUpOpen && followUpDraft && (
+        <Modal
+          open={followUpOpen}
+          onClose={closeFollowUpModal}
+          title="Log Follow-up"
+          footer={(
+            <>
+              <button className="btn" type="button" onClick={closeFollowUpModal} disabled={followUpBusy}>Cancel</button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={submitFollowUpLog}
+                disabled={followUpBusy || !followUpDraft.note.trim()}
+              >
+                <CheckCircle2 size={16} /> {followUpBusy ? 'Saving...' : 'Save Outcome'}
+              </button>
+            </>
+          )}
+        >
+          <div className="form-group">
+            <div className="form-label">Task Match</div>
+            <div className={s.followUpHint}>
+              {followUpTask
+                ? `Completes oldest open follow-up task: ${followUpTask.title || 'Follow-up'} (${taskDateLabel(followUpTask.dueAt)}).`
+                : 'No open follow-up task was found. This will log follow-up history directly.'}
+            </div>
+          </div>
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">Outcome</label>
+              <select
+                className="input select"
+                value={followUpDraft.outcome}
+                disabled={followUpBusy}
+                onChange={(event) => updateFollowUpDraft({ outcome: event.target.value })}
+              >
+                {FOLLOW_UP_OUTCOME_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Channel</label>
+              <select
+                className="input select"
+                value={followUpDraft.channel}
+                disabled={followUpBusy}
+                onChange={(event) => updateFollowUpDraft({ channel: event.target.value })}
+              >
+                <option value="phone">Phone</option>
+                <option value="sms">SMS</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="email">Email</option>
+                <option value="in_person">In person</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">Attempted</label>
+              <input
+                className="input"
+                value={followUpDraft.contactMethod}
+                disabled={followUpBusy}
+                placeholder="Phone or email used"
+                onChange={(event) => updateFollowUpDraft({ contactMethod: event.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Next Due</label>
+              <input
+                className="input"
+                type="date"
+                value={followUpDraft.nextDueDate}
+                disabled={followUpBusy}
+                onChange={(event) => updateFollowUpDraft({ nextDueDate: event.target.value })}
+              />
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Next Owner</label>
+            <select
+              className="input select"
+              value={followUpDraft.nextOwnerUserId}
+              disabled={followUpBusy}
+              onChange={(event) => updateFollowUpDraft({ nextOwnerUserId: event.target.value })}
+            >
+              <option value="" disabled>Select owner</option>
+              {ownerOptions.map((owner) => (
+                <option key={owner.id} value={owner.id}>{owner.label}</option>
+              ))}
+            </select>
+          </div>
+          {isAitUsaContact && (
+            <>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">Program</label>
+                  <input className="input" value={followUpDraft.leadProfile?.programInterest || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('programInterest', event.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Location</label>
+                  <input className="input" value={followUpDraft.leadProfile?.locationPreference || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('locationPreference', event.target.value)} />
+                </div>
+              </div>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">Preferred Day</label>
+                  <input className="input" value={followUpDraft.leadProfile?.preferredDay || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('preferredDay', event.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Schedule</label>
+                  <input className="input" value={followUpDraft.leadProfile?.preferredSchedule || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('preferredSchedule', event.target.value)} />
+                </div>
+              </div>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">Test</label>
+                  <input className="input" value={followUpDraft.leadProfile?.testInterest || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('testInterest', event.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Level</label>
+                  <input className="input" value={followUpDraft.leadProfile?.educationLevel || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('educationLevel', event.target.value)} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">School</label>
+                <input className="input" value={followUpDraft.leadProfile?.schoolName || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('schoolName', event.target.value)} />
+              </div>
+            </>
+          )}
+          <div className="form-group">
+            <label className="form-label">Note Required</label>
+            <textarea
+              className="textarea"
+              rows={3}
+              value={followUpDraft.note}
+              disabled={followUpBusy}
+              onChange={(event) => updateFollowUpDraft({ note: event.target.value })}
+            />
+          </div>
+          {followUpError && <div className={s.followUpError}>{followUpError}</div>}
+        </Modal>
+      )}
 
       {/* Edit Profile Modal */}
       {isEditModalOpen && editForm && (
