@@ -8,7 +8,7 @@ import { useCRM } from '@/lib/store';
 import { isClientAccountBusinessUnit } from '@/lib/crm/lifecycle';
 import s from './Sidebar.module.css';
 
-import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, CloudSun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal } from 'lucide-react';
 
 const nav = [
   { href: '/', label: 'Dashboard', Icon: LayoutDashboard },
@@ -31,6 +31,12 @@ const roleLabels = {
   designer: 'Designer',
   sales_manager: 'Sales Manager',
 };
+
+const themeOptions = [
+  { value: 'light', label: 'Light', Icon: Sun },
+  { value: 'dusk', label: 'Dusk', Icon: CloudSun },
+  { value: 'dark', label: 'Dark', Icon: Moon },
+];
 
 function isRouteActive(pathname, href) {
   if (href === '/') return pathname === '/';
@@ -185,11 +191,20 @@ export default function Sidebar() {
         </div>
       </nav>
       <div className={s.bottom}>
-        <div className={s.themeToggle}>
-          <button className={s.themeBtn} onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>
-            {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
-            <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
-          </button>
+        <div className={s.themeToggle} role="group" aria-label="Theme">
+          {themeOptions.map(({ value, label, Icon }) => (
+            <button
+              key={value}
+              type="button"
+              className={`${s.themeBtn} ${theme === value ? s.themeBtnActive : ''}`}
+              onClick={() => setTheme(value)}
+              aria-pressed={theme === value}
+              title={`${label} theme`}
+            >
+              <Icon size={15} />
+              <span>{label}</span>
+            </button>
+          ))}
         </div>
         <div className={s.roleSwitcher}>
           <label className={s.roleLabel}>Signed In</label>

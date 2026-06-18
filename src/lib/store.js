@@ -13,6 +13,11 @@ const SCOPE_STORAGE_KEY = 'ait-crm-business-unit-scope';
 const SCOPE_USER_KEY = 'ait-crm-scope-user-id';
 const ALL_BUSINESS_UNITS = 'all';
 const UNASSIGNED_BUSINESS_UNIT = 'unassigned';
+const THEME_OPTIONS = new Set(['light', 'dusk', 'dark']);
+
+function normalizeTheme(value) {
+  return THEME_OPTIONS.has(value) ? value : 'light';
+}
 
 function getBusinessUnitId(record) {
   return record?.businessUnitId || record?.primaryBusinessUnitId || '';
@@ -153,13 +158,8 @@ export function CRMProvider({ children, initialData }) {
     }
     return 'admin';
   });
-  const [theme, setTheme] = useState(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('ait-crm-theme');
-      return saved || 'light';
-    }
-    return 'light';
-  });
+  const [theme, setTheme] = useState('light');
+  const [themeReady, setThemeReady] = useState(false);
   const [currentUser] = useState(bootstrapData.currentUser);
   const [access] = useState(bootstrapData.access || {});
   const [importStaging] = useState(bootstrapData.importStaging);
@@ -316,11 +316,26 @@ export function CRMProvider({ children, initialData }) {
   }, [isPostgres, role]);
 
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('ait-crm-theme', theme);
-      document.documentElement.setAttribute('data-theme', theme);
-    }
-  }, [theme]);
+    if (typeof window === 'undefined') return;
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const savedTheme = normalizeTheme(localStorage.getItem('ait-crm-theme'));
+      setTheme(savedTheme);
+      setThemeReady(true);
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !themeReady) return;
+    const nextTheme = normalizeTheme(theme);
+    localStorage.setItem('ait-crm-theme', nextTheme);
+    document.documentElement.setAttribute('data-theme', nextTheme);
+  }, [theme, themeReady]);
 
   useEffect(() => {
     if (!loaded) return;

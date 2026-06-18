@@ -64,6 +64,45 @@
   --mobile-shell-clearance: 16px;
 }
 
+[data-theme="dusk"] {
+  --bg-primary: #e7edf0;
+  --bg-secondary: #f4f1ea;
+  --bg-tertiary: #d9e5e5;
+  --bg-elevated: #fbf8f1;
+  --bg-hover: #dfe9e8;
+  --bg-active: #cfdedd;
+
+  --border-subtle: #cbd9d8;
+  --border-default: #aebfbe;
+  --border-strong: #768b8d;
+  --border-focus: #27747d;
+
+  --text-primary: #22313a;
+  --text-secondary: #506067;
+  --text-muted: #738287;
+
+  --accent: #27747d;
+  --accent-hover: #1f626a;
+  --accent-muted: #d7e8e7;
+  --accent-ring: rgba(39, 116, 125, 0.22);
+
+  --success: #2f8f5d;
+  --success-muted: #dcebdd;
+  --warning: #a05f18;
+  --warning-muted: #f4e4ca;
+  --danger: #b9443f;
+  --danger-muted: #f2dada;
+  --info: #217c9c;
+  --info-muted: #d7e8ef;
+  --purple: #6757a8;
+  --purple-muted: #e4dff0;
+
+  --shadow-sm: 0 1px 2px rgba(31, 48, 55, 0.08), 0 1px 0 rgba(255, 255, 255, 0.54) inset;
+  --shadow-md: 0 12px 26px rgba(37, 55, 61, 0.12), 0 2px 7px rgba(37, 55, 61, 0.07);
+  --shadow-lg: 0 22px 50px rgba(37, 55, 61, 0.16), 0 6px 16px rgba(37, 55, 61, 0.09);
+  --shadow-soft: 0 10px 24px rgba(37, 55, 61, 0.10), 0 1px 0 rgba(255, 255, 255, 0.58) inset;
+}
+
 [data-theme="dark"] {
   --bg-primary: #0b0d10;
   --bg-secondary: #12161b;
@@ -124,6 +163,13 @@ html, body {
   background:
     linear-gradient(180deg, rgba(35,43,54,0.55), rgba(35,43,54,0) 280px),
     repeating-linear-gradient(90deg, transparent 0, transparent 31px, rgba(137,148,163,0.045) 32px),
+    var(--bg-primary);
+}
+
+[data-theme="dusk"] body {
+  background:
+    linear-gradient(180deg, rgba(250,246,235,0.46), rgba(250,246,235,0) 250px),
+    repeating-linear-gradient(90deg, transparent 0, transparent 31px, rgba(39,116,125,0.055) 32px),
     var(--bg-primary);
 }
 
@@ -208,6 +254,12 @@ a { color: inherit; text-decoration: none; }
 
 [data-theme="dark"] .main-content {
   background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0) 180px);
+}
+
+[data-theme="dusk"] .main-content {
+  background:
+    linear-gradient(180deg, rgba(255,250,239,0.42), rgba(255,250,239,0) 185px),
+    radial-gradient(circle at 98% 0%, color-mix(in srgb, var(--accent-muted) 72%, transparent), transparent 270px);
 }
 
 @media (max-width: 1024px) and (min-width: 901px) {
