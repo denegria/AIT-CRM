@@ -11,7 +11,7 @@ import {
 test('workflowColumnsForBusinessUnit returns AIT USA enrollment columns', () => {
   assert.deepEqual(
     workflowColumnsForBusinessUnit({ name: 'AIT USA Institute' }).map((column) => column.id),
-    ['New Lead', 'Follow Up', 'Enrolled', 'Completed / Previous Student'],
+    ['New Lead', 'Follow Up', 'Enrolled', 'Not Interested', 'Course Completed'],
   );
 });
 
@@ -33,6 +33,14 @@ test('workflowFromLead maps legacy statuses into the AIT USA workflow', () => {
   assert.equal(
     pipelineStatusFromLead({ status: 'Won' }, { businessUnit: { name: 'AIT USA Institute' } }),
     'Enrolled',
+  );
+  assert.equal(
+    pipelineStatusFromLead({ status: 'Completed / Previous Student' }, { businessUnit: { name: 'AIT USA Institute' } }),
+    'Course Completed',
+  );
+  assert.equal(
+    pipelineStatusFromLead({ status: 'Closed Lost' }, { businessUnit: { name: 'AIT USA Institute' } }),
+    'Not Interested',
   );
 });
 

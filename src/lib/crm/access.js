@@ -34,7 +34,7 @@ export function scopedBusinessUnitWhere(table, session) {
 }
 
 export function scopedContactWhere(table, session) {
-  const orgScope = scopedOrgWhere(table, session);
+  const orgScope = and(scopedOrgWhere(table, session), isNull(table.archivedAt));
   if (session.user.canAccessAllBusinessUnits) return orgScope;
   if (!session.user.businessUnitIds.length) {
     return and(orgScope, isNull(table.primaryBusinessUnitId));

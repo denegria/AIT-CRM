@@ -66,7 +66,13 @@ export function normalizeFollowUpCompletionPayload({
   const occurredAt = payload.occurredAt
     ? parseFollowUpDateTime(payload.occurredAt, 'occurredAt')
     : now;
-  const createNextTask = Boolean(nextDueAt) ||
+  const closesFollowUp = [
+    FOLLOW_UP_OUTCOMES.REACHED_NOT_INTERESTED,
+    FOLLOW_UP_OUTCOMES.DO_NOT_CONTACT,
+    FOLLOW_UP_OUTCOMES.WRONG_NUMBER,
+    FOLLOW_UP_OUTCOMES.ENROLLED_OR_WON,
+  ].includes(outcome);
+  const createNextTask = (!closesFollowUp && Boolean(nextDueAt)) ||
     outcome === FOLLOW_UP_OUTCOMES.NEEDS_NEXT_FOLLOW_UP;
 
   if (outcome === FOLLOW_UP_OUTCOMES.NEEDS_NEXT_FOLLOW_UP && !nextDueAt) {
@@ -130,6 +136,12 @@ export function leadStatusForFollowUpOutcome(outcome, businessUnit = null) {
   }
   if (outcome === FOLLOW_UP_OUTCOMES.ENROLLED_OR_WON) {
     return normalizeLifecycleStatus('won', { workflowKey });
+  }
+  if (
+    workflowKey === WORKFLOW_KEYS.AIT_USA &&
+    [FOLLOW_UP_OUTCOMES.REACHED_NOT_INTERESTED, FOLLOW_UP_OUTCOMES.DO_NOT_CONTACT].includes(outcome)
+  ) {
+    return normalizeLifecycleStatus('not interested', { workflowKey });
   }
   if (
     workflowKey === WORKFLOW_KEYS.DEFAULT &&

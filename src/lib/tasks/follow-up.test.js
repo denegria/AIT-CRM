@@ -66,6 +66,21 @@ test('requires next date for explicit next-follow-up outcome', () => {
   );
 });
 
+test('closed follow-up outcomes do not create another follow-up task', () => {
+  const payload = normalizeFollowUpCompletionPayload({
+    task: followUpTask(),
+    payload: {
+      outcome: FOLLOW_UP_OUTCOMES.DO_NOT_CONTACT,
+      note: 'Asked not to be contacted again.',
+      nextDueAt: '2026-06-04T13:00:00.000Z',
+    },
+    now,
+  });
+
+  assert.equal(payload.createNextTask, false);
+  assert.equal(payload.nextDueAt.toISOString(), '2026-06-04T13:00:00.000Z');
+});
+
 test('maps follow-up outcomes to stable event types and readable messages', () => {
   assert.equal(
     followUpEventTypeForOutcome(FOLLOW_UP_OUTCOMES.WRONG_NUMBER),
@@ -100,7 +115,11 @@ test('keeps lifecycle updates conservative and explicit', () => {
   );
   assert.equal(
     leadStatusForFollowUpOutcome(FOLLOW_UP_OUTCOMES.REACHED_NOT_INTERESTED, { name: 'AIT USA Institute' }),
-    null,
+    'Not Interested',
+  );
+  assert.equal(
+    leadStatusForFollowUpOutcome(FOLLOW_UP_OUTCOMES.DO_NOT_CONTACT, { name: 'AIT USA Institute' }),
+    'Not Interested',
   );
 });
 

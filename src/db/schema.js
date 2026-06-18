@@ -137,6 +137,9 @@ export const contacts = pgTable('contacts', {
   sourceLabel: text('source_label'),
   isDoNotCall: boolean('is_do_not_call').notNull().default(false),
   isWrongNumber: boolean('is_wrong_number').notNull().default(false),
+  archivedAt: timestamp('archived_at', { withTimezone: true }),
+  archivedByUserId: uuid('archived_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  archiveReason: text('archive_reason'),
   createdAt,
   updatedAt,
 });
