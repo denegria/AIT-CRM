@@ -19,6 +19,22 @@
   width: 40px; height: 40px;
   object-fit: contain;
 }
+.logoMark {
+  width: 40px;
+  height: 40px;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border-subtle));
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--accent-muted) 86%, var(--bg-elevated)), var(--bg-secondary));
+  color: var(--accent);
+  font-size: 9px;
+  font-weight: 850;
+  line-height: 1;
+  box-shadow: var(--shadow-sm);
+  flex: 0 0 auto;
+}
 .navSection {
   padding: 0 12px;
   flex: 1;

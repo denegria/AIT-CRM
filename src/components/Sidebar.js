@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -49,6 +49,32 @@ function formatRoleLabel(roleKey) {
     .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
+function divisionBrandFor(unit) {
+  const unitName = String(unit?.name || '').trim();
+  if (/ait\s*signs/i.test(unitName)) {
+    return {
+      title: 'AIT Signs',
+      alt: 'AIT Signs',
+      logoSrc: '',
+      mark: 'SIGN',
+    };
+  }
+  if (/ait\s*usa/i.test(unitName)) {
+    return {
+      title: 'AIT USA',
+      alt: 'AIT USA',
+      logoSrc: '/logo.png',
+      mark: '',
+    };
+  }
+  return {
+    title: unitName || 'AIT CRM',
+    alt: unitName || 'AIT CRM',
+    logoSrc: '/logo.png',
+    mark: '',
+  };
+}
+
 export default function Sidebar() {
   const pathname = usePathname();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
@@ -77,6 +103,12 @@ export default function Sidebar() {
 
   const isClientViewScope = currentBusinessUnitId !== 'all' && isClientAccountBusinessUnit(currentBusinessUnit);
   const canUseFinancialsWorkspace = Boolean(access.canReadSettings || access.canReadReports || role === 'admin');
+  const divisionBrand = useMemo(() => divisionBrandFor(currentBusinessUnit), [currentBusinessUnit]);
+
+  useEffect(() => {
+    document.title = divisionBrand.title;
+  }, [divisionBrand.title]);
+
   const scopedNav = useMemo(() => nav.map((item) => {
     if (item.href === '/contacts' && isClientViewScope) {
       return { href: '/clients', label: 'Clients', Icon: Building2 };
@@ -137,8 +169,12 @@ export default function Sidebar() {
   return (
     <aside className={s.sidebar}>
       <div className={s.logo}>
-        <Image src="/logo.png" alt="AIT USA" width={40} height={40} className={s.logoImage} />
-        <span>AIT USA</span>
+        {divisionBrand.logoSrc ? (
+          <Image src={divisionBrand.logoSrc} alt={divisionBrand.alt} width={40} height={40} className={s.logoImage} />
+        ) : (
+          <span className={s.logoMark} aria-hidden="true">{divisionBrand.mark}</span>
+        )}
+        <span>{divisionBrand.title}</span>
       </div>
       {accessibleBusinessUnits?.length > 0 && (
         <div className={s.mobileScopeBar}>
