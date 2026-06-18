@@ -341,6 +341,7 @@ export async function completeFollowUpTaskWithActivity({
   contactPatch = null,
   leadPatch = null,
   leadStatusChange = null,
+  profileActivity = null,
   nextTaskValues = null,
   nextTaskEventMetadata = {},
 }) {
@@ -419,6 +420,21 @@ export async function completeFollowUpTaskWithActivity({
           actorUserId,
           reason: leadStatusChange.reason || null,
           occurredAt: new Date(),
+        });
+      }
+
+      if (lead && profileActivity) {
+        await tx.insert(activityEvents).values({
+          organizationId,
+          businessUnitId: lead.businessUnitId,
+          contactId: lead.contactId,
+          leadId: lead.id,
+          workOrderId: task.workOrderId || null,
+          eventType: profileActivity.eventType || 'lead_profile.updated',
+          message: profileActivity.message || 'Updated lead profile.',
+          metadataJson: profileActivity.metadataJson || {},
+          actorUserId,
+          occurredAt: profileActivity.occurredAt || new Date(),
         });
       }
     }

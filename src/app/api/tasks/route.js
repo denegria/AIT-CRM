@@ -19,6 +19,11 @@ import {
 } from '@/lib/crm/access.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
 import { evaluateLifecycleTransition } from '@/lib/crm/lifecycle.js';
+import {
+  leadProfilePatchFromPayload,
+  leadProfilePatchToDrizzleValues,
+  leadProfileSummary,
+} from '@/lib/crm/lead-profile.js';
 import { isUuid } from '@/lib/crm/validation.js';
 import { TASK_STATUSES, TASK_TYPES } from '@/lib/tasks/constants.js';
 import {
@@ -455,11 +460,15 @@ export async function PATCH(request) {
             .limit(1)
         : [];
       const suggestedLeadStatus = leadStatusForFollowUpOutcome(completion.outcome, businessUnit);
+      const leadProfilePatch = leadProfilePatchFromPayload(body, { allowClear: false });
+      const leadProfileDbPatch = leadProfilePatchToDrizzleValues(leadProfilePatch);
+      const leadProfileUpdateSummary = leadProfileSummary(leadProfilePatch);
       let leadPatch = null;
       let leadStatusChange = null;
       let statusTransitionMeta = null;
 
       if (lead && suggestedLeadStatus) {
+        leadPatch = { updatedAt: now };
         const transition = evaluateLifecycleTransition({
           fromStatus: lead.currentStage || lead.status,
           toStatus: suggestedLeadStatus,
@@ -468,16 +477,22 @@ export async function PATCH(request) {
         });
         statusTransitionMeta = transition;
         if (transition.allowed && transition.changed) {
-          leadPatch = {
+          Object.assign(leadPatch, {
             status: transition.toStatus,
             currentStage: transition.toStatus,
-            updatedAt: now,
-          };
+          });
           leadStatusChange = {
             ...transition,
             reason: `Follow-up outcome: ${completion.outcome}`,
           };
         }
+      }
+      if (lead && Object.keys(leadProfileDbPatch).length) {
+        leadPatch = {
+          ...(leadPatch || {}),
+          ...leadProfileDbPatch,
+          updatedAt: now,
+        };
       }
 
       const activityMetadata = compactObject({
@@ -490,6 +505,7 @@ export async function PATCH(request) {
         note: completion.note,
         nextDueAt: completion.nextDueAt?.toISOString?.() || null,
         statusTransition: statusTransitionMeta,
+        leadProfile: Object.keys(leadProfilePatch).length ? leadProfilePatch : null,
       });
       const taskEventMetadata = compactObject({
         followUpOutcome: completion.outcome,
@@ -551,6 +567,19 @@ export async function PATCH(request) {
         contactPatch: contactPatchForFollowUpOutcome(completion.outcome, now),
         leadPatch,
         leadStatusChange,
+        profileActivity: leadProfileUpdateSummary
+          ? {
+              eventType: 'lead_profile.updated',
+              message: `Updated lead profile: ${leadProfileUpdateSummary}.`,
+              metadataJson: compactObject({
+                source: 'follow_up_completion',
+                taskId: existingTask.id,
+                outcome: completion.outcome,
+                leadProfile: leadProfilePatch,
+              }),
+              occurredAt: completion.occurredAt,
+            }
+          : null,
         nextTaskValues,
         nextTaskEventMetadata: compactObject({
           createdFromTaskId: existingTask.id,

@@ -10,6 +10,11 @@ import {
 } from '@/lib/crm/access.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
 import { validateManualContactIdentity } from '@/lib/crm/contact-input.js';
+import {
+  leadProfileForPayload,
+  leadProfilePatchFromPayload,
+  leadProfilePatchToDrizzleValues,
+} from '@/lib/crm/lead-profile.js';
 import { evaluateLifecycleTransition, requireLifecycleStatus } from '@/lib/crm/lifecycle.js';
 import { isUuid } from '@/lib/crm/validation.js';
 import {
@@ -67,6 +72,16 @@ function toContactPayload(row, lead = null, noteRows = [], businessUnit = null, 
     outreachState: workflow.outreachState,
     needsFirstOutreach: workflow.needsFirstOutreach,
     source: lead?.sourceName || row.sourceLabel || '',
+    leadProfile: leadProfileForPayload(lead),
+    programInterest: lead?.programInterest || '',
+    preferredDay: lead?.preferredDay || '',
+    preferredSchedule: lead?.preferredSchedule || '',
+    testInterest: lead?.testInterest || '',
+    educationLevel: lead?.educationLevel || '',
+    schoolName: lead?.schoolName || '',
+    locationPreference: lead?.locationPreference || '',
+    profileDetails: lead?.profileDetails || '',
+    sourceDetail: lead?.sourceDetail || '',
     assignedTo: lead?.assignedUserId || '',
     submittedAt: submittedAt?.toISOString?.() || submittedAt || '',
     contactCreatedAt: row.createdAt?.toISOString?.() || row.createdAt || '',
@@ -198,6 +213,7 @@ export async function POST(request) {
       status,
       currentStage: status,
       assignedUserId,
+      ...leadProfilePatchToDrizzleValues(leadProfilePatchFromPayload(body, { allowClear: false })),
     } : null,
   });
 
@@ -269,7 +285,10 @@ export async function PATCH(request) {
     );
   }
 
-  const hasLeadPatch = 'status' in body || 'source' in body || 'assignedTo' in body || hasBusinessUnitPatch;
+  const leadProfilePatch = leadProfilePatchFromPayload(body, { allowClear: true });
+  const hasLeadProfilePatch = Object.keys(leadProfilePatch).length > 0 ||
+    (body.leadProfile && typeof body.leadProfile === 'object');
+  const hasLeadPatch = 'status' in body || 'source' in body || 'assignedTo' in body || hasBusinessUnitPatch || hasLeadProfilePatch;
   let leadPatch = null;
   let leadStatusChange = null;
   if (lead && hasLeadPatch) {
@@ -303,6 +322,9 @@ export async function PATCH(request) {
     }
     if (hasBusinessUnitPatch && patch.primaryBusinessUnitId) {
       leadPatch.businessUnitId = patch.primaryBusinessUnitId;
+    }
+    if (hasLeadProfilePatch) {
+      Object.assign(leadPatch, leadProfilePatchToDrizzleValues(leadProfilePatch));
     }
   }
 
