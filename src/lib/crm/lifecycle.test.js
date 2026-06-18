@@ -26,7 +26,7 @@ test('lifecycle workflows resolve division-specific statuses', () => {
   assert.equal(isClientAccountBusinessUnit({ name: 'AIT USA Institute' }), false);
   assert.deepEqual(
     lifecycleWorkflowForBusinessUnit({ name: 'AIT USA Institute' }).statuses,
-    ['New Lead', 'Follow Up', 'Enrolled', 'Completed / Previous Student'],
+    ['New Lead', 'Follow Up', 'Enrolled', 'Not Interested', 'Course Completed'],
   );
   assert.deepEqual(
     lifecycleWorkflowForBusinessUnit({ name: 'AIT Signs' }).statuses,
@@ -34,6 +34,8 @@ test('lifecycle workflows resolve division-specific statuses', () => {
   );
   assert.equal(normalizeLifecycleStatus('contacted', { businessUnit: { name: 'AIT USA Institute' } }), 'Follow Up');
   assert.equal(normalizeLifecycleStatus('won', { businessUnit: { name: 'AIT USA Institute' } }), 'Enrolled');
+  assert.equal(normalizeLifecycleStatus('Completed / Previous Student', { businessUnit: { name: 'AIT USA Institute' } }), 'Course Completed');
+  assert.equal(normalizeLifecycleStatus('do not contact', { businessUnit: { name: 'AIT USA Institute' } }), 'Not Interested');
   assert.equal(normalizeLifecycleStatus('proposal sent', { businessUnit: { name: 'AIT Signs' } }), 'Estimate');
   assert.equal(normalizeLifecycleStatus('in production', { businessUnit: { name: 'AIT Signs' } }), 'Fulfillment');
 });
@@ -105,11 +107,24 @@ test('evaluateLifecycleTransition requires all-division authority to reopen clos
     }),
     {
       allowed: true,
-      fromStatus: 'Completed / Previous Student',
+      fromStatus: 'Course Completed',
       toStatus: 'Follow Up',
       changed: true,
       reopenReason: 'new_course_follow_up',
       reason: 'Reopened for new course follow-up.',
+    },
+  );
+  assert.deepEqual(
+    evaluateLifecycleTransition({
+      fromStatus: 'Course Completed',
+      toStatus: 'Not Interested',
+      businessUnit: { name: 'AIT USA Institute' },
+    }),
+    {
+      allowed: true,
+      fromStatus: 'Course Completed',
+      toStatus: 'Not Interested',
+      changed: true,
     },
   );
 });

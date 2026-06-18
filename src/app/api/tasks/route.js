@@ -570,6 +570,7 @@ export async function PATCH(request) {
         contactPatch: contactPatchForFollowUpOutcome(completion.outcome, now),
         leadPatch,
         leadStatusChange,
+        cancelOpenFollowUps: leadStatusChange?.toStatus === 'Not Interested',
         profileActivity: leadProfileUpdateSummary
           ? {
               eventType: 'lead_profile.updated',

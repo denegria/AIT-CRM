@@ -301,13 +301,13 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   };
   const confirmDelete = () => {
     if (!deleteTarget) return;
-    deleteContact(deleteTarget.id)
+    deleteContact(deleteTarget.id, { reason: 'Archived from contacts directory.' })
       .then(() => {
-        toast(`${singularLabel} deleted`);
+        toast(`${singularLabel} archived`);
         setDeleteTarget(null);
         close();
       })
-      .catch((error) => toast(error?.message || 'Delete failed.', 'error'));
+      .catch((error) => toast(error?.message || 'Archive failed.', 'error'));
   };
 
   const save = () => {
@@ -683,9 +683,9 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={confirmDelete}
-        title={`Delete ${singularLabel}`}
-        message={`Delete ${deleteTarget?.name || `this ${singularLabel.toLowerCase()}`}? This action cannot be undone.`}
-        confirmLabel="Delete"
+        title={`Archive ${singularLabel}`}
+        message={`Archive ${deleteTarget?.name || `this ${singularLabel.toLowerCase()}`}? It will be removed from normal CRM lists, but history remains available in the database for audit/recovery.`}
+        confirmLabel="Archive"
         variant="danger"
       />
     </div>

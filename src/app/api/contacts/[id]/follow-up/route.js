@@ -364,6 +364,7 @@ export async function POST(request, { params }) {
         contactPatch: contactPatchForFollowUpOutcome(completion.outcome, now),
         leadPatch: transition.leadPatch,
         leadStatusChange: transition.leadStatusChange,
+        cancelOpenFollowUps: transition.leadStatusChange?.toStatus === 'Not Interested',
         profileActivity: transition.profileActivity,
         nextTaskValues,
         nextTaskEventMetadata: compactObject({
@@ -399,6 +400,7 @@ export async function POST(request, { params }) {
       contactPatch: contactPatchForFollowUpOutcome(completion.outcome, now),
       leadPatch: transition.leadPatch,
       leadStatusChange: transition.leadStatusChange,
+      cancelOpenFollowUps: transition.leadStatusChange?.toStatus === 'Not Interested',
       profileActivity: transition.profileActivity,
       nextTaskValues,
       nextTaskEventMetadata: compactObject({

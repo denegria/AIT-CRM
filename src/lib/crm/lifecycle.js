@@ -16,10 +16,10 @@ export const WORKFLOW_DEFINITIONS = {
   [WORKFLOW_KEYS.AIT_USA]: {
     key: WORKFLOW_KEYS.AIT_USA,
     label: 'AIT USA Enrollment Pipeline',
-    statuses: ['New Lead', 'Follow Up', 'Enrolled', 'Completed / Previous Student'],
+    statuses: ['New Lead', 'Follow Up', 'Enrolled', 'Not Interested', 'Course Completed'],
     activeStatuses: ['New Lead', 'Follow Up', 'Enrolled'],
-    closedStatuses: ['Completed / Previous Student'],
-    terminalStatuses: ['Completed / Previous Student'],
+    closedStatuses: ['Not Interested', 'Course Completed'],
+    terminalStatuses: ['Not Interested', 'Course Completed'],
   },
   [WORKFLOW_KEYS.AIT_SIGNS]: {
     key: WORKFLOW_KEYS.AIT_SIGNS,
@@ -92,14 +92,22 @@ const WORKFLOW_ALIASES = {
     ['won', 'Enrolled'],
     ['closed won', 'Enrolled'],
     ['sold', 'Enrolled'],
-    ['completed', 'Completed / Previous Student'],
-    ['fulfilled', 'Completed / Previous Student'],
-    ['previous student', 'Completed / Previous Student'],
-    ['previously enrolled', 'Completed / Previous Student'],
-    ['completed previous student', 'Completed / Previous Student'],
-    ['completed previous', 'Completed / Previous Student'],
-    ['lost', 'Completed / Previous Student'],
-    ['closed lost', 'Completed / Previous Student'],
+    ['not interested', 'Not Interested'],
+    ['uninterested', 'Not Interested'],
+    ['not interested lead', 'Not Interested'],
+    ['do not contact', 'Not Interested'],
+    ['dnc', 'Not Interested'],
+    ['lost', 'Not Interested'],
+    ['closed lost', 'Not Interested'],
+    ['completed', 'Course Completed'],
+    ['course completed', 'Course Completed'],
+    ['completed course', 'Course Completed'],
+    ['fulfilled', 'Course Completed'],
+    ['previous student', 'Course Completed'],
+    ['previously enrolled', 'Course Completed'],
+    ['completed previous student', 'Course Completed'],
+    ['completed previous', 'Course Completed'],
+    ['completed / previous student', 'Course Completed'],
   ]),
   [WORKFLOW_KEYS.AIT_SIGNS]: new Map([
     ['new', 'Intake'],
@@ -228,13 +236,15 @@ export function evaluateLifecycleTransition({
   const from = normalizeLifecycleStatus(fromStatus, options) || workflow.statuses[0];
   const to = requireLifecycleStatus(toStatus, options);
   const fromClosed = isClosedLifecycleStatus(from, options);
+  const toClosed = isClosedLifecycleStatus(to, options);
+  const isReopeningClosedStatus = fromClosed && !toClosed;
   const reopenReasonKey = normalizeClosedStatusReopenReason(reopenClosedStatusReason);
 
   if (from === to) {
     return { allowed: true, fromStatus: from, toStatus: to, changed: false };
   }
 
-  if (fromClosed && !canReopenClosedStatus && !reopenReasonKey) {
+  if (isReopeningClosedStatus && !canReopenClosedStatus && !reopenReasonKey) {
     return {
       allowed: false,
       fromStatus: from,
@@ -249,7 +259,7 @@ export function evaluateLifecycleTransition({
     fromStatus: from,
     toStatus: to,
     changed: true,
-    ...(fromClosed && reopenReasonKey ? {
+    ...(isReopeningClosedStatus && reopenReasonKey ? {
       reopenReason: reopenReasonKey,
       reason: CLOSED_STATUS_REOPEN_REASONS[reopenReasonKey],
     } : {}),

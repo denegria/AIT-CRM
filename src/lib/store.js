@@ -420,14 +420,14 @@ export function CRMProvider({ children, initialData }) {
     }
     return Promise.resolve(draft);
   }, [access.canWriteCrm, callContactsApi, effectiveBusinessUnitId, isPostgres]);
-  const deleteContact = useCallback((id) => {
+  const deleteContact = useCallback((id, options = {}) => {
     if (isPostgres && !access.canWriteCrm) {
       return Promise.reject(crmWriteAccessError());
     }
     const existing = contacts.find(c => c.id === id);
     setContacts(p => p.filter(c => c.id!==id));
     if (isPostgres && access.canWriteCrm) {
-      return callContactsApi('DELETE', { id }).catch((error) => {
+      return callContactsApi('DELETE', { id, ...options }).catch((error) => {
         console.error(error);
         if (existing) setContacts(p => [existing, ...p]);
         throw error;

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, lte } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
 import {
   activityEvents,
   contacts,
@@ -8,7 +8,7 @@ import {
   taskEvents,
   tasks,
 } from '@/db/schema.js';
-import { TASK_EVENT_TYPES, TASK_STATUSES } from './constants.js';
+import { TASK_EVENT_TYPES, TASK_STATUSES, TASK_TYPES } from './constants.js';
 import { createCrmError } from '@/lib/crm/errors.js';
 
 function compactObject(value) {
@@ -55,6 +55,51 @@ function taskEventValues({
     metadataJson,
     occurredAt: new Date(),
   };
+}
+
+async function cancelOpenFollowUpTasks(tx, {
+  organizationId,
+  actorUserId,
+  contactId = null,
+  leadId = null,
+  excludeTaskId = null,
+  reason = 'Canceled because the lead is not interested.',
+}) {
+  if (!contactId && !leadId) return [];
+  const now = new Date();
+  const filters = [
+    eq(tasks.organizationId, organizationId),
+    eq(tasks.taskType, TASK_TYPES.FOLLOW_UP),
+    inArray(tasks.status, [TASK_STATUSES.OPEN, TASK_STATUSES.IN_PROGRESS, TASK_STATUSES.SNOOZED]),
+  ];
+  if (contactId) filters.push(eq(tasks.contactId, contactId));
+  if (leadId) filters.push(eq(tasks.leadId, leadId));
+  if (excludeTaskId) filters.push(sql`${tasks.id} <> ${excludeTaskId}`);
+
+  const canceledTasks = await tx
+    .update(tasks)
+    .set({
+      status: TASK_STATUSES.CANCELED,
+      canceledAt: now,
+      completedAt: null,
+      snoozedUntil: null,
+      updatedAt: now,
+    })
+    .where(and(...filters))
+    .returning();
+
+  if (canceledTasks.length) {
+    await tx.insert(taskEvents).values(canceledTasks.map((task) => taskEventValues({
+      organizationId,
+      actorUserId,
+      task,
+      eventType: TASK_EVENT_TYPES.CANCELED,
+      message: reason,
+      metadataJson: { reason: 'lead_not_interested' },
+    })));
+  }
+
+  return canceledTasks;
 }
 
 function activityEventValues({
@@ -344,6 +389,7 @@ export async function completeFollowUpTaskWithActivity({
   profileActivity = null,
   nextTaskValues = null,
   nextTaskEventMetadata = {},
+  cancelOpenFollowUps = false,
 }) {
   return db.transaction(async (tx) => {
     const [task] = await tx
@@ -439,6 +485,16 @@ export async function completeFollowUpTaskWithActivity({
       }
     }
 
+    if (cancelOpenFollowUps) {
+      await cancelOpenFollowUpTasks(tx, {
+        organizationId,
+        actorUserId,
+        contactId: task.contactId,
+        leadId: task.leadId,
+        excludeTaskId: task.id,
+      });
+    }
+
     let nextTask = null;
     if (nextTaskValues) {
       [nextTask] = await tx
@@ -483,6 +539,7 @@ export async function recordFollowUpActivity({
   profileActivity = null,
   nextTaskValues = null,
   nextTaskEventMetadata = {},
+  cancelOpenFollowUps = false,
 }) {
   return db.transaction(async (tx) => {
     await tx.insert(activityEvents).values({
@@ -551,6 +608,15 @@ export async function recordFollowUpActivity({
           occurredAt: profileActivity.occurredAt || new Date(),
         });
       }
+    }
+
+    if (cancelOpenFollowUps) {
+      await cancelOpenFollowUpTasks(tx, {
+        organizationId,
+        actorUserId,
+        contactId: context.contactId || null,
+        leadId: context.leadId || null,
+      });
     }
 
     let nextTask = null;

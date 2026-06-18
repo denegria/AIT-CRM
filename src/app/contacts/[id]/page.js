@@ -355,6 +355,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     financials,
     allFinancials,
     updateContact,
+    deleteContact,
     addFinancial,
     recordPayment,
     loaded,
@@ -408,6 +409,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState(null);
+  const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
+  const [archiveReason, setArchiveReason] = useState('');
+  const [archiveBusy, setArchiveBusy] = useState(false);
   const [estimateModalOpen, setEstimateModalOpen] = useState(false);
   const [estimateForm, setEstimateForm] = useState(emptyEstimateForm);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
@@ -787,6 +791,21 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       .catch((error) => {
         toast(error.message || 'Profile update failed', 'error');
       });
+  };
+
+  const handleArchiveContact = () => {
+    if (!contact || archiveBusy) return;
+    const reason = cleanText(archiveReason) || 'Archived from contact profile.';
+    setArchiveBusy(true);
+    deleteContact(contact.id, { reason })
+      .then(() => {
+        toast(`${singularLabel} archived`);
+        setArchiveConfirmOpen(false);
+        setIsEditModalOpen(false);
+        router.push(isClientMode ? '/clients' : '/contacts');
+      })
+      .catch((error) => toast(error.message || 'Archive failed', 'error'))
+      .finally(() => setArchiveBusy(false));
   };
 
   const updateEditLeadProfile = (field, value) => {
@@ -2151,6 +2170,55 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 <option key={owner.id} value={owner.id}>{owner.label}</option>
               ))}
             </select>
+          </div>
+          {access.canWriteCrm && (
+            <div className="empty-state" style={{padding: 12, marginTop: 12, borderColor: 'var(--danger-muted)'}}>
+              <div style={{fontWeight: 700, color: 'var(--danger)', marginBottom: 4}}>Danger zone</div>
+              <div style={{fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 10}}>
+                Archive removes this {singularLabel.toLowerCase()} from normal CRM lists. History is retained for audit and recovery.
+              </div>
+              <button
+                className="btn btn-danger"
+                type="button"
+                onClick={() => {
+                  setArchiveReason('');
+                  setArchiveConfirmOpen(true);
+                }}
+              >
+                Archive {singularLabel}
+              </button>
+            </div>
+          )}
+        </Modal>
+      )}
+
+      {archiveConfirmOpen && (
+        <Modal
+          open={archiveConfirmOpen}
+          onClose={() => !archiveBusy && setArchiveConfirmOpen(false)}
+          title={`Archive ${singularLabel}`}
+          footer={(
+            <>
+              <button className="btn" type="button" disabled={archiveBusy} onClick={() => setArchiveConfirmOpen(false)}>Cancel</button>
+              <button className="btn btn-danger" type="button" disabled={archiveBusy} onClick={handleArchiveContact}>
+                {archiveBusy ? 'Archiving...' : `Archive ${singularLabel}`}
+              </button>
+            </>
+          )}
+        >
+          <div className="empty-state" style={{padding: 12, marginBottom: 12}}>
+            This removes the {singularLabel.toLowerCase()} from normal CRM lists and selectors. Notes, timeline, lead history, and linked records remain in the database for audit.
+          </div>
+          <div className="form-group">
+            <label className="form-label">Reason</label>
+            <textarea
+              className="textarea"
+              rows={3}
+              value={archiveReason}
+              disabled={archiveBusy}
+              placeholder="Example: Test Facebook lead submitted by staff."
+              onChange={(event) => setArchiveReason(event.target.value)}
+            />
           </div>
         </Modal>
       )}

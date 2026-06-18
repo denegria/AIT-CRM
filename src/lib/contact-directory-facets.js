@@ -185,10 +185,11 @@ export const CONTACT_DIRECTORY_FACET_GROUPS = [
       { id: 'usa_new_lead', label: 'New Lead', matches: (contact) => isAitUsa(contact) && hasStatus(contact, 'New Lead') },
       { id: 'usa_follow_up', label: 'Needs Follow-up', matches: (contact) => isAitUsa(contact) && (hasStatus(contact, 'Follow Up') || readyForFollowUp(contact)) },
       { id: 'usa_enrolled', label: 'Enrolled', matches: (contact) => isAitUsa(contact) && hasStatus(contact, 'Enrolled') },
+      { id: 'usa_not_interested', label: 'Not Interested', matches: (contact) => isAitUsa(contact) && hasStatus(contact, 'Not Interested') },
       {
-        id: 'usa_completed_previous',
-        label: 'Completed / Previous',
-        matches: (contact) => isAitUsa(contact) && hasStatus(contact, 'Completed / Previous Student'),
+        id: 'usa_course_completed',
+        label: 'Course Completed',
+        matches: (contact) => isAitUsa(contact) && hasStatus(contact, 'Course Completed'),
       },
       {
         id: 'usa_bad_contact_channel',

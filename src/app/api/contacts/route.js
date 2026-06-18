@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
-import { businessUnits, contacts, users } from '@/db/schema.js';
+import { activityEvents, businessUnits, contacts, users } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import {
   canAccessContact,
@@ -389,14 +389,47 @@ export async function DELETE(request) {
     return NextResponse.json({ error: 'Insufficient business-unit access.' }, { status: 403 });
   }
 
-  const deleted = await db
-    .delete(contacts)
-    .where(eq(contacts.id, id))
-    .returning({ id: contacts.id });
+  const archiveReason = String(body.reason || body.archiveReason || 'Archived by employee request.').trim()
+    || 'Archived by employee request.';
+  const archivedAt = new Date();
+  const archived = await db.transaction(async (tx) => {
+    const [row] = await tx
+      .update(contacts)
+      .set({
+        archivedAt,
+        archivedByUserId: session.user.id,
+        archiveReason,
+        updatedAt: archivedAt,
+      })
+      .where(and(eq(contacts.id, id), eq(contacts.organizationId, session.user.organizationId)))
+      .returning({
+        id: contacts.id,
+        name: contacts.name,
+        primaryBusinessUnitId: contacts.primaryBusinessUnitId,
+      });
 
-  if (!deleted.length) {
+    if (!row) return null;
+
+    await tx.insert(activityEvents).values({
+      organizationId: session.user.organizationId,
+      businessUnitId: row.primaryBusinessUnitId || null,
+      contactId: row.id,
+      eventType: 'contact.archived',
+      message: `Archived contact: ${archiveReason}`,
+      metadataJson: {
+        reason: archiveReason,
+        contactName: row.name,
+      },
+      actorUserId: session.user.id,
+      occurredAt: archivedAt,
+    });
+
+    return row;
+  });
+
+  if (!archived) {
     return NextResponse.json({ error: 'Contact not found.' }, { status: 404 });
   }
 
-  return NextResponse.json({ ok: true, id });
+  return NextResponse.json({ ok: true, id, archived: true });
 }
