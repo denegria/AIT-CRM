@@ -2,6 +2,10 @@
 
 import { Suspense, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import {
+  publishActiveSession,
+  sessionIdentityForUser,
+} from '@/lib/auth/session-sync.js';
 
 function JoinForm() {
   const searchParams = useSearchParams();
@@ -41,6 +45,11 @@ function JoinForm() {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Unable to create account.');
+      const sessionResponse = await fetch('/api/auth/session', { cache: 'no-store' }).catch(() => null);
+      const sessionPayload = await sessionResponse?.json?.().catch(() => ({}));
+      if (sessionPayload?.user) {
+        publishActiveSession(sessionIdentityForUser(sessionPayload.user), 'signup');
+      }
       setSuccess(true);
       window.setTimeout(() => {
         window.location.href = '/contacts';

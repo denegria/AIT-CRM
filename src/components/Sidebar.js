@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
+import { publishLogout } from '@/lib/auth/session-sync.js';
 import { useCRM } from '@/lib/store';
 import { isClientAccountBusinessUnit } from '@/lib/crm/lifecycle';
 import s from './Sidebar.module.css';
@@ -64,6 +65,7 @@ export default function Sidebar() {
     // Clear persisted scope so next user starts fresh
     localStorage.removeItem('ait-crm-business-unit-scope');
     localStorage.removeItem('ait-crm-scope-user-id');
+    publishLogout('manual-logout');
     window.location.reload();
   };
 
