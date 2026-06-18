@@ -29,6 +29,7 @@ import {
   taskDateKey,
 } from '@/lib/tasks/visibility.js';
 import { useToast } from '@/components/Toast';
+import { SpanishAssistCallout, SpanishFieldHint, SpanishGlossary, SpanishHelpHint, SPANISH_ASSIST_HINTS } from '@/components/SpanishAssist';
 import s from './FollowUpQueue.module.css';
 
 const TASK_TYPE_OPTIONS = [
@@ -892,6 +893,10 @@ export default function FollowUpQueuePage() {
         </div>
       </div>
 
+      <SpanishAssistCallout title="Ayuda en español">
+        Esta página organiza seguimientos y recordatorios del equipo. La ayuda explica los campos; no cambia ni traduce notas, contactos o documentos.
+      </SpanishAssistCallout>
+
       {createOpen && (
         <form className={s.createPanel} onSubmit={submitCreatedTask}>
           <div className={s.createPanelHeader}>
@@ -916,13 +921,13 @@ export default function FollowUpQueuePage() {
               />
             </label>
             <label>
-              <span className="form-label">Task Type</span>
+              <span className="form-label">Task Type <SpanishHelpHint title="Tipo de tarea">{SPANISH_ASSIST_HINTS.taskType}</SpanishHelpHint></span>
               <select className="select" value={createDraft.taskType} disabled={createBusy} onChange={(event) => updateCreateDraft({ taskType: event.target.value })}>
                 {TASK_CREATE_TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </label>
             <label>
-              <span className="form-label">Due Date *</span>
+              <span className="form-label">Due Date * <SpanishHelpHint title="Fecha límite">{SPANISH_ASSIST_HINTS.taskDue}</SpanishHelpHint></span>
               <input
                 className="input"
                 type="date"
@@ -939,14 +944,14 @@ export default function FollowUpQueuePage() {
               </select>
             </label>
             <label>
-              <span className="form-label">Owner *</span>
+              <span className="form-label">Owner * <SpanishHelpHint title="Responsable">{SPANISH_ASSIST_HINTS.owner}</SpanishHelpHint></span>
               <select className="select" value={createDraft.ownerUserId} disabled={createBusy} onChange={(event) => updateCreateDraft({ ownerUserId: event.target.value })}>
                 <option value="" disabled>Select owner</option>
                 {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
               </select>
             </label>
             <label>
-              <span className="form-label">{scopeLabel} *</span>
+              <span className="form-label">{scopeLabel} * <SpanishHelpHint title="División">{SPANISH_ASSIST_HINTS.division}</SpanishHelpHint></span>
               <select className="select" value={createDraft.businessUnitId} disabled={createBusy} onChange={(event) => updateCreateBusinessUnit(event.target.value)}>
                 {accessibleBusinessUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
               </select>
@@ -958,7 +963,7 @@ export default function FollowUpQueuePage() {
               </select>
             </label>
             <label className={`${s.createContactField} ${s.contactPicker}`}>
-              <span className="form-label">Contact</span>
+              <span className="form-label">Contact <SpanishHelpHint title="Contacto relacionado">Persona o lead conectado a esta tarea. La información del contacto no se traduce.</SpanishHelpHint></span>
               <input
                 className="input"
                 value={createContactSearch}
@@ -977,6 +982,12 @@ export default function FollowUpQueuePage() {
               </span>
             </label>
           </div>
+          <SpanishGlossary terms={[
+            ['Follow Up', 'Seguimiento. Llamada, mensaje o revisión pendiente.'],
+            ['Owner', 'Empleado responsable de completar la tarea.'],
+            ['Due Date', 'Fecha en que se debe atender la tarea.'],
+            ['Recurring', 'Se repite automáticamente según la frecuencia elegida.'],
+          ]} />
           {createError && <div className={s.createError}>{createError}</div>}
           <div className={s.createActions}>
             <button className="btn btn-sm" type="button" disabled={createBusy} onClick={() => setCreateOpen(false)}>Cancel</button>
@@ -1009,13 +1020,13 @@ export default function FollowUpQueuePage() {
         </div>
         <div className={s.toolbar}>
           <label className={s.filterGroup}>
-            <span className="form-label">Due</span>
+            <span className="form-label">Due <SpanishHelpHint title="Vencimiento">{SPANISH_ASSIST_HINTS.taskDue}</SpanishHelpHint></span>
             <select className="select" value={filters.due} onChange={(event) => setFilters((prev) => ({ ...prev, due: event.target.value }))}>
               {DUE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
           <label className={s.filterGroup}>
-            <span className="form-label">Owner</span>
+            <span className="form-label">Owner <SpanishHelpHint title="Responsable">{SPANISH_ASSIST_HINTS.owner}</SpanishHelpHint></span>
             <select className="select" value={filters.ownerUserId} onChange={(event) => setFilters((prev) => ({ ...prev, ownerUserId: event.target.value }))}>
               <option value="all">All Owners</option>
               {currentUser?.id && <option value="__me">My Tasks</option>}
@@ -1030,13 +1041,13 @@ export default function FollowUpQueuePage() {
             </select>
           </label>
           <label className={s.filterGroup}>
-            <span className="form-label">Task Type</span>
+            <span className="form-label">Task Type <SpanishHelpHint title="Tipo">{SPANISH_ASSIST_HINTS.taskType}</SpanishHelpHint></span>
             <select className="select" value={filters.taskType} onChange={(event) => setFilters((prev) => ({ ...prev, taskType: event.target.value }))}>
               {TASK_TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
           <label className={s.filterGroup}>
-            <span className="form-label">Status</span>
+            <span className="form-label">Status <SpanishHelpHint title="Estado">Estado de la tarea: abierta, en progreso, pospuesta, completada o cancelada.</SpanishHelpHint></span>
             <select className="select" value={filters.status} onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}>
               {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
@@ -1203,13 +1214,13 @@ export default function FollowUpQueuePage() {
                       />
                     </label>
                     <label>
-                      <span className="form-label">Task Type</span>
+                      <span className="form-label">Task Type <SpanishHelpHint title="Tipo de tarea">{SPANISH_ASSIST_HINTS.taskType}</SpanishHelpHint></span>
                       <select className="select" value={editDraft.taskType} disabled={editBusy} onChange={(event) => updateEditDraft({ taskType: event.target.value })}>
                         {TASK_CREATE_TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                       </select>
                     </label>
                     <label>
-                      <span className="form-label">Due Date</span>
+                      <span className="form-label">Due Date <SpanishHelpHint title="Fecha límite">{SPANISH_ASSIST_HINTS.taskDue}</SpanishHelpHint></span>
                       <input
                         className="input"
                         type="date"
@@ -1226,14 +1237,14 @@ export default function FollowUpQueuePage() {
                       </select>
                     </label>
                     <label>
-                      <span className="form-label">Owner</span>
+                      <span className="form-label">Owner <SpanishHelpHint title="Responsable">{SPANISH_ASSIST_HINTS.owner}</SpanishHelpHint></span>
                       <select className="select" value={editDraft.ownerUserId} disabled={editBusy} onChange={(event) => updateEditDraft({ ownerUserId: event.target.value })}>
                         <option value="" disabled>Select owner</option>
                         {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
                       </select>
                     </label>
                     <label>
-                      <span className="form-label">{scopeLabel}</span>
+                      <span className="form-label">{scopeLabel} <SpanishHelpHint title="División">{SPANISH_ASSIST_HINTS.division}</SpanishHelpHint></span>
                       <select className="select" value={editDraft.businessUnitId} disabled={editBusy} onChange={(event) => updateEditBusinessUnit(event.target.value)}>
                         {accessibleBusinessUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
                       </select>
@@ -1262,8 +1273,9 @@ export default function FollowUpQueuePage() {
                 )}
                 {showFollowUpCompletion && (
                   <div className={s.completionPanel}>
+                    <SpanishFieldHint>{SPANISH_ASSIST_HINTS.taskComplete}</SpanishFieldHint>
                     <label className={s.filterGroup}>
-                      <span className="form-label">Outcome</span>
+                      <span className="form-label">Outcome <SpanishHelpHint title="Resultado">Qué pasó durante el seguimiento: contestó, no contestó, cita hecha, no interesado/a, etc.</SpanishHelpHint></span>
                       <select
                         className="select"
                         value={draft.outcome}
@@ -1300,7 +1312,7 @@ export default function FollowUpQueuePage() {
                       />
                     </label>
                     <label className={s.filterGroup}>
-                      <span className="form-label">Next Due</span>
+                      <span className="form-label">Next Due <SpanishHelpHint title="Próximo seguimiento">Fecha para crear o actualizar el siguiente seguimiento.</SpanishHelpHint></span>
                       <input
                         className="input"
                         type="date"
@@ -1310,7 +1322,7 @@ export default function FollowUpQueuePage() {
                       />
                     </label>
                     <label className={s.filterGroup}>
-                      <span className="form-label">Next Owner</span>
+                      <span className="form-label">Next Owner <SpanishHelpHint title="Próximo responsable">{SPANISH_ASSIST_HINTS.owner}</SpanishHelpHint></span>
                       <select
                         className="select"
                         value={draft.nextOwnerUserId}
@@ -1387,7 +1399,7 @@ export default function FollowUpQueuePage() {
                       </label>
                     </div>
                     <label className={s.completionNote}>
-                      <span className="form-label">Note Required</span>
+                      <span className="form-label">Note Required <SpanishHelpHint title="Nota interna">{SPANISH_ASSIST_HINTS.notes}</SpanishHelpHint></span>
                       <textarea
                         className="textarea"
                         rows={2}
@@ -1395,6 +1407,7 @@ export default function FollowUpQueuePage() {
                         disabled={busyTaskId === task.id}
                         onChange={(event) => updateFollowUpDraft(task.id, { note: event.target.value })}
                       />
+                      <SpanishFieldHint>Escribe el resultado para el equipo. Esta nota queda interna y no se envía automáticamente.</SpanishFieldHint>
                     </label>
                     <div className={s.completionActions}>
                       <button className="btn btn-sm" type="button" onClick={() => setCompletionTaskId('')} disabled={busyTaskId === task.id}>Cancel</button>

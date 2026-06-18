@@ -24,6 +24,7 @@ import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import { SpanishAssistCallout, SpanishFieldHint, SpanishGlossary, SpanishHelpHint, SPANISH_ASSIST_HINTS } from '@/components/SpanishAssist';
 import { AlertCircle, RotateCcw, UserRoundCheck } from 'lucide-react';
 
 const empty = {
@@ -464,6 +465,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         </div>
       </div>
 
+      <SpanishAssistCallout title="Ayuda en español">
+        Esta vista mantiene los datos en inglés, pero agrega ayuda para entender filtros, estados, responsables y campos importantes.
+      </SpanishAssistCallout>
+
       <div className="contacts-facet-panel" aria-label="Contact quick filters">
         <div className="contacts-facet-summary">
           <strong>{filteredContacts.length}</strong>
@@ -481,7 +486,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         </div>
         <div className="contacts-facet-groups">
           <div className="contacts-facet-group">
-            <div className="contacts-facet-label">Lead dates</div>
+            <div className="contacts-facet-label">
+              Lead dates
+              <SpanishHelpHint title="Fechas de leads">{SPANISH_ASSIST_HINTS.contactsFilters}</SpanishHelpHint>
+            </div>
             <div className="contacts-facet-pills">
               {[
                 ['current', 'Current Leads', currentLeadCount],
@@ -502,7 +510,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           </div>
           {facetGroups.map((group) => (
             <div key={group.id} className="contacts-facet-group">
-              <div className="contacts-facet-label">{group.label}</div>
+              <div className="contacts-facet-label">
+                {group.label}
+                <SpanishHelpHint title={group.label}>{SPANISH_ASSIST_HINTS.contactsFilters}</SpanishHelpHint>
+              </div>
               <div className="contacts-facet-pills">
                 {group.facets
                   .filter((facet) => facet.count > 0 || facet.id === 'all' || effectiveDirectoryFacet === facet.id)
@@ -530,6 +541,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           columns={columns}
           data={filteredContacts}
           searchPlaceholder={`Search ${pluralLabel.toLowerCase()}...`}
+          toolbarExtra={<SpanishHelpHint title="Buscar">{SPANISH_ASSIST_HINTS.contactSearch}</SpanishHelpHint>}
           onEdit={canWrite ? (id, u) => {
             updateContact(id, u)
               .then(() => toast('Field updated'))
@@ -586,7 +598,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         </div>
         <div className="grid-2">
           <div className="form-group">
-            <label className="form-label">Status</label>
+            <label className="form-label">
+              Status
+              <SpanishHelpHint title="Estado">{SPANISH_ASSIST_HINTS.status}</SpanishHelpHint>
+            </label>
             <select className="input select" value={form.status} onChange={e => setForm(f => ({...f, status: e.target.value}))}>
               {[
                 ...new Set([
@@ -597,14 +612,20 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
             </select>
           </div>
           <div className="form-group">
-            <label className="form-label">Source</label>
+            <label className="form-label">
+              Source
+              <SpanishHelpHint title="Origen">{SPANISH_ASSIST_HINTS.source}</SpanishHelpHint>
+            </label>
             <select className="input select" value={form.source} onChange={e => setForm(f => ({...f, source: e.target.value}))}>
               {['Wix Historical Import','Website','Facebook Ads','Referral','Cold Call','Google Ads'].map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           </div>
         </div>
         <div className="form-group">
-          <label className="form-label">Assigned To</label>
+          <label className="form-label">
+            Assigned To
+            <SpanishHelpHint title="Responsable">{SPANISH_ASSIST_HINTS.owner}</SpanishHelpHint>
+          </label>
           <select className="input select" value={form.assignedTo || ''} onChange={e => setForm(f => ({...f, assignedTo: e.target.value}))}>
             <option value="">Unassigned</option>
             {ownerOptions.map((owner) => (
@@ -613,7 +634,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           </select>
         </div>
         <div className="form-group">
-          <label className="form-label">{scopeLabel}</label>
+          <label className="form-label">
+            {scopeLabel}
+            <SpanishHelpHint title="División">{SPANISH_ASSIST_HINTS.division}</SpanishHelpHint>
+          </label>
           <select
             className="input select"
             value={form.businessUnitId || form.primaryBusinessUnitId || ''}
@@ -634,7 +658,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         </div>
         {isAitUsaForm ? (
           <div className="form-group">
-            <label className="form-label">School Location</label>
+            <label className="form-label">
+              School Location
+              <SpanishHelpHint title="Ubicación">{SPANISH_ASSIST_HINTS.schoolLocation}</SpanishHelpHint>
+            </label>
             <select
               className="input select"
               value={form.address || ''}
@@ -657,7 +684,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           </div>
         )}
         <div className="form-group">
-          <label className="form-label">Notes</label>
+          <label className="form-label">
+            Notes
+            <SpanishHelpHint title="Notas">{SPANISH_ASSIST_HINTS.notes}</SpanishHelpHint>
+          </label>
           <textarea className="input" rows={3} 
             value={Array.isArray(form.notes) ? (form.notes[form.notes.length - 1]?.text || '') : form.notes} 
             onChange={e => {
@@ -677,7 +707,14 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           <div style={{fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 4}}>
             Editing the latest note. Full timeline available in Contact Details.
           </div>
+          <SpanishFieldHint>Nota interna del equipo. No se traduce ni se envía automáticamente al cliente.</SpanishFieldHint>
         </div>
+        <SpanishGlossary terms={[
+          ['New Lead', 'Nuevo posible estudiante o cliente.'],
+          ['Follow Up', 'Seguimiento pendiente.'],
+          ['Owner', 'Empleado responsable.'],
+          ['Archive', 'Oculta de listas normales, conserva historial.'],
+        ]} />
       </Modal>
       <ConfirmDialog
         open={!!deleteTarget}
