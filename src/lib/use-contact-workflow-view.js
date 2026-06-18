@@ -4,7 +4,7 @@ import { useMemo } from 'react';
 import {
   PIPELINE_STATUSES,
   FIRST_OUTREACH_ACTION,
-  isWorkflowStatusClosed,
+  isWorkflowContactActive,
   isPipelineEligibleContact,
   workflowColumnsForBusinessUnit,
   workflowForBusinessUnit,
@@ -216,7 +216,7 @@ export function useContactWorkflowView({
     unassigned: contactsWithWorkflow.filter((contact) => !contact.assignedTo).length,
     active: contactsWithWorkflow.filter((contact) => {
       const businessUnit = businessUnitById.get(contact.businessUnitId || contact.primaryBusinessUnitId) || null;
-      return !isWorkflowStatusClosed(contact.status, businessUnit);
+      return isWorkflowContactActive(contact, businessUnit);
     }).length,
   }), [businessUnitById, contactsWithWorkflow]);
 

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   isPipelineEligibleContact,
+  isWorkflowContactActive,
   pipelineStatusFromLead,
   workflowColumnsForBusinessUnit,
   workflowFromContact,
@@ -12,6 +13,30 @@ test('workflowColumnsForBusinessUnit returns AIT USA enrollment columns', () => 
   assert.deepEqual(
     workflowColumnsForBusinessUnit({ name: 'AIT USA Institute' }).map((column) => column.id),
     ['New Lead', 'Follow Up', 'Enrolled', 'Not Interested', 'Course Completed'],
+  );
+});
+
+test('workflow active checks exclude do-not-contact leads even before status cleanup', () => {
+  const businessUnit = { id: 'bu-usa', name: 'AIT USA Institute' };
+  assert.equal(
+    isWorkflowContactActive(
+      { id: 'contact-1', status: 'Follow Up', isDoNotCall: true, businessUnitId: 'bu-usa' },
+      businessUnit,
+    ),
+    false,
+  );
+  assert.equal(
+    isWorkflowContactActive(
+      { id: 'contact-2', status: 'New Lead', processPills: ['do_not_contact'], businessUnitId: 'bu-usa' },
+      businessUnit,
+    ),
+    false,
+  );
+  assert.equal(
+    isWorkflowContactActive(
+      { id: 'contact-3', status: 'New Lead', workflowKey: 'ait_usa' },
+    ),
+    true,
   );
 });
 

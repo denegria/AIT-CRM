@@ -7,7 +7,7 @@ import KanbanBoard from '@/components/KanbanBoard';
 import { useToast } from '@/components/Toast';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
 import { useCRM } from '@/lib/store';
-import { isWorkflowStatusClosed } from '@/lib/sales-workflow';
+import { isWorkflowContactActive } from '@/lib/sales-workflow';
 import s from './PipelinePage.module.css';
 
 function matchesSearch(contact, query) {
@@ -145,7 +145,7 @@ export default function PipelinePage() {
     unassigned: pipelineScopedRows.filter((contact) => !contact.assignedTo).length,
     active: pipelineScopedRows.filter((contact) => {
       const businessUnit = businessUnitById.get(contact.businessUnitId || contact.primaryBusinessUnitId) || null;
-      return !isWorkflowStatusClosed(contact.status, businessUnit);
+      return isWorkflowContactActive(contact, businessUnit);
     }).length,
   }), [businessUnitById, pipelineScopedRows]);
   const sourceOptions = useMemo(() => {
@@ -168,7 +168,7 @@ export default function PipelinePage() {
       workflowFilter === 'all' ||
       (workflowFilter === 'needs_first_outreach' && contact.needsFirstOutreach) ||
       (workflowFilter === 'new_leads' && isNewLead(contact)) ||
-      (workflowFilter === 'active' && !isWorkflowStatusClosed(contact.status, businessUnit)) ||
+      (workflowFilter === 'active' && isWorkflowContactActive(contact, businessUnit)) ||
       (workflowFilter === 'unassigned' && !contact.assignedTo);
     const ownerMatch =
       ownerFilter === 'all' ||

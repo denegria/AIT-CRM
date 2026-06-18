@@ -26,6 +26,16 @@ function normalized(value) {
   return clean(value).toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
 }
 
+function normalizedTokens(values = []) {
+  return new Set((Array.isArray(values) ? values : [values]).map(normalized).filter(Boolean));
+}
+
+function contactBusinessUnitHint(contact = {}, businessUnit = null) {
+  if (businessUnit) return businessUnit;
+  if (contact.workflowKey) return { workflowKey: contact.workflowKey };
+  return contact.businessUnit || contact.businessUnitName || contact.divisionLabel || null;
+}
+
 function textAfter(label, text) {
   const pattern = new RegExp(label + '=([^|]+)', 'i');
   const match = clean(text).match(pattern);
@@ -140,6 +150,7 @@ function businessUnitById(businessUnits = [], id = '') {
 }
 
 export function workflowForBusinessUnit(businessUnit = null) {
+  if (businessUnit?.workflowKey) return lifecycleWorkflowForKey(businessUnit.workflowKey);
   return lifecycleWorkflowForBusinessUnit(businessUnit);
 }
 
@@ -296,4 +307,22 @@ export function isPipelineEligibleContact(contact = {}, options = {}) {
 export function isWorkflowStatusClosed(status, businessUnit = null) {
   const workflow = workflowForBusinessUnit(businessUnit);
   return workflow.closedStatuses.includes(normalizeLifecycleStatus(status, { workflowKey: workflow.key }));
+}
+
+export function isContactDoNotContact(contact = {}) {
+  if (contact.isDoNotCall) return true;
+  const tokens = normalizedTokens([
+    contact.contactabilityStatus,
+    contact.qualityDisposition,
+    contact.outreachState,
+    ...(contact.tags || []),
+    ...(contact.processPills || []),
+  ]);
+  return ['do not contact', 'do not call', 'dnc'].some((value) => tokens.has(value));
+}
+
+export function isWorkflowContactActive(contact = {}, businessUnit = null) {
+  return contact.isPipelineEligible !== false &&
+    !isContactDoNotContact(contact) &&
+    !isWorkflowStatusClosed(contact.status || contact.currentStage, contactBusinessUnitHint(contact, businessUnit));
 }
