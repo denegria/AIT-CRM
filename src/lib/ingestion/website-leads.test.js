@@ -165,6 +165,41 @@ test('records duplicate externalId submissions for review without creating CRM r
   assert.equal(normalizedInsert.params[6], 'needs_review');
 });
 
+test('creates a notification after a new website lead is promoted', async () => {
+  const { client, calls } = createWebsitePromotionClient();
+
+  const result = await ingestWebsiteLeadSubmission(client, {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-1',
+    body: {
+      externalId: 'web-001',
+      fullName: 'Wix Lead',
+      email: 'wix@example.com',
+      service: 'Channel letters',
+      message: 'Need an estimate',
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.duplicate, false);
+  assert.equal(result.contactId, 'contact-1');
+  assert.equal(result.leadId, 'lead-1');
+
+  const notificationInsert = calls.find((call) => call.sql.startsWith('insert into notifications'));
+  assert.ok(notificationInsert);
+  assert.deepEqual(notificationInsert.params.slice(0, 8), [
+    'org-1',
+    'bu-1',
+    null,
+    'inbound_lead',
+    'website_form',
+    'New website lead',
+    'Wix Lead - Interested in Channel letters.',
+    '/contacts/contact-1?leadId=lead-1',
+  ]);
+  assert.equal(notificationInsert.params[11], 'website:web-001');
+});
+
 function createDuplicateClient() {
   const calls = [];
   return {
@@ -196,6 +231,73 @@ function createDuplicateClient() {
           return { rows: [{ id: 'normalized-5' }] };
         }
         if (normalizedSql.startsWith('insert into import_review_items')) {
+          return { rows: [] };
+        }
+
+        throw new Error('Unexpected query: ' + normalizedSql);
+      },
+    },
+  };
+}
+
+function createWebsitePromotionClient() {
+  const calls = [];
+  return {
+    calls,
+    client: {
+      async query(sql, params = []) {
+        const normalizedSql = String(sql).replace(/\s+/g, ' ').trim();
+        calls.push({ sql: normalizedSql, params });
+
+        if (normalizedSql.startsWith('select l.id as lead_id')) {
+          return { rows: [] };
+        }
+        if (normalizedSql.startsWith('select id from import_batches where organization_id')) {
+          return { rows: [{ id: 'batch-1' }] };
+        }
+        if (normalizedSql === 'begin' || normalizedSql === 'commit' || normalizedSql === 'rollback') {
+          return { rows: [] };
+        }
+        if (normalizedSql.startsWith('select id from import_batches where id = $1 for update')) {
+          return { rows: [{ id: 'batch-1' }] };
+        }
+        if (normalizedSql.startsWith('select coalesce(max(source_row_number)')) {
+          return { rows: [{ max_row: 2 }] };
+        }
+        if (normalizedSql.startsWith('select u.id, u.name, u.email from users u')) {
+          return { rows: [] };
+        }
+        if (normalizedSql.startsWith('select id, name, email from users')) {
+          return { rows: [] };
+        }
+        if (normalizedSql.startsWith('select id from contacts where organization_id')) {
+          return { rows: [] };
+        }
+        if (normalizedSql.startsWith('insert into contacts')) {
+          return { rows: [{ id: 'contact-1' }] };
+        }
+        if (normalizedSql.startsWith('insert into leads')) {
+          return { rows: [{ id: 'lead-1' }] };
+        }
+        if (normalizedSql.startsWith('insert into activity_events')) {
+          return { rows: [] };
+        }
+        if (normalizedSql.startsWith('insert into notes')) {
+          return { rows: [] };
+        }
+        if (normalizedSql.startsWith('insert into import_source_rows')) {
+          return { rows: [{ id: 'source-row-3' }] };
+        }
+        if (normalizedSql.startsWith('insert into import_normalized_records')) {
+          return { rows: [{ id: 'normalized-3' }] };
+        }
+        if (normalizedSql.startsWith('insert into import_review_items')) {
+          return { rows: [] };
+        }
+        if (normalizedSql.startsWith('insert into notifications')) {
+          return { rows: [{ id: 'notification-1' }] };
+        }
+        if (normalizedSql.startsWith('update leads set original_notes')) {
           return { rows: [] };
         }
 

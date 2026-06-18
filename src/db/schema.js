@@ -198,6 +198,29 @@ export const leadStatusHistory = pgTable('lead_status_history', {
   contactOccurredIdx: index('lead_status_history_contact_occurred_idx').on(table.contactId, table.occurredAt),
 }));
 
+export const notifications = pgTable('notifications', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').references(() => businessUnits.id, { onDelete: 'set null' }),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  type: text('type').notNull(),
+  sourceType: text('source_type'),
+  title: text('title').notNull(),
+  body: text('body'),
+  href: text('href'),
+  contactId: uuid('contact_id').references(() => contacts.id, { onDelete: 'set null' }),
+  leadId: uuid('lead_id').references(() => leads.id, { onDelete: 'set null' }),
+  metadataJson: jsonb('metadata_json').notNull().default({}),
+  idempotencyKey: text('idempotency_key'),
+  readAt: timestamp('read_at', { withTimezone: true }),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  orgReadCreatedIdx: index('notifications_org_read_created_idx').on(table.organizationId, table.readAt, table.createdAt),
+  orgBusinessUnitCreatedIdx: index('notifications_org_business_unit_created_idx').on(table.organizationId, table.businessUnitId, table.createdAt),
+  orgIdempotencyIdx: uniqueIndex('notifications_org_idempotency_idx').on(table.organizationId, table.idempotencyKey),
+}));
+
 export const estimates = pgTable('estimates', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
@@ -697,6 +720,7 @@ export const allTables = {
   contactPeople,
   leads,
   leadStatusHistory,
+  notifications,
   estimates,
   workOrders,
   paymentSnapshots,

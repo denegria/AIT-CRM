@@ -120,6 +120,9 @@ function createServiceClient({
         if (normalized.startsWith('insert into activity_events')) {
           return { rows: [] };
         }
+        if (normalized.startsWith('insert into notifications')) {
+          return { rows: [{ id: 'notification-1' }] };
+        }
         if (normalized.startsWith('insert into import_normalized_records')) {
           return { rows: [{ id: normalizedId }] };
         }
@@ -312,7 +315,21 @@ test('auto-promotes safe mapped leadgen events while preserving import audit row
   assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), true);
   assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), true);
   assert.equal(calls.some((call) => call.sql.startsWith('insert into activity_events')), true);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into notifications')), true);
   assert.equal(calls.filter((call) => call.sql.startsWith('insert into activity_events')).length, 1);
+
+  const notificationInsert = calls.find((call) => call.sql.startsWith('insert into notifications'));
+  assert.deepEqual(notificationInsert.params.slice(0, 8), [
+    'org-1',
+    'bu-1',
+    null,
+    'inbound_lead',
+    'facebook_lead_ads',
+    'New Facebook lead',
+    'Ada Lovelace - Submitted Facebook form form-1.',
+    '/contacts/contact-1?leadId=lead-1',
+  ]);
+  assert.equal(notificationInsert.params[11], 'facebook_lead_ads:leadgen-1');
 
   const normalizedInsert = calls.find((call) => call.sql.startsWith('insert into import_normalized_records'));
   const proposedLead = JSON.parse(normalizedInsert.params[3]);

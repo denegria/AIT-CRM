@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import CommandPalette from '@/components/CommandPalette';
+import NotificationBell from '@/components/NotificationBell';
 import Sidebar from '@/components/Sidebar';
 import { useCRM } from '@/lib/store';
 
@@ -18,6 +19,7 @@ export default function AppShell({ children }) {
   return (
     <>
       <CommandPalette />
+      <NotificationBell />
       <div className={`app-layout ${hasMobileScopeBar ? 'app-layout-has-mobile-scope' : ''}`}>
         <Sidebar />
         <main className="main-content">
