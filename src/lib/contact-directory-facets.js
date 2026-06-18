@@ -1,5 +1,5 @@
 import { WORKFLOW_KEYS } from './crm/lifecycle.js';
-import { isWorkflowStatusClosed } from './sales-workflow.js';
+import { isWorkflowContactActive, isWorkflowStatusClosed } from './sales-workflow.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RECENT_TOUCH_WINDOW_DAYS = 30;
@@ -78,7 +78,7 @@ function isClosed(contact = {}, options = {}) {
 }
 
 function isActive(contact = {}, options = {}) {
-  return contact.isPipelineEligible !== false && !isClosed(contact, options);
+  return isWorkflowContactActive(contact, contactBusinessUnit(contact, options.businessUnitById));
 }
 
 function assignedToCurrentUser(contact = {}, options = {}) {
@@ -183,7 +183,13 @@ export const CONTACT_DIRECTORY_FACET_GROUPS = [
     workflowKey: WORKFLOW_KEYS.AIT_USA,
     facets: [
       { id: 'usa_new_lead', label: 'New Lead', matches: (contact) => isAitUsa(contact) && hasStatus(contact, 'New Lead') },
-      { id: 'usa_follow_up', label: 'Needs Follow-up', matches: (contact) => isAitUsa(contact) && (hasStatus(contact, 'Follow Up') || readyForFollowUp(contact)) },
+      {
+        id: 'usa_follow_up',
+        label: 'Needs Follow-up',
+        matches: (contact) => isAitUsa(contact) &&
+          !suppressFromFollowUp(contact) &&
+          (hasStatus(contact, 'Follow Up') || readyForFollowUp(contact)),
+      },
       { id: 'usa_enrolled', label: 'Enrolled', matches: (contact) => isAitUsa(contact) && hasStatus(contact, 'Enrolled') },
       { id: 'usa_not_interested', label: 'Not Interested', matches: (contact) => isAitUsa(contact) && hasStatus(contact, 'Not Interested') },
       {
