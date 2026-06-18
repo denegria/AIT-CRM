@@ -4,6 +4,7 @@ import {
   contacts,
   leadStatusHistory,
   leads,
+  notes,
   taskEvents,
   tasks,
 } from '@/db/schema.js';
@@ -381,6 +382,16 @@ export async function completeFollowUpTaskWithActivity({
       metadataJson: followUpActivity.metadataJson,
       occurredAt: followUpActivity.occurredAt || new Date(),
     }));
+
+    await tx.insert(notes).values({
+      organizationId,
+      businessUnitId: task.businessUnitId,
+      contactId: task.contactId || null,
+      leadId: task.leadId || null,
+      workOrderId: task.workOrderId || null,
+      body: followUpActivity.noteBody || followUpActivity.message,
+      authorUserId: actorUserId,
+    });
 
     if (contactPatch && task.contactId) {
       await tx

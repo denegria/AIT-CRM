@@ -7,6 +7,7 @@ import {
   NOTIFICATION_SOURCES,
   createInboundLeadNotification,
 } from '../notifications/service.js';
+import { createInboundLeadIntakeTask } from '../tasks/intake.js';
 export const FACEBOOK_LEAD_ADS_BATCH_SOURCE_NAME = 'Facebook Lead Ads';
 export const FACEBOOK_LEAD_ADS_BATCH_SOURCE_TYPE = 'facebook_leads';
 export const FACEBOOK_LEAD_ADS_SOURCE_SHEET = 'facebook_webhook';
@@ -346,6 +347,14 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
       rowNumber,
     ],
   );
+  const inboundLeadIdempotencyKey = `facebook_lead_ads:${event.leadgenId || sourceRowId || leadId}`;
+  const inboundLeadMetadata = {
+    leadgenId: event.leadgenId || null,
+    formId: event.formId || null,
+    pageId: event.pageId || null,
+    sourceRowId,
+  };
+  const inboundLeadDetail = `Submitted Facebook form ${event.formId || 'unknown'}.`;
   await createInboundLeadNotification(client, {
     organizationId,
     businessUnitId,
@@ -354,14 +363,21 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
     sourceType: NOTIFICATION_SOURCES.FACEBOOK_LEAD_ADS,
     sourceName: 'Facebook Ads',
     contactName: details.name,
-    detail: `Submitted Facebook form ${event.formId || 'unknown'}.`,
-    idempotencyKey: `facebook_lead_ads:${event.leadgenId || sourceRowId || leadId}`,
-    metadata: {
-      leadgenId: event.leadgenId || null,
-      formId: event.formId || null,
-      pageId: event.pageId || null,
-      sourceRowId,
-    },
+    detail: inboundLeadDetail,
+    idempotencyKey: inboundLeadIdempotencyKey,
+    metadata: inboundLeadMetadata,
+  });
+  await createInboundLeadIntakeTask(client, {
+    organizationId,
+    businessUnitId,
+    contactId,
+    leadId,
+    sourceType: NOTIFICATION_SOURCES.FACEBOOK_LEAD_ADS,
+    sourceName: 'Facebook Ads',
+    contactName: details.name,
+    detail: inboundLeadDetail,
+    idempotencyKey: inboundLeadIdempotencyKey,
+    metadata: inboundLeadMetadata,
   });
   return { contactId, leadId, assignedUserId, reason: null };
 }

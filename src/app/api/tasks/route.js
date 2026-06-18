@@ -439,8 +439,8 @@ export async function PATCH(request) {
     }
 
     if (String(body.action || '').trim() === 'complete' && existingTask.taskType === TASK_TYPES.FOLLOW_UP) {
-      if (!existingTask.ownerUserId) throw createCrmError('Task owner is required.');
       const now = new Date();
+      const effectiveOwnerUserId = existingTask.ownerUserId || session.user.id;
       const completion = normalizeFollowUpCompletionPayload({
         task: existingTask,
         payload: body,
@@ -501,7 +501,7 @@ export async function PATCH(request) {
         ? await resolveOrganizationUserId(
             db,
             session,
-            body.nextOwnerUserId || body.nextAssignedTo || existingTask.ownerUserId,
+            body.nextOwnerUserId || body.nextAssignedTo || effectiveOwnerUserId,
             'nextOwnerUserId',
           )
         : null;
@@ -538,10 +538,12 @@ export async function PATCH(request) {
           status: TASK_STATUSES.COMPLETED,
           completedAt: now,
           canceledAt: null,
+          ownerUserId: effectiveOwnerUserId,
         },
         followUpActivity: {
           eventType: completion.eventType,
           message: followUpActivityMessage(completion),
+          noteBody: completion.note,
           metadataJson: activityMetadata,
           occurredAt: completion.occurredAt,
         },

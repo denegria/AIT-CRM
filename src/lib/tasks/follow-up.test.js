@@ -28,6 +28,8 @@ test('normalizes structured follow-up completion payloads', () => {
     payload: {
       outcome: FOLLOW_UP_OUTCOMES.REACHED_INTERESTED,
       note: '  Asked for a call back tomorrow.  ',
+      channel: 'phone',
+      contactMethod: '732-555-0100',
       nextDueAt: '2026-06-04T13:00:00.000Z',
     },
     now,
@@ -36,8 +38,21 @@ test('normalizes structured follow-up completion payloads', () => {
   assert.equal(payload.outcome, FOLLOW_UP_OUTCOMES.REACHED_INTERESTED);
   assert.equal(payload.eventType, 'follow_up.reached_interested');
   assert.equal(payload.note, 'Asked for a call back tomorrow.');
+  assert.equal(payload.channel, 'phone');
+  assert.equal(payload.contactMethod, '732-555-0100');
   assert.equal(payload.createNextTask, true);
   assert.equal(payload.nextDueAt.toISOString(), '2026-06-04T13:00:00.000Z');
+});
+
+test('requires a written note to complete follow-up tasks', () => {
+  assert.throws(
+    () => normalizeFollowUpCompletionPayload({
+      task: followUpTask(),
+      payload: { outcome: FOLLOW_UP_OUTCOMES.NO_ANSWER },
+      now,
+    }),
+    /Follow-up note is required/,
+  );
 });
 
 test('requires next date for explicit next-follow-up outcome', () => {
@@ -93,7 +108,7 @@ test('rejects structured completion for non-follow-up tasks', () => {
   assert.throws(
     () => normalizeFollowUpCompletionPayload({
       task: followUpTask({ taskType: TASK_TYPES.MANUAL_REMINDER }),
-      payload: { outcome: FOLLOW_UP_OUTCOMES.NO_ANSWER },
+      payload: { outcome: FOLLOW_UP_OUTCOMES.NO_ANSWER, note: 'No answer.' },
       now,
     }),
     /only supports follow-up tasks/,
