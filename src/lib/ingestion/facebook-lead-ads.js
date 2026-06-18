@@ -3,6 +3,10 @@ import {
   normalizeMetaLeadFields,
   resolveMetaPageBusinessUnitMapping,
 } from '../messaging/providers/meta.js';
+import {
+  NOTIFICATION_SOURCES,
+  createInboundLeadNotification,
+} from '../notifications/service.js';
 export const FACEBOOK_LEAD_ADS_BATCH_SOURCE_NAME = 'Facebook Lead Ads';
 export const FACEBOOK_LEAD_ADS_BATCH_SOURCE_TYPE = 'facebook_leads';
 export const FACEBOOK_LEAD_ADS_SOURCE_SHEET = 'facebook_webhook';
@@ -342,6 +346,23 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
       rowNumber,
     ],
   );
+  await createInboundLeadNotification(client, {
+    organizationId,
+    businessUnitId,
+    contactId,
+    leadId,
+    sourceType: NOTIFICATION_SOURCES.FACEBOOK_LEAD_ADS,
+    sourceName: 'Facebook Ads',
+    contactName: details.name,
+    detail: `Submitted Facebook form ${event.formId || 'unknown'}.`,
+    idempotencyKey: `facebook_lead_ads:${event.leadgenId || sourceRowId || leadId}`,
+    metadata: {
+      leadgenId: event.leadgenId || null,
+      formId: event.formId || null,
+      pageId: event.pageId || null,
+      sourceRowId,
+    },
+  });
   return { contactId, leadId, assignedUserId, reason: null };
 }
 

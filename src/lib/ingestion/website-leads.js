@@ -4,6 +4,10 @@ import {
   resolveDefaultInboundLeadOwnerUserId,
 } from '../crm/assignment.js';
 import { normalizeLifecycleStatus } from '../crm/lifecycle.js';
+import {
+  NOTIFICATION_SOURCES,
+  createInboundLeadNotification,
+} from '../notifications/service.js';
 import { normalizeWorkflowTags } from '../sales-workflow.js';
 
 export const WEBSITE_LEAD_SECRET_HEADER = 'x-ait-webhook-secret';
@@ -741,6 +745,24 @@ export async function ingestWebsiteLeadSubmission(client, {
       contactId,
       leadId,
       assignedUserId,
+    });
+    await createInboundLeadNotification(client, {
+      organizationId,
+      businessUnitId,
+      contactId,
+      leadId,
+      sourceType: NOTIFICATION_SOURCES.WEBSITE,
+      sourceName: lead.sourceName || WEBSITE_LEAD_SOURCE_NAME,
+      contactName: lead.name,
+      detail: lead.service
+        ? `Interested in ${lead.service}.`
+        : lead.message || 'Website lead submitted.',
+      idempotencyKey: `website:${lead.externalId || sourceRowId || leadId}`,
+      metadata: {
+        sourceKey: lead.sourceKey || null,
+        externalId: lead.externalId || null,
+        sourceRowId,
+      },
     });
     await client.query(
       'update leads set original_notes = replace(original_notes, $1, $2), updated_at = now() where id = $3',
