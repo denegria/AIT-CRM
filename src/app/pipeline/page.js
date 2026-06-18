@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { AlertCircle, ArrowRight, Clock3, ListFilter, Search, UserPlus, UserRoundCheck } from 'lucide-react';
 import KanbanBoard from '@/components/KanbanBoard';
 import { useToast } from '@/components/Toast';
-import { SpanishAssistCallout, SpanishFieldHint, SpanishGlossary, SpanishHelpHint, SPANISH_ASSIST_HINTS } from '@/components/SpanishAssist';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
 import { useCRM } from '@/lib/store';
 import { isWorkflowContactActive } from '@/lib/sales-workflow';
@@ -253,10 +252,6 @@ export default function PipelinePage() {
         </div>
       </div>
 
-      <SpanishAssistCallout title="Ayuda en español">
-        Pipeline muestra en qué etapa está cada lead o contacto. La ayuda explica acciones y filtros; los nombres, notas y datos del contacto quedan tal como fueron escritos.
-      </SpanishAssistCallout>
-
       <div className={s.statsGrid}>
         <div className={s.statCard}>
           <AlertCircle size={18} />
@@ -274,7 +269,7 @@ export default function PipelinePage() {
 
       <div className={s.scopeBar}>
         <div className={s.scopeTitle}>
-          <strong>{activeWorkflow.label} <SpanishHelpHint title="Pipeline">{SPANISH_ASSIST_HINTS.pipeline}</SpanishHelpHint></strong>
+          <strong>{activeWorkflow.label}</strong>
           <span>{pipelineBusinessUnit?.name || currentBusinessUnit?.name || 'Selected division'} · {pipelineRows.length} shown of {pipelineScopedRows.length}</span>
         </div>
         {!currentScopedBusinessUnitId && accessibleBusinessUnits.length > 1 && (
@@ -333,14 +328,6 @@ export default function PipelinePage() {
           Compact cards
         </label>
       </div>
-      <SpanishFieldHint>Los filtros solo cambian qué tarjetas ves. No cambian datos ni estados.</SpanishFieldHint>
-      <SpanishGlossary terms={[
-        ['New Lead', 'Nuevo posible estudiante o cliente que necesita primer contacto.'],
-        ['Needs First Outreach', 'Necesita primera llamada o mensaje.'],
-        ['Unassigned', 'No tiene responsable asignado.'],
-        ['Move', 'Cambia la etapa del contacto en el proceso.'],
-        ['Bulk Assign', 'Selecciona varias tarjetas y asígnalas a una persona.'],
-      ]} />
 
       {bulkAssignMode && (
         <div className={s.bulkBar}>

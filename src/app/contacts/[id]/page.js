@@ -5,7 +5,6 @@ import { useParams, useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
-import { SpanishAssistCallout, SpanishFieldHint, SpanishGlossary, SpanishHelpHint, SPANISH_ASSIST_HINTS } from '@/components/SpanishAssist';
 import { generateInvoicePDF, generateEstimatePDF, generateReceiptPDF, generateAitUsaReceiptPDF } from '@/lib/pdf';
 import s from './ContactDetail.module.css';
 import {
@@ -1222,10 +1221,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         </button>
       </div>
 
-      <SpanishAssistCallout title="Ayuda en español">
-        Esta vista muestra el historial y próximos pasos del contacto. La ayuda explica campos y acciones; no traduce notas, mensajes, documentos ni datos del cliente.
-      </SpanishAssistCallout>
-
       <div className={s.detailLayout}>
         {/* Left Sidebar: Profile */}
         <div className={s.profileCard}>
@@ -1313,22 +1308,15 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           )}
 
           <div className={s.profileAssignment}>
-            <div className={s.assignmentLabel}>Assigned To <SpanishHelpHint title="Responsable">{SPANISH_ASSIST_HINTS.owner}</SpanishHelpHint></div>
+            <div className={s.assignmentLabel}>Assigned To</div>
             <div className={s.assignmentUser}>
               <div className={s.userAvatarSmall}>{assignedEmployee?.name?.charAt(0)}</div>
               <span>{assignedEmployee?.name || 'Unassigned'}</span>
             </div>
           </div>
-          <SpanishGlossary terms={[
-            ['Status', 'Estado actual dentro del proceso.'],
-            ['Follow Up', 'Seguimiento que debe registrarse con resultado y nota.'],
-            ['Assigned To', 'Empleado responsable de este contacto.'],
-            ['Timeline', 'Historial interno del contacto; no se traduce.'],
-          ]} />
           
           {access.canWriteCrm && (
             <>
-              <SpanishFieldHint>Usa estas acciones para actualizar el próximo paso del contacto. Las notas y el historial quedan en el idioma original.</SpanishFieldHint>
               {nextStatus && (
                 <button
                   className={`${s.statusStepButton} btn btn-block`}
@@ -1389,7 +1377,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     onChange={e => setNoteInput(e.target.value)}
                     disabled={!access.canWriteCrm}
                   />
-                  <SpanishFieldHint>{SPANISH_ASSIST_HINTS.notes}</SpanishFieldHint>
                   <div className={s.noteBoxFooter}>
                     <button className="btn btn-primary btn-sm" onClick={addNote} disabled={!access.canWriteCrm}>
                       <Plus size={14} /> Add Note
@@ -1933,9 +1920,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             </>
           )}
         >
-          <SpanishAssistCallout title="Ayuda en español">
-            Registra qué pasó en el seguimiento y el próximo paso. La nota queda como historial interno y no se envía automáticamente.
-          </SpanishAssistCallout>
           <div className="form-group">
             <div className="form-label">Task Match</div>
             <div className={s.followUpHint}>
@@ -1946,7 +1930,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           </div>
           <div className="grid-2">
             <div className="form-group">
-              <label className="form-label">Outcome <SpanishHelpHint title="Resultado">Qué pasó durante el seguimiento: contestó, no contestó, cita hecha, no interesado/a, etc.</SpanishHelpHint></label>
+              <label className="form-label">Outcome</label>
               <select
                 className="input select"
                 value={followUpDraft.outcome}
@@ -1985,7 +1969,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               />
             </div>
             <div className="form-group">
-              <label className="form-label">Next Due <SpanishHelpHint title="Próximo seguimiento">Fecha para el siguiente seguimiento, si hace falta.</SpanishHelpHint></label>
+              <label className="form-label">Next Due</label>
               <input
                 className="input"
                 type="date"
@@ -1996,7 +1980,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             </div>
           </div>
           <div className="form-group">
-            <label className="form-label">Next Owner <SpanishHelpHint title="Próximo responsable">{SPANISH_ASSIST_HINTS.owner}</SpanishHelpHint></label>
+            <label className="form-label">Next Owner</label>
             <select
               className="input select"
               value={followUpDraft.nextOwnerUserId}
@@ -2048,7 +2032,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             </>
           )}
           <div className="form-group">
-            <label className="form-label">Note Required <SpanishHelpHint title="Nota interna">{SPANISH_ASSIST_HINTS.notes}</SpanishHelpHint></label>
+            <label className="form-label">Note Required</label>
             <textarea
               className="textarea"
               rows={3}
@@ -2056,7 +2040,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               disabled={followUpBusy}
               onChange={(event) => updateFollowUpDraft({ note: event.target.value })}
             />
-            <SpanishFieldHint>Describe el resultado para el equipo. No se traduce ni se manda al cliente.</SpanishFieldHint>
           </div>
           {followUpError && <div className={s.followUpError}>{followUpError}</div>}
         </Modal>
@@ -2070,9 +2053,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           title="Edit Profile"
           footer={<><button className="btn" onClick={() => setIsEditModalOpen(false)}>Cancel</button><button className="btn btn-primary" onClick={handleEditSave}>Save Changes</button></>}
         >
-          <SpanishAssistCallout title="Ayuda en español">
-            Edita campos internos del perfil. Cambiar estado o responsable afecta el flujo de trabajo; la información escrita por el cliente queda igual.
-          </SpanishAssistCallout>
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Full Name</label>
@@ -2089,21 +2069,21 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               <input className="input" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
             </div>
             <div className="form-group">
-              <label className="form-label">Source <SpanishHelpHint title="Origen">{SPANISH_ASSIST_HINTS.source}</SpanishHelpHint></label>
+              <label className="form-label">Source</label>
               <select className="input select" value={editForm.source} onChange={e => setEditForm({...editForm, source: e.target.value})}>
                 {sources.map(src => <option key={src} value={src}>{src}</option>)}
               </select>
             </div>
           </div>
           <div className="form-group">
-            <label className="form-label">Status <SpanishHelpHint title="Estado">{SPANISH_ASSIST_HINTS.status}</SpanishHelpHint></label>
+            <label className="form-label">Status</label>
             <select className="input select" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}>
               {[...new Set([...(contactStatusOptions || PIPELINE_STATUSES), ...(editForm.status ? [editForm.status] : [])])].map(st => <option key={st} value={st}>{st}</option>)}
             </select>
           </div>
           {isClosedStatusReopen && (
             <div className="form-group">
-              <label className="form-label">Reopen reason <SpanishHelpHint title="Razón para reabrir">{SPANISH_ASSIST_HINTS.reopen}</SpanishHelpHint></label>
+              <label className="form-label">Reopen reason</label>
               <select
                 className="input select"
                 value={editForm.statusChangeReason || ''}
@@ -2120,7 +2100,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           )}
           {showSchoolLocationField ? (
             <div className="form-group">
-              <label className="form-label">School Location <SpanishHelpHint title="Ubicación">{SPANISH_ASSIST_HINTS.schoolLocation}</SpanishHelpHint></label>
+              <label className="form-label">School Location</label>
               <select className="input select" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})}>
                 <option value="">Select school location</option>
                 {editSchoolLocationOptions.map((location) => (
@@ -2183,7 +2163,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             </>
           )}
           <div className="form-group">
-            <label className="form-label">Assigned To <SpanishHelpHint title="Responsable">{SPANISH_ASSIST_HINTS.owner}</SpanishHelpHint></label>
+            <label className="form-label">Assigned To</label>
             <select className="input select" value={editForm.assignedTo || ''} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
               <option value="">Unassigned</option>
               {ownerOptions.map((owner) => (
@@ -2197,7 +2177,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               <div style={{fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 10}}>
                 Archive removes this {singularLabel.toLowerCase()} from normal CRM lists. History is retained for audit and recovery.
               </div>
-              <SpanishFieldHint>{SPANISH_ASSIST_HINTS.archive}</SpanishFieldHint>
               <button
                 className="btn btn-danger"
                 type="button"
@@ -2230,9 +2209,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           <div className="empty-state" style={{padding: 12, marginBottom: 12}}>
             This removes the {singularLabel.toLowerCase()} from normal CRM lists and selectors. Notes, timeline, lead history, and linked records remain in the database for audit.
           </div>
-          <SpanishFieldHint>{SPANISH_ASSIST_HINTS.archive}</SpanishFieldHint>
           <div className="form-group">
-            <label className="form-label">Reason <SpanishHelpHint title="Razón">Explica por qué se archiva. Esta razón queda interna.</SpanishHelpHint></label>
+            <label className="form-label">Reason</label>
             <textarea
               className="textarea"
               rows={3}

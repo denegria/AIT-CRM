@@ -14,14 +14,9 @@ const SCOPE_USER_KEY = 'ait-crm-scope-user-id';
 const ALL_BUSINESS_UNITS = 'all';
 const UNASSIGNED_BUSINESS_UNIT = 'unassigned';
 const THEME_OPTIONS = new Set(['light', 'dusk', 'dark']);
-const SPANISH_ASSIST_KEY = 'ait-crm-spanish-assist';
 
 function normalizeTheme(value) {
   return THEME_OPTIONS.has(value) ? value : 'light';
-}
-
-function normalizeSpanishAssist(value) {
-  return value === true || value === 'true';
 }
 
 function getBusinessUnitId(record) {
@@ -165,8 +160,6 @@ export function CRMProvider({ children, initialData }) {
   });
   const [theme, setTheme] = useState('light');
   const [themeReady, setThemeReady] = useState(false);
-  const [spanishAssist, setSpanishAssist] = useState(false);
-  const [spanishAssistReady, setSpanishAssistReady] = useState(false);
   const [currentUser] = useState(bootstrapData.currentUser);
   const [access] = useState(bootstrapData.access || {});
   const [importStaging] = useState(bootstrapData.importStaging);
@@ -343,28 +336,6 @@ export function CRMProvider({ children, initialData }) {
     localStorage.setItem('ait-crm-theme', nextTheme);
     document.documentElement.setAttribute('data-theme', nextTheme);
   }, [theme, themeReady]);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    let cancelled = false;
-    queueMicrotask(() => {
-      if (cancelled) return;
-      const savedSpanishAssist = normalizeSpanishAssist(localStorage.getItem(SPANISH_ASSIST_KEY));
-      setSpanishAssist(savedSpanishAssist);
-      setSpanishAssistReady(true);
-      document.documentElement.setAttribute('data-spanish-assist', savedSpanishAssist ? 'on' : 'off');
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !spanishAssistReady) return;
-    const nextSpanishAssist = Boolean(spanishAssist);
-    localStorage.setItem(SPANISH_ASSIST_KEY, String(nextSpanishAssist));
-    document.documentElement.setAttribute('data-spanish-assist', nextSpanishAssist ? 'on' : 'off');
-  }, [spanishAssist, spanishAssistReady]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -607,7 +578,7 @@ export function CRMProvider({ children, initialData }) {
   }, [isPostgres]);
 
   const value = {
-    role, setRole: serverOwnedSetRole, theme, setTheme, spanishAssist, setSpanishAssist, loaded,
+    role, setRole: serverOwnedSetRole, theme, setTheme, loaded,
     dataSource: bootstrapData.dataSource,
     authRequired: bootstrapData.authRequired,
     currentUser,

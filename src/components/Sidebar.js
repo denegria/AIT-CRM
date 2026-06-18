@@ -8,7 +8,7 @@ import { useCRM } from '@/lib/store';
 import { isClientAccountBusinessUnit } from '@/lib/crm/lifecycle';
 import s from './Sidebar.module.css';
 
-import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, CloudSun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal, Languages } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, CloudSun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal } from 'lucide-react';
 
 const nav = [
   { href: '/', label: 'Dashboard', Icon: LayoutDashboard },
@@ -56,8 +56,6 @@ export default function Sidebar() {
     role,
     theme,
     setTheme,
-    spanishAssist,
-    setSpanishAssist,
     currentUser,
     access,
     dataSource,
@@ -136,19 +134,6 @@ export default function Sidebar() {
     </select>
   );
 
-  const spanishAssistButton = (
-    <button
-      type="button"
-      className={`${s.assistBtn} ${spanishAssist ? s.assistBtnActive : ''}`}
-      onClick={() => setSpanishAssist((enabled) => !enabled)}
-      aria-pressed={spanishAssist}
-      title="Spanish Help"
-    >
-      <Languages size={15} />
-      <span>Spanish Help</span>
-    </button>
-  );
-
   return (
     <aside className={s.sidebar}>
       <div className={s.logo}>
@@ -162,16 +147,6 @@ export default function Sidebar() {
             <span>{currentBusinessUnit?.name || scopeLabel}</span>
           </div>
           {renderScopeSelect()}
-          <button
-            type="button"
-            className={`${s.mobileAssistBtn} ${spanishAssist ? s.active : ''}`}
-            onClick={() => setSpanishAssist((enabled) => !enabled)}
-            aria-label="Spanish Help"
-            aria-pressed={spanishAssist}
-            title="Spanish Help"
-          >
-            <Languages size={15} />
-          </button>
         </div>
       )}
       <nav className={s.navSection}>
@@ -231,7 +206,6 @@ export default function Sidebar() {
             </button>
           ))}
         </div>
-        {spanishAssistButton}
         <div className={s.roleSwitcher}>
           <label className={s.roleLabel}>Signed In</label>
           <div className={s.userName}>{currentUser?.name || 'Local Admin'}</div>
