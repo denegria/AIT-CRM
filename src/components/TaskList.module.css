@@ -21,6 +21,36 @@
 .checked {
   background:var(--accent); border-color:var(--accent); color:#fff;
 }
+.logButton,
+.quickLink {
+  border:1px solid var(--border-default);
+  border-radius:var(--radius-sm);
+  color:var(--text-secondary);
+  font-size:var(--text-xs);
+  font-weight:700;
+  line-height:1;
+  text-decoration:none;
+  transition:all var(--transition-fast);
+  white-space:nowrap;
+}
+.logButton {
+  padding:5px 6px;
+  flex-shrink:0;
+}
+.quickActions {
+  align-items:center;
+  display:flex;
+  gap:6px;
+  flex-shrink:0;
+}
+.quickLink {
+  padding:6px 8px;
+}
+.logButton:hover,
+.quickLink:hover {
+  border-color:var(--accent);
+  color:var(--accent);
+}
 .content { flex:1; min-width:0; }
 .taskTitle {
   font-size:var(--text-sm); color:var(--text-primary);
@@ -86,5 +116,14 @@
   .addRowCompact button {
     height: 34px;
     white-space: nowrap;
+  }
+
+  .item {
+    align-items:flex-start;
+  }
+
+  .quickActions {
+    align-items:flex-end;
+    flex-direction:column;
   }
 }

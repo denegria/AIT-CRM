@@ -198,6 +198,14 @@ test('creates a notification after a new website lead is promoted', async () => 
     '/contacts/contact-1?leadId=lead-1',
   ]);
   assert.equal(notificationInsert.params[11], 'website:web-001');
+
+  const taskInsert = calls.find((call) => call.sql.startsWith('with new_task as'));
+  assert.ok(taskInsert);
+  assert.equal(taskInsert.params[6], 'follow_up');
+  assert.equal(taskInsert.params[8], 'high');
+  assert.equal(taskInsert.params[9], 'automation');
+  assert.equal(taskInsert.params[10], 'website:web-001');
+  assert.equal(taskInsert.params[11], 'Inbound lead intake');
 });
 
 function createDuplicateClient() {
@@ -296,6 +304,9 @@ function createWebsitePromotionClient() {
         }
         if (normalizedSql.startsWith('insert into notifications')) {
           return { rows: [{ id: 'notification-1' }] };
+        }
+        if (normalizedSql.startsWith('with new_task as')) {
+          return { rows: [{ id: 'task-activity-1' }] };
         }
         if (normalizedSql.startsWith('update leads set original_notes')) {
           return { rows: [] };

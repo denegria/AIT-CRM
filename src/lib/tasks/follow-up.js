@@ -72,6 +72,9 @@ export function normalizeFollowUpCompletionPayload({
   if (outcome === FOLLOW_UP_OUTCOMES.NEEDS_NEXT_FOLLOW_UP && !nextDueAt) {
     throw followUpError('Next follow-up date is required for this outcome.');
   }
+  if (!note) {
+    throw followUpError('Follow-up note is required to complete this task.');
+  }
 
   return {
     outcome,

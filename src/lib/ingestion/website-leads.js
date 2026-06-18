@@ -9,6 +9,7 @@ import {
   createInboundLeadNotification,
 } from '../notifications/service.js';
 import { normalizeWorkflowTags } from '../sales-workflow.js';
+import { createInboundLeadIntakeTask } from '../tasks/intake.js';
 
 export const WEBSITE_LEAD_SECRET_HEADER = 'x-ait-webhook-secret';
 export const WEBSITE_LEAD_SOURCE_TYPE = 'website_form';
@@ -746,6 +747,15 @@ export async function ingestWebsiteLeadSubmission(client, {
       leadId,
       assignedUserId,
     });
+    const inboundLeadIdempotencyKey = `website:${lead.externalId || sourceRowId || leadId}`;
+    const inboundLeadMetadata = {
+      sourceKey: lead.sourceKey || null,
+      externalId: lead.externalId || null,
+      sourceRowId,
+    };
+    const inboundLeadDetail = lead.service
+      ? `Interested in ${lead.service}.`
+      : lead.message || 'Website lead submitted.';
     await createInboundLeadNotification(client, {
       organizationId,
       businessUnitId,
@@ -754,15 +764,21 @@ export async function ingestWebsiteLeadSubmission(client, {
       sourceType: NOTIFICATION_SOURCES.WEBSITE,
       sourceName: lead.sourceName || WEBSITE_LEAD_SOURCE_NAME,
       contactName: lead.name,
-      detail: lead.service
-        ? `Interested in ${lead.service}.`
-        : lead.message || 'Website lead submitted.',
-      idempotencyKey: `website:${lead.externalId || sourceRowId || leadId}`,
-      metadata: {
-        sourceKey: lead.sourceKey || null,
-        externalId: lead.externalId || null,
-        sourceRowId,
-      },
+      detail: inboundLeadDetail,
+      idempotencyKey: inboundLeadIdempotencyKey,
+      metadata: inboundLeadMetadata,
+    });
+    await createInboundLeadIntakeTask(client, {
+      organizationId,
+      businessUnitId,
+      contactId,
+      leadId,
+      sourceType: NOTIFICATION_SOURCES.WEBSITE,
+      sourceName: lead.sourceName || WEBSITE_LEAD_SOURCE_NAME,
+      contactName: lead.name,
+      detail: inboundLeadDetail,
+      idempotencyKey: inboundLeadIdempotencyKey,
+      metadata: inboundLeadMetadata,
     });
     await client.query(
       'update leads set original_notes = replace(original_notes, $1, $2), updated_at = now() where id = $3',

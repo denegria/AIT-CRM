@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import Link from 'next/link';
 import s from './TaskList.module.css';
 
 export default function TaskList({
@@ -56,11 +57,19 @@ export default function TaskList({
     <div>
       <div className={s.list}>
         {tasks.length === 0 && <div className={s.empty}>{emptyText}</div>}
-        {tasks.map(t => (
+        {tasks.map(t => {
+          const isFollowUpTask = t.taskType === 'follow_up';
+          return (
           <div key={t.id} className={s.item}>
-            <button className={`${s.check} ${t.completed ? s.checked : ''}`} onClick={() => onToggle(t.id, { completed: !t.completed })}>
-              {t.completed ? '✓' : ''}
-            </button>
+            {isFollowUpTask && !t.completed ? (
+              <Link className={s.logButton} href={`/tasks?contactId=${encodeURIComponent(t.contactId || '')}&taskType=follow_up`}>
+                Log
+              </Link>
+            ) : (
+              <button className={`${s.check} ${t.completed ? s.checked : ''}`} onClick={() => onToggle(t.id, { completed: !t.completed })}>
+                {t.completed ? '✓' : ''}
+              </button>
+            )}
             <div className={s.content}>
               <div className={`${s.taskTitle} ${t.completed ? s.taskTitleDone : ''}`}>{t.title}</div>
               <div className={s.meta}>
@@ -71,8 +80,20 @@ export default function TaskList({
                 <span className={`badge badge-${t.priority?.toLowerCase()}`} style={{fontSize:'0.6rem',padding:'1px 6px'}}>{t.priority}</span>
               </div>
             </div>
+            <div className={s.quickActions}>
+              {t.contactId && (
+                <Link className={s.quickLink} href={`/contacts/${encodeURIComponent(t.contactId)}`}>
+                  Contact
+                </Link>
+              )}
+              {isFollowUpTask && (
+                <Link className={s.quickLink} href={`/tasks?contactId=${encodeURIComponent(t.contactId || '')}&taskType=follow_up`}>
+                  Follow-up
+                </Link>
+              )}
+            </div>
           </div>
-        ))}
+        );})}
       </div>
       {onAdd && (
         <>

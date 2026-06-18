@@ -510,6 +510,8 @@ export default function FollowUpQueuePage() {
   function followUpDraft(taskId, task = null) {
     return {
       outcome: 'reached_interested',
+      channel: 'phone',
+      contactMethod: '',
       note: '',
       nextDueDate: '',
       nextOwnerUserId: task?.ownerUserId || defaultOwnerUserId(currentUser, visibleAssignees),
@@ -522,6 +524,8 @@ export default function FollowUpQueuePage() {
       ...prev,
       [taskId]: {
         outcome: 'reached_interested',
+        channel: 'phone',
+        contactMethod: '',
         note: '',
         nextDueDate: '',
         ...(prev[taskId] || {}),
@@ -781,6 +785,8 @@ export default function FollowUpQueuePage() {
     const draft = followUpDraft(task.id, task);
     await applyTaskAction(task, 'complete', {
       outcome: draft.outcome,
+      channel: draft.channel,
+      contactMethod: draft.contactMethod,
       note: draft.note,
       nextDueAt: dateInputToIso(draft.nextDueDate),
       nextOwnerUserId: draft.nextOwnerUserId || task.ownerUserId || null,
@@ -1235,6 +1241,32 @@ export default function FollowUpQueuePage() {
                       </select>
                     </label>
                     <label className={s.filterGroup}>
+                      <span className="form-label">Channel</span>
+                      <select
+                        className="select"
+                        value={draft.channel}
+                        disabled={busyTaskId === task.id}
+                        onChange={(event) => updateFollowUpDraft(task.id, { channel: event.target.value })}
+                      >
+                        <option value="phone">Phone</option>
+                        <option value="sms">SMS</option>
+                        <option value="whatsapp">WhatsApp</option>
+                        <option value="email">Email</option>
+                        <option value="in_person">In person</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </label>
+                    <label className={s.filterGroup}>
+                      <span className="form-label">Attempted</span>
+                      <input
+                        className="input"
+                        value={draft.contactMethod}
+                        placeholder="Phone or email used"
+                        disabled={busyTaskId === task.id}
+                        onChange={(event) => updateFollowUpDraft(task.id, { contactMethod: event.target.value })}
+                      />
+                    </label>
+                    <label className={s.filterGroup}>
                       <span className="form-label">Next Due</span>
                       <input
                         className="input"
@@ -1257,7 +1289,7 @@ export default function FollowUpQueuePage() {
                       </select>
                     </label>
                     <label className={s.completionNote}>
-                      <span className="form-label">Note</span>
+                      <span className="form-label">Note Required</span>
                       <textarea
                         className="textarea"
                         rows={2}
@@ -1268,7 +1300,7 @@ export default function FollowUpQueuePage() {
                     </label>
                     <div className={s.completionActions}>
                       <button className="btn btn-sm" type="button" onClick={() => setCompletionTaskId('')} disabled={busyTaskId === task.id}>Cancel</button>
-                      <button className="btn btn-sm btn-primary" type="button" onClick={() => submitFollowUpCompletion(task)} disabled={busyTaskId === task.id}>
+                      <button className="btn btn-sm btn-primary" type="button" onClick={() => submitFollowUpCompletion(task)} disabled={busyTaskId === task.id || !draft.note.trim()}>
                         <CheckCircle2 size={14} />
                         Save Outcome
                       </button>

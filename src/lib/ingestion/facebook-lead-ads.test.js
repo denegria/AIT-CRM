@@ -123,6 +123,9 @@ function createServiceClient({
         if (normalized.startsWith('insert into notifications')) {
           return { rows: [{ id: 'notification-1' }] };
         }
+        if (normalized.startsWith('with new_task as')) {
+          return { rows: [{ id: 'task-activity-1' }] };
+        }
         if (normalized.startsWith('insert into import_normalized_records')) {
           return { rows: [{ id: normalizedId }] };
         }
@@ -316,6 +319,7 @@ test('auto-promotes safe mapped leadgen events while preserving import audit row
   assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), true);
   assert.equal(calls.some((call) => call.sql.startsWith('insert into activity_events')), true);
   assert.equal(calls.some((call) => call.sql.startsWith('insert into notifications')), true);
+  assert.equal(calls.some((call) => call.sql.startsWith('with new_task as')), true);
   assert.equal(calls.filter((call) => call.sql.startsWith('insert into activity_events')).length, 1);
 
   const notificationInsert = calls.find((call) => call.sql.startsWith('insert into notifications'));
@@ -330,6 +334,13 @@ test('auto-promotes safe mapped leadgen events while preserving import audit row
     '/contacts/contact-1?leadId=lead-1',
   ]);
   assert.equal(notificationInsert.params[11], 'facebook_lead_ads:leadgen-1');
+
+  const taskInsert = calls.find((call) => call.sql.startsWith('with new_task as'));
+  assert.equal(taskInsert.params[6], 'follow_up');
+  assert.equal(taskInsert.params[8], 'high');
+  assert.equal(taskInsert.params[9], 'automation');
+  assert.equal(taskInsert.params[10], 'facebook_lead_ads:leadgen-1');
+  assert.equal(taskInsert.params[11], 'Inbound lead intake');
 
   const normalizedInsert = calls.find((call) => call.sql.startsWith('insert into import_normalized_records'));
   const proposedLead = JSON.parse(normalizedInsert.params[3]);
