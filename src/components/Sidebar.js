@@ -55,8 +55,8 @@ function divisionBrandFor(unit) {
     return {
       title: 'AIT Signs',
       alt: 'AIT Signs',
-      logoSrc: '',
-      mark: 'SIGN',
+      logoSrc: '/ait-signs-logo.png',
+      mark: '',
     };
   }
   if (/ait\s*usa/i.test(unitName)) {
