@@ -152,6 +152,14 @@ export default function PipelinePage() {
     const values = [...new Set(pipelineScopedRows.map(sourceValue).filter(Boolean))];
     return values.sort((left, right) => left.localeCompare(right));
   }, [pipelineScopedRows]);
+  const ownerOptions = useMemo(() => {
+    return (employees || [])
+      .filter((employee) => employee?.id && employee.id !== currentUser?.id)
+      .map((employee) => ({
+        id: employee.id,
+        label: employee.name || employee.email || 'Unnamed User',
+      }));
+  }, [currentUser?.id, employees]);
 
   const normalizedSearch = search.trim().toLowerCase();
   const pipelineRows = pipelineScopedRows.filter((contact) => {
@@ -290,8 +298,8 @@ export default function PipelinePage() {
           <option value="all">{canUseConsolidatedScope ? 'Team Pipeline' : 'All Owners'}</option>
           <option value="unassigned">Unassigned</option>
           {currentUser?.id && <option value={currentUser.id}>Me</option>}
-          {employees.map((employee) => (
-            <option key={employee.id} value={employee.id}>{employee.name || employee.email || 'Unnamed User'}</option>
+          {ownerOptions.map((owner) => (
+            <option key={owner.id} value={owner.id}>{owner.label}</option>
           ))}
         </select>
         <select className="input select" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
