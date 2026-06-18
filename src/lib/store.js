@@ -1,6 +1,10 @@
 'use client';
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import {
+  publishActiveSession,
+  sessionIdentityForUser,
+} from '@/lib/auth/session-sync.js';
 import * as defaults from './data';
 
 const CRMContext = createContext(null);
@@ -98,6 +102,11 @@ function LoginGate({ authError }) {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Sign-in failed.');
+      const sessionResponse = await fetch('/api/auth/session', { cache: 'no-store' }).catch(() => null);
+      const sessionPayload = await sessionResponse?.json?.().catch(() => ({}));
+      if (sessionPayload?.user) {
+        publishActiveSession(sessionIdentityForUser(sessionPayload.user), 'login');
+      }
       router.refresh();
     } catch (err) {
       setError(err.message || 'Sign-in failed.');
