@@ -5,6 +5,10 @@ import {
 } from '../crm/assignment.js';
 import { normalizeLifecycleStatus } from '../crm/lifecycle.js';
 import {
+  leadProfilePatchFromWebsiteLead,
+  leadProfilePatchToDbValues,
+} from '../crm/lead-profile.js';
+import {
   NOTIFICATION_SOURCES,
   createInboundLeadNotification,
 } from '../notifications/service.js';
@@ -550,8 +554,17 @@ function leadFormDetailsNote(lead) {
 }
 
 async function persistLead(client, organizationId, businessUnitId, contactId, lead, sourceRowId, rowNumber, ownerUserId = null) {
+  const profileValues = leadProfilePatchToDbValues(leadProfilePatchFromWebsiteLead(lead));
   const inserted = await client.query(
-    'insert into leads (organization_id, business_unit_id, contact_id, source_type, source_name, status, current_stage, original_notes, assigned_user_id) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) returning id',
+    `
+      insert into leads (
+        organization_id, business_unit_id, contact_id, source_type, source_name, status, current_stage,
+        original_notes, assigned_user_id, program_interest, preferred_day, preferred_schedule,
+        test_interest, education_level, school_name, location_preference, profile_details, source_detail
+      )
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+      returning id
+    `,
     [
       organizationId,
       businessUnitId,
@@ -562,6 +575,15 @@ async function persistLead(client, organizationId, businessUnitId, contactId, le
       lead.currentStage || lead.status || 'New Lead',
       originalNotesForLead(lead, sourceRowId),
       ownerUserId,
+      profileValues.program_interest || null,
+      profileValues.preferred_day || null,
+      profileValues.preferred_schedule || null,
+      profileValues.test_interest || null,
+      profileValues.education_level || null,
+      profileValues.school_name || null,
+      profileValues.location_preference || null,
+      profileValues.profile_details || null,
+      profileValues.source_detail || null,
     ],
   );
   const leadId = inserted.rows[0]?.id || null;
@@ -634,6 +656,7 @@ export async function persistWebsiteLeadImportAudit(
     source_key: lead.sourceKey || null,
     external_id: lead.externalId || null,
     service: lead.service || null,
+    lead_profile: leadProfilePatchFromWebsiteLead(lead),
     message: lead.message || null,
     address: lead.address || null,
     age: lead.age || null,

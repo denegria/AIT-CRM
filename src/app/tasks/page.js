@@ -508,6 +508,18 @@ export default function FollowUpQueuePage() {
   }
 
   function followUpDraft(taskId, task = null) {
+    const contact = accessibleContacts.find((row) => row.id === task?.contactId);
+    const savedDraft = followUpDrafts[taskId] || {};
+    const leadProfile = {
+      programInterest: contact?.programInterest || '',
+      preferredDay: contact?.preferredDay || '',
+      preferredSchedule: contact?.preferredSchedule || '',
+      testInterest: contact?.testInterest || '',
+      educationLevel: contact?.educationLevel || '',
+      schoolName: contact?.schoolName || '',
+      locationPreference: contact?.locationPreference || '',
+      ...(savedDraft.leadProfile || {}),
+    };
     return {
       outcome: 'reached_interested',
       channel: 'phone',
@@ -515,7 +527,8 @@ export default function FollowUpQueuePage() {
       note: '',
       nextDueDate: '',
       nextOwnerUserId: task?.ownerUserId || defaultOwnerUserId(currentUser, visibleAssignees),
-      ...(followUpDrafts[taskId] || {}),
+      ...savedDraft,
+      leadProfile,
     };
   }
 
@@ -528,8 +541,27 @@ export default function FollowUpQueuePage() {
         contactMethod: '',
         note: '',
         nextDueDate: '',
+        leadProfile: {},
         ...(prev[taskId] || {}),
         ...patch,
+      },
+    }));
+  }
+
+  function updateFollowUpLeadProfile(taskId, field, value) {
+    setFollowUpDrafts((prev) => ({
+      ...prev,
+      [taskId]: {
+        outcome: 'reached_interested',
+        channel: 'phone',
+        contactMethod: '',
+        note: '',
+        nextDueDate: '',
+        ...(prev[taskId] || {}),
+        leadProfile: {
+          ...(prev[taskId]?.leadProfile || {}),
+          [field]: value,
+        },
       },
     }));
   }
@@ -788,6 +820,7 @@ export default function FollowUpQueuePage() {
       channel: draft.channel,
       contactMethod: draft.contactMethod,
       note: draft.note,
+      leadProfile: draft.leadProfile,
       nextDueAt: dateInputToIso(draft.nextDueDate),
       nextOwnerUserId: draft.nextOwnerUserId || task.ownerUserId || null,
     });
@@ -1288,6 +1321,71 @@ export default function FollowUpQueuePage() {
                         {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
                       </select>
                     </label>
+                    <div className={s.profileFields}>
+                      <label className={s.filterGroup}>
+                        <span className="form-label">Program</span>
+                        <input
+                          className="input"
+                          value={draft.leadProfile?.programInterest || ''}
+                          disabled={busyTaskId === task.id}
+                          onChange={(event) => updateFollowUpLeadProfile(task.id, 'programInterest', event.target.value)}
+                        />
+                      </label>
+                      <label className={s.filterGroup}>
+                        <span className="form-label">Location</span>
+                        <input
+                          className="input"
+                          value={draft.leadProfile?.locationPreference || ''}
+                          disabled={busyTaskId === task.id}
+                          onChange={(event) => updateFollowUpLeadProfile(task.id, 'locationPreference', event.target.value)}
+                        />
+                      </label>
+                      <label className={s.filterGroup}>
+                        <span className="form-label">Preferred Day</span>
+                        <input
+                          className="input"
+                          value={draft.leadProfile?.preferredDay || ''}
+                          disabled={busyTaskId === task.id}
+                          onChange={(event) => updateFollowUpLeadProfile(task.id, 'preferredDay', event.target.value)}
+                        />
+                      </label>
+                      <label className={s.filterGroup}>
+                        <span className="form-label">Schedule</span>
+                        <input
+                          className="input"
+                          value={draft.leadProfile?.preferredSchedule || ''}
+                          disabled={busyTaskId === task.id}
+                          onChange={(event) => updateFollowUpLeadProfile(task.id, 'preferredSchedule', event.target.value)}
+                        />
+                      </label>
+                      <label className={s.filterGroup}>
+                        <span className="form-label">Test</span>
+                        <input
+                          className="input"
+                          value={draft.leadProfile?.testInterest || ''}
+                          disabled={busyTaskId === task.id}
+                          onChange={(event) => updateFollowUpLeadProfile(task.id, 'testInterest', event.target.value)}
+                        />
+                      </label>
+                      <label className={s.filterGroup}>
+                        <span className="form-label">Level</span>
+                        <input
+                          className="input"
+                          value={draft.leadProfile?.educationLevel || ''}
+                          disabled={busyTaskId === task.id}
+                          onChange={(event) => updateFollowUpLeadProfile(task.id, 'educationLevel', event.target.value)}
+                        />
+                      </label>
+                      <label className={s.filterGroup}>
+                        <span className="form-label">School</span>
+                        <input
+                          className="input"
+                          value={draft.leadProfile?.schoolName || ''}
+                          disabled={busyTaskId === task.id}
+                          onChange={(event) => updateFollowUpLeadProfile(task.id, 'schoolName', event.target.value)}
+                        />
+                      </label>
+                    </div>
                     <label className={s.completionNote}>
                       <span className="form-label">Note Required</span>
                       <textarea

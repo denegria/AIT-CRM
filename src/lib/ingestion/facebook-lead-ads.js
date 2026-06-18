@@ -4,6 +4,10 @@ import {
   resolveMetaPageBusinessUnitMapping,
 } from '../messaging/providers/meta.js';
 import {
+  leadProfilePatchFromMetaFieldData,
+  leadProfilePatchToDbValues,
+} from '../crm/lead-profile.js';
+import {
   NOTIFICATION_SOURCES,
   createInboundLeadNotification,
 } from '../notifications/service.js';
@@ -309,6 +313,7 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
   }
 
   const extraFieldNotes = formatFacebookLeadExtraFieldNotes(details.field_data);
+  const profileValues = leadProfilePatchToDbValues(leadProfilePatchFromMetaFieldData(details.field_data));
   const originalNotes = [
     `Facebook leadgen_id=${event.leadgenId || 'unknown'} source_row_id=${sourceRowId || 'unknown'}`,
     extraFieldNotes.length ? `Facebook form answers:\n${extraFieldNotes.map((line) => `- ${line}`).join('\n')}` : '',
@@ -317,8 +322,12 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
   const lead = await client.query(
     `
       insert into leads
-      (organization_id, business_unit_id, contact_id, source_type, source_name, status, current_stage, original_notes, assigned_user_id)
-      values ($1, $2, $3, 'facebook_lead_ads', 'Facebook Ads', 'New Lead', 'New Lead', $4, $5)
+      (
+        organization_id, business_unit_id, contact_id, source_type, source_name, status, current_stage,
+        original_notes, assigned_user_id, program_interest, preferred_day, preferred_schedule,
+        test_interest, education_level, school_name, location_preference, profile_details, source_detail
+      )
+      values ($1, $2, $3, 'facebook_lead_ads', 'Facebook Ads', 'New Lead', 'New Lead', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       returning id
     `,
     [
@@ -327,6 +336,15 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
       contactId,
       originalNotes,
       assignedUserId,
+      profileValues.program_interest || null,
+      profileValues.preferred_day || null,
+      profileValues.preferred_schedule || null,
+      profileValues.test_interest || null,
+      profileValues.education_level || null,
+      profileValues.school_name || null,
+      profileValues.location_preference || null,
+      profileValues.profile_details || null,
+      profileValues.source_detail || null,
     ],
   );
   const leadId = lead.rows[0]?.id || null;
@@ -580,6 +598,7 @@ export async function persistFacebookLeadAdsEvent(
     status: 'New Lead',
     current_stage: 'New Lead',
     field_data: graphLead?.field_data || null,
+    lead_profile: leadProfilePatchFromMetaFieldData(graphLead?.field_data || []),
     business_unit_id: businessUnitId,
     contact_id: crmWrite.contactId,
     lead_id: crmWrite.leadId,

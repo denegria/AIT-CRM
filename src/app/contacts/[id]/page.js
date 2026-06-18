@@ -620,7 +620,21 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
   const openEditModal = () => {
     if (!access.canWriteCrm) return;
-    setEditForm({ ...contact, assignedTo: contact?.assignedTo || '' });
+    setEditForm({
+      ...contact,
+      assignedTo: contact?.assignedTo || '',
+      leadProfile: {
+        programInterest: contact?.programInterest || '',
+        preferredDay: contact?.preferredDay || '',
+        preferredSchedule: contact?.preferredSchedule || '',
+        testInterest: contact?.testInterest || '',
+        educationLevel: contact?.educationLevel || '',
+        schoolName: contact?.schoolName || '',
+        locationPreference: contact?.locationPreference || '',
+        profileDetails: contact?.profileDetails || '',
+        sourceDetail: contact?.sourceDetail || '',
+      },
+    });
     setIsEditModalOpen(true);
   };
 
@@ -680,7 +694,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   };
 
   const handleEditSave = () => {
-    updateContact(contact.id, editForm)
+    updateContact(contact.id, {
+      ...editForm,
+      ...(editForm.leadProfile ? { leadProfile: editForm.leadProfile } : {}),
+    })
       .then(() => {
         toast('Profile updated');
         setTimelineReloadKey((key) => key + 1);
@@ -689,6 +706,16 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       .catch((error) => {
         toast(error.message || 'Profile update failed', 'error');
       });
+  };
+
+  const updateEditLeadProfile = (field, value) => {
+    setEditForm((current) => ({
+      ...current,
+      leadProfile: {
+        ...(current?.leadProfile || {}),
+        [field]: value,
+      },
+    }));
   };
 
   const openEstimateModal = () => {
@@ -1772,6 +1799,54 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               <label className="form-label">Address</label>
               <input className="input" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})} />
             </div>
+          )}
+          {isAitUsaContact && (
+            <>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">Program Interest</label>
+                  <input className="input" value={editForm.leadProfile?.programInterest || ''} onChange={e => updateEditLeadProfile('programInterest', e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Location Preference</label>
+                  <input className="input" value={editForm.leadProfile?.locationPreference || ''} onChange={e => updateEditLeadProfile('locationPreference', e.target.value)} />
+                </div>
+              </div>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">Preferred Day</label>
+                  <input className="input" value={editForm.leadProfile?.preferredDay || ''} onChange={e => updateEditLeadProfile('preferredDay', e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Preferred Schedule</label>
+                  <input className="input" value={editForm.leadProfile?.preferredSchedule || ''} onChange={e => updateEditLeadProfile('preferredSchedule', e.target.value)} />
+                </div>
+              </div>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">Test</label>
+                  <input className="input" value={editForm.leadProfile?.testInterest || ''} onChange={e => updateEditLeadProfile('testInterest', e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Level</label>
+                  <input className="input" value={editForm.leadProfile?.educationLevel || ''} onChange={e => updateEditLeadProfile('educationLevel', e.target.value)} />
+                </div>
+              </div>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">School</label>
+                  <input className="input" value={editForm.leadProfile?.schoolName || ''} onChange={e => updateEditLeadProfile('schoolName', e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Source Detail</label>
+                  <input className="input" value={editForm.leadProfile?.sourceDetail || ''} onChange={e => updateEditLeadProfile('sourceDetail', e.target.value)} />
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Profile Details</label>
+                <textarea className="textarea" rows={2} value={editForm.leadProfile?.profileDetails || ''} onChange={e => updateEditLeadProfile('profileDetails', e.target.value)} />
+              </div>
+            </>
           )}
           <div className="form-group">
             <label className="form-label">Assigned To</label>

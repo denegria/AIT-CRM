@@ -180,14 +180,18 @@ function buildInstituteHighlights(contact = {}) {
   return compactArray([
     {
       label: 'Inquiry source',
-      value: firstPresent([source.channel, contact.inquirySource, contact.source]),
+      value: firstPresent([contact.sourceDetail, source.channel, contact.inquirySource, contact.source]),
     },
     {
       label: 'Program',
-      value: firstPresent([inquiry.programInterest, contact.programInterest, inquiry.service]),
+      value: firstPresent([contact.programInterest, inquiry.programInterest, inquiry.service]),
     },
-    { label: 'Age', value: inquiry.age ? `Age ${inquiry.age}` : '' },
-    { label: 'Location', value: firstPresent([inquiry.location, contact.address]) },
+    { label: 'Preferred day', value: firstPresent([contact.preferredDay, inquiry.preferredDay]) },
+    { label: 'Schedule', value: firstPresent([contact.preferredSchedule, inquiry.preferredSchedule]) },
+    { label: 'Test', value: firstPresent([contact.testInterest, inquiry.testInterest]) },
+    { label: 'Level', value: firstPresent([contact.educationLevel, inquiry.level, inquiry.age ? `Age ${inquiry.age}` : '']) },
+    { label: 'School', value: firstPresent([contact.schoolName, inquiry.school]) },
+    { label: 'Location', value: firstPresent([contact.locationPreference, inquiry.location, contact.address]) },
     {
       label: 'Enrollment stage',
       value: firstPresent([process.stage, contact.currentStage, contact.status]),
