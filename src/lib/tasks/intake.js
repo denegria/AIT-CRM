@@ -7,7 +7,7 @@ function cleanText(value) {
 function intakeDescription({ sourceName, detail }) {
   const source = cleanText(sourceName) || 'Inbound lead';
   const summary = cleanText(detail);
-  return summary ? `${source}: ${summary}` : `${source}: Review the new inbound lead and log the first follow-up outcome.`;
+  return summary ? `${source}: ${summary}` : `${source}: Review the new lead and log the first follow-up outcome.`;
 }
 
 export async function createInboundLeadIntakeTask(client, {
@@ -26,7 +26,7 @@ export async function createInboundLeadIntakeTask(client, {
     return { inserted: false, reason: 'invalid_intake_task' };
   }
 
-  const title = `Review new inbound lead${cleanText(contactName) ? ` - ${cleanText(contactName)}` : ''}`;
+  const title = `Review new lead follow-up${cleanText(contactName) ? ` - ${cleanText(contactName)}` : ''}`;
   const metadataJson = {
     sourceName: cleanText(sourceName) || null,
     sourceType: cleanText(sourceType) || null,
@@ -52,13 +52,13 @@ export async function createInboundLeadIntakeTask(client, {
       task_event as (
         insert into task_events
         (task_id, organization_id, business_unit_id, event_type, to_status, to_owner_user_id, to_due_at, actor_user_id, message, metadata_json)
-        select id, organization_id, business_unit_id, 'created', status, owner_user_id, due_at, null, 'Created inbound lead intake task.', $13::jsonb
+        select id, organization_id, business_unit_id, 'created', status, owner_user_id, due_at, null, 'Created new lead follow-up task.', $13::jsonb
         from new_task
         returning id
       )
       insert into activity_events
       (organization_id, business_unit_id, contact_id, lead_id, event_type, message, metadata_json, actor_user_id, occurred_at)
-      select organization_id, business_unit_id, contact_id, lead_id, 'task.created', 'Created inbound lead intake task.', $13::jsonb, null, now()
+      select organization_id, business_unit_id, contact_id, lead_id, 'task.created', 'Created new lead follow-up task.', $13::jsonb, null, now()
       from new_task
       returning id
     `,
@@ -74,7 +74,7 @@ export async function createInboundLeadIntakeTask(client, {
       TASK_PRIORITIES.HIGH,
       TASK_SOURCE_TYPES.AUTOMATION,
       idempotencyKey,
-      'Inbound lead intake',
+      'New lead follow-up',
       JSON.stringify(metadataJson),
     ],
   );

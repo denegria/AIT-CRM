@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createInboundLeadIntakeTask } from './intake.js';
 
-test('creates inbound lead intake tasks idempotently', async () => {
+test('creates inbound lead follow-up tasks idempotently', async () => {
   const calls = [];
   const client = {
     async query(sql, params = []) {
@@ -32,14 +32,14 @@ test('creates inbound lead intake tasks idempotently', async () => {
     'bu-1',
     'contact-1',
     'lead-1',
-    'Review new inbound lead - Ada Lead',
+    'Review new lead follow-up - Ada Lead',
     'Website Form: Interested in English classes.',
     'follow_up',
     'open',
     'high',
     'automation',
     'website:lead-1',
-    'Inbound lead intake',
+    'New lead follow-up',
   ]);
   assert.equal(JSON.parse(calls[0].params[12]).requiresFollowUpNote, true);
 });

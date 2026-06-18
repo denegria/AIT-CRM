@@ -205,7 +205,7 @@ test('creates a notification after a new website lead is promoted', async () => 
   assert.equal(taskInsert.params[8], 'high');
   assert.equal(taskInsert.params[9], 'automation');
   assert.equal(taskInsert.params[10], 'website:web-001');
-  assert.equal(taskInsert.params[11], 'Inbound lead intake');
+  assert.equal(taskInsert.params[11], 'New lead follow-up');
 });
 
 function createDuplicateClient() {

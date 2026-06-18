@@ -340,7 +340,7 @@ test('auto-promotes safe mapped leadgen events while preserving import audit row
   assert.equal(taskInsert.params[8], 'high');
   assert.equal(taskInsert.params[9], 'automation');
   assert.equal(taskInsert.params[10], 'facebook_lead_ads:leadgen-1');
-  assert.equal(taskInsert.params[11], 'Inbound lead intake');
+  assert.equal(taskInsert.params[11], 'New lead follow-up');
 
   const normalizedInsert = calls.find((call) => call.sql.startsWith('insert into import_normalized_records'));
   const proposedLead = JSON.parse(normalizedInsert.params[3]);
