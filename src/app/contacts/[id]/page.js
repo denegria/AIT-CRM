@@ -414,10 +414,14 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
   const [invoiceWorkOrderId, setInvoiceWorkOrderId] = useState('');
 
-  const contactSource = isClientMode ? (allContacts || contacts) : contacts;
-  const workOrderSource = isClientMode ? (allWorkOrders || workOrders) : workOrders;
-  const financialSource = isClientMode ? (allFinancials || financials) : financials;
-  const contact = useMemo(() => contactSource.find(c => c.id === params.id), [contactSource, params.id]);
+  const scopedContact = useMemo(() => contacts.find(c => c.id === params.id), [contacts, params.id]);
+  const allAccessibleContacts = allContacts?.length ? allContacts : contacts;
+  const contact = useMemo(() => (
+    scopedContact || allAccessibleContacts.find(c => c.id === params.id)
+  ), [allAccessibleContacts, params.id, scopedContact]);
+  const useAllLinkedRecords = isClientMode || Boolean(contact && !scopedContact);
+  const workOrderSource = useAllLinkedRecords ? (allWorkOrders || workOrders) : workOrders;
+  const financialSource = useAllLinkedRecords ? (allFinancials || financials) : financials;
   const contactWorkOrders = useMemo(() => workOrderSource.filter(wo => wo.contactId === params.id), [workOrderSource, params.id]);
   const contactFinancials = useMemo(() => financialSource.filter(f => f.contactId === params.id), [financialSource, params.id]);
   const contactInvoices = useMemo(() => contactFinancials.filter(isInvoiceRecord), [contactFinancials]);
