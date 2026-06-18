@@ -139,6 +139,7 @@ function buildFollowUpTransition({
       toStatus: suggestedLeadStatus,
       businessUnit,
       canReopenClosedStatus: session.user.canAccessAllBusinessUnits,
+      reopenClosedStatusReason: 'new_course_follow_up',
     });
     statusTransitionMeta = transition;
     if (transition.allowed && transition.changed) {
@@ -148,7 +149,9 @@ function buildFollowUpTransition({
       });
       leadStatusChange = {
         ...transition,
-        reason: `Follow-up outcome: ${completion.outcome}`,
+        reason: transition.reason
+          ? `Follow-up outcome: ${completion.outcome}. ${transition.reason}`
+          : `Follow-up outcome: ${completion.outcome}`,
       };
     }
   }

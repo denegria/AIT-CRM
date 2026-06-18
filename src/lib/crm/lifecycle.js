@@ -42,6 +42,11 @@ export const CLOSED_LIFECYCLE_STATUSES = [
   ...new Set(Object.values(WORKFLOW_DEFINITIONS).flatMap((workflow) => workflow.closedStatuses)),
 ];
 
+export const CLOSED_STATUS_REOPEN_REASONS = Object.freeze({
+  correction: 'Status correction: previous closed status was entered by mistake.',
+  new_course_follow_up: 'Reopened for new course follow-up.',
+});
+
 const STATUS_ALIASES = new Map([
   ['new', 'New Lead'],
   ['new lead', 'New Lead'],
@@ -204,6 +209,11 @@ export function isClosedLifecycleStatus(status, options = {}) {
   return workflow.closedStatuses.includes(normalizeLifecycleStatus(status, options));
 }
 
+export function normalizeClosedStatusReopenReason(value = '') {
+  const key = String(value || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
+  return CLOSED_STATUS_REOPEN_REASONS[key] ? key : '';
+}
+
 export function evaluateLifecycleTransition({
   fromStatus,
   toStatus,
@@ -211,25 +221,37 @@ export function evaluateLifecycleTransition({
   businessUnitName = '',
   workflowKey = '',
   canReopenClosedStatus = false,
+  reopenClosedStatusReason = '',
 }) {
   const workflow = lifecycleWorkflowForKey(workflowKey || workflowKeyForBusinessUnit(businessUnit || businessUnitName || ''));
   const options = { workflowKey: workflow.key };
   const from = normalizeLifecycleStatus(fromStatus, options) || workflow.statuses[0];
   const to = requireLifecycleStatus(toStatus, options);
+  const fromClosed = isClosedLifecycleStatus(from, options);
+  const reopenReasonKey = normalizeClosedStatusReopenReason(reopenClosedStatusReason);
 
   if (from === to) {
     return { allowed: true, fromStatus: from, toStatus: to, changed: false };
   }
 
-  if (isClosedLifecycleStatus(from, options) && !canReopenClosedStatus) {
+  if (fromClosed && !canReopenClosedStatus && !reopenReasonKey) {
     return {
       allowed: false,
       fromStatus: from,
       toStatus: to,
       changed: true,
-      reason: 'Only all-division users can change a closed lead status.',
+      reason: 'Changing a closed lead status requires a correction or new-course follow-up reason.',
     };
   }
 
-  return { allowed: true, fromStatus: from, toStatus: to, changed: true };
+  return {
+    allowed: true,
+    fromStatus: from,
+    toStatus: to,
+    changed: true,
+    ...(fromClosed && reopenReasonKey ? {
+      reopenReason: reopenReasonKey,
+      reason: CLOSED_STATUS_REOPEN_REASONS[reopenReasonKey],
+    } : {}),
+  };
 }
