@@ -535,8 +535,25 @@
   padding: 8px 16px;
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
   border-top: 1px solid var(--border-subtle);
   background: var(--bg-secondary);
+}
+
+.followUpHint {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.followUpError {
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--danger) 44%, var(--border-subtle));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--danger) 8%, var(--bg-secondary));
+  color: var(--danger);
+  font-size: var(--text-sm);
 }
 
 .snapshotStrip {

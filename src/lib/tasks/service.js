@@ -471,6 +471,117 @@ export async function completeFollowUpTaskWithActivity({
   });
 }
 
+export async function recordFollowUpActivity({
+  db,
+  organizationId,
+  actorUserId,
+  context,
+  followUpActivity,
+  contactPatch = null,
+  leadPatch = null,
+  leadStatusChange = null,
+  profileActivity = null,
+  nextTaskValues = null,
+  nextTaskEventMetadata = {},
+}) {
+  return db.transaction(async (tx) => {
+    await tx.insert(activityEvents).values({
+      organizationId,
+      businessUnitId: context.businessUnitId,
+      contactId: context.contactId || null,
+      leadId: context.leadId || null,
+      workOrderId: context.workOrderId || null,
+      eventType: followUpActivity.eventType,
+      message: followUpActivity.message,
+      metadataJson: followUpActivity.metadataJson || {},
+      actorUserId,
+      occurredAt: followUpActivity.occurredAt || new Date(),
+    });
+
+    await tx.insert(notes).values({
+      organizationId,
+      businessUnitId: context.businessUnitId,
+      contactId: context.contactId || null,
+      leadId: context.leadId || null,
+      workOrderId: context.workOrderId || null,
+      body: followUpActivity.noteBody || followUpActivity.message,
+      authorUserId: actorUserId,
+    });
+
+    if (contactPatch && context.contactId) {
+      await tx
+        .update(contacts)
+        .set(contactPatch)
+        .where(and(eq(contacts.id, context.contactId), eq(contacts.organizationId, organizationId)));
+    }
+
+    let lead = null;
+    if (leadPatch && context.leadId) {
+      [lead] = await tx
+        .update(leads)
+        .set(leadPatch)
+        .where(and(eq(leads.id, context.leadId), eq(leads.organizationId, organizationId)))
+        .returning();
+
+      if (lead && leadStatusChange?.changed) {
+        await tx.insert(leadStatusHistory).values({
+          organizationId,
+          businessUnitId: lead.businessUnitId,
+          contactId: lead.contactId,
+          leadId: lead.id,
+          fromStatus: leadStatusChange.fromStatus,
+          toStatus: leadStatusChange.toStatus,
+          actorUserId,
+          reason: leadStatusChange.reason || null,
+          occurredAt: new Date(),
+        });
+      }
+
+      if (lead && profileActivity) {
+        await tx.insert(activityEvents).values({
+          organizationId,
+          businessUnitId: lead.businessUnitId,
+          contactId: lead.contactId,
+          leadId: lead.id,
+          workOrderId: context.workOrderId || null,
+          eventType: profileActivity.eventType || 'lead_profile.updated',
+          message: profileActivity.message || 'Updated lead profile.',
+          metadataJson: profileActivity.metadataJson || {},
+          actorUserId,
+          occurredAt: profileActivity.occurredAt || new Date(),
+        });
+      }
+    }
+
+    let nextTask = null;
+    if (nextTaskValues) {
+      [nextTask] = await tx
+        .insert(tasks)
+        .values({
+          organizationId,
+          businessUnitId: context.businessUnitId,
+          contactId: context.contactId || null,
+          leadId: context.leadId || null,
+          workOrderId: context.workOrderId || null,
+          createdByUserId: actorUserId,
+          ...nextTaskValues,
+        })
+        .returning();
+
+      await tx.insert(taskEvents).values(taskEventValues({
+        organizationId,
+        actorUserId,
+        task: nextTask,
+        eventType: TASK_EVENT_TYPES.CREATED,
+        message: 'Created next follow-up task.',
+        metadataJson: nextTaskEventMetadata,
+      }));
+    }
+
+    return { lead, nextTask };
+  });
+}
+
 export function compactTaskPatch(patch) {
   return compactObject(patch);
 }
