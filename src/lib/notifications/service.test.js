@@ -22,8 +22,8 @@ test('builds reusable inbound lead notifications with contact deep links', () =>
 
   assert.equal(notification.type, 'inbound_lead');
   assert.equal(notification.sourceType, 'facebook_lead_ads');
-  assert.equal(notification.title, 'New Facebook lead');
-  assert.equal(notification.body, 'Ada Lovelace - Submitted the AIT USA lead form.');
+  assert.equal(notification.title, 'Ada Lovelace - Facebook lead');
+  assert.equal(notification.body, 'Submitted the AIT USA lead form. Open the contact to assign and follow up.');
   assert.equal(notification.href, '/contacts/contact-1?leadId=lead-1');
   assert.deepEqual(notification.metadataJson, {
     sourceName: 'Facebook Ads',
@@ -60,6 +60,6 @@ test('persists inbound lead notifications idempotently', async () => {
     null,
     'inbound_lead',
     'website_form',
-    'New website lead',
+    'Wix Lead - Website Form',
   ]);
 });

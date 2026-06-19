@@ -252,6 +252,14 @@ a { color: inherit; text-decoration: none; }
     radial-gradient(circle at 98% 0%, color-mix(in srgb, var(--accent-muted) 58%, transparent), transparent 260px);
 }
 
+.app-topbar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  min-height: 38px;
+  margin: -10px 0 14px;
+}
+
 [data-theme="dark"] .main-content {
   background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(255,255,255,0) 180px);
 }
@@ -283,6 +291,11 @@ a { color: inherit; text-decoration: none; }
     height: 100dvh;
     padding: 12px;
     padding-bottom: calc(var(--mobile-bottom-nav-height) + var(--mobile-shell-clearance) + env(safe-area-inset-bottom));
+  }
+
+  .app-topbar {
+    min-height: 36px;
+    margin: 0 0 10px;
   }
 
   .app-layout-has-mobile-scope .main-content {

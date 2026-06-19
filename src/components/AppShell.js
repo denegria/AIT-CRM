@@ -20,11 +20,13 @@ export default function AppShell({ children }) {
   return (
     <>
       <CommandPalette />
-      <NotificationBell />
       <SessionSwitchGuard />
       <div className={`app-layout ${hasMobileScopeBar ? 'app-layout-has-mobile-scope' : ''}`}>
         <Sidebar />
         <main className="main-content">
+          <header className="app-topbar" aria-label="Workspace notifications">
+            <NotificationBell />
+          </header>
           {children}
         </main>
       </div>

@@ -1,8 +1,7 @@
 .wrap {
-  position: fixed;
-  top: 14px;
-  right: 16px;
-  z-index: 120;
+  position: relative;
+  z-index: 40;
+  display: inline-flex;
 }
 
 .trigger {
@@ -173,8 +172,7 @@
 
 @media (max-width: 900px) {
   .wrap {
-    top: 10px;
-    right: max(10px, env(safe-area-inset-right));
+    z-index: 40;
   }
 
   .trigger {

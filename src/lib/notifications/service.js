@@ -11,15 +11,28 @@ function cleanText(value) {
   return String(value || '').trim();
 }
 
-function inboundLeadTitle(sourceType) {
-  if (sourceType === NOTIFICATION_SOURCES.FACEBOOK_LEAD_ADS) return 'New Facebook lead';
-  return 'New website lead';
-}
-
 function notificationHref({ contactId, leadId }) {
   if (contactId) return `/contacts/${contactId}${leadId ? `?leadId=${leadId}` : ''}`;
   if (leadId) return `/pipeline?leadId=${leadId}`;
   return '/pipeline';
+}
+
+function inboundLeadDisplayLabel(sourceType, sourceName) {
+  if (sourceType === NOTIFICATION_SOURCES.FACEBOOK_LEAD_ADS) return 'Facebook lead';
+  return cleanText(sourceName) || 'Website lead';
+}
+
+function inboundLeadSourceLabel(sourceType, sourceName) {
+  const sourceLabel = cleanText(sourceName);
+  if (sourceLabel) return sourceLabel;
+  if (sourceType === NOTIFICATION_SOURCES.FACEBOOK_LEAD_ADS) return 'Facebook Ads';
+  return 'Website Form';
+}
+
+function inboundLeadTitle({ contactName, sourceType, sourceName }) {
+  const name = cleanText(contactName) || 'New lead';
+  const sourceLabel = inboundLeadDisplayLabel(sourceType, sourceName);
+  return `${name} - ${sourceLabel}`;
 }
 
 export function buildInboundLeadNotification({
@@ -34,9 +47,8 @@ export function buildInboundLeadNotification({
   idempotencyKey,
   metadata = {},
 } = {}) {
-  const title = inboundLeadTitle(sourceType);
-  const sourceLabel = cleanText(sourceName)
-    || (sourceType === NOTIFICATION_SOURCES.FACEBOOK_LEAD_ADS ? 'Facebook Ads' : 'Website Form');
+  const sourceLabel = inboundLeadSourceLabel(sourceType, sourceName);
+  const title = inboundLeadTitle({ contactName, sourceType, sourceName: sourceLabel });
   const name = cleanText(contactName) || 'A new lead';
   const bodyDetail = cleanText(detail);
   return {
@@ -46,7 +58,7 @@ export function buildInboundLeadNotification({
     type: NOTIFICATION_TYPES.INBOUND_LEAD,
     sourceType,
     title,
-    body: bodyDetail ? `${name} - ${bodyDetail}` : `${name} came in from ${sourceLabel}.`,
+    body: bodyDetail ? `${bodyDetail} Open the contact to assign and follow up.` : `${name} came in from ${sourceLabel}. Open the contact to assign and follow up.`,
     href: notificationHref({ contactId, leadId }),
     contactId: contactId || null,
     leadId: leadId || null,
