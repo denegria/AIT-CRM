@@ -1,6 +1,7 @@
 'use client';
 import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { ListTodo, UserPlus } from 'lucide-react';
 import { useCRM } from '@/lib/store';
 import KPICard from '@/components/KPICard';
 import TaskList from '@/components/TaskList';
@@ -51,6 +52,19 @@ function isPendingEstimate(record = {}) {
   return type === 'estimate' && status !== 'draft' && status !== 'paid';
 }
 
+function isUnassignedInboundLeadFollowUp(task = {}) {
+  return isOpenTask(task) &&
+    task.taskType === 'follow_up' &&
+    !task.ownerUserId &&
+    task.sourceType === 'automation' &&
+    task.sourceLabel === 'New lead follow-up';
+}
+
+function isFacebookLeadFollowUp(task = {}) {
+  return isUnassignedInboundLeadFollowUp(task) &&
+    String(task.sourceId || '').startsWith('facebook_lead_ads:');
+}
+
 export default function Dashboard() {
   const {
     role,
@@ -89,6 +103,8 @@ export default function Dashboard() {
     const dueTodayTasks = myTasks.filter(task => isTaskDueToday(task));
     const overdueTasks = myTasks.filter(task => isTaskOverdue(task));
     const myTasksCount = myTasks.filter(isTaskCurrentWork).length;
+    const unassignedLeadFollowUps = tasks.filter(isUnassignedInboundLeadFollowUp);
+    const unassignedFacebookFollowUps = unassignedLeadFollowUps.filter(isFacebookLeadFollowUp);
     const activeContacts = currentContacts.length;
     const pendingInvoices = invoices.filter(f => f.status === 'Pending').length;
     const assignedWOs = workOrders.filter(w => w.assignedTo === currentUserId && isOpenWorkOrder(w)).length;
@@ -117,6 +133,8 @@ export default function Dashboard() {
       activeWOs,
       newLeads,
       myTasksCount,
+      unassignedLeadFollowUps: unassignedLeadFollowUps.length,
+      unassignedFacebookFollowUps: unassignedFacebookFollowUps.length,
       activeContacts,
       pendingInvoices,
       assignedWOs,
@@ -168,14 +186,19 @@ export default function Dashboard() {
   }, [tasks, isAdminView, currentUserId]);
 
   const dashboardKpiCards = useMemo(() => {
-    const taskHref = kpis.overdueTasks
+    const inboundTaskHref = '/tasks?ownerUserId=unassigned&taskType=follow_up&status=open';
+    const taskHref = kpis.unassignedLeadFollowUps
+      ? inboundTaskHref
+      : kpis.overdueTasks
       ? `/tasks?due=overdue${isAdminView ? '' : '&ownerUserId=__me'}`
       : `/tasks?due=today${isAdminView ? '' : '&ownerUserId=__me'}`;
     const taskCard = {
-      label: kpis.overdueTasks ? 'Overdue Tasks' : 'Tasks Due Today',
-      value: kpis.overdueTasks || kpis.dueTodayTasks,
-      change: kpis.overdueTasks ? `${kpis.dueTodayTasks} also due today` : 'Due today',
-      trend: kpis.overdueTasks ? 'down' : 'up',
+      label: kpis.unassignedLeadFollowUps ? 'Unassigned Lead Follow-ups' : kpis.overdueTasks ? 'Overdue Tasks' : 'Tasks Due Today',
+      value: kpis.unassignedLeadFollowUps || kpis.overdueTasks || kpis.dueTodayTasks,
+      change: kpis.unassignedLeadFollowUps
+        ? kpis.unassignedFacebookFollowUps ? `${kpis.unassignedFacebookFollowUps} Facebook leads` : 'Needs owner'
+        : kpis.overdueTasks ? `${kpis.dueTodayTasks} also due today` : 'Due today',
+      trend: kpis.unassignedLeadFollowUps || kpis.overdueTasks ? 'down' : 'up',
       href: taskHref,
     };
     const workflowKey = workflowKeyForBusinessUnit(currentBusinessUnit || '');
@@ -210,6 +233,15 @@ export default function Dashboard() {
         : { label: 'Needs First Outreach', value: kpis.needsFirstOutreach, change: 'Ready to assign', trend: 'up', href: '/contacts?leadDateScope=current&facet=needs_first_outreach' },
     ];
   }, [canReadFinancials, currentBusinessUnit, isAdminView, kpis, workOrders]);
+
+  const unassignedLeadFollowUps = useMemo(
+    () => tasks.filter(isUnassignedInboundLeadFollowUp),
+    [tasks],
+  );
+  const unassignedFacebookFollowUps = useMemo(
+    () => unassignedLeadFollowUps.filter(isFacebookLeadFollowUp),
+    [unassignedLeadFollowUps],
+  );
 
   const dashboardDueTodayTasks = useMemo(() => {
     const todayKey = new Date().toISOString().slice(0, 10);
@@ -313,6 +345,30 @@ export default function Dashboard() {
               <span className="badge badge-pending">{importStaging.latestBatch.status}</span>
               <Link className="btn btn-sm btn-primary" href="/import-review">
                 Open review queue
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {unassignedLeadFollowUps.length > 0 && (
+        <div className="card" style={{marginBottom:20, padding:16, borderColor:'color-mix(in srgb, var(--warning) 42%, var(--border-subtle))'}}>
+          <div className="flex-between" style={{alignItems:'flex-start', gap:16}}>
+            <div>
+              <div className="card-title" style={{marginBottom:4}}>Unassigned lead follow-ups</div>
+              <p className="page-subtitle" style={{margin:0}}>
+                {unassignedLeadFollowUps.length} new lead follow-up{unassignedLeadFollowUps.length === 1 ? '' : 's'} need an owner
+                {unassignedFacebookFollowUps.length ? ` · ${unassignedFacebookFollowUps.length} from Facebook` : ''}.
+              </p>
+            </div>
+            <div className="flex-gap" style={{justifyContent:'flex-end'}}>
+              <Link className="btn btn-sm btn-primary" href="/tasks?ownerUserId=unassigned&taskType=follow_up&status=open">
+                <ListTodo size={14} />
+                Review queue
+              </Link>
+              <Link className="btn btn-sm" href="/tasks?ownerUserId=unassigned&taskType=follow_up&status=open&due=work">
+                <UserPlus size={14} />
+                Assign follow-ups
               </Link>
             </div>
           </div>

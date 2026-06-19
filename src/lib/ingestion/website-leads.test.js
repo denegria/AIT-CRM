@@ -193,8 +193,8 @@ test('creates a notification after a new website lead is promoted', async () => 
     null,
     'inbound_lead',
     'website_form',
-    'New website lead',
-    'Wix Lead - Interested in Channel letters.',
+    'Wix Lead - Website Form',
+    'Interested in Channel letters. Open the contact to assign and follow up.',
     '/contacts/contact-1?leadId=lead-1',
   ]);
   assert.equal(notificationInsert.params[11], 'website:web-001');

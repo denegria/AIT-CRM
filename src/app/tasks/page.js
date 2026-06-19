@@ -9,6 +9,7 @@ import {
   Pencil,
   ExternalLink,
   FilterX,
+  ListTodo,
   Plus,
   RefreshCcw,
   Repeat2,
@@ -216,6 +217,19 @@ function recurrenceLabel(recurrence) {
   if (!recurrence?.frequency || recurrence.frequency === 'none') return '';
   const match = TASK_RECURRENCE_OPTIONS.find(([value]) => value === recurrence.frequency);
   return match?.[1] || titleCase(recurrence.frequency);
+}
+
+function isUnassignedInboundLeadFollowUp(task = {}) {
+  return isTaskOpen(task) &&
+    task.taskType === 'follow_up' &&
+    !task.ownerUserId &&
+    task.sourceType === 'automation' &&
+    task.sourceLabel === 'New lead follow-up';
+}
+
+function isFacebookLeadFollowUp(task = {}) {
+  return isUnassignedInboundLeadFollowUp(task) &&
+    String(task.sourceId || '').startsWith('facebook_lead_ads:');
 }
 
 function optionLabel(options, value) {
@@ -437,14 +451,34 @@ export default function FollowUpQueuePage() {
       .sort((a, b) => String(b.completedAt || '').localeCompare(String(a.completedAt || '')));
   }, [currentUser?.id, filters.businessUnitId, filters.link, filters.ownerUserId, filters.taskType, queueTasks]);
 
+  const unassignedLeadFollowUps = useMemo(
+    () => queueTasks.filter(isUnassignedInboundLeadFollowUp),
+    [queueTasks],
+  );
+
+  const unassignedFacebookFollowUps = useMemo(
+    () => unassignedLeadFollowUps.filter(isFacebookLeadFollowUp),
+    [unassignedLeadFollowUps],
+  );
+
   const stats = useMemo(() => {
     const today = todayKey();
     const currentWork = queueTasks.filter((task) => isTaskCurrentWork(task, today)).length;
     const dueToday = queueTasks.filter((task) => isTaskDueToday(task, today)).length;
     const overdue = queueTasks.filter((task) => isTaskOverdue(task, today)).length;
     const completedToday = queueTasks.filter((task) => isTaskCompletedToday(task, today)).length;
-    return { currentWork, dueToday, overdue, completedToday };
+    const unassigned = queueTasks.filter((task) => isTaskOpen(task) && !task.ownerUserId).length;
+    return { currentWork, dueToday, overdue, unassigned, completedToday };
   }, [queueTasks]);
+
+  const showUnassignedLeadFollowUps = () => setFilters((prev) => ({
+    ...prev,
+    due: 'work',
+    ownerUserId: 'unassigned',
+    taskType: 'follow_up',
+    status: 'open',
+    link: 'contact',
+  }));
 
   async function applyTaskAction(task, action, payload = {}) {
     if (!access.canWriteCrm) return;
@@ -992,10 +1026,29 @@ export default function FollowUpQueuePage() {
         <div className={s.summaryTile}><span className={s.summaryValue}>{stats.currentWork}</span><span className={s.summaryLabel}>Current Work</span></div>
         <div className={s.summaryTile}><span className={s.summaryValue}>{stats.dueToday}</span><span className={s.summaryLabel}>Due Today</span></div>
         <div className={s.summaryTile}><span className={s.summaryValue}>{stats.overdue}</span><span className={s.summaryLabel}>Overdue</span></div>
+        <button className={`${s.summaryTile} ${s.summaryButton}`} type="button" onClick={showUnassignedLeadFollowUps}>
+          <span className={s.summaryValue}>{stats.unassigned}</span>
+          <span className={s.summaryLabel}>Unassigned</span>
+        </button>
         <div className={s.summaryTile}><span className={s.summaryValue}>{stats.completedToday}</span><span className={s.summaryLabel}>Done Today</span></div>
       </div>
 
       <div className="card">
+        {unassignedLeadFollowUps.length > 0 && (
+          <div className={s.intakeAlert}>
+            <div className={s.intakeAlertText}>
+              <span className={s.intakeAlertTitle}>New lead follow-ups need owners</span>
+              <span className={s.intakeAlertCopy}>
+                {unassignedLeadFollowUps.length} unassigned lead follow-up{unassignedLeadFollowUps.length === 1 ? '' : 's'}
+                {unassignedFacebookFollowUps.length ? ` · ${unassignedFacebookFollowUps.length} Facebook` : ''}.
+              </span>
+            </div>
+            <button className="btn btn-sm btn-primary" type="button" onClick={showUnassignedLeadFollowUps}>
+              <ListTodo size={14} />
+              Show queue
+            </button>
+          </div>
+        )}
         <div className={s.mobileFilterSummary} aria-label="Active task filters">
           <div className={s.mobileFilterText}>
             <span className={s.mobileFilterLabel}>Active filters</span>
@@ -1019,6 +1072,7 @@ export default function FollowUpQueuePage() {
             <select className="select" value={filters.ownerUserId} onChange={(event) => setFilters((prev) => ({ ...prev, ownerUserId: event.target.value }))}>
               <option value="all">All Owners</option>
               {currentUser?.id && <option value="__me">My Tasks</option>}
+              <option value="unassigned">Unassigned</option>
               {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
             </select>
           </label>

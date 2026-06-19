@@ -1,5 +1,5 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -8,7 +8,7 @@ import { useCRM } from '@/lib/store';
 import { isClientAccountBusinessUnit } from '@/lib/crm/lifecycle';
 import s from './Sidebar.module.css';
 
-import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, CloudSun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal } from 'lucide-react';
 
 const nav = [
   { href: '/', label: 'Dashboard', Icon: LayoutDashboard },
@@ -32,6 +32,12 @@ const roleLabels = {
   sales_manager: 'Sales Manager',
 };
 
+const themeOptions = [
+  { value: 'light', label: 'Light', Icon: Sun },
+  { value: 'dusk', label: 'Dusk', Icon: CloudSun },
+  { value: 'dark', label: 'Dark', Icon: Moon },
+];
+
 function isRouteActive(pathname, href) {
   if (href === '/') return pathname === '/';
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -41,6 +47,32 @@ function formatRoleLabel(roleKey) {
   return roleLabels[roleKey] || String(roleKey || '')
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function divisionBrandFor(unit) {
+  const unitName = String(unit?.name || '').trim();
+  if (/ait\s*signs/i.test(unitName)) {
+    return {
+      title: 'AIT Signs',
+      alt: 'AIT Signs',
+      logoSrc: '/ait-signs-logo.png',
+      mark: '',
+    };
+  }
+  if (/ait\s*usa/i.test(unitName)) {
+    return {
+      title: 'AIT USA',
+      alt: 'AIT USA',
+      logoSrc: '/logo.png',
+      mark: '',
+    };
+  }
+  return {
+    title: unitName || 'AIT CRM',
+    alt: unitName || 'AIT CRM',
+    logoSrc: '/logo.png',
+    mark: '',
+  };
 }
 
 export default function Sidebar() {
@@ -71,6 +103,12 @@ export default function Sidebar() {
 
   const isClientViewScope = currentBusinessUnitId !== 'all' && isClientAccountBusinessUnit(currentBusinessUnit);
   const canUseFinancialsWorkspace = Boolean(access.canReadSettings || access.canReadReports || role === 'admin');
+  const divisionBrand = useMemo(() => divisionBrandFor(currentBusinessUnit), [currentBusinessUnit]);
+
+  useEffect(() => {
+    document.title = divisionBrand.title;
+  }, [divisionBrand.title]);
+
   const scopedNav = useMemo(() => nav.map((item) => {
     if (item.href === '/contacts' && isClientViewScope) {
       return { href: '/clients', label: 'Clients', Icon: Building2 };
@@ -131,8 +169,12 @@ export default function Sidebar() {
   return (
     <aside className={s.sidebar}>
       <div className={s.logo}>
-        <Image src="/logo.png" alt="AIT USA" width={40} height={40} className={s.logoImage} />
-        <span>AIT USA</span>
+        {divisionBrand.logoSrc ? (
+          <Image src={divisionBrand.logoSrc} alt={divisionBrand.alt} width={40} height={40} className={s.logoImage} />
+        ) : (
+          <span className={s.logoMark} aria-hidden="true">{divisionBrand.mark}</span>
+        )}
+        <span>{divisionBrand.title}</span>
       </div>
       {accessibleBusinessUnits?.length > 0 && (
         <div className={s.mobileScopeBar}>
@@ -185,11 +227,20 @@ export default function Sidebar() {
         </div>
       </nav>
       <div className={s.bottom}>
-        <div className={s.themeToggle}>
-          <button className={s.themeBtn} onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}>
-            {theme === 'light' ? <Moon size={16} /> : <Sun size={16} />}
-            <span>{theme === 'light' ? 'Dark Mode' : 'Light Mode'}</span>
-          </button>
+        <div className={s.themeToggle} role="group" aria-label="Theme">
+          {themeOptions.map(({ value, label, Icon }) => (
+            <button
+              key={value}
+              type="button"
+              className={`${s.themeBtn} ${theme === value ? s.themeBtnActive : ''}`}
+              onClick={() => setTheme(value)}
+              aria-pressed={theme === value}
+              title={`${label} theme`}
+            >
+              <Icon size={15} />
+              <span>{label}</span>
+            </button>
+          ))}
         </div>
         <div className={s.roleSwitcher}>
           <label className={s.roleLabel}>Signed In</label>

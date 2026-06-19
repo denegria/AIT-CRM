@@ -329,8 +329,8 @@ test('auto-promotes safe mapped leadgen events while preserving import audit row
     null,
     'inbound_lead',
     'facebook_lead_ads',
-    'New Facebook lead',
-    'Ada Lovelace - Submitted Facebook form form-1.',
+    'Ada Lovelace - Facebook lead',
+    'Submitted Facebook form form-1. Open the contact to assign and follow up.',
     '/contacts/contact-1?leadId=lead-1',
   ]);
   assert.equal(notificationInsert.params[11], 'facebook_lead_ads:leadgen-1');

@@ -1,6 +1,6 @@
 .summaryGrid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -12,6 +12,20 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
+}
+
+.summaryButton {
+  appearance: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  font-family: var(--font-sans);
+  color: inherit;
+}
+
+.summaryButton:hover {
+  border-color: var(--accent);
+  background: var(--bg-hover);
 }
 
 .summaryValue {
@@ -46,6 +60,37 @@
 
 .mobileFilterText {
   min-width: 0;
+}
+
+.intakeAlert {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 11px 12px;
+  border: 1px solid color-mix(in srgb, var(--warning) 36%, var(--border-subtle));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--warning-muted) 46%, var(--bg-secondary));
+}
+
+.intakeAlertText {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.intakeAlertTitle {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 760;
+  line-height: 1.25;
+}
+
+.intakeAlertCopy {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.35;
 }
 
 .mobileFilterLabel {
@@ -395,6 +440,10 @@
 }
 
 @media (max-width: 1120px) {
+  .summaryGrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
   .toolbar {
     grid-template-columns: repeat(4, minmax(130px, 1fr));
   }
@@ -472,6 +521,15 @@
     border: 1px solid var(--border-subtle);
     border-radius: var(--radius-md);
     background: color-mix(in srgb, var(--bg-secondary) 85%, var(--bg-tertiary));
+  }
+
+  .intakeAlert {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .intakeAlert button {
+    width: 100%;
   }
 
   .mobileFilterSummary button {
