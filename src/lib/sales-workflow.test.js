@@ -12,7 +12,7 @@ import {
 test('workflowColumnsForBusinessUnit returns AIT USA enrollment columns', () => {
   assert.deepEqual(
     workflowColumnsForBusinessUnit({ name: 'AIT USA Institute' }).map((column) => column.id),
-    ['New Lead', 'Follow Up', 'Enrolled', 'Retargeting', 'Not Interested', 'Course Completed'],
+    ['New Lead', 'Follow Up', 'Enrolled', 'Dropped / Quit', 'Retargeting', 'Not Interested', 'Course Completed'],
   );
 });
 
@@ -68,6 +68,18 @@ test('workflowFromLead maps legacy statuses into the AIT USA workflow', () => {
     'Retargeting',
   );
   assert.equal(
+    pipelineStatusFromLead({ status: 'Dropped course' }, { businessUnit: { name: 'AIT USA Institute' } }),
+    'Dropped / Quit',
+  );
+  assert.equal(
+    pipelineStatusFromLead({ status: 'Quit course' }, { businessUnit: { name: 'AIT USA Institute' } }),
+    'Dropped / Quit',
+  );
+  assert.equal(
+    pipelineStatusFromLead({ status: 'Previous student' }, { businessUnit: { name: 'AIT USA Institute' } }),
+    'New Lead',
+  );
+  assert.equal(
     pipelineStatusFromLead({ status: 'Closed Lost' }, { businessUnit: { name: 'AIT USA Institute' } }),
     'Not Interested',
   );
@@ -94,6 +106,20 @@ test('AIT USA default pipeline excludes prior-year and explicit retargeting rows
   assert.equal(
     isPipelineEligibleContact(
       { id: 'retargeting-status', workflowKey: 'ait_usa', status: 'Retargeting', leadCreatedAt: '2026-02-01T00:00:00.000Z' },
+      { businessUnit, now },
+    ),
+    false,
+  );
+  assert.equal(
+    isPipelineEligibleContact(
+      { id: 'dropped-status', workflowKey: 'ait_usa', status: 'Dropped / Quit', leadCreatedAt: '2026-02-01T00:00:00.000Z' },
+      { businessUnit, now },
+    ),
+    false,
+  );
+  assert.equal(
+    isPipelineEligibleContact(
+      { id: 'quit-status', workflowKey: 'ait_usa', status: 'Dropped / Quit', leadCreatedAt: '2026-02-01T00:00:00.000Z' },
       { businessUnit, now },
     ),
     false,

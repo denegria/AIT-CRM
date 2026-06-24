@@ -200,3 +200,32 @@ test('AIT USA contact detail only adds student receipt finance affordances when 
     'Source details',
   ]);
 });
+
+test('AIT USA contact detail reads ended course and outcome metadata', () => {
+  const model = buildContactDetailViewModel({
+    businessUnit: { name: 'AIT USA Institute' },
+    contact: {
+      workflowKey: 'ait_usa',
+      name: 'Former Student',
+      status: 'Dropped / Quit',
+      currentStage: 'Dropped / Quit',
+      enrollmentSignals: {
+        source: { channel: 'Wix Website Form' },
+        inquiry: { programInterest: 'Tax Prep' },
+        course: {
+          ended: 'Tax Prep 2026',
+          outcome: 'dropped',
+        },
+        process: { stage: 'Dropped / Quit' },
+        contactability: {
+          status: 'reachable',
+          label: 'Reachable',
+          canFollowUp: true,
+        },
+      },
+    },
+  });
+
+  assert.ok(model.highlights.some((item) => item.label === 'Ended course' && item.value === 'Tax Prep 2026'));
+  assert.ok(model.highlights.some((item) => item.label === 'Course outcome' && item.value === 'dropped'));
+});

@@ -49,6 +49,73 @@ function parseTags(value = '') {
   return unique(clean(value).split(/[;,]/));
 }
 
+function firstPresent(values = []) {
+  return values.map(clean).find(Boolean) || '';
+}
+
+function fieldValue(fields = {}, aliases = []) {
+  for (const key of aliases) {
+    const value = clean(fields[key]);
+    if (value) return value;
+  }
+  return '';
+}
+
+export function aitUsaCourseMetadataFromFields(fields = {}, fallback = {}) {
+  const current = firstPresent([
+    fieldValue(fields, ['current_course', 'enrolled_course', 'course', 'program', 'service']),
+    fallback.currentCourse,
+    fallback.enrolledCourse,
+    fallback.programInterest,
+  ]);
+  const completed = firstPresent([
+    fieldValue(fields, ['completed_course', 'course_completed', 'finished_course']),
+    fallback.completedCourse,
+  ]);
+  const ended = firstPresent([
+    fieldValue(fields, ['ended_course', 'dropped_course', 'quit_course', 'last_course']),
+    fallback.endedCourse,
+    completed,
+  ]);
+  const outcome = firstPresent([
+    fieldValue(fields, ['course_outcome', 'outcome', 'completion_outcome', 'end_reason']),
+    fallback.courseOutcome,
+  ]);
+
+  return compactObject({
+    current,
+    enrolled: firstPresent([fieldValue(fields, ['enrolled_course']), fallback.enrolledCourse, current]),
+    completed,
+    ended,
+    outcome,
+  });
+}
+
+export function aitUsaCourseMetadataForContact(contact = {}) {
+  return aitUsaCourseMetadataFromFields({}, {
+    currentCourse: contact.enrollmentSignals?.course?.current,
+    enrolledCourse: contact.enrollmentSignals?.course?.enrolled,
+    completedCourse: contact.enrollmentSignals?.course?.completed,
+    endedCourse: contact.enrollmentSignals?.course?.ended,
+    courseOutcome: contact.enrollmentSignals?.course?.outcome,
+    programInterest: contact.enrollmentSignals?.inquiry?.programInterest || contact.programInterest,
+  });
+}
+
+export function currentOrEnrolledAitUsaCourse(contact = {}) {
+  const course = aitUsaCourseMetadataForContact(contact);
+  return firstPresent([course.current, course.enrolled]);
+}
+
+export function completedOrEndedAitUsaCourse(contact = {}) {
+  const course = aitUsaCourseMetadataForContact(contact);
+  return firstPresent([course.completed, course.ended]);
+}
+
+export function aitUsaCourseOutcome(contact = {}) {
+  return clean(aitUsaCourseMetadataForContact(contact).outcome);
+}
+
 function displaySourceChannel({ sourceName = '', sourceType = '', sourceKey = '' } = {}) {
   const source = normalized(sourceName || sourceKey || sourceType);
   if (source.includes('facebook') || source.includes('messenger')) return 'Facebook Messenger';
@@ -160,6 +227,15 @@ export function buildAitUsaEnrollmentSignals({ contact = {}, lead = null, workfl
   const contactability = contactabilityForContact(contact);
   const disposition = qualityDisposition(contactability);
   const stage = clean(lead?.currentStage || fields.current_stage || lead?.status || workflow.status);
+  const programInterest = clean(fields.service);
+  const course = aitUsaCourseMetadataFromFields(fields, {
+    programInterest,
+    currentCourse: workflow.currentCourse,
+    enrolledCourse: workflow.enrolledCourse,
+    completedCourse: workflow.completedCourse,
+    endedCourse: workflow.endedCourse,
+    courseOutcome: workflow.courseOutcome,
+  });
   const processState = compactObject({
     stage,
     status: clean(workflow.status || lead?.status),
@@ -183,12 +259,13 @@ export function buildAitUsaEnrollmentSignals({ contact = {}, lead = null, workfl
     }),
     inquiry: compactObject({
       service: clean(fields.service),
-      programInterest: clean(fields.service),
+      programInterest,
       location: clean(contact.address || fields.address),
       age: clean(fields.age),
       formFields: clean(fields.form_fields),
       message: clean(fields.message),
     }),
+    course,
     process: processState,
     contactability,
     quality: compactObject({

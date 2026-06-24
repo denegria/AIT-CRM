@@ -26,7 +26,7 @@ test('lifecycle workflows resolve division-specific statuses', () => {
   assert.equal(isClientAccountBusinessUnit({ name: 'AIT USA Institute' }), false);
   assert.deepEqual(
     lifecycleWorkflowForBusinessUnit({ name: 'AIT USA Institute' }).statuses,
-    ['New Lead', 'Follow Up', 'Enrolled', 'Retargeting', 'Not Interested', 'Course Completed'],
+    ['New Lead', 'Follow Up', 'Enrolled', 'Dropped / Quit', 'Retargeting', 'Not Interested', 'Course Completed'],
   );
   assert.deepEqual(
     lifecycleWorkflowForBusinessUnit({ name: 'AIT Signs' }).statuses,
@@ -34,8 +34,11 @@ test('lifecycle workflows resolve division-specific statuses', () => {
   );
   assert.equal(normalizeLifecycleStatus('contacted', { businessUnit: { name: 'AIT USA Institute' } }), 'Follow Up');
   assert.equal(normalizeLifecycleStatus('won', { businessUnit: { name: 'AIT USA Institute' } }), 'Enrolled');
+  assert.equal(normalizeLifecycleStatus('withdrawn', { businessUnit: { name: 'AIT USA Institute' } }), 'Dropped / Quit');
+  assert.equal(normalizeLifecycleStatus('quit course', { businessUnit: { name: 'AIT USA Institute' } }), 'Dropped / Quit');
   assert.equal(normalizeLifecycleStatus('retargeting only', { businessUnit: { name: 'AIT USA Institute' } }), 'Retargeting');
   assert.equal(normalizeLifecycleStatus('Completed / Previous Student', { businessUnit: { name: 'AIT USA Institute' } }), 'Course Completed');
+  assert.equal(normalizeLifecycleStatus('previous student', { businessUnit: { name: 'AIT USA Institute' } }), null);
   assert.equal(normalizeLifecycleStatus('do not contact', { businessUnit: { name: 'AIT USA Institute' } }), 'Not Interested');
   assert.equal(normalizeLifecycleStatus('proposal sent', { businessUnit: { name: 'AIT Signs' } }), 'Estimate');
   assert.equal(normalizeLifecycleStatus('in production', { businessUnit: { name: 'AIT Signs' } }), 'Fulfillment');
