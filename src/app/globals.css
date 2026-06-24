@@ -774,6 +774,20 @@ a { color: inherit; text-decoration: none; }
   gap: 6px;
   min-width: 0;
 }
+.contacts-filter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+.contacts-filter-select {
+  flex: 0 1 190px;
+  min-width: 160px;
+  max-width: 240px;
+  min-height: 32px;
+  padding: 5px 9px;
+  font-size: var(--text-xs);
+}
 .contacts-facet-pill {
   display: inline-flex;
   align-items: center;
@@ -970,6 +984,10 @@ a { color: inherit; text-decoration: none; }
   .contacts-facet-pill {
     flex: 1 1 132px;
     justify-content: space-between;
+  }
+  .contacts-filter-select {
+    flex: 1 1 100%;
+    max-width: none;
   }
 }
 
