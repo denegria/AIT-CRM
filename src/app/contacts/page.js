@@ -14,11 +14,16 @@ import {
   buildCourseFilterOptions,
   contactFilterQuery,
   contactFilterStateFromParams,
+  contactMatchesLeadDateScope,
   contactMatchesStatusOwnerCourse,
   courseTagsForDirectoryRow,
+  CONTACT_LEAD_DATE_SCOPE_ALL,
+  CONTACT_LEAD_DATE_SCOPE_CUSTOM,
   DEFAULT_CONTACT_COURSE_FILTER,
   DEFAULT_CONTACT_FACET_FILTER,
+  DEFAULT_CONTACT_LEAD_DATE_FROM,
   DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+  DEFAULT_CONTACT_LEAD_DATE_TO,
   DEFAULT_CONTACT_OWNER_FILTER,
   DEFAULT_CONTACT_STATUS_FILTER,
 } from '@/lib/contact-directory-filters';
@@ -27,7 +32,6 @@ import {
   directorySourceText,
   enrollmentSourceText,
   enrollmentStageText,
-  isCurrentLeadDateScope,
   lifecycleBucket,
 } from '@/lib/contact-directory-view';
 import { workflowForBusinessUnit } from '@/lib/sales-workflow';
@@ -36,7 +40,7 @@ import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { AlertCircle, RotateCcw, UserRoundCheck } from 'lucide-react';
+import { AlertCircle, ListFilter, RotateCcw, UserRoundCheck } from 'lucide-react';
 
 const empty = {
   name: '',
@@ -151,6 +155,17 @@ function BucketCell({ row }) {
   );
 }
 
+function dateScopeLabel(scope = DEFAULT_CONTACT_LEAD_DATE_SCOPE, from = '', to = '') {
+  if (scope === CONTACT_LEAD_DATE_SCOPE_ALL) return 'All Leads';
+  if (scope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
+    if (from && to) return `${from} to ${to}`;
+    if (from) return `From ${from}`;
+    if (to) return `Through ${to}`;
+    return 'Custom time frame';
+  }
+  return 'Current Year';
+}
+
 export default function ContactsPage({ mode = 'contacts' } = {}) {
   const {
     contacts,
@@ -177,6 +192,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [formError, setFormError] = useState('');
   const [facetNow] = useState(() => Date.now());
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [filterMenuTab, setFilterMenuTab] = useState('date');
   const isClientsMode = mode === 'clients';
   const singularLabel = isClientsMode ? 'Client' : 'Contact';
   const pluralLabel = isClientsMode ? 'Clients' : 'Contacts';
@@ -186,6 +203,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     ownerFilter,
     directoryFacet,
     leadDateScope,
+    leadDateFrom,
+    leadDateTo,
     courseFilter,
   } = contactFilterStateFromParams(searchParams);
   const updateFilterQuery = useCallback((patch) => {
@@ -194,15 +213,19 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       ownerFilter,
       directoryFacet,
       leadDateScope,
+      leadDateFrom,
+      leadDateTo,
       courseFilter,
       ...patch,
     });
     router.replace(nextQuery ? `${routeBase}?${nextQuery}` : routeBase, { scroll: false });
-  }, [courseFilter, directoryFacet, leadDateScope, ownerFilter, routeBase, router, statusFilter]);
+  }, [courseFilter, directoryFacet, leadDateFrom, leadDateScope, leadDateTo, ownerFilter, routeBase, router, statusFilter]);
   const setStatusFilter = useCallback((value) => updateFilterQuery({ statusFilter: value }), [updateFilterQuery]);
   const setOwnerFilter = useCallback((value) => updateFilterQuery({ ownerFilter: value }), [updateFilterQuery]);
   const setDirectoryFacet = useCallback((value) => updateFilterQuery({ directoryFacet: value }), [updateFilterQuery]);
   const setLeadDateScope = useCallback((value) => updateFilterQuery({ leadDateScope: value }), [updateFilterQuery]);
+  const setLeadDateFrom = useCallback((value) => updateFilterQuery({ leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM, leadDateFrom: value }), [updateFilterQuery]);
+  const setLeadDateTo = useCallback((value) => updateFilterQuery({ leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM, leadDateTo: value }), [updateFilterQuery]);
   const setCourseFilter = useCallback((value) => updateFilterQuery({ courseFilter: value }), [updateFilterQuery]);
 
   const directoryContacts = useMemo(() => {
@@ -355,13 +378,24 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   ];
 
   const dateScopedRows = useMemo(() => {
-    if (leadDateScope === 'all') return directoryRows;
-    return directoryRows.filter((contact) => isCurrentLeadDateScope(contact));
-  }, [directoryRows, leadDateScope]);
+    return directoryRows.filter((contact) => contactMatchesLeadDateScope(contact, {
+      leadDateScope,
+      leadDateFrom,
+      leadDateTo,
+    }));
+  }, [directoryRows, leadDateFrom, leadDateScope, leadDateTo]);
   const allDateLeadCount = directoryRows.length;
   const currentLeadCount = useMemo(
-    () => directoryRows.filter((contact) => isCurrentLeadDateScope(contact)).length,
+    () => directoryRows.filter((contact) => contactMatchesLeadDateScope(contact)).length,
     [directoryRows],
+  );
+  const customLeadCount = useMemo(
+    () => directoryRows.filter((contact) => contactMatchesLeadDateScope(contact, {
+      leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM,
+      leadDateFrom,
+      leadDateTo,
+    })).length,
+    [directoryRows, leadDateFrom, leadDateTo],
   );
   const statusOwnerFilteredContacts = useMemo(() => dateScopedRows.filter((contact) => (
     contactMatchesStatusOwnerCourse(contact, {
@@ -407,20 +441,30 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     if (courseFilter === DEFAULT_CONTACT_COURSE_FILTER) return '';
     return courseFilterOptions.find((option) => option.value === courseFilter)?.label || courseFilter;
   }, [courseFilter, courseFilterOptions]);
+  const selectedDateLabel = useMemo(
+    () => dateScopeLabel(leadDateScope, leadDateFrom, leadDateTo),
+    [leadDateFrom, leadDateScope, leadDateTo],
+  );
   const activeFilterChips = useMemo(() => [
-    leadDateScope === 'all' ? { key: 'leadDateScope', label: 'All date leads' } : null,
+    { key: 'leadDateScope', label: selectedDateLabel },
     statusFilter !== DEFAULT_CONTACT_STATUS_FILTER ? { key: 'status', label: statusFilter } : null,
     selectedCourseLabel ? { key: 'course', label: selectedCourseLabel } : null,
     selectedOwnerLabel ? { key: 'owner', label: selectedOwnerLabel } : null,
     selectedFacetLabel ? { key: 'facet', label: selectedFacetLabel } : null,
-  ].filter(Boolean), [leadDateScope, selectedCourseLabel, selectedFacetLabel, selectedOwnerLabel, statusFilter]);
-  const hasActiveFilters = activeFilterChips.length > 0;
-  const filterSummaryText = hasActiveFilters
-    ? activeFilterChips.map((chip) => chip.label).join(' / ')
-    : 'Default contact view';
+  ].filter(Boolean), [selectedCourseLabel, selectedDateLabel, selectedFacetLabel, selectedOwnerLabel, statusFilter]);
+  const hasNonDefaultFilters = leadDateScope !== DEFAULT_CONTACT_LEAD_DATE_SCOPE ||
+    leadDateFrom !== DEFAULT_CONTACT_LEAD_DATE_FROM ||
+    leadDateTo !== DEFAULT_CONTACT_LEAD_DATE_TO ||
+    statusFilter !== DEFAULT_CONTACT_STATUS_FILTER ||
+    ownerFilter !== DEFAULT_CONTACT_OWNER_FILTER ||
+    courseFilter !== DEFAULT_CONTACT_COURSE_FILTER ||
+    effectiveDirectoryFacet !== DEFAULT_CONTACT_FACET_FILTER;
+  const filterSummaryText = activeFilterChips.map((chip) => chip.label).join(' / ');
   const resetFilters = () => {
     updateFilterQuery({
       leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+      leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
+      leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
       statusFilter: DEFAULT_CONTACT_STATUS_FILTER,
       ownerFilter: DEFAULT_CONTACT_OWNER_FILTER,
       directoryFacet: DEFAULT_CONTACT_FACET_FILTER,
@@ -459,99 +503,162 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           <p className="page-subtitle">{directoryContacts.length} {pluralLabel.toLowerCase()} in {directoryBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}</p>
         </div>
         <div className="flex-gap contacts-header-actions">
-          <select className="input select contacts-filter" style={{width:150, padding:'4px 8px'}} value={ownerFilter} onChange={e=>setOwnerFilter(e.target.value)}>
-            <option value="all">All Owners</option>
-            <option value="unassigned">Unassigned</option>
-            {ownerOptions.map((owner) => (
-              <option key={owner.id} value={owner.id}>{owner.label}</option>
-            ))}
-          </select>
           {canWrite && <button className="btn btn-primary" onClick={openNew}>+ Add {singularLabel}</button>}
         </div>
       </div>
 
-      <div className="contacts-facet-panel" aria-label="Contact quick filters">
-        <div className="contacts-facet-summary">
-          <strong>{filteredContacts.length}</strong>
-          <span>matching {pluralLabel.toLowerCase()}</span>
-          <small>{filterSummaryText}</small>
-          {invalidPhoneScopeSummary && (
-            <small>{invalidPhoneScopeSummary}</small>
-          )}
-          {hasActiveFilters && (
-            <button className="contacts-filter-reset" type="button" onClick={resetFilters}>
-              <RotateCcw size={13} />
-              Reset filters
+      <section className="contacts-facet-panel contacts-filter-surface" aria-label="Contact filters">
+        <div className="contacts-filter-topline">
+          <div className="contacts-facet-summary">
+            <strong>{filteredContacts.length}</strong>
+            <span>matching {pluralLabel.toLowerCase()}</span>
+            <small>{filterSummaryText}</small>
+            {invalidPhoneScopeSummary && (
+              <small>{invalidPhoneScopeSummary}</small>
+            )}
+          </div>
+          <div className="contacts-filter-toolbar">
+            {hasNonDefaultFilters && (
+              <button className="contacts-filter-reset" type="button" onClick={resetFilters}>
+                <RotateCcw size={13} />
+                Reset
+              </button>
+            )}
+            <button
+              className={`contacts-filter-menu-button ${filterMenuOpen ? 'active' : ''}`}
+              type="button"
+              onClick={() => setFilterMenuOpen((open) => !open)}
+              aria-expanded={filterMenuOpen}
+            >
+              <ListFilter size={15} />
+              Filters
+              {hasNonDefaultFilters && <strong>{activeFilterChips.length}</strong>}
             </button>
-          )}
+          </div>
         </div>
-        <div className="contacts-facet-groups">
-          <div className="contacts-facet-group">
-            <div className="contacts-facet-label">Status</div>
-            <div className="contacts-filter-controls">
-              <select className="input select contacts-filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                <option value={DEFAULT_CONTACT_STATUS_FILTER}>All Statuses</option>
-                {statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="contacts-facet-group">
-            <div className="contacts-facet-label">Course</div>
-            <div className="contacts-filter-controls">
-              <select className="input select contacts-filter-select" value={courseFilter} onChange={(event) => setCourseFilter(event.target.value)}>
-                <option value={DEFAULT_CONTACT_COURSE_FILTER}>All Courses</option>
-                {courseFilterOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label} ({option.count})
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-          <div className="contacts-facet-group">
-            <div className="contacts-facet-label">Lead dates</div>
-            <div className="contacts-facet-pills">
+
+        <div className="contacts-active-chips" aria-label="Active filter summary">
+          {activeFilterChips.map((chip) => (
+            <span key={chip.key} className={`contacts-active-chip ${chip.key === 'leadDateScope' ? 'primary' : ''}`}>{chip.label}</span>
+          ))}
+        </div>
+
+        {filterMenuOpen && (
+          <div className="contacts-filter-menu">
+            <div className="contacts-filter-tabs" role="tablist" aria-label="Contact filter sections">
               {[
-                ['current', 'Current Leads', currentLeadCount],
-                ['all', 'All Date Leads', allDateLeadCount],
-              ].map(([id, label, count]) => (
+                ['date', 'Date'],
+                ['filters', 'Filters'],
+                ['buckets', 'Buckets'],
+              ].map(([id, label]) => (
                 <button
                   key={id}
                   type="button"
-                  className={`contacts-facet-pill ${leadDateScope === id ? 'active' : ''}`}
-                  onClick={() => setLeadDateScope(id)}
-                  aria-pressed={leadDateScope === id}
+                  className={`contacts-filter-tab ${filterMenuTab === id ? 'active' : ''}`}
+                  onClick={() => setFilterMenuTab(id)}
+                  role="tab"
+                  aria-selected={filterMenuTab === id}
                 >
-                  <span>{label}</span>
-                  <strong>{count}</strong>
+                  {label}
                 </button>
               ))}
             </div>
-          </div>
-          {facetGroups.map((group) => (
-            <div key={group.id} className="contacts-facet-group">
-              <div className="contacts-facet-label">{group.label}</div>
-              <div className="contacts-facet-pills">
-                {group.facets
-                  .filter((facet) => facet.count > 0 || facet.id === 'all' || effectiveDirectoryFacet === facet.id)
-                  .map((facet) => (
-                  <button
-                    key={facet.id}
-                    type="button"
-                    className={`contacts-facet-pill ${effectiveDirectoryFacet === facet.id ? 'active' : ''} ${facet.count === 0 ? 'is-empty' : ''}`}
-                    onClick={() => setDirectoryFacet(facet.id)}
-                    disabled={facet.count === 0 && directoryFacet !== facet.id}
-                    aria-pressed={effectiveDirectoryFacet === facet.id}
-                  >
-                    <span>{facet.label}</span>
-                    <strong>{facet.count}</strong>
-                  </button>
+
+            {filterMenuTab === 'date' && (
+              <div className="contacts-filter-section">
+                <div className="contacts-facet-pills">
+                  {[
+                    [DEFAULT_CONTACT_LEAD_DATE_SCOPE, 'Current Year', currentLeadCount],
+                    [CONTACT_LEAD_DATE_SCOPE_ALL, 'All Leads', allDateLeadCount],
+                    [CONTACT_LEAD_DATE_SCOPE_CUSTOM, 'Custom Time Frame', customLeadCount],
+                  ].map(([id, label, count]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={`contacts-facet-pill ${leadDateScope === id ? 'active' : ''}`}
+                      onClick={() => setLeadDateScope(id)}
+                      aria-pressed={leadDateScope === id}
+                    >
+                      <span>{label}</span>
+                      <strong>{count}</strong>
+                    </button>
+                  ))}
+                </div>
+                <div className="contacts-date-range">
+                  <label>
+                    <span>From</span>
+                    <input className="input" type="date" value={leadDateFrom} onChange={(event) => setLeadDateFrom(event.target.value)} />
+                  </label>
+                  <label>
+                    <span>To</span>
+                    <input className="input" type="date" value={leadDateTo} onChange={(event) => setLeadDateTo(event.target.value)} />
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {filterMenuTab === 'filters' && (
+              <div className="contacts-filter-grid">
+                <label className="contacts-filter-field">
+                  <span>Status</span>
+                  <select className="input select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                    <option value={DEFAULT_CONTACT_STATUS_FILTER}>All Statuses</option>
+                    {statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+                  </select>
+                </label>
+                <label className="contacts-filter-field">
+                  <span>Course</span>
+                  <select className="input select" value={courseFilter} onChange={(event) => setCourseFilter(event.target.value)}>
+                    <option value={DEFAULT_CONTACT_COURSE_FILTER}>All Courses</option>
+                    {courseFilterOptions.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label} ({option.count})
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="contacts-filter-field">
+                  <span>Owner</span>
+                  <select className="input select" value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}>
+                    <option value="all">All Owners</option>
+                    <option value="unassigned">Unassigned</option>
+                    {ownerOptions.map((owner) => (
+                      <option key={owner.id} value={owner.id}>{owner.label}</option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+
+            {filterMenuTab === 'buckets' && (
+              <div className="contacts-facet-groups">
+                {facetGroups.map((group) => (
+                  <div key={group.id} className="contacts-facet-group">
+                    <div className="contacts-facet-label">{group.label}</div>
+                    <div className="contacts-facet-pills">
+                      {group.facets
+                        .filter((facet) => facet.count > 0 || facet.id === 'all' || effectiveDirectoryFacet === facet.id)
+                        .map((facet) => (
+                        <button
+                          key={facet.id}
+                          type="button"
+                          className={`contacts-facet-pill ${effectiveDirectoryFacet === facet.id ? 'active' : ''} ${facet.count === 0 ? 'is-empty' : ''}`}
+                          onClick={() => setDirectoryFacet(facet.id)}
+                          disabled={facet.count === 0 && directoryFacet !== facet.id}
+                          aria-pressed={effectiveDirectoryFacet === facet.id}
+                        >
+                          <span>{facet.label}</span>
+                          <strong>{facet.count}</strong>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ))}
               </div>
-            </div>
-          ))}
-        </div>
-      </div>
+            )}
+          </div>
+        )}
+      </section>
 
       <div className="card" style={{padding:16}}>
         <DataTable

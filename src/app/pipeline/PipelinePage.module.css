@@ -82,6 +82,264 @@
   width: min(240px, 100%);
 }
 
+.filterSurface {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 12px;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--bg-elevated) 90%, var(--bg-tertiary)), var(--bg-secondary));
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-soft);
+}
+
+.filterTopline {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+
+.filterSummary {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.filterSummary strong {
+  font-size: var(--text-2xl);
+  line-height: 1;
+}
+
+.filterSummary span {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.filterSummary small {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.filterToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.filterReset,
+.filterMenuButton {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 850;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.filterReset:hover,
+.filterMenuButton:hover,
+.filterMenuButton.active {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--border-subtle));
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.filterMenuButton strong {
+  min-width: 20px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1.15;
+}
+
+.activeChips,
+.filterPills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+
+.activeChip,
+.filterPill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 76%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elevated) 88%, var(--bg-secondary));
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.activeChip {
+  min-height: 24px;
+  padding: 3px 8px;
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activeChip.primary {
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--border-subtle));
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.filterMenu {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 78%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-elevated) 90%, var(--bg-secondary));
+}
+
+.filterTabs {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 72%, transparent);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  overflow-x: auto;
+}
+
+.filterTab {
+  min-height: 30px;
+  padding: 5px 11px;
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 3px);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-xs);
+  font-weight: 850;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.filterTab.active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.filterSection {
+  display: grid;
+  gap: 12px;
+}
+
+.filterPill {
+  min-height: 30px;
+  gap: 7px;
+  padding: 5px 9px;
+  cursor: pointer;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.78) inset;
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast), transform var(--transition-fast);
+}
+
+.filterPill:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.filterPill.active {
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border-subtle));
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.filterPill span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filterPill strong {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 23px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 10px;
+  line-height: 1;
+}
+
+.filterPill.active strong {
+  background: var(--accent);
+  color: #fff;
+}
+
+.dateRange,
+.filterGrid {
+  display: grid;
+  gap: 10px;
+}
+
+.dateRange {
+  grid-template-columns: repeat(2, minmax(0, 180px));
+}
+
+.filterGrid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.filterField,
+.dateRange label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.filterField > span,
+.dateRange span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.searchField {
+  grid-column: span 2;
+}
+
+.filterDensity {
+  align-self: end;
+}
+
 .filterBar {
   display: grid;
   grid-template-columns: minmax(160px, 1fr) minmax(145px, 0.9fr) minmax(145px, 0.9fr) minmax(150px, 0.9fr) minmax(200px, 1.2fr) auto;
@@ -199,6 +457,19 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .filterTopline {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .filterToolbar {
+    justify-content: flex-start;
+  }
+
+  .filterGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+
   .searchBox,
   .compactToggle {
     grid-column: 1 / -1;
@@ -226,6 +497,32 @@
 
   .scopeSelect {
     width: 100%;
+  }
+
+  .filterToolbar,
+  .filterMenuButton {
+    width: 100%;
+  }
+
+  .filterMenuButton {
+    justify-content: space-between;
+  }
+
+  .filterTabs {
+    width: 100%;
+  }
+
+  .filterTab {
+    flex: 1;
+  }
+
+  .dateRange,
+  .filterGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .searchField {
+    grid-column: auto;
   }
 
   .desktopBoard {

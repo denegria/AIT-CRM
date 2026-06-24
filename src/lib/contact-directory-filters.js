@@ -8,12 +8,27 @@ import {
   WORKFLOW_KEYS,
   normalizeLifecycleStatus,
 } from './crm/lifecycle.js';
+import {
+  isCurrentLeadDateScope,
+  leadDateForDirectoryScope,
+} from './contact-directory-view.js';
 
 export const DEFAULT_CONTACT_STATUS_FILTER = 'All';
 export const DEFAULT_CONTACT_OWNER_FILTER = 'all';
 export const DEFAULT_CONTACT_FACET_FILTER = 'all';
 export const DEFAULT_CONTACT_COURSE_FILTER = 'all';
 export const DEFAULT_CONTACT_LEAD_DATE_SCOPE = 'current';
+export const CONTACT_LEAD_DATE_SCOPE_ALL = 'all';
+export const CONTACT_LEAD_DATE_SCOPE_CUSTOM = 'custom';
+export const DEFAULT_CONTACT_LEAD_DATE_FROM = '';
+export const DEFAULT_CONTACT_LEAD_DATE_TO = '';
+
+export const DEFAULT_PIPELINE_WORKFLOW_FILTER = 'all';
+export const DEFAULT_PIPELINE_OWNER_FILTER = 'all';
+export const DEFAULT_PIPELINE_SOURCE_FILTER = 'all';
+export const DEFAULT_PIPELINE_ACTIVITY_FILTER = 'all';
+export const DEFAULT_PIPELINE_SEARCH = '';
+export const DEFAULT_PIPELINE_COMPACT_MODE = true;
 
 function clean(value = '') {
   return String(value || '').trim();
@@ -31,6 +46,36 @@ function titleLabel(value = '') {
 
 function paramValue(searchParams, key) {
   return typeof searchParams?.get === 'function' ? searchParams.get(key) : '';
+}
+
+function dateOnlyTime(value = '', endOfDay = false) {
+  const text = clean(value);
+  if (!text) return null;
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (match) {
+    const [, year, month, day] = match;
+    return Date.UTC(
+      Number(year),
+      Number(month) - 1,
+      Number(day),
+      endOfDay ? 23 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 59 : 0,
+      endOfDay ? 999 : 0,
+    );
+  }
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return null;
+  if (!endOfDay) return date.getTime();
+  return Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate(),
+    23,
+    59,
+    59,
+    999,
+  );
 }
 
 function canonicalStatus(row = {}) {
@@ -63,7 +108,17 @@ export function facetFromContactParams(searchParams) {
 }
 
 export function leadDateScopeFromContactParams(searchParams) {
-  return paramValue(searchParams, 'leadDateScope') === 'all' ? 'all' : DEFAULT_CONTACT_LEAD_DATE_SCOPE;
+  const value = paramValue(searchParams, 'leadDateScope');
+  if (value === CONTACT_LEAD_DATE_SCOPE_ALL || value === CONTACT_LEAD_DATE_SCOPE_CUSTOM) return value;
+  return DEFAULT_CONTACT_LEAD_DATE_SCOPE;
+}
+
+export function leadDateFromContactParams(searchParams) {
+  return clean(paramValue(searchParams, 'leadDateFrom')) || DEFAULT_CONTACT_LEAD_DATE_FROM;
+}
+
+export function leadDateToContactParams(searchParams) {
+  return clean(paramValue(searchParams, 'leadDateTo')) || DEFAULT_CONTACT_LEAD_DATE_TO;
 }
 
 export function courseFromContactParams(searchParams) {
@@ -76,6 +131,8 @@ export function contactFilterStateFromParams(searchParams) {
     ownerFilter: ownerFromContactParams(searchParams),
     directoryFacet: facetFromContactParams(searchParams),
     leadDateScope: leadDateScopeFromContactParams(searchParams),
+    leadDateFrom: leadDateFromContactParams(searchParams),
+    leadDateTo: leadDateToContactParams(searchParams),
     courseFilter: courseFromContactParams(searchParams),
   };
 }
@@ -85,15 +142,42 @@ export function contactFilterQuery({
   ownerFilter = DEFAULT_CONTACT_OWNER_FILTER,
   directoryFacet = DEFAULT_CONTACT_FACET_FILTER,
   leadDateScope = DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+  leadDateFrom = DEFAULT_CONTACT_LEAD_DATE_FROM,
+  leadDateTo = DEFAULT_CONTACT_LEAD_DATE_TO,
   courseFilter = DEFAULT_CONTACT_COURSE_FILTER,
 } = {}) {
   const params = new URLSearchParams();
-  if (leadDateScope === 'all') params.set('leadDateScope', 'all');
+  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_ALL);
+  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
+    params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_CUSTOM);
+    if (leadDateFrom) params.set('leadDateFrom', leadDateFrom);
+    if (leadDateTo) params.set('leadDateTo', leadDateTo);
+  }
   if (statusFilter && statusFilter !== DEFAULT_CONTACT_STATUS_FILTER) params.set('status', statusFilter);
   if (ownerFilter && ownerFilter !== DEFAULT_CONTACT_OWNER_FILTER) params.set('owner', ownerFilter);
   if (directoryFacet && directoryFacet !== DEFAULT_CONTACT_FACET_FILTER) params.set('facet', directoryFacet);
   if (courseFilter && courseFilter !== DEFAULT_CONTACT_COURSE_FILTER) params.set('course', courseFilter);
   return params.toString();
+}
+
+export function contactMatchesLeadDateScope(contact = {}, {
+  leadDateScope = DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+  leadDateFrom = DEFAULT_CONTACT_LEAD_DATE_FROM,
+  leadDateTo = DEFAULT_CONTACT_LEAD_DATE_TO,
+  now = new Date(),
+} = {}) {
+  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) return true;
+  if (leadDateScope !== CONTACT_LEAD_DATE_SCOPE_CUSTOM) return isCurrentLeadDateScope(contact, now);
+
+  const fromTime = dateOnlyTime(leadDateFrom);
+  const toTime = dateOnlyTime(leadDateTo, true);
+  if (fromTime == null && toTime == null) return true;
+
+  const contactTime = dateOnlyTime(leadDateForDirectoryScope(contact));
+  if (contactTime == null) return false;
+  if (fromTime != null && contactTime < fromTime) return false;
+  if (toTime != null && contactTime > toTime) return false;
+  return true;
 }
 
 export function courseForContactDirectoryFilter(contact = {}) {
@@ -148,4 +232,45 @@ export function courseTagsForDirectoryRow(row = {}) {
     course,
     outcome && canonicalStatus(row) !== 'Course Completed' ? titleLabel(outcome) : '',
   ].filter(Boolean);
+}
+
+export function pipelineFilterStateFromParams(searchParams) {
+  return {
+    workflowFilter: clean(paramValue(searchParams, 'workflow')) || DEFAULT_PIPELINE_WORKFLOW_FILTER,
+    ownerFilter: ownerFromContactParams(searchParams) || DEFAULT_PIPELINE_OWNER_FILTER,
+    sourceFilter: clean(paramValue(searchParams, 'source')) || DEFAULT_PIPELINE_SOURCE_FILTER,
+    activityFilter: clean(paramValue(searchParams, 'activity')) || DEFAULT_PIPELINE_ACTIVITY_FILTER,
+    search: clean(paramValue(searchParams, 'q')) || DEFAULT_PIPELINE_SEARCH,
+    leadDateScope: leadDateScopeFromContactParams(searchParams),
+    leadDateFrom: leadDateFromContactParams(searchParams),
+    leadDateTo: leadDateToContactParams(searchParams),
+    compactMode: paramValue(searchParams, 'compact') === '0' ? false : DEFAULT_PIPELINE_COMPACT_MODE,
+  };
+}
+
+export function pipelineFilterQuery({
+  workflowFilter = DEFAULT_PIPELINE_WORKFLOW_FILTER,
+  ownerFilter = DEFAULT_PIPELINE_OWNER_FILTER,
+  sourceFilter = DEFAULT_PIPELINE_SOURCE_FILTER,
+  activityFilter = DEFAULT_PIPELINE_ACTIVITY_FILTER,
+  search = DEFAULT_PIPELINE_SEARCH,
+  leadDateScope = DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+  leadDateFrom = DEFAULT_CONTACT_LEAD_DATE_FROM,
+  leadDateTo = DEFAULT_CONTACT_LEAD_DATE_TO,
+  compactMode = DEFAULT_PIPELINE_COMPACT_MODE,
+} = {}) {
+  const params = new URLSearchParams();
+  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_ALL);
+  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
+    params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_CUSTOM);
+    if (leadDateFrom) params.set('leadDateFrom', leadDateFrom);
+    if (leadDateTo) params.set('leadDateTo', leadDateTo);
+  }
+  if (workflowFilter && workflowFilter !== DEFAULT_PIPELINE_WORKFLOW_FILTER) params.set('workflow', workflowFilter);
+  if (ownerFilter && ownerFilter !== DEFAULT_PIPELINE_OWNER_FILTER) params.set('owner', ownerFilter);
+  if (sourceFilter && sourceFilter !== DEFAULT_PIPELINE_SOURCE_FILTER) params.set('source', sourceFilter);
+  if (activityFilter && activityFilter !== DEFAULT_PIPELINE_ACTIVITY_FILTER) params.set('activity', activityFilter);
+  if (search) params.set('q', search);
+  if (compactMode !== DEFAULT_PIPELINE_COMPACT_MODE) params.set('compact', compactMode ? '1' : '0');
+  return params.toString();
 }
