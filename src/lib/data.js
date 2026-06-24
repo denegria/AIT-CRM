@@ -11,6 +11,8 @@ export const STATUSES = {
     'Intake',
     'Follow Up',
     'Enrolled',
+    'Dropped / Quit',
+    'Retargeting',
     'Not Interested',
     'Course Completed',
     'Estimate',

@@ -1,4 +1,13 @@
-import { WORKFLOW_KEYS } from './crm/lifecycle.js';
+import {
+  WORKFLOW_KEYS,
+  lifecycleWorkflowForKey,
+  normalizeLifecycleStatus,
+} from './crm/lifecycle.js';
+import {
+  aitUsaCourseOutcome,
+  completedOrEndedAitUsaCourse,
+  currentOrEnrolledAitUsaCourse,
+} from './ait-usa-enrollment-signals.js';
 
 function clean(value = '') {
   return String(value || '').trim();
@@ -20,7 +29,11 @@ export function enrollmentStageText(row = {}) {
 }
 
 export function programText(row = {}) {
-  return clean(row.programInterest) || clean(row.enrollmentSignals?.inquiry?.programInterest) || 'Program not set';
+  return currentOrEnrolledAitUsaCourse(row) ||
+    completedOrEndedAitUsaCourse(row) ||
+    clean(row.programInterest) ||
+    clean(row.enrollmentSignals?.inquiry?.programInterest) ||
+    'Program not set';
 }
 
 export function contactabilityText(row = {}) {
@@ -80,11 +93,16 @@ export function lifecycleBucket(row = {}) {
   }
 
   if (workflowKey === WORKFLOW_KEYS.AIT_USA) {
-    if (row.isPipelineEligible === false || clean(row.currentStage) === 'Retargeting' || clean(row.status) === 'Retargeting') {
+    const status = normalizeLifecycleStatus(clean(row.currentStage) || clean(row.status), { workflowKey });
+    const isTerminal = lifecycleWorkflowForKey(workflowKey).terminalStatuses.includes(status);
+    if (isTerminal) {
       return {
-        label: 'Retargeting',
+        label: status,
         tone: 'muted',
-        detail: clean(row.sourceActivityDate) || clean(row.leadCreatedAt),
+        detail: aitUsaCourseOutcome(row) ||
+          completedOrEndedAitUsaCourse(row) ||
+          clean(row.sourceActivityDate) ||
+          clean(row.leadCreatedAt),
       };
     }
     return {
@@ -118,9 +136,15 @@ export function leadDateForDirectoryScope(row = {}) {
 }
 
 export function isCurrentLeadDateScope(row = {}, now = new Date()) {
+  const workflowKey = clean(row.workflowKey);
   if (
-    clean(row.workflowKey) === WORKFLOW_KEYS.AIT_USA &&
-    (row.isPipelineEligible === false || clean(row.currentStage) === 'Retargeting' || clean(row.status) === 'Retargeting')
+    workflowKey === WORKFLOW_KEYS.AIT_USA &&
+    (
+      row.isPipelineEligible === false ||
+      lifecycleWorkflowForKey(workflowKey).terminalStatuses.includes(
+        normalizeLifecycleStatus(clean(row.currentStage) || clean(row.status), { workflowKey }),
+      )
+    )
   ) {
     return false;
   }

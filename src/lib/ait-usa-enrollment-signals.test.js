@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  aitUsaCourseMetadataForContact,
   buildAitUsaEnrollmentSignals,
+  completedOrEndedAitUsaCourse,
+  currentOrEnrolledAitUsaCourse,
   parseLeadNoteFields,
 } from './ait-usa-enrollment-signals.js';
 
@@ -43,8 +46,38 @@ test('buildAitUsaEnrollmentSignals exposes Wix first-outreach fields as structur
   assert.equal(signals.inquiry.age, '36');
   assert.equal(signals.inquiry.location, 'New jersey');
   assert.equal(signals.inquiry.programInterest, 'ESL');
+  assert.deepEqual(signals.course, {
+    current: 'ESL',
+    enrolled: 'ESL',
+  });
   assert.equal(signals.contactability.status, 'reachable');
   assert.equal(signals.quality.disposition, 'ready_for_follow_up');
+});
+
+test('AIT USA course metadata selectors expose current/enrolled and completed/ended outcomes', () => {
+  const activeSignals = buildAitUsaEnrollmentSignals({
+    contact: { phone: '9085550101', email: 'student@example.com' },
+    lead: {
+      status: 'Enrolled',
+      originalNotes: 'website_form | current_course=ESL Level 2 | enrolled_course=ESL Level 2 | service=ESL',
+    },
+    workflow: { workflowKey: 'ait_usa', status: 'Enrolled' },
+  });
+  const endedSignals = buildAitUsaEnrollmentSignals({
+    contact: { phone: '9085550101', email: 'student@example.com' },
+    lead: {
+      status: 'Dropped / Quit',
+      originalNotes: 'website_form | ended_course=Tax Prep | course_outcome=dropped',
+    },
+    workflow: { workflowKey: 'ait_usa', status: 'Dropped / Quit' },
+  });
+
+  assert.equal(currentOrEnrolledAitUsaCourse({ enrollmentSignals: activeSignals }), 'ESL Level 2');
+  assert.equal(completedOrEndedAitUsaCourse({ enrollmentSignals: endedSignals }), 'Tax Prep');
+  assert.deepEqual(aitUsaCourseMetadataForContact({ enrollmentSignals: endedSignals }), {
+    ended: 'Tax Prep',
+    outcome: 'dropped',
+  });
 });
 
 test('buildAitUsaEnrollmentSignals creates process pills for historical first outreach leads', () => {

@@ -250,8 +250,9 @@ export function pipelineStatusFromLead(lead, options = {}) {
   const status = clean(lead.status).toLowerCase();
   if (workflow.key === WORKFLOW_KEYS.AIT_USA) {
     if (status.includes('retarget')) return 'Retargeting';
+    if (status.includes('drop') || status.includes('withdraw') || status.includes('quit') || status.includes('stopped attending')) return 'Dropped / Quit';
     if (status.includes('not interested') || status.includes('uninterested') || status.includes('do not contact') || status === 'lost' || status === 'closed lost') return 'Not Interested';
-    if (status.includes('previous') || status.includes('complete') || status.includes('fulfilled')) return 'Course Completed';
+    if (status.includes('complete') || status.includes('fulfilled') || status.includes('graduat') || status.includes('passed')) return 'Course Completed';
     if (status.includes('enroll') || status.includes('matric') || status.includes('won')) return 'Enrolled';
     if (status.includes('follow') || status.includes('contact') || status.includes('qualified')) return 'Follow Up';
     return workflow.statuses[0];

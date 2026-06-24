@@ -32,12 +32,13 @@ test('AIT USA row labels prefer enrollment-specific signals', () => {
     enrollmentSignals: {
       source: { channel: 'Wix Website Form' },
       inquiry: { programInterest: 'Citizenship' },
+      course: { current: 'ESL Level 2' },
       contactability: { status: 'reachable' },
     },
   };
 
   assert.equal(enrollmentStageText(row), 'Follow Up');
-  assert.equal(programText(row), 'ESL');
+  assert.equal(programText(row), 'ESL Level 2');
   assert.equal(contactabilityText(row), 'Missing Phone');
   assert.equal(enrollmentSourceText(row), 'Wix Website Form');
 });
@@ -104,6 +105,33 @@ test('AIT USA retargeting lifecycle buckets stay out of active work', () => {
       detail: '2025-09-01T12:00:00.000Z',
     },
   );
+});
+
+test('AIT USA dropped / quit rows are terminal history, not current lead scope', () => {
+  const now = new Date('2026-06-13T00:00:00.000Z');
+
+  assert.deepEqual(
+    lifecycleBucket({
+      workflowKey: 'ait_usa',
+      status: 'Dropped / Quit',
+      isPipelineEligible: false,
+      leadCreatedAt: '2026-03-01T12:00:00.000Z',
+      enrollmentSignals: {
+        course: { ended: 'Tax Prep', outcome: 'dropped' },
+      },
+    }),
+    {
+      label: 'Dropped / Quit',
+      tone: 'muted',
+      detail: 'dropped',
+    },
+  );
+  assert.equal(isCurrentLeadDateScope({
+    workflowKey: 'ait_usa',
+    status: 'quit course',
+    isPipelineEligible: false,
+    leadCreatedAt: '2026-03-01T12:00:00.000Z',
+  }, now), false);
 });
 
 test('lead date scope uses lead dates and keeps only the current year active', () => {

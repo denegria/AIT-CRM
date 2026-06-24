@@ -53,6 +53,8 @@ test('AIT USA bucket ids are shared for Contacts facets and Pipeline quick filte
     { id: 'new', businessUnitId: 'usa', workflowKey: 'ait_usa', status: 'New Lead' },
     { id: 'follow', businessUnitId: 'usa', workflowKey: 'ait_usa', status: 'Follow Up' },
     { id: 'enrolled', businessUnitId: 'usa', workflowKey: 'ait_usa', status: 'Enrolled' },
+    { id: 'dropped', businessUnitId: 'usa', workflowKey: 'ait_usa', status: 'Dropped / Quit', isPipelineEligible: false },
+    { id: 'quit', businessUnitId: 'usa', workflowKey: 'ait_usa', status: 'quit course', isPipelineEligible: false },
     { id: 'retargeting', businessUnitId: 'usa', workflowKey: 'ait_usa', status: 'Retargeting', isPipelineEligible: false },
     { id: 'bad-channel', businessUnitId: 'usa', workflowKey: 'ait_usa', status: 'Follow Up', processPills: ['wrong_number'] },
   ];
@@ -60,12 +62,16 @@ test('AIT USA bucket ids are shared for Contacts facets and Pipeline quick filte
   assert.deepEqual(bucketIdsFor(contacts[0]), ['usa_new_lead']);
   assert.deepEqual(bucketIdsFor(contacts[1]), ['usa_follow_up']);
   assert.deepEqual(bucketIdsFor(contacts[2]), ['usa_enrolled']);
-  assert.deepEqual(bucketIdsFor(contacts[3]), ['usa_retargeting']);
-  assert.deepEqual(bucketIdsFor(contacts[4]), ['usa_bad_contact_channel']);
+  assert.deepEqual(bucketIdsFor(contacts[3]), ['usa_dropped_quit']);
+  assert.deepEqual(bucketIdsFor(contacts[4]), ['usa_dropped_quit']);
+  assert.deepEqual(bucketIdsFor(contacts[5]), ['usa_retargeting']);
+  assert.deepEqual(bucketIdsFor(contacts[6]), ['usa_bad_contact_channel']);
 
   assert.equal(matchesPipelineQuickFilter(contacts[0], 'new_leads', { businessUnitById }), true);
   assert.equal(matchesPipelineQuickFilter(contacts[1], 'active', { businessUnitById }), true);
   assert.equal(matchesPipelineQuickFilter(contacts[3], 'active', { businessUnitById }), false);
+  assert.equal(matchesPipelineQuickFilter(contacts[4], 'active', { businessUnitById }), false);
+  assert.equal(matchesPipelineQuickFilter(contacts[5], 'active', { businessUnitById }), false);
 });
 
 test('Pipeline new lead keeps legacy AIT Signs intake behavior outside AIT USA', () => {

@@ -68,7 +68,7 @@ function isNoRecentTouch(contact = {}, now = Date.now()) {
 }
 
 function isClosed(contact = {}, options = {}) {
-  return isWorkflowStatusClosed(contact.status, contactBusinessUnit(contact, options.businessUnitById));
+  return isWorkflowStatusClosed(contact.status || contact.currentStage, contactBusinessUnit(contact, options.businessUnitById));
 }
 
 function assignedToCurrentUser(contact = {}, options = {}) {

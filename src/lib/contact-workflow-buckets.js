@@ -1,4 +1,4 @@
-import { WORKFLOW_KEYS } from './crm/lifecycle.js';
+import { WORKFLOW_KEYS, normalizeLifecycleStatus } from './crm/lifecycle.js';
 import { isWorkflowContactActive } from './sales-workflow.js';
 
 function clean(value) {
@@ -37,7 +37,10 @@ export function contactBusinessUnit(contact = {}, businessUnitById = new Map()) 
 }
 
 export function contactHasStatus(contact = {}, status = '') {
-  return normalized(contact.status) === normalized(status) || normalized(contact.currentStage) === normalized(status);
+  const expected = normalizeLifecycleStatus(status, { workflowKey: contact.workflowKey }) || status;
+  const actualStatus = normalizeLifecycleStatus(contact.status, { workflowKey: contact.workflowKey }) || contact.status;
+  const actualStage = normalizeLifecycleStatus(contact.currentStage, { workflowKey: contact.workflowKey }) || contact.currentStage;
+  return normalized(actualStatus) === normalized(expected) || normalized(actualStage) === normalized(expected);
 }
 
 export function isAitSignsContact(contact = {}) {
@@ -114,6 +117,7 @@ export const AIT_USA_CONTACT_BUCKETS = [
   { id: 'usa_new_lead', label: 'New Lead', matches: isAitUsaNewLeadBucket },
   { id: 'usa_follow_up', label: 'Follow Up', matches: isAitUsaFollowUpBucket },
   { id: 'usa_enrolled', label: 'Enrolled', matches: (contact) => isAitUsaContact(contact) && contactHasStatus(contact, 'Enrolled') },
+  { id: 'usa_dropped_quit', label: 'Dropped / Quit', matches: (contact) => isAitUsaContact(contact) && contactHasStatus(contact, 'Dropped / Quit') },
   { id: 'usa_retargeting', label: 'Retargeting', matches: isAitUsaRetargetingBucket },
   { id: 'usa_not_interested', label: 'Not Interested', matches: (contact) => isAitUsaContact(contact) && contactHasStatus(contact, 'Not Interested') },
   { id: 'usa_course_completed', label: 'Course Completed', matches: (contact) => isAitUsaContact(contact) && contactHasStatus(contact, 'Course Completed') },
