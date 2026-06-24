@@ -16,6 +16,10 @@ function facetCount(groups, id) {
   return groups.flatMap((group) => group.facets).find((facet) => facet.id === id)?.count;
 }
 
+function facetLabel(groups, id) {
+  return groups.flatMap((group) => group.facets).find((facet) => facet.id === id)?.label;
+}
+
 test('contact directory facets expose counted division-aware buckets', () => {
   const contacts = [
     {
@@ -92,6 +96,7 @@ test('contact directory facets expose counted division-aware buckets', () => {
   assert.equal(facetCount(groups, 'needs_contact_info'), 1);
   assert.equal(facetCount(groups, 'invalid_phone'), 1);
   assert.equal(facetCount(groups, 'signs_linked_people'), 1);
+  assert.equal(facetLabel(groups, 'usa_follow_up'), 'Follow Up');
   assert.equal(facetCount(groups, 'usa_follow_up'), 1);
   assert.equal(facetCount(groups, 'usa_retargeting'), 1);
   assert.equal(facetCount(groups, 'usa_bad_contact_channel'), 2);
