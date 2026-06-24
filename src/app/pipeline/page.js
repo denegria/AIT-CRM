@@ -7,7 +7,10 @@ import KanbanBoard from '@/components/KanbanBoard';
 import { useToast } from '@/components/Toast';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
 import { useCRM } from '@/lib/store';
-import { isWorkflowContactActive } from '@/lib/sales-workflow';
+import {
+  isPipelineNewLeadBucket,
+  matchesPipelineQuickFilter,
+} from '@/lib/contact-workflow-buckets';
 import s from './PipelinePage.module.css';
 
 function matchesSearch(contact, query) {
@@ -65,16 +68,12 @@ function sourceValue(contact = {}) {
   return contact.inquirySource || contact.sourceCategoryText || contact.source || 'Unknown Source';
 }
 
-function isNewLead(contact = {}) {
-  return /new lead|intake/i.test(String(contact.status || contact.currentStage || ''));
-}
-
 function nextLeadScore(contact = {}) {
   let score = 0;
   if (contact.needsFirstOutreach) score += 100;
   if (!contact.assignedTo) score += 40;
   if (!contact.phone && !contact.email) score += 20;
-  if (isNewLead(contact)) score += 15;
+  if (isPipelineNewLeadBucket(contact)) score += 15;
   score += Math.min(daysSince(contactTouchDate(contact)), 30);
   return score;
 }
@@ -141,12 +140,9 @@ export default function PipelinePage() {
   );
 
   const pipelineStats = useMemo(() => ({
-    needsFirstOutreach: pipelineScopedRows.filter((contact) => contact.needsFirstOutreach).length,
-    unassigned: pipelineScopedRows.filter((contact) => !contact.assignedTo).length,
-    active: pipelineScopedRows.filter((contact) => {
-      const businessUnit = businessUnitById.get(contact.businessUnitId || contact.primaryBusinessUnitId) || null;
-      return isWorkflowContactActive(contact, businessUnit);
-    }).length,
+    needsFirstOutreach: pipelineScopedRows.filter((contact) => matchesPipelineQuickFilter(contact, 'needs_first_outreach')).length,
+    unassigned: pipelineScopedRows.filter((contact) => matchesPipelineQuickFilter(contact, 'unassigned')).length,
+    active: pipelineScopedRows.filter((contact) => matchesPipelineQuickFilter(contact, 'active', { businessUnitById })).length,
   }), [businessUnitById, pipelineScopedRows]);
   const sourceOptions = useMemo(() => {
     const values = [...new Set(pipelineScopedRows.map(sourceValue).filter(Boolean))];
@@ -163,13 +159,7 @@ export default function PipelinePage() {
 
   const normalizedSearch = search.trim().toLowerCase();
   const pipelineRows = pipelineScopedRows.filter((contact) => {
-    const businessUnit = businessUnitById.get(contact.businessUnitId || contact.primaryBusinessUnitId) || null;
-    const workflowMatch =
-      workflowFilter === 'all' ||
-      (workflowFilter === 'needs_first_outreach' && contact.needsFirstOutreach) ||
-      (workflowFilter === 'new_leads' && isNewLead(contact)) ||
-      (workflowFilter === 'active' && isWorkflowContactActive(contact, businessUnit)) ||
-      (workflowFilter === 'unassigned' && !contact.assignedTo);
+    const workflowMatch = matchesPipelineQuickFilter(contact, workflowFilter, { businessUnitById });
     const ownerMatch =
       ownerFilter === 'all' ||
       (ownerFilter === 'unassigned' && !contact.assignedTo) ||
@@ -189,7 +179,11 @@ export default function PipelinePage() {
     : pipelineRows.filter((contact) => contact.status === mobileStageFilter);
   const nextLead = useMemo(() => (
     [...pipelineRows]
-      .filter((contact) => isNewLead(contact) || contact.needsFirstOutreach || !contact.assignedTo)
+      .filter((contact) => (
+        isPipelineNewLeadBucket(contact) ||
+        matchesPipelineQuickFilter(contact, 'needs_first_outreach') ||
+        matchesPipelineQuickFilter(contact, 'unassigned')
+      ))
       .sort((left, right) => nextLeadScore(right) - nextLeadScore(left))[0] || null
   ), [pipelineRows]);
   const selectedRows = useMemo(() => pipelineRows.filter((contact) => selectedIds.includes(contact.id)), [pipelineRows, selectedIds]);
