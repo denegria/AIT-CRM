@@ -11,6 +11,18 @@ import {
   filterContactsByDirectoryFacet,
 } from '@/lib/contact-directory-facets';
 import {
+  buildCourseFilterOptions,
+  contactFilterQuery,
+  contactFilterStateFromParams,
+  contactMatchesStatusOwnerCourse,
+  courseTagsForDirectoryRow,
+  DEFAULT_CONTACT_COURSE_FILTER,
+  DEFAULT_CONTACT_FACET_FILTER,
+  DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+  DEFAULT_CONTACT_OWNER_FILTER,
+  DEFAULT_CONTACT_STATUS_FILTER,
+} from '@/lib/contact-directory-filters';
+import {
   clientDirectoryColumnMode,
   directorySourceText,
   enrollmentSourceText,
@@ -39,31 +51,6 @@ const empty = {
   nextAction: '',
   notes: [],
 };
-
-function statusFromParams(searchParams) {
-  return searchParams.get('status') || 'All';
-}
-
-function ownerFromParams(searchParams) {
-  return searchParams.get('owner') || searchParams.get('ownerUserId') || 'all';
-}
-
-function facetFromParams(searchParams) {
-  return searchParams.get('facet') || searchParams.get('directoryFacet') || 'all';
-}
-
-function leadDateScopeFromParams(searchParams) {
-  return searchParams.get('leadDateScope') === 'all' ? 'all' : 'current';
-}
-
-function contactFilterQuery({ statusFilter, ownerFilter, directoryFacet, leadDateScope }) {
-  const params = new URLSearchParams();
-  if (leadDateScope === 'all') params.set('leadDateScope', 'all');
-  if (statusFilter && statusFilter !== 'All') params.set('status', statusFilter);
-  if (ownerFilter && ownerFilter !== 'all') params.set('owner', ownerFilter);
-  if (directoryFacet && directoryFacet !== 'all') params.set('facet', directoryFacet);
-  return params.toString();
-}
 
 function TagList({ tags = [] }) {
   if (!tags.length) return null;
@@ -119,6 +106,7 @@ function RecentWorkCell({ row }) {
 }
 
 function EnrollmentCell({ row }) {
+  const courseTags = courseTagsForDirectoryRow(row);
   return (
     <div className="workflow-cell">
       <div className="workflow-line">
@@ -126,6 +114,7 @@ function EnrollmentCell({ row }) {
         <span>{enrollmentStageText(row)}</span>
       </div>
       {row.nextAction && <div className="workflow-next">{row.nextAction}</div>}
+      <TagList tags={courseTags} />
     </div>
   );
 }
@@ -192,24 +181,29 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const singularLabel = isClientsMode ? 'Client' : 'Contact';
   const pluralLabel = isClientsMode ? 'Clients' : 'Contacts';
   const routeBase = isClientsMode ? '/clients' : '/contacts';
-  const statusFilter = statusFromParams(searchParams);
-  const ownerFilter = ownerFromParams(searchParams);
-  const directoryFacet = facetFromParams(searchParams);
-  const leadDateScope = leadDateScopeFromParams(searchParams);
+  const {
+    statusFilter,
+    ownerFilter,
+    directoryFacet,
+    leadDateScope,
+    courseFilter,
+  } = contactFilterStateFromParams(searchParams);
   const updateFilterQuery = useCallback((patch) => {
     const nextQuery = contactFilterQuery({
       statusFilter,
       ownerFilter,
       directoryFacet,
       leadDateScope,
+      courseFilter,
       ...patch,
     });
     router.replace(nextQuery ? `${routeBase}?${nextQuery}` : routeBase, { scroll: false });
-  }, [directoryFacet, leadDateScope, ownerFilter, routeBase, router, statusFilter]);
+  }, [courseFilter, directoryFacet, leadDateScope, ownerFilter, routeBase, router, statusFilter]);
   const setStatusFilter = useCallback((value) => updateFilterQuery({ statusFilter: value }), [updateFilterQuery]);
   const setOwnerFilter = useCallback((value) => updateFilterQuery({ ownerFilter: value }), [updateFilterQuery]);
   const setDirectoryFacet = useCallback((value) => updateFilterQuery({ directoryFacet: value }), [updateFilterQuery]);
   const setLeadDateScope = useCallback((value) => updateFilterQuery({ leadDateScope: value }), [updateFilterQuery]);
+  const setCourseFilter = useCallback((value) => updateFilterQuery({ courseFilter: value }), [updateFilterQuery]);
 
   const directoryContacts = useMemo(() => {
     return contacts;
@@ -369,14 +363,24 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     () => directoryRows.filter((contact) => isCurrentLeadDateScope(contact)).length,
     [directoryRows],
   );
-  const baseFilteredContacts = useMemo(() => dateScopedRows.filter((contact) => {
-    const statusMatch = statusFilter === 'All' || contact.status === statusFilter;
-    const ownerMatch =
-      ownerFilter === 'all' ||
-      (ownerFilter === 'unassigned' && !contact.assignedTo) ||
-      contact.assignedTo === ownerFilter;
-    return statusMatch && ownerMatch;
-  }), [dateScopedRows, ownerFilter, statusFilter]);
+  const statusOwnerFilteredContacts = useMemo(() => dateScopedRows.filter((contact) => (
+    contactMatchesStatusOwnerCourse(contact, {
+      statusFilter,
+      ownerFilter,
+      courseFilter: DEFAULT_CONTACT_COURSE_FILTER,
+    })
+  )), [dateScopedRows, ownerFilter, statusFilter]);
+  const courseFilterOptions = useMemo(
+    () => buildCourseFilterOptions(statusOwnerFilteredContacts),
+    [statusOwnerFilteredContacts],
+  );
+  const baseFilteredContacts = useMemo(() => statusOwnerFilteredContacts.filter((contact) => (
+    contactMatchesStatusOwnerCourse(contact, {
+      statusFilter: DEFAULT_CONTACT_STATUS_FILTER,
+      ownerFilter: DEFAULT_CONTACT_OWNER_FILTER,
+      courseFilter,
+    })
+  )), [courseFilter, statusOwnerFilteredContacts]);
   const facetGroups = useMemo(
     () => buildContactDirectoryFacetGroups(baseFilteredContacts, facetContext),
     [baseFilteredContacts, facetContext],
@@ -399,22 +403,28 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     if (ownerFilter === 'unassigned') return 'Unassigned';
     return ownerOptions.find((owner) => owner.id === ownerFilter)?.label || 'Selected owner';
   }, [ownerFilter, ownerOptions]);
+  const selectedCourseLabel = useMemo(() => {
+    if (courseFilter === DEFAULT_CONTACT_COURSE_FILTER) return '';
+    return courseFilterOptions.find((option) => option.value === courseFilter)?.label || courseFilter;
+  }, [courseFilter, courseFilterOptions]);
   const activeFilterChips = useMemo(() => [
     leadDateScope === 'all' ? { key: 'leadDateScope', label: 'All date leads' } : null,
-    statusFilter !== 'All' ? { key: 'status', label: statusFilter } : null,
+    statusFilter !== DEFAULT_CONTACT_STATUS_FILTER ? { key: 'status', label: statusFilter } : null,
+    selectedCourseLabel ? { key: 'course', label: selectedCourseLabel } : null,
     selectedOwnerLabel ? { key: 'owner', label: selectedOwnerLabel } : null,
     selectedFacetLabel ? { key: 'facet', label: selectedFacetLabel } : null,
-  ].filter(Boolean), [leadDateScope, selectedFacetLabel, selectedOwnerLabel, statusFilter]);
+  ].filter(Boolean), [leadDateScope, selectedCourseLabel, selectedFacetLabel, selectedOwnerLabel, statusFilter]);
   const hasActiveFilters = activeFilterChips.length > 0;
   const filterSummaryText = hasActiveFilters
     ? activeFilterChips.map((chip) => chip.label).join(' / ')
     : 'Default contact view';
   const resetFilters = () => {
     updateFilterQuery({
-      leadDateScope: 'current',
-      statusFilter: 'All',
-      ownerFilter: 'all',
-      directoryFacet: 'all',
+      leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+      statusFilter: DEFAULT_CONTACT_STATUS_FILTER,
+      ownerFilter: DEFAULT_CONTACT_OWNER_FILTER,
+      directoryFacet: DEFAULT_CONTACT_FACET_FILTER,
+      courseFilter: DEFAULT_CONTACT_COURSE_FILTER,
     });
   };
   const invalidPhoneScopeSummary = useMemo(() => {
@@ -449,10 +459,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           <p className="page-subtitle">{directoryContacts.length} {pluralLabel.toLowerCase()} in {directoryBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}</p>
         </div>
         <div className="flex-gap contacts-header-actions">
-          <select className="input select contacts-filter" style={{width:130, padding:'4px 8px'}} value={statusFilter} onChange={e=>setStatusFilter(e.target.value)}>
-            <option value="All">All Statuses</option>
-            {statusOptions.map(s=><option key={s} value={s}>{s}</option>)}
-          </select>
           <select className="input select contacts-filter" style={{width:150, padding:'4px 8px'}} value={ownerFilter} onChange={e=>setOwnerFilter(e.target.value)}>
             <option value="all">All Owners</option>
             <option value="unassigned">Unassigned</option>
@@ -480,6 +486,28 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           )}
         </div>
         <div className="contacts-facet-groups">
+          <div className="contacts-facet-group">
+            <div className="contacts-facet-label">Status</div>
+            <div className="contacts-filter-controls">
+              <select className="input select contacts-filter-select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+                <option value={DEFAULT_CONTACT_STATUS_FILTER}>All Statuses</option>
+                {statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="contacts-facet-group">
+            <div className="contacts-facet-label">Course</div>
+            <div className="contacts-filter-controls">
+              <select className="input select contacts-filter-select" value={courseFilter} onChange={(event) => setCourseFilter(event.target.value)}>
+                <option value={DEFAULT_CONTACT_COURSE_FILTER}>All Courses</option>
+                {courseFilterOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label} ({option.count})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
           <div className="contacts-facet-group">
             <div className="contacts-facet-label">Lead dates</div>
             <div className="contacts-facet-pills">
