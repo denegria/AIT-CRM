@@ -118,6 +118,12 @@ export function leadDateForDirectoryScope(row = {}) {
 }
 
 export function isCurrentLeadDateScope(row = {}, now = new Date()) {
+  if (
+    clean(row.workflowKey) === WORKFLOW_KEYS.AIT_USA &&
+    (row.isPipelineEligible === false || clean(row.currentStage) === 'Retargeting' || clean(row.status) === 'Retargeting')
+  ) {
+    return false;
+  }
   const rawDate = leadDateForDirectoryScope(row);
   if (!rawDate && clean(row.workflowKey) === WORKFLOW_KEYS.AIT_SIGNS) return false;
   if (!rawDate) return true;
