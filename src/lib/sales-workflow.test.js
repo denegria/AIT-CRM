@@ -12,7 +12,7 @@ import {
 test('workflowColumnsForBusinessUnit returns AIT USA enrollment columns', () => {
   assert.deepEqual(
     workflowColumnsForBusinessUnit({ name: 'AIT USA Institute' }).map((column) => column.id),
-    ['New Lead', 'Follow Up', 'Enrolled', 'Not Interested', 'Course Completed'],
+    ['New Lead', 'Follow Up', 'Enrolled', 'Retargeting', 'Not Interested', 'Course Completed'],
   );
 });
 
@@ -64,8 +64,53 @@ test('workflowFromLead maps legacy statuses into the AIT USA workflow', () => {
     'Course Completed',
   );
   assert.equal(
+    pipelineStatusFromLead({ status: 'Retargeting only' }, { businessUnit: { name: 'AIT USA Institute' } }),
+    'Retargeting',
+  );
+  assert.equal(
     pipelineStatusFromLead({ status: 'Closed Lost' }, { businessUnit: { name: 'AIT USA Institute' } }),
     'Not Interested',
+  );
+});
+
+test('AIT USA default pipeline excludes prior-year and explicit retargeting rows', () => {
+  const businessUnit = { id: 'bu-usa', name: 'AIT USA Institute' };
+  const now = Date.parse('2026-06-24T00:00:00.000Z');
+
+  assert.equal(
+    isPipelineEligibleContact(
+      { id: 'old-lead', workflowKey: 'ait_usa', status: 'Follow Up', leadCreatedAt: '2025-12-31T23:59:59.000Z' },
+      { businessUnit, now },
+    ),
+    false,
+  );
+  assert.equal(
+    isPipelineEligibleContact(
+      { id: 'current-lead', workflowKey: 'ait_usa', status: 'Follow Up', leadCreatedAt: '2026-01-01T00:00:00.000Z' },
+      { businessUnit, now },
+    ),
+    true,
+  );
+  assert.equal(
+    isPipelineEligibleContact(
+      { id: 'retargeting-status', workflowKey: 'ait_usa', status: 'Retargeting', leadCreatedAt: '2026-02-01T00:00:00.000Z' },
+      { businessUnit, now },
+    ),
+    false,
+  );
+  assert.equal(
+    isPipelineEligibleContact(
+      { id: 'retargeting-tag', workflowKey: 'ait_usa', status: 'New Lead', tags: ['legacy_undated_retargeting'] },
+      { businessUnit, now },
+    ),
+    false,
+  );
+  assert.equal(
+    isPipelineEligibleContact(
+      { id: 'unknown-date-active-row', workflowKey: 'ait_usa', status: 'New Lead' },
+      { businessUnit, now },
+    ),
+    true,
   );
 });
 
