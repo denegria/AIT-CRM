@@ -1,8 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { AlertCircle, ArrowRight, Clock3, ListFilter, Search, UserPlus, UserRoundCheck } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { AlertCircle, ArrowRight, Clock3, ListFilter, RotateCcw, Search, UserPlus, UserRoundCheck } from 'lucide-react';
 import KanbanBoard from '@/components/KanbanBoard';
 import { useToast } from '@/components/Toast';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
@@ -11,7 +11,38 @@ import {
   isPipelineNewLeadBucket,
   matchesPipelineQuickFilter,
 } from '@/lib/contact-workflow-buckets';
+import {
+  contactMatchesLeadDateScope,
+  CONTACT_LEAD_DATE_SCOPE_ALL,
+  CONTACT_LEAD_DATE_SCOPE_CUSTOM,
+  DEFAULT_CONTACT_LEAD_DATE_FROM,
+  DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+  DEFAULT_CONTACT_LEAD_DATE_TO,
+  DEFAULT_PIPELINE_ACTIVITY_FILTER,
+  DEFAULT_PIPELINE_COMPACT_MODE,
+  DEFAULT_PIPELINE_OWNER_FILTER,
+  DEFAULT_PIPELINE_SEARCH,
+  DEFAULT_PIPELINE_SOURCE_FILTER,
+  DEFAULT_PIPELINE_WORKFLOW_FILTER,
+  pipelineFilterQuery,
+  pipelineFilterStateFromParams,
+} from '@/lib/contact-directory-filters';
 import s from './PipelinePage.module.css';
+
+const PIPELINE_BUCKET_OPTIONS = [
+  ['all', 'All Pipeline Cards'],
+  ['new_leads', 'New Leads'],
+  ['needs_first_outreach', 'Needs First Outreach'],
+  ['active', 'Active Pipeline'],
+  ['unassigned', 'Unassigned'],
+];
+
+const PIPELINE_ACTIVITY_OPTIONS = [
+  ['all', 'Any Activity'],
+  ['recent_7', 'Touched Last 7 Days'],
+  ['stale_30', 'No Touch 30+ Days'],
+  ['no_touch', 'No Touch Recorded'],
+];
 
 function matchesSearch(contact, query) {
   if (!query) return true;
@@ -78,6 +109,21 @@ function nextLeadScore(contact = {}) {
   return score;
 }
 
+function optionLabel(options = [], value = '') {
+  return options.find(([id]) => id === value)?.[1] || value;
+}
+
+function dateScopeLabel(scope = DEFAULT_CONTACT_LEAD_DATE_SCOPE, from = '', to = '') {
+  if (scope === CONTACT_LEAD_DATE_SCOPE_ALL) return 'All Leads';
+  if (scope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
+    if (from && to) return `${from} to ${to}`;
+    if (from) return `From ${from}`;
+    if (to) return `Through ${to}`;
+    return 'Custom time frame';
+  }
+  return 'Current Year';
+}
+
 export default function PipelinePage() {
   const {
     contacts,
@@ -95,20 +141,49 @@ export default function PipelinePage() {
     scopeLabel,
   } = useCRM();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
+  const pipelineSearchQuery = searchParams.toString();
   const [pipelineBusinessUnitId, setPipelineBusinessUnitId] = useState('');
-  const [workflowFilter, setWorkflowFilter] = useState('all');
-  const [ownerFilter, setOwnerFilter] = useState(() => (
-    currentUser?.id && !currentUser.canAccessAllBusinessUnits ? 'unassigned' : 'all'
-  ));
-  const [sourceFilter, setSourceFilter] = useState('all');
-  const [activityFilter, setActivityFilter] = useState('all');
-  const [compactMode, setCompactMode] = useState(true);
-  const [search, setSearch] = useState('');
+  const [filterMenuOpen, setFilterMenuOpen] = useState(false);
+  const [filterMenuTab, setFilterMenuTab] = useState('date');
   const [mobileStageFilter, setMobileStageFilter] = useState('all');
   const [mobileMoveCardId, setMobileMoveCardId] = useState('');
   const [bulkAssignMode, setBulkAssignMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
+  const parsedFilters = useMemo(() => pipelineFilterStateFromParams(new URLSearchParams(pipelineSearchQuery)), [pipelineSearchQuery]);
+  const ownerFilter = parsedFilters.ownerFilter === DEFAULT_PIPELINE_OWNER_FILTER &&
+    currentUser?.id &&
+    !currentUser.canAccessAllBusinessUnits
+    ? 'unassigned'
+    : parsedFilters.ownerFilter;
+  const {
+    workflowFilter,
+    sourceFilter,
+    activityFilter,
+    search,
+    leadDateScope,
+    leadDateFrom,
+    leadDateTo,
+    compactMode,
+  } = parsedFilters;
+  const updatePipelineFilterQuery = (patch) => {
+    const nextQuery = pipelineFilterQuery({
+      ...parsedFilters,
+      ownerFilter,
+      ...patch,
+    });
+    router.replace(nextQuery ? `/pipeline?${nextQuery}` : '/pipeline', { scroll: false });
+  };
+  const setWorkflowFilter = (value) => updatePipelineFilterQuery({ workflowFilter: value });
+  const setOwnerFilter = (value) => updatePipelineFilterQuery({ ownerFilter: value });
+  const setSourceFilter = (value) => updatePipelineFilterQuery({ sourceFilter: value });
+  const setActivityFilter = (value) => updatePipelineFilterQuery({ activityFilter: value });
+  const setSearch = (value) => updatePipelineFilterQuery({ search: value });
+  const setCompactMode = (value) => updatePipelineFilterQuery({ compactMode: value });
+  const setLeadDateScope = (value) => updatePipelineFilterQuery({ leadDateScope: value });
+  const setLeadDateFrom = (value) => updatePipelineFilterQuery({ leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM, leadDateFrom: value });
+  const setLeadDateTo = (value) => updatePipelineFilterQuery({ leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM, leadDateTo: value });
   const canWrite = access.canWriteCrm;
   const {
     activeWorkflow,
@@ -134,9 +209,30 @@ export default function PipelinePage() {
     if (!selectedBusinessUnitId) return true;
     return (contact.businessUnitId || contact.primaryBusinessUnitId) === selectedBusinessUnitId;
   }), [contactRows, selectedBusinessUnitId]);
-  const pipelineScopedRows = useMemo(
+  const eligibleScopedRows = useMemo(
     () => scopedRows.filter((contact) => contact.isPipelineEligible !== false),
     [scopedRows],
+  );
+  const pipelineScopedRows = useMemo(
+    () => eligibleScopedRows.filter((contact) => contactMatchesLeadDateScope(contact, {
+      leadDateScope,
+      leadDateFrom,
+      leadDateTo,
+    })),
+    [eligibleScopedRows, leadDateFrom, leadDateScope, leadDateTo],
+  );
+  const allPipelineCount = eligibleScopedRows.length;
+  const currentPipelineCount = useMemo(
+    () => eligibleScopedRows.filter((contact) => contactMatchesLeadDateScope(contact)).length,
+    [eligibleScopedRows],
+  );
+  const customPipelineCount = useMemo(
+    () => eligibleScopedRows.filter((contact) => contactMatchesLeadDateScope(contact, {
+      leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM,
+      leadDateFrom,
+      leadDateTo,
+    })).length,
+    [eligibleScopedRows, leadDateFrom, leadDateTo],
   );
 
   const pipelineStats = useMemo(() => ({
@@ -158,7 +254,7 @@ export default function PipelinePage() {
   }, [currentUser?.id, employees]);
 
   const normalizedSearch = search.trim().toLowerCase();
-  const pipelineRows = pipelineScopedRows.filter((contact) => {
+  const pipelineRows = useMemo(() => pipelineScopedRows.filter((contact) => {
     const workflowMatch = matchesPipelineQuickFilter(contact, workflowFilter, { businessUnitById });
     const ownerMatch =
       ownerFilter === 'all' ||
@@ -172,7 +268,7 @@ export default function PipelinePage() {
       (activityFilter === 'stale_30' && touchAge > 30) ||
       (activityFilter === 'recent_7' && touchAge <= 7);
     return workflowMatch && ownerMatch && sourceMatch && activityMatch && matchesSearch(contact, normalizedSearch);
-  });
+  }), [activityFilter, businessUnitById, normalizedSearch, ownerFilter, pipelineScopedRows, sourceFilter, workflowFilter]);
   const normalizedColumns = useMemo(() => normalizedPipelineColumns(pipelineColumns), [pipelineColumns]);
   const mobileStageRows = mobileStageFilter === 'all'
     ? pipelineRows
@@ -187,6 +283,44 @@ export default function PipelinePage() {
       .sort((left, right) => nextLeadScore(right) - nextLeadScore(left))[0] || null
   ), [pipelineRows]);
   const selectedRows = useMemo(() => pipelineRows.filter((contact) => selectedIds.includes(contact.id)), [pipelineRows, selectedIds]);
+  const selectedOwnerLabel = useMemo(() => {
+    if (ownerFilter === DEFAULT_PIPELINE_OWNER_FILTER) return '';
+    if (ownerFilter === 'unassigned') return 'Unassigned';
+    if (ownerFilter === currentUser?.id) return 'Me';
+    return ownerOptions.find((owner) => owner.id === ownerFilter)?.label || 'Selected owner';
+  }, [currentUser?.id, ownerFilter, ownerOptions]);
+  const selectedDateLabel = dateScopeLabel(leadDateScope, leadDateFrom, leadDateTo);
+  const activeFilterChips = [
+    { key: 'date', label: selectedDateLabel },
+    workflowFilter !== DEFAULT_PIPELINE_WORKFLOW_FILTER ? { key: 'bucket', label: optionLabel(PIPELINE_BUCKET_OPTIONS, workflowFilter) } : null,
+    selectedOwnerLabel ? { key: 'owner', label: selectedOwnerLabel } : null,
+    sourceFilter !== DEFAULT_PIPELINE_SOURCE_FILTER ? { key: 'source', label: sourceFilter } : null,
+    activityFilter !== DEFAULT_PIPELINE_ACTIVITY_FILTER ? { key: 'activity', label: optionLabel(PIPELINE_ACTIVITY_OPTIONS, activityFilter) } : null,
+    search !== DEFAULT_PIPELINE_SEARCH ? { key: 'search', label: `Search: ${search}` } : null,
+    compactMode !== DEFAULT_PIPELINE_COMPACT_MODE ? { key: 'cards', label: 'Comfort cards' } : null,
+  ].filter(Boolean);
+  const hasNonDefaultFilters = leadDateScope !== DEFAULT_CONTACT_LEAD_DATE_SCOPE ||
+    leadDateFrom !== DEFAULT_CONTACT_LEAD_DATE_FROM ||
+    leadDateTo !== DEFAULT_CONTACT_LEAD_DATE_TO ||
+    workflowFilter !== DEFAULT_PIPELINE_WORKFLOW_FILTER ||
+    ownerFilter !== DEFAULT_PIPELINE_OWNER_FILTER ||
+    sourceFilter !== DEFAULT_PIPELINE_SOURCE_FILTER ||
+    activityFilter !== DEFAULT_PIPELINE_ACTIVITY_FILTER ||
+    search !== DEFAULT_PIPELINE_SEARCH ||
+    compactMode !== DEFAULT_PIPELINE_COMPACT_MODE;
+  const resetFilters = () => {
+    updatePipelineFilterQuery({
+      workflowFilter: DEFAULT_PIPELINE_WORKFLOW_FILTER,
+      ownerFilter: DEFAULT_PIPELINE_OWNER_FILTER,
+      sourceFilter: DEFAULT_PIPELINE_SOURCE_FILTER,
+      activityFilter: DEFAULT_PIPELINE_ACTIVITY_FILTER,
+      search: DEFAULT_PIPELINE_SEARCH,
+      leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+      leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
+      leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
+      compactMode: DEFAULT_PIPELINE_COMPACT_MODE,
+    });
+  };
 
   const movePipelineCard = (id, status, column) => {
     if (column?.isOperational) {
@@ -280,48 +414,164 @@ export default function PipelinePage() {
         )}
       </div>
 
-      <div className={s.filterBar}>
-        <select className="input select" value={workflowFilter} onChange={(event) => setWorkflowFilter(event.target.value)}>
-          <option value="all">All Pipeline Cards</option>
-          <option value="new_leads">New Leads</option>
-          <option value="needs_first_outreach">Needs First Outreach</option>
-          <option value="active">Active Pipeline</option>
-          <option value="unassigned">Unassigned</option>
-        </select>
-        <select className="input select" value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}>
-          <option value="all">{canUseConsolidatedScope ? 'Team Pipeline' : 'All Owners'}</option>
-          <option value="unassigned">Unassigned</option>
-          {currentUser?.id && <option value={currentUser.id}>Me</option>}
-          {ownerOptions.map((owner) => (
-            <option key={owner.id} value={owner.id}>{owner.label}</option>
-          ))}
-        </select>
-        <select className="input select" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
-          <option value="all">All Sources</option>
-          {sourceOptions.map((source) => (
-            <option key={source} value={source}>{source}</option>
-          ))}
-        </select>
-        <select className="input select" value={activityFilter} onChange={(event) => setActivityFilter(event.target.value)}>
-          <option value="all">Any Activity</option>
-          <option value="recent_7">Touched Last 7 Days</option>
-          <option value="stale_30">No Touch 30+ Days</option>
-          <option value="no_touch">No Touch Recorded</option>
-        </select>
-        <div className={s.searchBox}>
-          <Search size={14} />
-          <input
-            className={`input ${s.searchInput}`}
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search pipeline..."
-          />
+      <section className={s.filterSurface} aria-label="Pipeline filters">
+        <div className={s.filterTopline}>
+          <div className={s.filterSummary}>
+            <strong>{pipelineRows.length}</strong>
+            <span>shown of {pipelineScopedRows.length}</span>
+            <small>{activeFilterChips.map((chip) => chip.label).join(' / ')}</small>
+          </div>
+          <div className={s.filterToolbar}>
+            {hasNonDefaultFilters && (
+              <button className={s.filterReset} type="button" onClick={resetFilters}>
+                <RotateCcw size={13} />
+                Reset
+              </button>
+            )}
+            <button
+              className={`${s.filterMenuButton} ${filterMenuOpen ? s.active : ''}`}
+              type="button"
+              onClick={() => setFilterMenuOpen((open) => !open)}
+              aria-expanded={filterMenuOpen}
+            >
+              <ListFilter size={15} />
+              Filters
+              {hasNonDefaultFilters && <strong>{activeFilterChips.length}</strong>}
+            </button>
+          </div>
         </div>
-        <label className={s.compactToggle}>
-          <input type="checkbox" checked={compactMode} onChange={(event) => setCompactMode(event.target.checked)} />
-          Compact cards
-        </label>
-      </div>
+
+        <div className={s.activeChips} aria-label="Active pipeline filter summary">
+          {activeFilterChips.map((chip) => (
+            <span key={chip.key} className={`${s.activeChip} ${chip.key === 'date' ? s.primary : ''}`}>{chip.label}</span>
+          ))}
+        </div>
+
+        {filterMenuOpen && (
+          <div className={s.filterMenu}>
+            <div className={s.filterTabs} role="tablist" aria-label="Pipeline filter sections">
+              {[
+                ['date', 'Date'],
+                ['filters', 'Filters'],
+                ['buckets', 'Buckets'],
+              ].map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`${s.filterTab} ${filterMenuTab === id ? s.active : ''}`}
+                  onClick={() => setFilterMenuTab(id)}
+                  role="tab"
+                  aria-selected={filterMenuTab === id}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {filterMenuTab === 'date' && (
+              <div className={s.filterSection}>
+                <div className={s.filterPills}>
+                  {[
+                    [DEFAULT_CONTACT_LEAD_DATE_SCOPE, 'Current Year', currentPipelineCount],
+                    [CONTACT_LEAD_DATE_SCOPE_ALL, 'All Leads', allPipelineCount],
+                    [CONTACT_LEAD_DATE_SCOPE_CUSTOM, 'Custom Time Frame', customPipelineCount],
+                  ].map(([id, label, count]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={`${s.filterPill} ${leadDateScope === id ? s.active : ''}`}
+                      onClick={() => setLeadDateScope(id)}
+                      aria-pressed={leadDateScope === id}
+                    >
+                      <span>{label}</span>
+                      <strong>{count}</strong>
+                    </button>
+                  ))}
+                </div>
+                <div className={s.dateRange}>
+                  <label>
+                    <span>From</span>
+                    <input className="input" type="date" value={leadDateFrom} onChange={(event) => setLeadDateFrom(event.target.value)} />
+                  </label>
+                  <label>
+                    <span>To</span>
+                    <input className="input" type="date" value={leadDateTo} onChange={(event) => setLeadDateTo(event.target.value)} />
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {filterMenuTab === 'filters' && (
+              <div className={s.filterGrid}>
+                <label className={s.filterField}>
+                  <span>Owner</span>
+                  <select className="input select" value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}>
+                    <option value="all">{canUseConsolidatedScope ? 'Team Pipeline' : 'All Owners'}</option>
+                    <option value="unassigned">Unassigned</option>
+                    {currentUser?.id && <option value={currentUser.id}>Me</option>}
+                    {ownerOptions.map((owner) => (
+                      <option key={owner.id} value={owner.id}>{owner.label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className={s.filterField}>
+                  <span>Source</span>
+                  <select className="input select" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
+                    <option value="all">All Sources</option>
+                    {sourceOptions.map((source) => (
+                      <option key={source} value={source}>{source}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className={s.filterField}>
+                  <span>Activity</span>
+                  <select className="input select" value={activityFilter} onChange={(event) => setActivityFilter(event.target.value)}>
+                    {PIPELINE_ACTIVITY_OPTIONS.map(([id, label]) => (
+                      <option key={id} value={id}>{label}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className={`${s.filterField} ${s.searchField}`}>
+                  <span>Search</span>
+                  <div className={s.searchBox}>
+                    <Search size={14} />
+                    <input
+                      className={`input ${s.searchInput}`}
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                      placeholder="Search pipeline..."
+                    />
+                  </div>
+                </label>
+                <label className={`${s.compactToggle} ${s.filterDensity}`}>
+                  <input type="checkbox" checked={compactMode} onChange={(event) => setCompactMode(event.target.checked)} />
+                  Compact cards
+                </label>
+              </div>
+            )}
+
+            {filterMenuTab === 'buckets' && (
+              <div className={s.filterPills}>
+                {PIPELINE_BUCKET_OPTIONS.map(([id, label]) => {
+                  const count = pipelineScopedRows.filter((contact) => matchesPipelineQuickFilter(contact, id, { businessUnitById })).length;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      className={`${s.filterPill} ${workflowFilter === id ? s.active : ''}`}
+                      onClick={() => setWorkflowFilter(id)}
+                      aria-pressed={workflowFilter === id}
+                    >
+                      <span>{label}</span>
+                      <strong>{count}</strong>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
 
       {bulkAssignMode && (
         <div className={s.bulkBar}>
