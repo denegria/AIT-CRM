@@ -119,6 +119,12 @@ test('lead date scope uses lead dates and keeps only the current year active', (
   assert.equal(isCurrentLeadDateScope({ leadCreatedAt: '2024-12-31T23:00:00.000Z' }, now), false);
   assert.equal(isCurrentLeadDateScope({ submittedAt: '2024-12-31T23:00:00.000Z', leadCreatedAt: '2026-01-01T00:00:00.000Z' }, now), false);
   assert.equal(isCurrentLeadDateScope({ leadCreatedAt: '' }, now), true);
+  assert.equal(isCurrentLeadDateScope({
+    workflowKey: 'ait_usa',
+    status: 'Retargeting',
+    isPipelineEligible: false,
+    contactCreatedAt: '2026-06-24T00:00:00.000Z',
+  }, now), false);
 });
 
 test('AIT Signs date scope uses source activity date instead of CRM load date', () => {
