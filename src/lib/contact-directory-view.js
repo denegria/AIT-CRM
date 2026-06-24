@@ -80,6 +80,13 @@ export function lifecycleBucket(row = {}) {
   }
 
   if (workflowKey === WORKFLOW_KEYS.AIT_USA) {
+    if (row.isPipelineEligible === false || clean(row.currentStage) === 'Retargeting' || clean(row.status) === 'Retargeting') {
+      return {
+        label: 'Retargeting',
+        tone: 'muted',
+        detail: clean(row.sourceActivityDate) || clean(row.leadCreatedAt),
+      };
+    }
     return {
       label: clean(row.currentStage) || clean(row.status) || 'Enrollment',
       tone: 'active',
@@ -118,5 +125,6 @@ export function isCurrentLeadDateScope(row = {}, now = new Date()) {
   if (Number.isNaN(date.getTime())) return true;
   const currentYear = now.getUTCFullYear();
   const leadYear = date.getUTCFullYear();
-  return leadYear === currentYear || leadYear === currentYear - 1;
+  if (clean(row.workflowKey) === WORKFLOW_KEYS.AIT_SIGNS) return leadYear === currentYear || leadYear === currentYear - 1;
+  return leadYear === currentYear;
 }

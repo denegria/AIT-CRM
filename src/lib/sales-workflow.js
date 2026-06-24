@@ -17,6 +17,15 @@ export const FIRST_OUTREACH_ACTION =
 
 const AIT_SIGNS_CURRENT_PIPELINE_START = '2025-01-01';
 const AIT_SIGNS_RECENT_FOLLOW_UP_START = '2026-01-01';
+const AIT_USA_RETARGETING_SIGNAL_TOKENS = new Set([
+  'exclude active and pipeline',
+  'legacy undated retargeting',
+  'missing name identity retargeting',
+  'retargeting',
+  'retargeting only',
+  'retargeting pool',
+  'retargeting legacy undated',
+]);
 
 function clean(value) {
   return String(value || '').trim();
@@ -28,6 +37,12 @@ function normalized(value) {
 
 function normalizedTokens(values = []) {
   return new Set((Array.isArray(values) ? values : [values]).map(normalized).filter(Boolean));
+}
+
+function pipelineWorkflowKey(contact = {}, businessUnit = null) {
+  if (businessUnit?.workflowKey) return businessUnit.workflowKey;
+  if (contact.workflowKey) return contact.workflowKey;
+  return workflowKeyForBusinessUnit(businessUnit || contact.businessUnitName || contact.divisionLabel || '');
 }
 
 function contactBusinessUnitHint(contact = {}, businessUnit = null) {
@@ -75,6 +90,55 @@ function dateValue(value) {
   if (!value || String(value).toLowerCase() === 'none') return 0;
   const time = new Date(value).getTime();
   return Number.isNaN(time) ? 0 : time;
+}
+
+function currentUtcYearStartMs(now = Date.now()) {
+  const value = now instanceof Date ? now.getTime() : Number(now || Date.now());
+  const date = new Date(Number.isFinite(value) ? value : Date.now());
+  return Date.UTC(date.getUTCFullYear(), 0, 1);
+}
+
+function isBeforeCurrentUtcYear(value, now = Date.now()) {
+  const time = dateValue(value);
+  return Boolean(time && time < currentUtcYearStartMs(now));
+}
+
+function aitUsaSourceDate(contact = {}, options = {}) {
+  return [
+    options.sourceActivityDate,
+    contact.sourceActivityDate,
+    options.submittedAt,
+    contact.submittedAt,
+    options.leadCreatedAt,
+    contact.leadCreatedAt,
+    options.contactCreatedAt,
+    contact.contactCreatedAt,
+    contact.createdAt,
+  ].find((value) => Boolean(dateValue(value))) || '';
+}
+
+function hasAitUsaRetargetingSignal(contact = {}) {
+  const values = [
+    contact.status,
+    contact.currentStage,
+    contact.contactabilityStatus,
+    contact.qualityDisposition,
+    contact.outreachState,
+    contact.source,
+    contact.sourceLabel,
+    contact.sourceType,
+    contact.sourceName,
+    contact.sourceDetail,
+    contact.originalNotes,
+    contact.notesText,
+    ...(contact.tags || []),
+    ...(contact.processPills || []),
+  ];
+  const tokens = normalizedTokens(values);
+  if ([...AIT_USA_RETARGETING_SIGNAL_TOKENS].some((token) => tokens.has(token))) return true;
+  return values
+    .map(normalized)
+    .some((value) => value.includes('retargeting only') || value.includes('legacy undated retargeting'));
 }
 
 function isOnOrAfter(value, isoDate) {
@@ -185,6 +249,7 @@ export function pipelineStatusFromLead(lead, options = {}) {
   if (canonicalStatus) return canonicalStatus;
   const status = clean(lead.status).toLowerCase();
   if (workflow.key === WORKFLOW_KEYS.AIT_USA) {
+    if (status.includes('retarget')) return 'Retargeting';
     if (status.includes('not interested') || status.includes('uninterested') || status.includes('do not contact') || status === 'lost' || status === 'closed lost') return 'Not Interested';
     if (status.includes('previous') || status.includes('complete') || status.includes('fulfilled')) return 'Course Completed';
     if (status.includes('enroll') || status.includes('matric') || status.includes('won')) return 'Enrolled';
@@ -241,7 +306,7 @@ export function workflowFromContact(contact = {}, options = {}) {
     options.businessUnits,
     contact.businessUnitId || contact.primaryBusinessUnitId,
   );
-  const workflowKey = workflowKeyForBusinessUnit(businessUnit || contact.businessUnitName || contact.divisionLabel || '');
+  const workflowKey = pipelineWorkflowKey(contact, businessUnit);
   const leadLike = {
     status: contact.status,
     currentStage: contact.currentStage,
@@ -270,7 +335,12 @@ export function isPipelineEligibleContact(contact = {}, options = {}) {
     options.businessUnits,
     contact.businessUnitId || contact.primaryBusinessUnitId,
   );
-  const workflowKey = workflowKeyForBusinessUnit(businessUnit || contact.businessUnitName || contact.divisionLabel || '');
+  const workflowKey = pipelineWorkflowKey(contact, businessUnit);
+  if (workflowKey === WORKFLOW_KEYS.AIT_USA) {
+    if (isWorkflowStatusClosed(contact.status || contact.currentStage, contactBusinessUnitHint(contact, businessUnit))) return false;
+    if (hasAitUsaRetargetingSignal(contact)) return false;
+    return !isBeforeCurrentUtcYear(aitUsaSourceDate(contact, options), options.now);
+  }
   if (workflowKey !== WORKFLOW_KEYS.AIT_SIGNS) return true;
 
   const hasLead = Boolean(contact.hasLeadStatus || contact.leadId);

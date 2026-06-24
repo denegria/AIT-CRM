@@ -191,6 +191,7 @@ export const CONTACT_DIRECTORY_FACET_GROUPS = [
           (hasStatus(contact, 'Follow Up') || readyForFollowUp(contact)),
       },
       { id: 'usa_enrolled', label: 'Enrolled', matches: (contact) => isAitUsa(contact) && hasStatus(contact, 'Enrolled') },
+      { id: 'usa_retargeting', label: 'Retargeting', matches: (contact) => isAitUsa(contact) && hasStatus(contact, 'Retargeting') },
       { id: 'usa_not_interested', label: 'Not Interested', matches: (contact) => isAitUsa(contact) && hasStatus(contact, 'Not Interested') },
       {
         id: 'usa_course_completed',
@@ -247,6 +248,7 @@ export function labelForContactProcessPill(value = '') {
     open_payment: 'Open Payment',
     ready_for_follow_up: 'Ready Follow-up',
     repeated_no_answer: 'Repeated No Answer',
+    retargeting_only: 'Retargeting',
     source_review: 'Source Review',
     suppress_from_follow_up: 'Suppress Follow-up',
     wrong_number: 'Wrong Number',

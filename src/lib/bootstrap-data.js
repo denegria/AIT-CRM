@@ -237,9 +237,30 @@ function mapContacts(
       estimates: contactEstimates,
       paymentSnapshots: contactPaymentSnapshots,
     });
+    const sourceActivityDate = workflow.workflowKey === 'ait_signs'
+      ? aitSignsSourceActivityDate({
+        lead,
+        events: contactEvents,
+        notes: contactNotes,
+        workOrders: contactWorkOrders,
+        estimates: contactEstimates,
+        paymentSnapshots: contactPaymentSnapshots,
+      })
+      : submittedAt;
     const isPipelineEligible = isPipelineEligibleContact({
       ...contact,
       source,
+      sourceType: lead?.sourceType || '',
+      sourceName: lead?.sourceName || '',
+      sourceDetail: lead?.sourceDetail || '',
+      originalNotes: lead?.originalNotes || '',
+      notesText: lead?.originalNotes || '',
+      status: workflow.status,
+      currentStage: workflow.currentStage,
+      tags: workflow.tags,
+      leadCreatedAt: lead?.createdAt?.toISOString?.() || lead?.createdAt || '',
+      submittedAt,
+      sourceActivityDate,
       hasLeadStatus: Boolean(lead),
       leadId: lead?.id || '',
     }, {
@@ -248,6 +269,9 @@ function mapContacts(
       estimates: contactEstimates,
       paymentSnapshots: contactPaymentSnapshots,
       activityEvents: contactEvents,
+      leadCreatedAt: lead?.createdAt?.toISOString?.() || lead?.createdAt || '',
+      submittedAt,
+      sourceActivityDate,
       lastTouch: touchSummary.lastTouch,
       lastFollowUpTouch: touchSummary.lastFollowUpTouch,
     });
@@ -274,16 +298,6 @@ function mapContacts(
       lead,
       workflow,
     });
-    const sourceActivityDate = workflow.workflowKey === 'ait_signs'
-      ? aitSignsSourceActivityDate({
-        lead,
-        events: contactEvents,
-        notes: contactNotes,
-        workOrders: contactWorkOrders,
-        estimates: contactEstimates,
-        paymentSnapshots: contactPaymentSnapshots,
-      })
-      : submittedAt;
 
     return {
       id: contact.id,

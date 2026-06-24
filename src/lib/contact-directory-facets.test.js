@@ -67,6 +67,16 @@ test('contact directory facets expose counted division-aware buckets', () => {
       phone: '9085552222',
       lastTouch: '2026-06-01',
     },
+    {
+      id: 'usa-retargeting',
+      businessUnitId: 'usa',
+      workflowKey: 'ait_usa',
+      status: 'Retargeting',
+      isPipelineEligible: false,
+      phone: '9085553333',
+      processPills: ['retargeting_only'],
+      lastTouch: '2025-09-01',
+    },
   ];
 
   const groups = buildContactDirectoryFacetGroups(contacts, {
@@ -75,18 +85,23 @@ test('contact directory facets expose counted division-aware buckets', () => {
     now: new Date('2026-06-03T00:00:00Z').getTime(),
   });
 
-  assert.equal(facetCount(groups, 'all'), 5);
+  assert.equal(facetCount(groups, 'all'), 6);
   assert.equal(facetCount(groups, 'mine'), 1);
   assert.equal(facetCount(groups, 'active'), 3);
-  assert.equal(facetCount(groups, 'no_recent_touch'), 2);
+  assert.equal(facetCount(groups, 'no_recent_touch'), 3);
   assert.equal(facetCount(groups, 'needs_contact_info'), 1);
   assert.equal(facetCount(groups, 'invalid_phone'), 1);
   assert.equal(facetCount(groups, 'signs_linked_people'), 1);
   assert.equal(facetCount(groups, 'usa_follow_up'), 1);
+  assert.equal(facetCount(groups, 'usa_retargeting'), 1);
   assert.equal(facetCount(groups, 'usa_bad_contact_channel'), 2);
   assert.deepEqual(
     filterContactsByDirectoryFacet(contacts, 'active', { businessUnitById }).map((contact) => contact.id),
     ['signs-work', 'usa-first', 'usa-review'],
+  );
+  assert.deepEqual(
+    filterContactsByDirectoryFacet(contacts, 'usa_retargeting', { businessUnitById }).map((contact) => contact.id),
+    ['usa-retargeting'],
   );
 });
 
