@@ -543,9 +543,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           <h1 className="page-title">{pluralLabel}</h1>
           <p className="page-subtitle">{directoryContacts.length} {pluralLabel.toLowerCase()} in {directoryBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}</p>
         </div>
-        <div className="flex-gap contacts-header-actions">
-          {canWrite && <button className="btn btn-primary" onClick={openNew}>+ Add {singularLabel}</button>}
-        </div>
       </div>
 
       <div className="card contacts-table-card" style={{padding:16}}>
@@ -577,7 +574,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
               )}
             </div>
           )}
-          toolbarBeforeColumns={(
+          toolbarAfterColumns={(
             <div className="contacts-filter-popover-anchor">
               <button
                 className={`contacts-filter-menu-button ${filterMenuOpen ? 'active' : ''}`}
@@ -719,6 +716,9 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
               )}
             </div>
           )}
+          toolbarExtra={canWrite ? (
+            <button className="btn btn-primary contacts-table-add-button" onClick={openNew}>+ Add {singularLabel}</button>
+          ) : null}
           onEdit={canWrite ? (id, u) => {
             updateContact(id, u)
               .then(() => toast('Field updated'))

@@ -776,6 +776,7 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   flex-wrap: wrap;
   gap: 7px;
+  min-height: 34px;
   min-width: 0;
   color: var(--text-secondary);
 }
@@ -789,15 +790,15 @@ a { color: inherit; text-decoration: none; }
 }
 .contacts-table-count {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
-  min-height: 28px;
+  min-height: 30px;
   padding-right: 2px;
   white-space: nowrap;
 }
 .contacts-table-count strong {
   color: var(--text-primary);
-  font-size: var(--text-lg);
+  font-size: var(--text-md);
   line-height: 1;
 }
 .contacts-table-count span {
@@ -890,6 +891,9 @@ a { color: inherit; text-decoration: none; }
 .contacts-filter-popover-anchor {
   position: relative;
   display: inline-flex;
+}
+.contacts-table-add-button {
+  min-height: 34px;
 }
 .contacts-filter-menu {
   position: absolute;
