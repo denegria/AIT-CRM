@@ -14,11 +14,11 @@
 }
 .kanbanContainer.fitColumns {
   display: grid;
-  grid-template-columns: repeat(var(--kanban-column-count, 1), minmax(236px, 1fr));
+  grid-template-columns: repeat(var(--kanban-column-count, 1), minmax(224px, 1fr));
   align-items: stretch;
 }
 .kanbanContainer.fitColumns.compact {
-  grid-template-columns: repeat(var(--kanban-column-count, 1), minmax(218px, 1fr));
+  grid-template-columns: repeat(var(--kanban-column-count, 1), minmax(206px, 1fr));
 }
 .kanbanColumn {
   flex: 0 0 280px;
