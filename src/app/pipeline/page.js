@@ -382,7 +382,7 @@ export default function PipelinePage() {
     search !== DEFAULT_PIPELINE_SEARCH ||
     compactMode !== DEFAULT_PIPELINE_COMPACT_MODE;
   const pipelineScopeName = pipelineBusinessUnit?.name || currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`;
-  const pipelineSummary = `${pipelineRows.length.toLocaleString()} matching pipeline cards of ${pipelineScopedRows.length.toLocaleString()} active pipeline cards in ${pipelineScopeName}`;
+  const pipelineSummary = `${pipelineRows.length.toLocaleString()} matching pipeline cards in ${pipelineScopeName}`;
   const showPipelineScopeSelector = !currentScopedBusinessUnitId && accessibleBusinessUnits.length > 1;
   const resetFilters = () => {
     updatePipelineFilterQuery({
