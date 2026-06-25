@@ -1,7 +1,7 @@
 .wrap { min-width:0; max-width:100%; margin-bottom: 8px; overflow-x: auto; }
 .toolbar {
   display:grid;
-  grid-template-columns:minmax(220px,340px) minmax(0,max-content) minmax(max-content,1fr);
+  grid-template-columns:max-content max-content minmax(max-content,1fr);
   align-items:center;
   gap:10px;
   margin-bottom:14px;
