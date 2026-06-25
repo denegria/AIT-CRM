@@ -63,10 +63,9 @@ function fieldValue(fields = {}, aliases = []) {
 
 export function aitUsaCourseMetadataFromFields(fields = {}, fallback = {}) {
   const current = firstPresent([
-    fieldValue(fields, ['current_course', 'enrolled_course', 'course', 'program', 'service']),
+    fieldValue(fields, ['current_course', 'enrolled_course', 'course']),
     fallback.currentCourse,
     fallback.enrolledCourse,
-    fallback.programInterest,
   ]);
   const completed = firstPresent([
     fieldValue(fields, ['completed_course', 'course_completed', 'finished_course']),
@@ -98,7 +97,6 @@ export function aitUsaCourseMetadataForContact(contact = {}) {
     completedCourse: contact.enrollmentSignals?.course?.completed,
     endedCourse: contact.enrollmentSignals?.course?.ended,
     courseOutcome: contact.enrollmentSignals?.course?.outcome,
-    programInterest: contact.enrollmentSignals?.inquiry?.programInterest || contact.programInterest,
   });
 }
 
