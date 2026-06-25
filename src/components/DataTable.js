@@ -20,6 +20,7 @@ export default function DataTable({
   searchPlaceholder,
   toolbarMeta,
   toolbarBeforeColumns,
+  toolbarAfterColumns,
   toolbarExtra,
   emptyState,
   selectable,
@@ -154,6 +155,7 @@ export default function DataTable({
               </div>
             </details>
           )}
+          {toolbarAfterColumns}
           {toolbarExtra}
         </div>
       </div>
