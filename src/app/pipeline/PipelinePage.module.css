@@ -480,9 +480,9 @@
 
 .boardWithClosers {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 280px);
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 320px);
   align-items: start;
-  gap: 14px;
+  gap: 16px;
   min-width: 0;
 }
 
@@ -490,8 +490,10 @@
   position: sticky;
   top: 12px;
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 10px;
   min-width: 0;
+  min-height: clamp(460px, calc(100dvh - 300px), 640px);
   padding: 10px;
   border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
   border-radius: var(--radius-xl);
@@ -521,11 +523,13 @@
 
 .closedDropList {
   display: grid;
+  grid-template-rows: repeat(var(--closed-outcome-count, 4), minmax(96px, 1fr));
   gap: 8px;
+  min-height: 0;
 }
 
 .closedDropZone {
-  min-height: 78px;
+  min-height: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
@@ -635,10 +639,13 @@
 
   .closedRail {
     position: static;
+    grid-template-rows: auto;
+    min-height: 0;
   }
 
   .closedDropList {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: none;
   }
 
   .searchBox,

@@ -136,6 +136,7 @@ export default function KanbanBoard({
   onEdit,
   showMobileMoveControls = true,
   compact = false,
+  fitColumns = false,
   selectedIds = [],
   onSelect,
 }) {
@@ -199,7 +200,10 @@ export default function KanbanBoard({
   };
 
   return (
-    <div className={`${s.kanbanContainer} ${compact ? s.compact : ''}`}>
+    <div
+      className={`${s.kanbanContainer} ${compact ? s.compact : ''} ${fitColumns ? s.fitColumns : ''}`}
+      style={fitColumns ? { '--kanban-column-count': String(normalizedColumns.length) } : undefined}
+    >
       {normalizedColumns.map(col => {
         const columnCards = data.filter(d => d.status === col.id);
         return (
