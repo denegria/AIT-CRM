@@ -12,6 +12,14 @@
   gap: 10px;
   min-height: 460px;
 }
+.kanbanContainer.fitColumns {
+  display: grid;
+  grid-template-columns: repeat(var(--kanban-column-count, 1), minmax(236px, 1fr));
+  align-items: stretch;
+}
+.kanbanContainer.fitColumns.compact {
+  grid-template-columns: repeat(var(--kanban-column-count, 1), minmax(218px, 1fr));
+}
 .kanbanColumn {
   flex: 0 0 280px;
   background: linear-gradient(180deg, color-mix(in srgb, var(--bg-tertiary) 78%, var(--bg-secondary)), var(--bg-tertiary));
@@ -23,6 +31,10 @@
 }
 .compact .kanbanColumn {
   flex-basis: 248px;
+}
+.fitColumns .kanbanColumn {
+  min-width: 0;
+  flex-basis: auto;
 }
 .kanbanColumn.terminal {
   opacity: 0.6;

@@ -685,6 +685,7 @@ export default function PipelinePage() {
               onEdit={(item) => router.push(`/contacts/${item.id}`)}
               showMobileMoveControls={false}
               compact={compactMode}
+              fitColumns
               selectedIds={selectedIds}
               onSelect={bulkAssignMode ? setSelectedIds : undefined}
             />
@@ -693,7 +694,10 @@ export default function PipelinePage() {
                 <strong>Close lead</strong>
                 <span>Drop active cards here</span>
               </div>
-              <div className={s.closedDropList}>
+              <div
+                className={s.closedDropList}
+                style={{ '--closed-outcome-count': String(closedOutcomeColumns.length) }}
+              >
                 {closedOutcomeColumns.map((column) => (
                   <div
                     key={column.id}
