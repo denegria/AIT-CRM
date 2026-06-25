@@ -529,6 +529,9 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     : columnMode === 'ait_usa'
       ? ['phone', 'enrollmentStage', 'inquirySource', 'assignedLabel', 'lastTouch', 'lastEdited']
       : ['phone', 'workflow', 'signalText', 'assignedLabel', 'divisionLabel', 'lastTouch', 'lastEdited'];
+  const directoryScopeName = directoryBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`;
+  const summaryNoun = pluralLabel.toLowerCase();
+  const directorySummary = `${filteredContacts.length.toLocaleString()} matching ${summaryNoun} of ${directoryContacts.length.toLocaleString()} ${summaryNoun} in ${directoryScopeName}`;
   const formBusinessUnitId = form.businessUnitId || form.primaryBusinessUnitId || '';
   const formBusinessUnit = businessUnitById.get(formBusinessUnitId) || null;
   const isAitUsaForm = workflowForBusinessUnit(formBusinessUnit).key === WORKFLOW_KEYS.AIT_USA;
@@ -541,7 +544,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       <div className="page-header">
         <div>
           <h1 className="page-title">{pluralLabel}</h1>
-          <p className="page-subtitle">{directoryContacts.length} {pluralLabel.toLowerCase()} in {directoryBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}</p>
+          <p className="page-subtitle">{directorySummary}</p>
         </div>
       </div>
 
@@ -552,10 +555,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           searchPlaceholder={`Search ${pluralLabel.toLowerCase()}...`}
           toolbarMeta={(
             <div className="contacts-table-filter-summary">
-              <div className="contacts-table-count">
-                <strong>{filteredContacts.length}</strong>
-                <span>matching {pluralLabel.toLowerCase()}</span>
-              </div>
               <div className="contacts-active-chips" aria-label="Active filter summary">
                 {activeFilterChips.map((chip) => {
                   const chipClass = `contacts-active-chip ${chip.primary ? 'primary' : ''} ${chip.onRemove ? 'removable' : ''}`;
