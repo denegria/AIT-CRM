@@ -218,3 +218,39 @@ test('course options and tags use MIS-210 enrollment metadata selectors', () => 
   assert.deepEqual(courseTagsForDirectoryRow(rows[1]), ['English', 'Quit Mid Course']);
   assert.deepEqual(courseTagsForDirectoryRow(rows[2]), ['Forklift']);
 });
+
+test('course filter does not treat Wix form service or program interest as course metadata', () => {
+  const rows = [
+    {
+      workflowKey: 'ait_usa',
+      status: 'Enrolled',
+      programInterest: 'Wix Contact Form - English Interest',
+      enrollmentSignals: {
+        inquiry: { programInterest: 'ESL' },
+      },
+    },
+    {
+      workflowKey: 'ait_usa',
+      status: 'Course Completed',
+      enrollmentSignals: {
+        inquiry: { service: 'Website English Form' },
+      },
+    },
+    {
+      workflowKey: 'ait_usa',
+      status: 'Enrolled',
+      enrollmentSignals: {
+        course: { current: 'OSHA 30', enrolled: 'OSHA 30' },
+        inquiry: { programInterest: 'Wix OSHA Form' },
+      },
+    },
+  ];
+
+  assert.equal(courseForContactDirectoryFilter(rows[0]), '');
+  assert.equal(courseForContactDirectoryFilter(rows[1]), '');
+  assert.equal(courseForContactDirectoryFilter(rows[2]), 'OSHA 30');
+  assert.deepEqual(
+    buildCourseFilterOptions(rows).map((option) => [option.label, option.count]),
+    [['OSHA 30', 1]],
+  );
+});

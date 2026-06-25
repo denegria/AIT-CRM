@@ -46,10 +46,7 @@ test('buildAitUsaEnrollmentSignals exposes Wix first-outreach fields as structur
   assert.equal(signals.inquiry.age, '36');
   assert.equal(signals.inquiry.location, 'New jersey');
   assert.equal(signals.inquiry.programInterest, 'ESL');
-  assert.deepEqual(signals.course, {
-    current: 'ESL',
-    enrolled: 'ESL',
-  });
+  assert.equal(signals.course, undefined);
   assert.equal(signals.contactability.status, 'reachable');
   assert.equal(signals.quality.disposition, 'ready_for_follow_up');
 });
