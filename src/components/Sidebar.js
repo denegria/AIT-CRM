@@ -24,6 +24,7 @@ const nav = [
 ];
 
 const mobilePrimaryPriority = ['/', '/clients', '/contacts', '/pipeline', '/tasks'];
+const scopePersistenceKeys = ['ait-crm-business-unit-scope', 'ait-crm-scope-user-id'];
 
 const roleLabels = {
   admin: 'Administrator',
@@ -95,14 +96,17 @@ export default function Sidebar() {
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
     // Clear persisted scope so next user starts fresh
-    localStorage.removeItem('ait-crm-business-unit-scope');
-    localStorage.removeItem('ait-crm-scope-user-id');
+    scopePersistenceKeys.forEach((key) => {
+      localStorage.removeItem(key);
+      document.cookie = `${key}=; Path=/; Max-Age=0; SameSite=Lax`;
+    });
     publishLogout('manual-logout');
     window.location.reload();
   };
 
   const isClientViewScope = currentBusinessUnitId !== 'all' && isClientAccountBusinessUnit(currentBusinessUnit);
   const canUseFinancialsWorkspace = Boolean(access.canReadSettings || access.canReadReports || role === 'admin');
+  const hasBusinessUnitScope = accessibleBusinessUnits?.length > 0;
   const divisionBrand = useMemo(() => divisionBrandFor(currentBusinessUnit), [currentBusinessUnit]);
 
   useEffect(() => {
@@ -167,7 +171,7 @@ export default function Sidebar() {
   );
 
   return (
-    <aside className={s.sidebar}>
+    <aside className={`${s.sidebar} ${hasBusinessUnitScope ? s.hasMobileScope : ''}`}>
       <div className={s.logo}>
         {divisionBrand.logoSrc ? (
           <Image src={divisionBrand.logoSrc} alt={divisionBrand.alt} width={40} height={40} className={s.logoImage} />
@@ -176,7 +180,7 @@ export default function Sidebar() {
         )}
         <span>{divisionBrand.title}</span>
       </div>
-      {accessibleBusinessUnits?.length > 0 && (
+      {hasBusinessUnitScope && (
         <div className={s.mobileScopeBar}>
           <div className={s.mobileScopeTitle}>
             <Building2 size={14} />
@@ -186,7 +190,7 @@ export default function Sidebar() {
         </div>
       )}
       <nav className={s.navSection}>
-        {accessibleBusinessUnits?.length > 0 && (
+        {hasBusinessUnitScope && (
           <div className={s.scopePanel}>
             <div className={s.scopeTitle}>
               <Building2 size={14} />
