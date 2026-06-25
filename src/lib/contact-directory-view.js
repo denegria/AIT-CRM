@@ -5,8 +5,9 @@ import {
 } from './crm/lifecycle.js';
 import {
   aitUsaCourseOutcome,
-  completedOrEndedAitUsaCourse,
-  currentOrEnrolledAitUsaCourse,
+  completedAitUsaCourse,
+  currentAitUsaCourse,
+  endedAitUsaCourse,
 } from './ait-usa-enrollment-signals.js';
 
 function clean(value = '') {
@@ -29,8 +30,9 @@ export function enrollmentStageText(row = {}) {
 }
 
 export function programText(row = {}) {
-  return currentOrEnrolledAitUsaCourse(row) ||
-    completedOrEndedAitUsaCourse(row) ||
+  return currentAitUsaCourse(row) ||
+    completedAitUsaCourse(row) ||
+    endedAitUsaCourse(row) ||
     clean(row.programInterest) ||
     clean(row.enrollmentSignals?.inquiry?.programInterest) ||
     'Program not set';
@@ -100,7 +102,8 @@ export function lifecycleBucket(row = {}) {
         label: status,
         tone: 'muted',
         detail: aitUsaCourseOutcome(row) ||
-          completedOrEndedAitUsaCourse(row) ||
+          endedAitUsaCourse(row) ||
+          completedAitUsaCourse(row) ||
           clean(row.sourceActivityDate) ||
           clean(row.leadCreatedAt),
       };

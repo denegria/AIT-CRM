@@ -63,8 +63,9 @@ function fieldValue(fields = {}, aliases = []) {
 
 export function aitUsaCourseMetadataFromFields(fields = {}, fallback = {}) {
   const current = firstPresent([
-    fieldValue(fields, ['current_course', 'enrolled_course', 'course']),
+    fieldValue(fields, ['current_course', 'course']),
     fallback.currentCourse,
+    fieldValue(fields, ['enrolled_course']),
     fallback.enrolledCourse,
   ]);
   const completed = firstPresent([
@@ -72,42 +73,47 @@ export function aitUsaCourseMetadataFromFields(fields = {}, fallback = {}) {
     fallback.completedCourse,
   ]);
   const ended = firstPresent([
-    fieldValue(fields, ['ended_course', 'dropped_course', 'quit_course', 'last_course']),
+    fieldValue(fields, ['ended_course', 'last_course']),
     fallback.endedCourse,
-    completed,
+    fieldValue(fields, ['dropped_course', 'quit_course']),
   ]);
   const outcome = firstPresent([
     fieldValue(fields, ['course_outcome', 'outcome', 'completion_outcome', 'end_reason']),
     fallback.courseOutcome,
   ]);
+  const resolvedEnded = normalized(ended) === normalized(completed) ? '' : ended;
 
   return compactObject({
     current,
-    enrolled: firstPresent([fieldValue(fields, ['enrolled_course']), fallback.enrolledCourse, current]),
     completed,
-    ended,
+    ended: resolvedEnded,
     outcome,
   });
 }
 
 export function aitUsaCourseMetadataForContact(contact = {}) {
+  const course = contact.enrollmentSignals?.course || {};
   return aitUsaCourseMetadataFromFields({}, {
-    currentCourse: contact.enrollmentSignals?.course?.current,
-    enrolledCourse: contact.enrollmentSignals?.course?.enrolled,
-    completedCourse: contact.enrollmentSignals?.course?.completed,
-    endedCourse: contact.enrollmentSignals?.course?.ended,
-    courseOutcome: contact.enrollmentSignals?.course?.outcome,
+    currentCourse: course.current || course.enrolled,
+    completedCourse: course.completed,
+    endedCourse: course.ended,
+    courseOutcome: course.outcome,
   });
 }
 
-export function currentOrEnrolledAitUsaCourse(contact = {}) {
+export function currentAitUsaCourse(contact = {}) {
   const course = aitUsaCourseMetadataForContact(contact);
-  return firstPresent([course.current, course.enrolled]);
+  return firstPresent([course.current]);
 }
 
-export function completedOrEndedAitUsaCourse(contact = {}) {
+export function completedAitUsaCourse(contact = {}) {
   const course = aitUsaCourseMetadataForContact(contact);
-  return firstPresent([course.completed, course.ended]);
+  return firstPresent([course.completed]);
+}
+
+export function endedAitUsaCourse(contact = {}) {
+  const course = aitUsaCourseMetadataForContact(contact);
+  return firstPresent([course.ended]);
 }
 
 export function aitUsaCourseOutcome(contact = {}) {
@@ -229,7 +235,6 @@ export function buildAitUsaEnrollmentSignals({ contact = {}, lead = null, workfl
   const course = aitUsaCourseMetadataFromFields(fields, {
     programInterest,
     currentCourse: workflow.currentCourse,
-    enrolledCourse: workflow.enrolledCourse,
     completedCourse: workflow.completedCourse,
     endedCourse: workflow.endedCourse,
     courseOutcome: workflow.courseOutcome,

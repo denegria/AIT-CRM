@@ -100,7 +100,7 @@ test('status and course filters compose across AIT USA course outcomes', () => {
       workflowKey: 'ait_usa',
       status: 'Enrolled',
       assignedTo: 'user-1',
-      enrollmentSignals: { course: { current: 'OSHA', enrolled: 'OSHA' } },
+      enrollmentSignals: { course: { current: 'OSHA' } },
     },
     {
       id: 'completed-forklift',
@@ -193,7 +193,7 @@ test('course options and tags use MIS-210 enrollment metadata selectors', () => 
     {
       workflowKey: 'ait_usa',
       status: 'Enrolled',
-      enrollmentSignals: { course: { current: 'OSHA', enrolled: 'OSHA' } },
+      enrollmentSignals: { course: { current: 'OSHA' } },
     },
     {
       workflowKey: 'ait_usa',
@@ -240,7 +240,7 @@ test('course filter does not treat Wix form service or program interest as cours
       workflowKey: 'ait_usa',
       status: 'Enrolled',
       enrollmentSignals: {
-        course: { current: 'OSHA 30', enrolled: 'OSHA 30' },
+        course: { current: 'OSHA 30' },
         inquiry: { programInterest: 'Wix OSHA Form' },
       },
     },

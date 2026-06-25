@@ -1,8 +1,9 @@
 import {
   aitUsaCourseOutcome,
   aitUsaCourseMetadataForContact,
-  completedOrEndedAitUsaCourse,
-  currentOrEnrolledAitUsaCourse,
+  completedAitUsaCourse,
+  currentAitUsaCourse,
+  endedAitUsaCourse,
 } from './ait-usa-enrollment-signals.js';
 import {
   WORKFLOW_KEYS,
@@ -183,12 +184,11 @@ export function contactMatchesLeadDateScope(contact = {}, {
 export function courseForContactDirectoryFilter(contact = {}) {
   if (contact.workflowKey !== WORKFLOW_KEYS.AIT_USA) return '';
   const status = canonicalStatus(contact);
-  if (status === 'Enrolled') return currentOrEnrolledAitUsaCourse(contact) || completedOrEndedAitUsaCourse(contact);
-  if (['Course Completed', 'Dropped / Quit'].includes(status)) {
-    return completedOrEndedAitUsaCourse(contact) || currentOrEnrolledAitUsaCourse(contact);
-  }
+  if (status === 'Enrolled') return currentAitUsaCourse(contact) || completedAitUsaCourse(contact) || endedAitUsaCourse(contact);
+  if (status === 'Course Completed') return completedAitUsaCourse(contact) || endedAitUsaCourse(contact) || currentAitUsaCourse(contact);
+  if (status === 'Dropped / Quit') return endedAitUsaCourse(contact) || currentAitUsaCourse(contact) || completedAitUsaCourse(contact);
   const course = aitUsaCourseMetadataForContact(contact);
-  return clean(course.current) || clean(course.enrolled) || clean(course.completed) || clean(course.ended);
+  return clean(course.current) || clean(course.completed) || clean(course.ended);
 }
 
 export function contactMatchesStatusOwnerCourse(contact = {}, {
