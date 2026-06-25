@@ -11,6 +11,7 @@ const CRMContext = createContext(null);
 const STORAGE_KEY = 'ait-crm-data';
 const SCOPE_STORAGE_KEY = 'ait-crm-business-unit-scope';
 const SCOPE_USER_KEY = 'ait-crm-scope-user-id';
+const SCOPE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 const ALL_BUSINESS_UNITS = 'all';
 const UNASSIGNED_BUSINESS_UNIT = 'unassigned';
 const THEME_OPTIONS = new Set(['light', 'dusk', 'dark']);
@@ -44,6 +45,49 @@ function defaultBusinessUnitScope({ businessUnits = [], currentUser = null, cont
   return preferredUnit?.id || allowedIds.find((id) => activeUnits.some((unit) => unit.id === id)) || activeUnits[0]?.id || ALL_BUSINESS_UNITS;
 }
 
+function validPersistedBusinessUnitScope({ businessUnits = [], currentUser = null, storedScope = '', storedUserId = '' } = {}) {
+  if (!storedScope || !currentUser?.canAccessAllBusinessUnits) return '';
+  if (currentUser?.id && storedUserId && storedUserId !== currentUser.id) return '';
+
+  const allowedIds = new Set(
+    (businessUnits || [])
+      .filter((unit) => unit.isActive !== false)
+      .map((unit) => unit.id)
+  );
+
+  if (storedScope === UNASSIGNED_BUSINESS_UNIT || allowedIds.has(storedScope)) {
+    return storedScope;
+  }
+  return '';
+}
+
+function scopeCookie(name, value, maxAge = SCOPE_COOKIE_MAX_AGE) {
+  return `${name}=${encodeURIComponent(value || '')}; Path=/; Max-Age=${maxAge}; SameSite=Lax`;
+}
+
+function persistBusinessUnitScope(scopeId, userId = '') {
+  if (typeof window === 'undefined') return;
+
+  localStorage.setItem(SCOPE_STORAGE_KEY, scopeId);
+  if (userId) localStorage.setItem(SCOPE_USER_KEY, userId);
+
+  if (typeof document !== 'undefined') {
+    document.cookie = scopeCookie(SCOPE_STORAGE_KEY, scopeId);
+    if (userId) document.cookie = scopeCookie(SCOPE_USER_KEY, userId);
+  }
+}
+
+function clearPersistedBusinessUnitScope() {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(SCOPE_STORAGE_KEY);
+    localStorage.removeItem(SCOPE_USER_KEY);
+  }
+  if (typeof document !== 'undefined') {
+    document.cookie = scopeCookie(SCOPE_STORAGE_KEY, '', 0);
+    document.cookie = scopeCookie(SCOPE_USER_KEY, '', 0);
+  }
+}
+
 function withBusinessUnitDefaults(record, businessUnitId, includePrimary = false) {
   if (!businessUnitId || businessUnitId === ALL_BUSINESS_UNITS) return record;
   const hasBusinessUnitId = Object.prototype.hasOwnProperty.call(record, 'businessUnitId');
@@ -71,6 +115,8 @@ function getInitialData(seedData = defaults) {
     authRequired: fallback.authRequired || false,
     authError: fallback.authError || '',
     currentUser: fallback.currentUser || null,
+    persistedBusinessUnitScope: fallback.persistedBusinessUnitScope || '',
+    persistedBusinessUnitScopeUserId: fallback.persistedBusinessUnitScopeUserId || '',
     access: fallback.access || {},
     importStaging: fallback.importStaging || null,
     businessUnits: fallback.businessUnits || [],
@@ -172,6 +218,14 @@ export function CRMProvider({ children, initialData }) {
   const [calendarEvents, setCalendarEvents] = useState(bootstrapData.calendarEvents);
   const [salesLedger, setSalesLedger] = useState(bootstrapData.salesLedger);
   const [currentBusinessUnitId, setCurrentBusinessUnitIdState] = useState(() => {
+    const persistedScope = validPersistedBusinessUnitScope({
+      businessUnits: bootstrapData.businessUnits,
+      currentUser: bootstrapData.currentUser,
+      storedScope: bootstrapData.persistedBusinessUnitScope,
+      storedUserId: bootstrapData.persistedBusinessUnitScopeUserId,
+    });
+    if (persistedScope) return persistedScope;
+
     return defaultBusinessUnitScope({
       businessUnits: bootstrapData.businessUnits,
       currentUser: bootstrapData.currentUser,
@@ -213,8 +267,7 @@ export function CRMProvider({ children, initialData }) {
       const storedUserId = localStorage.getItem(SCOPE_USER_KEY);
       const currentUserId = currentUser?.id || null;
       if (currentUserId && storedUserId && storedUserId !== currentUserId) {
-        localStorage.removeItem(SCOPE_STORAGE_KEY);
-        localStorage.removeItem(SCOPE_USER_KEY);
+        clearPersistedBusinessUnitScope();
         return;
       }
 
@@ -222,6 +275,7 @@ export function CRMProvider({ children, initialData }) {
       const allowedIds = new Set(accessibleBusinessUnits.map((unit) => unit.id));
       if (storedScope === UNASSIGNED_BUSINESS_UNIT || allowedIds.has(storedScope)) {
         setCurrentBusinessUnitIdState(storedScope);
+        persistBusinessUnitScope(storedScope, currentUser?.id);
       }
     });
 
@@ -235,19 +289,13 @@ export function CRMProvider({ children, initialData }) {
     const allowedIds = new Set(accessibleBusinessUnits.map((unit) => unit.id));
     if (selectedId === UNASSIGNED_BUSINESS_UNIT) {
       setCurrentBusinessUnitIdState(selectedId);
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(SCOPE_STORAGE_KEY, selectedId);
-      }
+      persistBusinessUnitScope(selectedId, currentUser?.id);
       return;
     }
     if (selectedId === ALL_BUSINESS_UNITS) return;
     if (selectedId !== ALL_BUSINESS_UNITS && !allowedIds.has(selectedId)) return;
     setCurrentBusinessUnitIdState(selectedId);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem(SCOPE_STORAGE_KEY, selectedId);
-      const userId = currentUser?.id;
-      if (userId) localStorage.setItem(SCOPE_USER_KEY, userId);
-    }
+    persistBusinessUnitScope(selectedId, currentUser?.id);
   }, [accessibleBusinessUnits, currentUser?.id]);
 
   const inCurrentBusinessUnitScope = useCallback((record) => {

@@ -4,6 +4,10 @@ import { ToastProvider } from '@/components/Toast';
 import AppShell from '@/components/AppShell';
 import { getBootstrapData } from '@/lib/bootstrap-data';
 import { getCurrentSession } from '@/lib/auth';
+import { cookies } from 'next/headers';
+
+const SCOPE_STORAGE_KEY = 'ait-crm-business-unit-scope';
+const SCOPE_USER_KEY = 'ait-crm-scope-user-id';
 
 export const metadata = {
   title: 'AIT Signs',
@@ -18,7 +22,12 @@ export const viewport = {
 
 export default async function RootLayout({ children }) {
   const session = await getCurrentSession();
-  const bootstrapData = await getBootstrapData(session);
+  const cookieStore = await cookies();
+  const bootstrapData = {
+    ...(await getBootstrapData(session)),
+    persistedBusinessUnitScope: cookieStore.get(SCOPE_STORAGE_KEY)?.value || '',
+    persistedBusinessUnitScopeUserId: cookieStore.get(SCOPE_USER_KEY)?.value || '',
+  };
   return (
     <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning>
