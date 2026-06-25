@@ -381,6 +381,9 @@ export default function PipelinePage() {
     activityFilter !== DEFAULT_PIPELINE_ACTIVITY_FILTER ||
     search !== DEFAULT_PIPELINE_SEARCH ||
     compactMode !== DEFAULT_PIPELINE_COMPACT_MODE;
+  const pipelineScopeName = pipelineBusinessUnit?.name || currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`;
+  const pipelineSummary = `${pipelineRows.length.toLocaleString()} matching pipeline cards of ${pipelineScopedRows.length.toLocaleString()} active pipeline cards in ${pipelineScopeName}`;
+  const showPipelineScopeSelector = !currentScopedBusinessUnitId && accessibleBusinessUnits.length > 1;
   const resetFilters = () => {
     updatePipelineFilterQuery({
       workflowFilter: DEFAULT_PIPELINE_WORKFLOW_FILTER,
@@ -429,9 +432,7 @@ export default function PipelinePage() {
       <div className={`page-header ${s.pipelineHeader}`}>
         <div className={s.headerCopy}>
           <h1 className="page-title">Pipeline</h1>
-          <p className="page-subtitle">
-            {activeWorkflow.label} · {pipelineBusinessUnit?.name || currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}
-          </p>
+          <p className="page-subtitle">{pipelineSummary}</p>
         </div>
         <div className={s.pipelineActions}>
           <button className="btn" onClick={() => nextLead ? router.push(`/contacts/${nextLead.id}`) : toast('No lead matches the current filters.', 'error')}>
@@ -468,12 +469,12 @@ export default function PipelinePage() {
         </div>
       </div>
 
-      <div className={s.scopeBar}>
-        <div className={s.scopeTitle}>
-          <strong>{activeWorkflow.label}</strong>
-          <span>{pipelineBusinessUnit?.name || currentBusinessUnit?.name || 'Selected division'} · {pipelineRows.length} shown of {pipelineScopedRows.length}</span>
-        </div>
-        {!currentScopedBusinessUnitId && accessibleBusinessUnits.length > 1 && (
+      {showPipelineScopeSelector && (
+        <div className={s.scopeBar}>
+          <div className={s.scopeTitle}>
+            <strong>Pipeline division</strong>
+            <span>{activeWorkflow.label}</span>
+          </div>
           <select
             className={`input select ${s.scopeSelect}`}
             value={resolvedPipelineBusinessUnitId}
@@ -484,14 +485,12 @@ export default function PipelinePage() {
               <option key={unit.id} value={unit.id}>{unit.name}</option>
             ))}
           </select>
-        )}
-      </div>
+        </div>
+      )}
 
       <section className={s.filterSurface} aria-label="Pipeline filters">
         <div className={s.filterTopline}>
           <div className={s.filterSummary}>
-            <strong>{pipelineRows.length}</strong>
-            <span>shown of {pipelineScopedRows.length}</span>
             <div className={s.activeChips} aria-label="Active pipeline filter summary">
               {activeFilterChips.map((chip) => {
                 const chipClass = `${s.activeChip} ${chip.primary ? s.primary : ''} ${chip.onRemove ? s.removable : ''}`;
