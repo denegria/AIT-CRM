@@ -30,12 +30,18 @@ import {
 import s from './PipelinePage.module.css';
 
 const PIPELINE_BUCKET_OPTIONS = [
-  ['all', 'All Pipeline Cards'],
+  ['all', 'All Active Cards'],
   ['new_leads', 'New Leads'],
   ['needs_first_outreach', 'Needs First Outreach'],
   ['active', 'Active Pipeline'],
-  ['unassigned', 'Unassigned'],
 ];
+
+const AIT_USA_CLOSED_OUTCOME_ORDER = new Map([
+  ['Course Completed', 0],
+  ['Dropped / Quit', 1],
+  ['Retargeting', 2],
+  ['Not Interested', 3],
+]);
 
 const PIPELINE_ACTIVITY_OPTIONS = [
   ['all', 'Any Activity'],
@@ -64,15 +70,27 @@ function normalizedPipelineColumns(columns = []) {
       return {
         id: column,
         label: column,
+        isTerminal: false,
         isOperational: false,
       };
     }
     return {
       id: column.id || column.status || column.label,
       label: column.label || column.id || column.status,
+      isTerminal: Boolean(column.isTerminal),
       isOperational: Boolean(column.isOperational),
     };
   });
+}
+
+function closedOutcomeSort(left, right) {
+  const leftOrder = AIT_USA_CLOSED_OUTCOME_ORDER.has(left.id)
+    ? AIT_USA_CLOSED_OUTCOME_ORDER.get(left.id)
+    : 100;
+  const rightOrder = AIT_USA_CLOSED_OUTCOME_ORDER.has(right.id)
+    ? AIT_USA_CLOSED_OUTCOME_ORDER.get(right.id)
+    : 100;
+  return leftOrder - rightOrder || left.label.localeCompare(right.label);
 }
 
 function mobileCardMeta(contact) {
@@ -270,6 +288,23 @@ export default function PipelinePage() {
     return workflowMatch && ownerMatch && sourceMatch && activityMatch && matchesSearch(contact, normalizedSearch);
   }), [activityFilter, businessUnitById, normalizedSearch, ownerFilter, pipelineScopedRows, sourceFilter, workflowFilter]);
   const normalizedColumns = useMemo(() => normalizedPipelineColumns(pipelineColumns), [pipelineColumns]);
+  const activePipelineColumns = useMemo(
+    () => normalizedColumns.filter((column) => !column.isTerminal),
+    [normalizedColumns],
+  );
+  const closedOutcomeColumns = useMemo(
+    () => normalizedColumns.filter((column) => column.isTerminal && !column.isOperational).sort(closedOutcomeSort),
+    [normalizedColumns],
+  );
+  const closedOutcomeCounts = useMemo(() => {
+    const counts = new Map(closedOutcomeColumns.map((column) => [column.id, 0]));
+    for (const contact of scopedRows) {
+      if (!counts.has(contact.status)) continue;
+      if (!contactMatchesLeadDateScope(contact, { leadDateScope, leadDateFrom, leadDateTo })) continue;
+      counts.set(contact.status, (counts.get(contact.status) || 0) + 1);
+    }
+    return counts;
+  }, [closedOutcomeColumns, leadDateFrom, leadDateScope, leadDateTo, scopedRows]);
   const mobileStageRows = mobileStageFilter === 'all'
     ? pipelineRows
     : pipelineRows.filter((contact) => contact.status === mobileStageFilter);
@@ -489,8 +524,8 @@ export default function PipelinePage() {
                   <div className={s.filterTabs} role="tablist" aria-label="Pipeline filter sections">
                     {[
                       ['date', 'Date'],
-                      ['filters', 'Filters'],
-                      ['buckets', 'Buckets'],
+                      ['filters', 'Details'],
+                      ['buckets', 'Active Board'],
                     ].map(([id, label]) => (
                       <button
                         key={id}
@@ -641,16 +676,58 @@ export default function PipelinePage() {
       )}
 
       <div className={s.desktopBoard}>
-        <KanbanBoard
-          data={pipelineRows}
-          columns={pipelineColumns}
-          onMove={canWrite ? movePipelineCard : undefined}
-          onEdit={(item) => router.push(`/contacts/${item.id}`)}
-          showMobileMoveControls={false}
-          compact={compactMode}
-          selectedIds={selectedIds}
-          onSelect={bulkAssignMode ? setSelectedIds : undefined}
-        />
+        {closedOutcomeColumns.length > 0 ? (
+          <div className={s.boardWithClosers}>
+            <KanbanBoard
+              data={pipelineRows}
+              columns={activePipelineColumns}
+              onMove={canWrite ? movePipelineCard : undefined}
+              onEdit={(item) => router.push(`/contacts/${item.id}`)}
+              showMobileMoveControls={false}
+              compact={compactMode}
+              selectedIds={selectedIds}
+              onSelect={bulkAssignMode ? setSelectedIds : undefined}
+            />
+            <aside className={s.closedRail} aria-label="Closed pipeline outcomes">
+              <div className={s.closedRailHeader}>
+                <strong>Close lead</strong>
+                <span>Drop active cards here</span>
+              </div>
+              <div className={s.closedDropList}>
+                {closedOutcomeColumns.map((column) => (
+                  <div
+                    key={column.id}
+                    className={`${s.closedDropZone} ${!canWrite ? s.disabled : ''}`}
+                    onDragOver={canWrite ? (event) => event.preventDefault() : undefined}
+                    onDrop={canWrite ? (event) => {
+                      event.preventDefault();
+                      const id = event.dataTransfer.getData('id');
+                      if (!id) return;
+                      movePipelineCard(id, column.id, column);
+                    } : undefined}
+                  >
+                    <div>
+                      <strong>{column.label}</strong>
+                      <span>Drop to remove from active pipeline</span>
+                    </div>
+                    <em>{closedOutcomeCounts.get(column.id) || 0}</em>
+                  </div>
+                ))}
+              </div>
+            </aside>
+          </div>
+        ) : (
+          <KanbanBoard
+            data={pipelineRows}
+            columns={activePipelineColumns}
+            onMove={canWrite ? movePipelineCard : undefined}
+            onEdit={(item) => router.push(`/contacts/${item.id}`)}
+            showMobileMoveControls={false}
+            compact={compactMode}
+            selectedIds={selectedIds}
+            onSelect={bulkAssignMode ? setSelectedIds : undefined}
+          />
+        )}
       </div>
 
       <div className={s.mobilePipeline} aria-label="Mobile pipeline list">
@@ -663,7 +740,7 @@ export default function PipelinePage() {
             <span>All</span>
             <strong>{pipelineRows.length}</strong>
           </button>
-          {normalizedColumns.map((column) => {
+          {activePipelineColumns.map((column) => {
             const count = pipelineRows.filter((contact) => contact.status === column.id).length;
             return (
               <button
