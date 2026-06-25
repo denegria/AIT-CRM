@@ -97,12 +97,12 @@ function isSourceReview(contact = {}) {
 export const CONTACT_DIRECTORY_FACET_GROUPS = [
   {
     id: 'core',
-    label: 'Core',
+    label: 'Follow-up',
     alwaysVisible: true,
     facets: [
       { id: 'all', label: 'All', matches: () => true },
       { id: 'mine', label: 'Mine', matches: assignedToCurrentUser },
-      ...CORE_CONTACT_BUCKETS,
+      ...CORE_CONTACT_BUCKETS.filter((facet) => facet.id !== 'unassigned'),
       { id: 'no_recent_touch', label: 'No Recent Touch', matches: (contact, options = {}) => isNoRecentTouch(contact, options.now) },
       { id: 'needs_contact_info', label: 'Needs Contact Info', matches: needsContactInfo },
       { id: 'invalid_phone', label: 'Invalid Phone', matches: hasInvalidPhone },
@@ -111,7 +111,7 @@ export const CONTACT_DIRECTORY_FACET_GROUPS = [
   },
   {
     id: WORKFLOW_KEYS.AIT_SIGNS,
-    label: 'AIT Signs',
+    label: 'Signs Work',
     workflowKey: WORKFLOW_KEYS.AIT_SIGNS,
     facets: [
       { id: 'signs_intake', label: 'Intake', matches: (contact) => isAitSignsContact(contact) && contactHasStatus(contact, 'Intake') },
@@ -125,7 +125,7 @@ export const CONTACT_DIRECTORY_FACET_GROUPS = [
   },
   {
     id: WORKFLOW_KEYS.AIT_USA,
-    label: 'AIT USA Institute',
+    label: 'Enrollment',
     workflowKey: WORKFLOW_KEYS.AIT_USA,
     facets: AIT_USA_CONTACT_BUCKETS,
   },

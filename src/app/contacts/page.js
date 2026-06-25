@@ -592,8 +592,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                   <div className="contacts-filter-tabs" role="tablist" aria-label="Contact filter sections">
                     {[
                       ['date', 'Date'],
-                      ['filters', 'Filters'],
-                      ['buckets', 'Buckets'],
+                      ['filters', 'Workflow'],
+                      ['buckets', 'Segments'],
                     ].map(([id, label]) => (
                       <button
                         key={id}

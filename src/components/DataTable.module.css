@@ -2,7 +2,7 @@
 .toolbar {
   display:grid;
   grid-template-columns:minmax(220px,340px) minmax(0,1fr) auto;
-  align-items:center;
+  align-items:end;
   gap:10px;
   margin-bottom:14px;
 }
@@ -15,18 +15,19 @@
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 .search:focus { border-color:var(--border-focus); box-shadow:var(--shadow-focus); }
-.searchWrap { position:relative; min-width:0; }
+.searchWrap { position:relative; align-self:end; min-width:0; }
 .searchIcon {
   position:absolute; left:11px; top:50%; transform:translateY(-50%);
   width:15px; height:15px; color:var(--text-muted); pointer-events:none;
 }
 .toolbarMeta {
+  align-self:end;
   min-width:0;
 }
 .toolbarActions {
   position:relative;
   display:flex;
-  align-items:center;
+  align-items:flex-end;
   justify-content:flex-end;
   flex-wrap:wrap;
   gap:8px;

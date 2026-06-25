@@ -792,7 +792,7 @@ a { color: inherit; text-decoration: none; }
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 30px;
+  min-height: 34px;
   padding-right: 2px;
   white-space: nowrap;
 }
@@ -849,9 +849,9 @@ a { color: inherit; text-decoration: none; }
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  min-height: 24px;
+  min-height: 34px;
   max-width: 100%;
-  padding: 3px 8px;
+  padding: 5px 9px;
   border: 1px solid color-mix(in srgb, var(--border-subtle) 72%, transparent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-elevated) 84%, var(--bg-secondary));
