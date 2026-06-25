@@ -589,10 +589,27 @@
 
 @media (max-width: 1340px) {
   .boardWithClosers {
+    grid-template-columns: minmax(0, 1fr) minmax(232px, 240px);
+    gap: 12px;
+  }
+
+  .closedRail {
+    grid-template-rows: auto minmax(0, 1fr);
+    min-height: clamp(420px, calc(100dvh - 300px), 560px);
+  }
+
+  .closedDropList {
+    grid-template-rows: repeat(var(--closed-outcome-count, 4), minmax(76px, 1fr));
+  }
+}
+
+@media (max-width: 1100px) {
+  .boardWithClosers {
     grid-template-columns: 1fr;
   }
 
   .closedRail {
+    order: -1;
     position: static;
     grid-template-rows: auto;
     min-height: 0;

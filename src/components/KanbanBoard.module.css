@@ -341,6 +341,16 @@
   font-style: italic;
 }
 
+@media (max-width: 1340px) {
+  .kanbanContainer.fitColumns {
+    grid-template-columns: repeat(var(--kanban-column-count, 1), minmax(206px, 1fr));
+  }
+
+  .kanbanContainer.fitColumns.compact {
+    grid-template-columns: repeat(var(--kanban-column-count, 1), minmax(190px, 1fr));
+  }
+}
+
 @media (max-width: 900px) {
   .kanbanContainer {
     gap: 10px;
