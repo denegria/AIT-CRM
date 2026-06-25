@@ -46,13 +46,14 @@ function defaultBusinessUnitScope({ businessUnits = [], currentUser = null, cont
 }
 
 function validPersistedBusinessUnitScope({ businessUnits = [], currentUser = null, storedScope = '', storedUserId = '' } = {}) {
-  if (!storedScope || !currentUser?.canAccessAllBusinessUnits) return '';
+  if (!storedScope) return '';
   if (currentUser?.id && storedUserId && storedUserId !== currentUser.id) return '';
 
+  const activeUnits = (businessUnits || []).filter((unit) => unit.isActive !== false);
   const allowedIds = new Set(
-    (businessUnits || [])
-      .filter((unit) => unit.isActive !== false)
-      .map((unit) => unit.id)
+    currentUser && !currentUser.canAccessAllBusinessUnits
+      ? currentUser.businessUnitIds || []
+      : activeUnits.map((unit) => unit.id)
   );
 
   if (storedScope === UNASSIGNED_BUSINESS_UNIT || allowedIds.has(storedScope)) {
@@ -259,7 +260,6 @@ export function CRMProvider({ children, initialData }) {
 
   useEffect(() => {
     if (typeof window === 'undefined' || !isPostgres) return undefined;
-    if (currentUser && !currentUser.canAccessAllBusinessUnits) return undefined;
 
     let cancelled = false;
     queueMicrotask(() => {
