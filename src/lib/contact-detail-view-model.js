@@ -1,8 +1,9 @@
 import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from './crm/lifecycle.js';
 import {
   aitUsaCourseOutcome,
-  completedOrEndedAitUsaCourse,
-  currentOrEnrolledAitUsaCourse,
+  completedAitUsaCourse,
+  currentAitUsaCourse,
+  endedAitUsaCourse,
 } from './ait-usa-enrollment-signals.js';
 import { lifecycleBucket } from './contact-directory-view.js';
 
@@ -183,8 +184,9 @@ function buildInstituteHighlights(contact = {}) {
   const process = signals.process || {};
   const contactability = contactabilityFor(contact);
   const program = firstPresent([contact.programInterest, inquiry.programInterest, inquiry.service]);
-  const currentCourse = currentOrEnrolledAitUsaCourse(contact);
-  const endedCourse = completedOrEndedAitUsaCourse(contact);
+  const currentCourse = currentAitUsaCourse(contact);
+  const completedCourse = completedAitUsaCourse(contact);
+  const endedCourse = endedAitUsaCourse(contact);
   const courseOutcome = aitUsaCourseOutcome(contact);
   return compactArray([
     {
@@ -196,6 +198,7 @@ function buildInstituteHighlights(contact = {}) {
       value: program,
     },
     { label: 'Current course', value: normalized(currentCourse) === normalized(program) ? '' : currentCourse },
+    { label: 'Completed course', value: completedCourse },
     { label: 'Ended course', value: endedCourse },
     { label: 'Course outcome', value: courseOutcome },
     { label: 'Preferred day', value: firstPresent([contact.preferredDay, inquiry.preferredDay]) },

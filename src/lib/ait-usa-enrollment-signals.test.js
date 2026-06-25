@@ -3,8 +3,9 @@ import test from 'node:test';
 import {
   aitUsaCourseMetadataForContact,
   buildAitUsaEnrollmentSignals,
-  completedOrEndedAitUsaCourse,
-  currentOrEnrolledAitUsaCourse,
+  completedAitUsaCourse,
+  currentAitUsaCourse,
+  endedAitUsaCourse,
   parseLeadNoteFields,
 } from './ait-usa-enrollment-signals.js';
 
@@ -51,7 +52,7 @@ test('buildAitUsaEnrollmentSignals exposes Wix first-outreach fields as structur
   assert.equal(signals.quality.disposition, 'ready_for_follow_up');
 });
 
-test('AIT USA course metadata selectors expose current/enrolled and completed/ended outcomes', () => {
+test('AIT USA course metadata normalizes aliases into current, completed, ended, and outcome', () => {
   const activeSignals = buildAitUsaEnrollmentSignals({
     contact: { phone: '9085550101', email: 'student@example.com' },
     lead: {
@@ -69,11 +70,21 @@ test('AIT USA course metadata selectors expose current/enrolled and completed/en
     workflow: { workflowKey: 'ait_usa', status: 'Dropped / Quit' },
   });
 
-  assert.equal(currentOrEnrolledAitUsaCourse({ enrollmentSignals: activeSignals }), 'ESL Level 2');
-  assert.equal(completedOrEndedAitUsaCourse({ enrollmentSignals: endedSignals }), 'Tax Prep');
+  assert.deepEqual(aitUsaCourseMetadataForContact({ enrollmentSignals: activeSignals }), {
+    current: 'ESL Level 2',
+  });
+  assert.equal(currentAitUsaCourse({ enrollmentSignals: activeSignals }), 'ESL Level 2');
+  assert.equal(completedAitUsaCourse({ enrollmentSignals: activeSignals }), '');
+  assert.equal(endedAitUsaCourse({ enrollmentSignals: endedSignals }), 'Tax Prep');
   assert.deepEqual(aitUsaCourseMetadataForContact({ enrollmentSignals: endedSignals }), {
     ended: 'Tax Prep',
     outcome: 'dropped',
+  });
+  assert.deepEqual(aitUsaCourseMetadataForContact({
+    enrollmentSignals: { course: { completed: 'Forklift', ended: 'Forklift', outcome: 'completed' } },
+  }), {
+    completed: 'Forklift',
+    outcome: 'completed',
   });
 });
 
