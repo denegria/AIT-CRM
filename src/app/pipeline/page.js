@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertCircle, ArrowRight, Clock3, ListFilter, RotateCcw, Search, UserPlus, UserRoundCheck } from 'lucide-react';
+import { AlertCircle, ArrowRight, Clock3, ListFilter, RotateCcw, Search, UserPlus, UserRoundCheck, X } from 'lucide-react';
 import KanbanBoard from '@/components/KanbanBoard';
 import { useToast } from '@/components/Toast';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
@@ -290,14 +290,52 @@ export default function PipelinePage() {
     return ownerOptions.find((owner) => owner.id === ownerFilter)?.label || 'Selected owner';
   }, [currentUser?.id, ownerFilter, ownerOptions]);
   const selectedDateLabel = dateScopeLabel(leadDateScope, leadDateFrom, leadDateTo);
+  const dateFilterIsDefault = leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE &&
+    leadDateFrom === DEFAULT_CONTACT_LEAD_DATE_FROM &&
+    leadDateTo === DEFAULT_CONTACT_LEAD_DATE_TO;
   const activeFilterChips = [
-    { key: 'date', label: selectedDateLabel },
-    workflowFilter !== DEFAULT_PIPELINE_WORKFLOW_FILTER ? { key: 'bucket', label: optionLabel(PIPELINE_BUCKET_OPTIONS, workflowFilter) } : null,
-    selectedOwnerLabel ? { key: 'owner', label: selectedOwnerLabel } : null,
-    sourceFilter !== DEFAULT_PIPELINE_SOURCE_FILTER ? { key: 'source', label: sourceFilter } : null,
-    activityFilter !== DEFAULT_PIPELINE_ACTIVITY_FILTER ? { key: 'activity', label: optionLabel(PIPELINE_ACTIVITY_OPTIONS, activityFilter) } : null,
-    search !== DEFAULT_PIPELINE_SEARCH ? { key: 'search', label: `Search: ${search}` } : null,
-    compactMode !== DEFAULT_PIPELINE_COMPACT_MODE ? { key: 'cards', label: 'Comfort cards' } : null,
+    {
+      key: 'date',
+      label: selectedDateLabel,
+      primary: true,
+      onRemove: dateFilterIsDefault
+        ? null
+        : () => updatePipelineFilterQuery({
+          leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+          leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
+          leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
+        }),
+    },
+    workflowFilter !== DEFAULT_PIPELINE_WORKFLOW_FILTER ? {
+      key: 'bucket',
+      label: optionLabel(PIPELINE_BUCKET_OPTIONS, workflowFilter),
+      onRemove: () => setWorkflowFilter(DEFAULT_PIPELINE_WORKFLOW_FILTER),
+    } : null,
+    selectedOwnerLabel ? {
+      key: 'owner',
+      label: selectedOwnerLabel,
+      onRemove: () => setOwnerFilter(DEFAULT_PIPELINE_OWNER_FILTER),
+    } : null,
+    sourceFilter !== DEFAULT_PIPELINE_SOURCE_FILTER ? {
+      key: 'source',
+      label: sourceFilter,
+      onRemove: () => setSourceFilter(DEFAULT_PIPELINE_SOURCE_FILTER),
+    } : null,
+    activityFilter !== DEFAULT_PIPELINE_ACTIVITY_FILTER ? {
+      key: 'activity',
+      label: optionLabel(PIPELINE_ACTIVITY_OPTIONS, activityFilter),
+      onRemove: () => setActivityFilter(DEFAULT_PIPELINE_ACTIVITY_FILTER),
+    } : null,
+    search !== DEFAULT_PIPELINE_SEARCH ? {
+      key: 'search',
+      label: `Search: ${search}`,
+      onRemove: () => setSearch(DEFAULT_PIPELINE_SEARCH),
+    } : null,
+    compactMode !== DEFAULT_PIPELINE_COMPACT_MODE ? {
+      key: 'cards',
+      label: 'Comfort cards',
+      onRemove: () => setCompactMode(DEFAULT_PIPELINE_COMPACT_MODE),
+    } : null,
   ].filter(Boolean);
   const hasNonDefaultFilters = leadDateScope !== DEFAULT_CONTACT_LEAD_DATE_SCOPE ||
     leadDateFrom !== DEFAULT_CONTACT_LEAD_DATE_FROM ||
@@ -419,158 +457,172 @@ export default function PipelinePage() {
           <div className={s.filterSummary}>
             <strong>{pipelineRows.length}</strong>
             <span>shown of {pipelineScopedRows.length}</span>
-            <small>{activeFilterChips.map((chip) => chip.label).join(' / ')}</small>
+            <div className={s.activeChips} aria-label="Active pipeline filter summary">
+              {activeFilterChips.map((chip) => {
+                const chipClass = `${s.activeChip} ${chip.primary ? s.primary : ''} ${chip.onRemove ? s.removable : ''}`;
+                return chip.onRemove ? (
+                  <button key={chip.key} type="button" className={chipClass} onClick={chip.onRemove} title={`Remove ${chip.label}`}>
+                    <span>{chip.label}</span>
+                    <X size={12} />
+                  </button>
+                ) : (
+                  <span key={chip.key} className={chipClass}>{chip.label}</span>
+                );
+              })}
+            </div>
           </div>
           <div className={s.filterToolbar}>
-            {hasNonDefaultFilters && (
-              <button className={s.filterReset} type="button" onClick={resetFilters}>
-                <RotateCcw size={13} />
-                Reset
+            <div className={s.filterPopoverAnchor}>
+              <button
+                className={`${s.filterMenuButton} ${filterMenuOpen ? s.active : ''}`}
+                type="button"
+                onClick={() => setFilterMenuOpen((open) => !open)}
+                aria-expanded={filterMenuOpen}
+              >
+                <ListFilter size={15} />
+                Filters
+                {hasNonDefaultFilters && <strong>{activeFilterChips.filter((chip) => chip.onRemove).length}</strong>}
               </button>
-            )}
-            <button
-              className={`${s.filterMenuButton} ${filterMenuOpen ? s.active : ''}`}
-              type="button"
-              onClick={() => setFilterMenuOpen((open) => !open)}
-              aria-expanded={filterMenuOpen}
-            >
-              <ListFilter size={15} />
-              Filters
-              {hasNonDefaultFilters && <strong>{activeFilterChips.length}</strong>}
-            </button>
-          </div>
-        </div>
 
-        <div className={s.activeChips} aria-label="Active pipeline filter summary">
-          {activeFilterChips.map((chip) => (
-            <span key={chip.key} className={`${s.activeChip} ${chip.key === 'date' ? s.primary : ''}`}>{chip.label}</span>
-          ))}
-        </div>
-
-        {filterMenuOpen && (
-          <div className={s.filterMenu}>
-            <div className={s.filterTabs} role="tablist" aria-label="Pipeline filter sections">
-              {[
-                ['date', 'Date'],
-                ['filters', 'Filters'],
-                ['buckets', 'Buckets'],
-              ].map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={`${s.filterTab} ${filterMenuTab === id ? s.active : ''}`}
-                  onClick={() => setFilterMenuTab(id)}
-                  role="tab"
-                  aria-selected={filterMenuTab === id}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
-            {filterMenuTab === 'date' && (
-              <div className={s.filterSection}>
-                <div className={s.filterPills}>
-                  {[
-                    [DEFAULT_CONTACT_LEAD_DATE_SCOPE, 'Current Year', currentPipelineCount],
-                    [CONTACT_LEAD_DATE_SCOPE_ALL, 'All Leads', allPipelineCount],
-                    [CONTACT_LEAD_DATE_SCOPE_CUSTOM, 'Custom Time Frame', customPipelineCount],
-                  ].map(([id, label, count]) => (
-                    <button
-                      key={id}
-                      type="button"
-                      className={`${s.filterPill} ${leadDateScope === id ? s.active : ''}`}
-                      onClick={() => setLeadDateScope(id)}
-                      aria-pressed={leadDateScope === id}
-                    >
-                      <span>{label}</span>
-                      <strong>{count}</strong>
-                    </button>
-                  ))}
-                </div>
-                <div className={s.dateRange}>
-                  <label>
-                    <span>From</span>
-                    <input className="input" type="date" value={leadDateFrom} onChange={(event) => setLeadDateFrom(event.target.value)} />
-                  </label>
-                  <label>
-                    <span>To</span>
-                    <input className="input" type="date" value={leadDateTo} onChange={(event) => setLeadDateTo(event.target.value)} />
-                  </label>
-                </div>
-              </div>
-            )}
-
-            {filterMenuTab === 'filters' && (
-              <div className={s.filterGrid}>
-                <label className={s.filterField}>
-                  <span>Owner</span>
-                  <select className="input select" value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}>
-                    <option value="all">{canUseConsolidatedScope ? 'Team Pipeline' : 'All Owners'}</option>
-                    <option value="unassigned">Unassigned</option>
-                    {currentUser?.id && <option value={currentUser.id}>Me</option>}
-                    {ownerOptions.map((owner) => (
-                      <option key={owner.id} value={owner.id}>{owner.label}</option>
+              {filterMenuOpen && (
+                <div className={s.filterMenu} role="dialog" aria-label="Pipeline filters">
+                  <div className={s.filterTabs} role="tablist" aria-label="Pipeline filter sections">
+                    {[
+                      ['date', 'Date'],
+                      ['filters', 'Filters'],
+                      ['buckets', 'Buckets'],
+                    ].map(([id, label]) => (
+                      <button
+                        key={id}
+                        type="button"
+                        className={`${s.filterTab} ${filterMenuTab === id ? s.active : ''}`}
+                        onClick={() => setFilterMenuTab(id)}
+                        role="tab"
+                        aria-selected={filterMenuTab === id}
+                      >
+                        {label}
+                      </button>
                     ))}
-                  </select>
-                </label>
-                <label className={s.filterField}>
-                  <span>Source</span>
-                  <select className="input select" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
-                    <option value="all">All Sources</option>
-                    {sourceOptions.map((source) => (
-                      <option key={source} value={source}>{source}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className={s.filterField}>
-                  <span>Activity</span>
-                  <select className="input select" value={activityFilter} onChange={(event) => setActivityFilter(event.target.value)}>
-                    {PIPELINE_ACTIVITY_OPTIONS.map(([id, label]) => (
-                      <option key={id} value={id}>{label}</option>
-                    ))}
-                  </select>
-                </label>
-                <label className={`${s.filterField} ${s.searchField}`}>
-                  <span>Search</span>
-                  <div className={s.searchBox}>
-                    <Search size={14} />
-                    <input
-                      className={`input ${s.searchInput}`}
-                      value={search}
-                      onChange={(event) => setSearch(event.target.value)}
-                      placeholder="Search pipeline..."
-                    />
                   </div>
-                </label>
-                <label className={`${s.compactToggle} ${s.filterDensity}`}>
-                  <input type="checkbox" checked={compactMode} onChange={(event) => setCompactMode(event.target.checked)} />
-                  Compact cards
-                </label>
-              </div>
-            )}
 
-            {filterMenuTab === 'buckets' && (
-              <div className={s.filterPills}>
-                {PIPELINE_BUCKET_OPTIONS.map(([id, label]) => {
-                  const count = pipelineScopedRows.filter((contact) => matchesPipelineQuickFilter(contact, id, { businessUnitById })).length;
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      className={`${s.filterPill} ${workflowFilter === id ? s.active : ''}`}
-                      onClick={() => setWorkflowFilter(id)}
-                      aria-pressed={workflowFilter === id}
-                    >
-                      <span>{label}</span>
-                      <strong>{count}</strong>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
+                  <div className={s.filterBody}>
+                    {filterMenuTab === 'date' && (
+                      <div className={s.filterSection}>
+                        <div className={s.filterPills}>
+                          {[
+                            [DEFAULT_CONTACT_LEAD_DATE_SCOPE, 'Current Year', currentPipelineCount],
+                            [CONTACT_LEAD_DATE_SCOPE_ALL, 'All Leads', allPipelineCount],
+                            [CONTACT_LEAD_DATE_SCOPE_CUSTOM, 'Custom Time Frame', customPipelineCount],
+                          ].map(([id, label, count]) => (
+                            <button
+                              key={id}
+                              type="button"
+                              className={`${s.filterPill} ${leadDateScope === id ? s.active : ''}`}
+                              onClick={() => setLeadDateScope(id)}
+                              aria-pressed={leadDateScope === id}
+                            >
+                              <span>{label}</span>
+                              <strong>{count}</strong>
+                            </button>
+                          ))}
+                        </div>
+                        <div className={s.dateRange}>
+                          <label>
+                            <span>From</span>
+                            <input className="input" type="date" value={leadDateFrom} onChange={(event) => setLeadDateFrom(event.target.value)} />
+                          </label>
+                          <label>
+                            <span>To</span>
+                            <input className="input" type="date" value={leadDateTo} onChange={(event) => setLeadDateTo(event.target.value)} />
+                          </label>
+                        </div>
+                      </div>
+                    )}
+
+                    {filterMenuTab === 'filters' && (
+                      <div className={s.filterGrid}>
+                        <label className={s.filterField}>
+                          <span>Owner</span>
+                          <select className="input select" value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}>
+                            <option value="all">{canUseConsolidatedScope ? 'Team Pipeline' : 'All Owners'}</option>
+                            <option value="unassigned">Unassigned</option>
+                            {currentUser?.id && <option value={currentUser.id}>Me</option>}
+                            {ownerOptions.map((owner) => (
+                              <option key={owner.id} value={owner.id}>{owner.label}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className={s.filterField}>
+                          <span>Source</span>
+                          <select className="input select" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
+                            <option value="all">All Sources</option>
+                            {sourceOptions.map((source) => (
+                              <option key={source} value={source}>{source}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className={s.filterField}>
+                          <span>Activity</span>
+                          <select className="input select" value={activityFilter} onChange={(event) => setActivityFilter(event.target.value)}>
+                            {PIPELINE_ACTIVITY_OPTIONS.map(([id, label]) => (
+                              <option key={id} value={id}>{label}</option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className={`${s.filterField} ${s.searchField}`}>
+                          <span>Search</span>
+                          <div className={s.searchBox}>
+                            <Search size={14} />
+                            <input
+                              className={`input ${s.searchInput}`}
+                              value={search}
+                              onChange={(event) => setSearch(event.target.value)}
+                              placeholder="Search pipeline..."
+                            />
+                          </div>
+                        </label>
+                        <label className={`${s.compactToggle} ${s.filterDensity}`}>
+                          <input type="checkbox" checked={compactMode} onChange={(event) => setCompactMode(event.target.checked)} />
+                          Compact cards
+                        </label>
+                      </div>
+                    )}
+
+                    {filterMenuTab === 'buckets' && (
+                      <div className={s.filterPills}>
+                        {PIPELINE_BUCKET_OPTIONS.map(([id, label]) => {
+                          const count = pipelineScopedRows.filter((contact) => matchesPipelineQuickFilter(contact, id, { businessUnitById })).length;
+                          return (
+                            <button
+                              key={id}
+                              type="button"
+                              className={`${s.filterPill} ${workflowFilter === id ? s.active : ''}`}
+                              onClick={() => setWorkflowFilter(id)}
+                              aria-pressed={workflowFilter === id}
+                            >
+                              <span>{label}</span>
+                              <strong>{count}</strong>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className={s.filterFooter}>
+                    <span>{pipelineRows.length} shown of {pipelineScopedRows.length}</span>
+                    {hasNonDefaultFilters && (
+                      <button className={s.filterReset} type="button" onClick={resetFilters}>
+                        <RotateCcw size={13} />
+                        Reset all
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
-        )}
+        </div>
       </section>
 
       {bulkAssignMode && (
