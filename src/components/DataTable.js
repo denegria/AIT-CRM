@@ -18,6 +18,8 @@ export default function DataTable({
   actions,
   onEdit,
   searchPlaceholder,
+  toolbarMeta,
+  toolbarBeforeColumns,
   toolbarExtra,
   emptyState,
   selectable,
@@ -129,27 +131,31 @@ export default function DataTable({
           <Search className={s.searchIcon} size={16} />
           <input className={s.search} placeholder={searchPlaceholder||'Search...'} value={search} onChange={e=>setSearch(e.target.value)} />
         </div>
-        {columns.length > 3 && (
-          <details className={s.columnMenu}>
-            <summary className={s.columnButton}>
-              <Columns3 size={14} /> Columns
-            </summary>
-            <div className={s.columnPanel}>
-              {columns.map((column) => (
-                <label key={column.key} className={s.columnOption}>
-                  <input
-                    type="checkbox"
-                    checked={effectiveVisibleColumnKeys.includes(column.key)}
-                    disabled={effectiveVisibleColumnKeys.length <= 1 && effectiveVisibleColumnKeys.includes(column.key)}
-                    onChange={() => toggleColumn(column.key)}
-                  />
-                  <span>{column.label}</span>
-                </label>
-              ))}
-            </div>
-          </details>
-        )}
-        {toolbarExtra}
+        {toolbarMeta && <div className={s.toolbarMeta}>{toolbarMeta}</div>}
+        <div className={s.toolbarActions}>
+          {toolbarBeforeColumns}
+          {columns.length > 3 && (
+            <details className={s.columnMenu}>
+              <summary className={s.columnButton}>
+                <Columns3 size={14} /> Columns
+              </summary>
+              <div className={s.columnPanel}>
+                {columns.map((column) => (
+                  <label key={column.key} className={s.columnOption}>
+                    <input
+                      type="checkbox"
+                      checked={effectiveVisibleColumnKeys.includes(column.key)}
+                      disabled={effectiveVisibleColumnKeys.length <= 1 && effectiveVisibleColumnKeys.includes(column.key)}
+                      onChange={() => toggleColumn(column.key)}
+                    />
+                    <span>{column.label}</span>
+                  </label>
+                ))}
+              </div>
+            </details>
+          )}
+          {toolbarExtra}
+        </div>
       </div>
       {selectable && selectedIds.length > 0 && (
         <div className={s.selectionBar}>
