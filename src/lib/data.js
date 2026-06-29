@@ -154,3 +154,9 @@ export const salesLedger = [
     stage: 'Intake',
   },
 ];
+
+export const inboxFixtureHint = {
+  label: 'Demo inbox fixture',
+  query: 'fixture=demo',
+  description: 'Replay-safe conversation data for inbox QA without live provider traffic.',
+};
