@@ -100,6 +100,65 @@ const CORE_FORM_FIELD_KEY_NAMES = new Set([
   'businessunit',
   'businessunitname',
   'division',
+  'submissiontype',
+  'submission-type',
+  'eventtype',
+  'event-type',
+  'leadtype',
+  'lead-type',
+  'intent',
+  'communication',
+  'communicationconsent',
+  'communication-consent',
+  'consent',
+  'preferences',
+  'contactconsent',
+  'contact-consent',
+  'consenttocontact',
+  'consent-to-contact',
+  'cancontact',
+  'can-contact',
+  'whatsappconsent',
+  'whatsapp-consent',
+  'whatsappoptin',
+  'whatsapp-opt-in',
+  'smsconsent',
+  'sms-consent',
+  'textconsent',
+  'text-consent',
+  'smsoptin',
+  'sms-opt-in',
+  'communicationpreference',
+  'communication-preference',
+  'preferredcontactmethod',
+  'preferred-contact-method',
+  'preferredchannel',
+  'preferred-channel',
+  'contactpreference',
+  'contact-preference',
+  'placement',
+  'placementtest',
+  'placement-test',
+  'placementresult',
+  'placement-result',
+  'placementrecommendation',
+  'placement-recommendation',
+  'recommendedlevel',
+  'recommended-level',
+  'advisorrecommendation',
+  'advisor-recommendation',
+  'placementscore',
+  'placement-score',
+  'scoreband',
+  'score-band',
+  'levelband',
+  'level-band',
+  'selectedgoals',
+  'selected-goals',
+  'selectedanswers',
+  'selected-answers',
+  'advisorconfirmation',
+  'advisor-confirmation',
   'status',
   'currentstage',
   'workflowstage',
@@ -116,6 +175,85 @@ const CORE_FORM_FIELD_KEY_NAMES = new Set([
   'age',
   'edad',
 ]);
+
+const SUBMISSION_TYPES = Object.freeze({
+  CONTACT_CTA: 'contact_cta',
+  PLACEMENT_TEST: 'placement_test',
+  WEBSITE_LEAD: 'website_lead',
+});
+
+const COMMUNICATION_PREFERENCES = Object.freeze({
+  WHATSAPP: 'whatsapp',
+  SMS: 'sms',
+  EMAIL: 'email',
+  PHONE: 'phone',
+  ANY: 'any',
+  NONE: 'none',
+});
+
+const CONTACT_CONSENT_ALIASES = [
+  'contactConsent',
+  'contact_consent',
+  'consentToContact',
+  'consent_to_contact',
+  'canContact',
+  'can_contact',
+  'permissionToContact',
+  'permission_to_contact',
+  'marketingConsent',
+  'marketing_consent',
+];
+const WHATSAPP_CONSENT_ALIASES = [
+  'whatsappConsent',
+  'whatsAppConsent',
+  'whatsapp_consent',
+  'whatsappOptIn',
+  'whatsapp_opt_in',
+  'consentWhatsapp',
+  'consent_whatsapp',
+];
+const SMS_CONSENT_ALIASES = [
+  'smsConsent',
+  'sms_consent',
+  'textConsent',
+  'text_consent',
+  'textMessageConsent',
+  'text_message_consent',
+  'smsOptIn',
+  'sms_opt_in',
+  'consentSms',
+  'consent_sms',
+];
+const COMMUNICATION_PREFERENCE_ALIASES = [
+  'communicationPreference',
+  'communication_preference',
+  'preferredContactMethod',
+  'preferred_contact_method',
+  'preferredChannel',
+  'preferred_channel',
+  'contactPreference',
+  'contact_preference',
+];
+const EXPLICIT_PLACEMENT_FIELD_ALIASES = [
+  'placementRecommendation',
+  'placement_recommendation',
+  'recommendedLevel',
+  'recommended_level',
+  'advisorRecommendation',
+  'advisor_recommendation',
+  'placementScore',
+  'placement_score',
+  'scoreBand',
+  'score_band',
+  'levelBand',
+  'level_band',
+  'selectedGoals',
+  'selected_goals',
+  'selectedAnswers',
+  'selected_answers',
+  'advisorConfirmation',
+  'advisor_confirmation',
+];
 
 function safeEqual(left, right) {
   const leftBuffer = Buffer.from(String(left || ''));
@@ -265,6 +403,10 @@ function firstText(...values) {
   return '';
 }
 
+function normalizeAliasKey(value) {
+  return normalizeText(value).toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
 function firstFieldText(body, ...keys) {
   for (const key of keys) {
     if (Object.prototype.hasOwnProperty.call(body, key)) {
@@ -273,6 +415,53 @@ function firstFieldText(body, ...keys) {
     }
   }
   return '';
+}
+
+function valueForAlias(source, aliases = []) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return undefined;
+  const normalizedAliases = new Set(aliases.map(normalizeAliasKey));
+  for (const [key, value] of Object.entries(source)) {
+    if (normalizedAliases.has(normalizeAliasKey(key))) return value;
+  }
+  return undefined;
+}
+
+function firstAliasValue(...sourcesAndAliases) {
+  for (const [source, aliases] of sourcesAndAliases) {
+    const value = valueForAlias(source, aliases);
+    if (value !== undefined && value !== null && normalizeText(value) !== '') return value;
+  }
+  return undefined;
+}
+
+function objectValue(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
+}
+
+function rawSubmissionTypeText(body) {
+  return firstText(body.submissionType, body.submission_type, body.eventType, body.event_type, body.leadType, body.lead_type, body.intent);
+}
+
+function normalizedSubmissionTypeToken(body) {
+  return rawSubmissionTypeText(body).toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+function isPlacementSubmissionType(body) {
+  return ['placement', 'placementtest', 'placementresult', 'quizresult', 'assessment', 'assessmentresult']
+    .includes(normalizedSubmissionTypeToken(body));
+}
+
+function placementObjectForBody(body) {
+  return objectValue(body.placement)
+    || objectValue(body.placementTest)
+    || objectValue(body.placement_test)
+    || objectValue(body.placementResult)
+    || objectValue(body.placement_result)
+    || {};
+}
+
+function hasExplicitPlacementField(body) {
+  return firstAliasValue([body, EXPLICIT_PLACEMENT_FIELD_ALIASES]) !== undefined;
 }
 
 function sourceKeyForBody(body) {
@@ -284,6 +473,217 @@ function sourceKeyForBody(body) {
     body.source,
     body.sourceName,
   );
+}
+
+function consentObjectForBody(body) {
+  const communication = objectValue(body.communication);
+  const communicationConsent = objectValue(body.communicationConsent)
+    || objectValue(body.communication_consent)
+    || objectValue(communication?.consent);
+  const consent = objectValue(body.consent);
+  const preferences = objectValue(body.preferences);
+  return {
+    communication,
+    communicationConsent,
+    consent,
+    preferences,
+    preferenceSource: objectValue(communication?.preference)
+      || objectValue(communication?.preferences)
+      || objectValue(preferences?.communication),
+  };
+}
+
+function normalizeConsentBoolean(value) {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'boolean') return value;
+  if (typeof value === 'number') {
+    if (value === 1) return true;
+    if (value === 0) return false;
+  }
+
+  const text = normalizeText(value).toLowerCase();
+  if (!text) return null;
+  const compact = text.replace(/[^a-z0-9]+/g, '');
+  if (['true', 'yes', 'y', '1', 'on', 'checked', 'agree', 'agreed', 'consent', 'consented', 'optin', 'subscribed'].includes(compact)) {
+    return true;
+  }
+  if (['false', 'no', 'n', '0', 'off', 'unchecked', 'decline', 'declined', 'deny', 'denied', 'optout', 'unsubscribed', 'donotcontact', 'none'].includes(compact)) {
+    return false;
+  }
+  if (/\b(do not|don'?t|no|decline|deny|denied|opt[-\s]?out|unsubscribe)\b/.test(text)) return false;
+  if (/\b(yes|agree|agreed|consent|consented|authorize|authorized|opt[-\s]?in|subscribe)\b/.test(text)) return true;
+  return null;
+}
+
+function normalizeCommunicationPreference(value) {
+  const text = normalizeText(value).toLowerCase();
+  if (!text) return null;
+  const compact = text.replace(/[^a-z0-9]+/g, '');
+  if (['whatsapp', 'wa', 'whatsapponly'].includes(compact)) return COMMUNICATION_PREFERENCES.WHATSAPP;
+  if (['sms', 'text', 'textmessage', 'texts', 'textme'].includes(compact)) return COMMUNICATION_PREFERENCES.SMS;
+  if (['email', 'mail'].includes(compact)) return COMMUNICATION_PREFERENCES.EMAIL;
+  if (['phone', 'call', 'voice', 'phonecall'].includes(compact)) return COMMUNICATION_PREFERENCES.PHONE;
+  if (['any', 'either', 'nopreference', 'best', 'bestmethod'].includes(compact)) return COMMUNICATION_PREFERENCES.ANY;
+  if (['none', 'donotcontact', 'nocontact'].includes(compact)) return COMMUNICATION_PREFERENCES.NONE;
+  return text.replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '') || null;
+}
+
+export function normalizeWebsiteLeadCommunication(body = {}) {
+  const {
+    communication,
+    communicationConsent,
+    consent,
+    preferences,
+    preferenceSource,
+  } = consentObjectForBody(body);
+
+  const contactConsent = normalizeConsentBoolean(firstAliasValue(
+    [communicationConsent, ['contact', ...CONTACT_CONSENT_ALIASES]],
+    [consent, ['contact', ...CONTACT_CONSENT_ALIASES]],
+    [communication, CONTACT_CONSENT_ALIASES],
+    [body, CONTACT_CONSENT_ALIASES],
+  ));
+  const whatsappConsent = normalizeConsentBoolean(firstAliasValue(
+    [communicationConsent, ['whatsapp', 'whatsApp', ...WHATSAPP_CONSENT_ALIASES]],
+    [consent, ['whatsapp', 'whatsApp', ...WHATSAPP_CONSENT_ALIASES]],
+    [communication, WHATSAPP_CONSENT_ALIASES],
+    [body, WHATSAPP_CONSENT_ALIASES],
+  ));
+  const smsConsent = normalizeConsentBoolean(firstAliasValue(
+    [communicationConsent, ['sms', 'text', ...SMS_CONSENT_ALIASES]],
+    [consent, ['sms', 'text', ...SMS_CONSENT_ALIASES]],
+    [communication, SMS_CONSENT_ALIASES],
+    [body, SMS_CONSENT_ALIASES],
+  ));
+  const communicationPreference = normalizeCommunicationPreference(firstAliasValue(
+    [preferenceSource, ['channel', 'method', 'preference', ...COMMUNICATION_PREFERENCE_ALIASES]],
+    [preferences, COMMUNICATION_PREFERENCE_ALIASES],
+    [communication, ['preference', 'preferred', 'preferredMethod', ...COMMUNICATION_PREFERENCE_ALIASES]],
+    [body, COMMUNICATION_PREFERENCE_ALIASES],
+  ));
+
+  return {
+    consent: {
+      contact: contactConsent,
+      whatsapp: whatsappConsent,
+      sms: smsConsent,
+    },
+    preference: communicationPreference,
+  };
+}
+
+function normalizeSubmissionType(body, placement) {
+  const compact = normalizedSubmissionTypeToken(body);
+  if (['contactcta', 'contact', 'contactform', 'contactrequest', 'contactus'].includes(compact)) return SUBMISSION_TYPES.CONTACT_CTA;
+  if (isPlacementSubmissionType(body)) return SUBMISSION_TYPES.PLACEMENT_TEST;
+  if (placement && Object.keys(placement).length) return SUBMISSION_TYPES.PLACEMENT_TEST;
+  return SUBMISSION_TYPES.WEBSITE_LEAD;
+}
+
+function normalizeStringList(value) {
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => normalizeNoteText(item))
+      .filter(Boolean);
+  }
+  const text = normalizeText(value);
+  if (!text) return [];
+  return text.split(/[;,|]/).map(normalizeNoteText).filter(Boolean);
+}
+
+function normalizeSafeMetadataValue(value) {
+  if (Array.isArray(value)) {
+    return value.map(normalizeSafeMetadataValue).filter((item) => item !== null && item !== '');
+  }
+  if (value && typeof value === 'object') {
+    const sanitized = sanitizeWebhookBodyForAudit(value);
+    return Object.fromEntries(
+      Object.entries(sanitized)
+        .map(([key, entryValue]) => [normalizeNoteText(key), normalizeSafeMetadataValue(entryValue)])
+        .filter(([key, entryValue]) => key && entryValue !== null && entryValue !== ''),
+    );
+  }
+  return normalizeNoteText(value);
+}
+
+function normalizePlacementScore(value) {
+  if (value === undefined || value === null || normalizeText(value) === '') return null;
+  const numberValue = Number(value);
+  return Number.isFinite(numberValue) ? numberValue : normalizeNoteText(value);
+}
+
+function compactMetadataObject(value) {
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([, entryValue]) => {
+        if (Array.isArray(entryValue)) return entryValue.length > 0;
+        if (entryValue && typeof entryValue === 'object') return Object.keys(entryValue).length > 0;
+        return entryValue !== null && entryValue !== '';
+      }),
+  );
+}
+
+export function normalizeWebsiteLeadPlacement(body = {}) {
+  const placement = placementObjectForBody(body);
+  const allowGenericTopLevelPlacementFields = Object.keys(placement).length > 0 || isPlacementSubmissionType(body);
+  const hasPlacementSignal = allowGenericTopLevelPlacementFields || hasExplicitPlacementField(body);
+  if (!hasPlacementSignal) return {};
+
+  const selectedAnswers = firstAliasValue(
+    [placement, ['answers', 'selectedAnswers', 'selected_answers']],
+    [body, ['selectedAnswers', 'selected_answers']],
+    allowGenericTopLevelPlacementFields ? [body, ['answers']] : [null, []],
+  );
+  return compactMetadataObject({
+    recommendation: firstText(
+      placement.recommendation,
+      placement.recommendedLevel,
+      placement.recommended_level,
+      placement.advisorRecommendation,
+      placement.advisor_recommendation,
+      body.placementRecommendation,
+      body.placement_recommendation,
+      body.recommendedLevel,
+      body.recommended_level,
+      allowGenericTopLevelPlacementFields ? body.recommendation : '',
+    ),
+    score: normalizePlacementScore(firstText(
+      placement.score,
+      placement.placementScore,
+      placement.placement_score,
+      body.placementScore,
+      body.placement_score,
+      allowGenericTopLevelPlacementFields ? body.score : '',
+    )),
+    scoreBand: firstText(
+      placement.scoreBand,
+      placement.score_band,
+      body.scoreBand,
+      body.score_band,
+      allowGenericTopLevelPlacementFields ? placement.band : '',
+      allowGenericTopLevelPlacementFields ? body.band : '',
+    ),
+    levelBand: firstText(
+      placement.levelBand,
+      placement.level_band,
+      body.levelBand,
+      body.level_band,
+      allowGenericTopLevelPlacementFields ? placement.level : '',
+      allowGenericTopLevelPlacementFields ? body.level : '',
+    ),
+    selectedGoals: normalizeStringList(firstAliasValue(
+      [placement, ['selectedGoals', 'selected_goals', 'goals']],
+      [body, ['selectedGoals', 'selected_goals']],
+      allowGenericTopLevelPlacementFields ? [body, ['goals']] : [null, []],
+    )),
+    selectedAnswers: normalizeSafeMetadataValue(selectedAnswers),
+    advisorConfirmation: firstText(
+      placement.advisorConfirmation,
+      placement.advisor_confirmation,
+      body.advisorConfirmation,
+      body.advisor_confirmation,
+    ),
+  });
 }
 
 function normalizeFormFieldValue(value) {
@@ -317,6 +717,9 @@ function collectAdditionalFormFields(body) {
 }
 
 export function normalizeWebsiteLeadBody(body) {
+  const communication = normalizeWebsiteLeadCommunication(body);
+  const placement = normalizeWebsiteLeadPlacement(body);
+  const submissionType = normalizeSubmissionType(body, placement);
   const firstName = firstFieldText(
     body,
     'firstName',
@@ -362,6 +765,7 @@ export function normalizeWebsiteLeadBody(body) {
   ) || status;
 
   return {
+    submissionType,
     name,
     company: firstText(body.company, body.companyName, body.businessName),
     email: normalizeEmail(body.email),
@@ -369,7 +773,7 @@ export function normalizeWebsiteLeadBody(body) {
     address: firstText(body.address, body.streetAddress, body.location, body.city, body.countryCity),
     age: firstText(body.age, body.edad, body.Edad),
     message: firstText(body.message, body.notes, body.comments, body.description),
-    service: firstText(body.service, body.serviceType, body.interest),
+    service: firstText(body.service, body.serviceType, body.interest, submissionType === SUBMISSION_TYPES.PLACEMENT_TEST ? 'Placement test' : ''),
     sourceKey,
     sourceName: firstText(body.sourceName, body.source, body.formName, WEBSITE_LEAD_SOURCE_NAME),
     externalId: firstText(body.externalId, body.submissionId, body.id),
@@ -381,6 +785,9 @@ export function normalizeWebsiteLeadBody(body) {
     priority: firstText(body.priority),
     tags: normalizeWorkflowTags(body.workflowTags || body.tags || body.tagList),
     nextAction: firstText(body.nextAction, body.task, body.todo),
+    communicationConsent: communication.consent,
+    communicationPreference: communication.preference,
+    placement,
     formFields: collectAdditionalFormFields(body),
   };
 }
@@ -521,15 +928,69 @@ function formatFormFieldsForNotes(fields) {
     .join('; ');
 }
 
+function hasExplicitCommunicationMetadata(lead) {
+  const consent = lead.communicationConsent || {};
+  return consent.contact === true
+    || consent.contact === false
+    || consent.whatsapp === true
+    || consent.whatsapp === false
+    || consent.sms === true
+    || consent.sms === false
+    || Boolean(lead.communicationPreference);
+}
+
+function consentLabel(value) {
+  if (value === true) return 'yes';
+  if (value === false) return 'no';
+  return 'not_provided';
+}
+
+function communicationSummary(lead) {
+  if (!hasExplicitCommunicationMetadata(lead)) return '';
+  const consent = lead.communicationConsent || {};
+  return [
+    'contact:' + consentLabel(consent.contact),
+    'whatsapp:' + consentLabel(consent.whatsapp),
+    'sms:' + consentLabel(consent.sms),
+    lead.communicationPreference ? 'preference:' + lead.communicationPreference : '',
+  ].filter(Boolean).join(',');
+}
+
+function placementSummary(placement = {}) {
+  if (!placement || typeof placement !== 'object' || !Object.keys(placement).length) return '';
+  return [
+    placement.recommendation ? 'recommendation:' + normalizeNoteText(placement.recommendation) : '',
+    placement.score !== null && placement.score !== undefined ? 'score:' + normalizeNoteText(placement.score) : '',
+    placement.scoreBand ? 'score_band:' + normalizeNoteText(placement.scoreBand) : '',
+    placement.levelBand ? 'level_band:' + normalizeNoteText(placement.levelBand) : '',
+    placement.selectedGoals?.length ? 'goals:' + placement.selectedGoals.map(normalizeNoteText).join(';') : '',
+    placement.advisorConfirmation ? 'advisor_confirmation:' + normalizeNoteText(placement.advisorConfirmation) : '',
+  ].filter(Boolean).join(',');
+}
+
+function websiteLeadMetadata(lead) {
+  return compactMetadataObject({
+    submissionType: lead.submissionType || SUBMISSION_TYPES.WEBSITE_LEAD,
+    communicationConsent: hasExplicitCommunicationMetadata(lead) ? lead.communicationConsent : null,
+    communicationPreference: lead.communicationPreference || null,
+    placement: lead.placement || null,
+  });
+}
+
 function originalNotesForLead(lead, sourceRowId) {
   const tags = lead.tags?.length ? lead.tags : [];
   const formFields = formatFormFieldsForNotes(lead.formFields);
+  const communication = communicationSummary(lead);
+  const placement = placementSummary(lead.placement);
   return [
     WEBSITE_LEAD_SOURCE_TYPE,
+    'submission_type=' + (lead.submissionType || SUBMISSION_TYPES.WEBSITE_LEAD),
     'external_id=' + (lead.externalId || 'none'),
     'source_key=' + (lead.sourceKey || 'none'),
     'source_row_id=' + (sourceRowId || 'unknown'),
     'current_stage=' + (lead.currentStage || lead.status || 'New Lead'),
+    communication ? 'communication=' + communication : '',
+    placement ? 'placement=' + placement : '',
     lead.outreachState ? 'outreach_state=' + lead.outreachState : '',
     lead.priority ? 'priority=' + lead.priority : '',
     tags.length ? 'tags=' + tags.join(';') : '',
@@ -544,6 +1005,10 @@ function originalNotesForLead(lead, sourceRowId) {
 
 function leadFormDetailsNote(lead) {
   const rows = [];
+  const communication = communicationSummary(lead);
+  const placement = placementSummary(lead.placement);
+  if (communication) rows.push('Communication: ' + communication);
+  if (placement) rows.push('Placement: ' + placement);
   if (lead.age) rows.push('Age: ' + normalizeNoteText(lead.age));
   if (lead.address) rows.push('Location: ' + normalizeNoteText(lead.address));
   if (lead.service) rows.push('Interest: ' + normalizeNoteText(lead.service));
@@ -627,10 +1092,14 @@ export async function persistWebsiteLeadImportAudit(
 ) {
   const rawValues = {
     source: WEBSITE_LEAD_SOURCE_TYPE,
+    submission_type: lead.submissionType || SUBMISSION_TYPES.WEBSITE_LEAD,
     source_key: lead.sourceKey || null,
     source_name: lead.sourceName || WEBSITE_LEAD_SOURCE_NAME,
     external_id: lead.externalId || null,
     business_unit_id: businessUnitId,
+    communication_consent: hasExplicitCommunicationMetadata(lead) ? lead.communicationConsent : null,
+    communication_preference: lead.communicationPreference || null,
+    placement: lead.placement && Object.keys(lead.placement).length ? lead.placement : null,
     raw: sanitizeWebhookBodyForAudit(body),
   };
 
@@ -652,6 +1121,7 @@ export async function persistWebsiteLeadImportAudit(
   };
   const proposedLead = {
     source_type: WEBSITE_LEAD_SOURCE_TYPE,
+    submission_type: lead.submissionType || SUBMISSION_TYPES.WEBSITE_LEAD,
     source_name: lead.sourceName || WEBSITE_LEAD_SOURCE_NAME,
     source_key: lead.sourceKey || null,
     external_id: lead.externalId || null,
@@ -660,6 +1130,9 @@ export async function persistWebsiteLeadImportAudit(
     message: lead.message || null,
     address: lead.address || null,
     age: lead.age || null,
+    communication_consent: hasExplicitCommunicationMetadata(lead) ? lead.communicationConsent : null,
+    communication_preference: lead.communicationPreference || null,
+    placement: lead.placement && Object.keys(lead.placement).length ? lead.placement : null,
     form_fields: lead.formFields && Object.keys(lead.formFields).length ? lead.formFields : null,
     status: lead.status || 'New Lead',
     current_stage: lead.currentStage || lead.status || 'New Lead',
@@ -775,6 +1248,7 @@ export async function ingestWebsiteLeadSubmission(client, {
       sourceKey: lead.sourceKey || null,
       externalId: lead.externalId || null,
       sourceRowId,
+      ...websiteLeadMetadata(lead),
     };
     const inboundLeadDetail = lead.service
       ? `Interested in ${lead.service}.`
