@@ -13,6 +13,7 @@
     "test:messenger-inbound": "node --test src/lib/ingestion/messenger-inbound.test.js",
     "test:whatsapp-inbound": "node --test src/lib/ingestion/whatsapp-inbound.test.js",
     "test:sms-provider-events": "node --test src/lib/ingestion/sms-provider-events.test.js",
+    "test:sms-campaigns": "node --test src/lib/sms-campaigns/*.test.js",
     "test:assignment": "node --test src/lib/crm/assignment.test.js src/lib/timeline/service.test.js",
     "test:admin": "node --test src/lib/admin/*.test.js",
     "test:lifecycle": "node --test src/lib/crm/lifecycle.test.js",

@@ -599,6 +599,12 @@ a { color: inherit; text-decoration: none; }
 .flex-between > *, .flex-gap > * { min-width: 0; }
 .flex-gap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 
+@media (max-width: 1080px) {
+  .sms-campaign-layout {
+    grid-template-columns: 1fr !important;
+  }
+}
+
 /* Contacts workflow surface. Kept global because styled-jsx is not emitted in this app shell. */
 .view-toggle {
   display: flex;

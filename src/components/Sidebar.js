@@ -8,7 +8,7 @@ import { useCRM } from '@/lib/store';
 import { isClientAccountBusinessUnit } from '@/lib/crm/lifecycle';
 import s from './Sidebar.module.css';
 
-import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, CloudSun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal, Inbox } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, CloudSun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal, Inbox, Megaphone } from 'lucide-react';
 
 const nav = [
   { href: '/', label: 'Dashboard', Icon: LayoutDashboard },
@@ -16,6 +16,7 @@ const nav = [
   { href: '/pipeline', label: 'Pipeline', Icon: Columns3 },
   { href: '/tasks', label: 'Tasks', Icon: ListTodo },
   { href: '/inbox', label: 'Inbox', Icon: Inbox },
+  { href: '/sms-campaigns', label: 'SMS Campaigns', Icon: Megaphone },
   { href: '/import-review', label: 'Import Review', Icon: Database },
   { href: '/work-orders', label: 'Work Orders', Icon: ClipboardList },
   { href: '/financials', label: 'Financials', Icon: DollarSign },
