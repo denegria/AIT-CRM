@@ -106,11 +106,24 @@ export default function InboxPage() {
   const inboxConversations = fixtureMode ? fixtureData.conversations : conversations;
   const visibleError = fixtureMode ? '' : error;
   const visibleThreadError = fixtureMode ? '' : threadError;
+  const businessUnitOptions = useMemo(() => {
+    if (!fixtureMode) return accessibleBusinessUnits;
+
+    const unitsById = new Map();
+    fixtureData.conversations.forEach((conversation) => {
+      if (conversation.businessUnit?.id) {
+        unitsById.set(conversation.businessUnit.id, conversation.businessUnit);
+      }
+    });
+    return [...unitsById.values()];
+  }, [accessibleBusinessUnits, fixtureData.conversations, fixtureMode]);
   const activeBusinessUnitFilter = businessUnitFilter !== 'all'
     ? businessUnitFilter
-    : currentBusinessUnitId && currentBusinessUnitId !== 'all'
-      ? currentBusinessUnitId
-      : 'all';
+    : fixtureMode || canUseConsolidatedScope
+      ? 'all'
+      : currentBusinessUnitId && currentBusinessUnitId !== 'all'
+        ? currentBusinessUnitId
+        : 'all';
   const channels = useMemo(() => [...new Set(inboxConversations.map((row) => row.channel).filter(Boolean))], [inboxConversations]);
 
   useEffect(() => {
@@ -279,8 +292,8 @@ export default function InboxPage() {
         <label className={s.filterField}>
           <span>{scopeLabel}</span>
           <select className="input select" value={activeBusinessUnitFilter} onChange={(event) => setBusinessUnitFilter(event.target.value)}>
-            {canUseConsolidatedScope && <option value="all">All visible</option>}
-            {accessibleBusinessUnits.map((unit) => (
+            {(canUseConsolidatedScope || fixtureMode) && <option value="all">All visible</option>}
+            {businessUnitOptions.map((unit) => (
               <option key={unit.id} value={unit.id}>{unit.name}</option>
             ))}
           </select>
