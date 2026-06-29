@@ -381,3 +381,35 @@ export function evaluateSmsEligibility({ contact = {}, consent = null } = {}) {
     reasons,
   };
 }
+
+export function previewSmsCampaignAudience(candidates = []) {
+  const included = [];
+  const blocked = [];
+
+  for (const candidate of Array.isArray(candidates) ? candidates : []) {
+    const contact = candidate.contact || candidate;
+    const eligibility = evaluateSmsEligibility({
+      contact,
+      consent: candidate.consent || null,
+    });
+    const previewRow = {
+      contactId: contact.id || contact.contact_id || null,
+      phone: contact.phone || null,
+      ok: eligibility.ok,
+      reasons: eligibility.reasons,
+    };
+    if (eligibility.ok) {
+      included.push(previewRow);
+    } else {
+      blocked.push(previewRow);
+    }
+  }
+
+  return {
+    total: included.length + blocked.length,
+    includedCount: included.length,
+    blockedCount: blocked.length,
+    included,
+    blocked,
+  };
+}

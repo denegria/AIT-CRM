@@ -9,6 +9,7 @@ import {
   evaluateSmsEligibility,
   loadSmsConsentForContact,
   normalizeSmsConsentEvent,
+  previewSmsCampaignAudience,
   recordSmsConsentEvent,
   smsConsentScopeKey,
 } from './sms-consent.js';
@@ -208,5 +209,31 @@ test('evaluates SMS campaign eligibility from contact and consent posture', () =
   assert.deepEqual(blocked.reasons.map((reason) => reason.code), [
     SMS_ELIGIBILITY_BLOCK_CODES.PHONE_MISSING,
     SMS_ELIGIBILITY_BLOCK_CODES.CONTACT_BLOCKED,
+  ]);
+});
+
+test('previews SMS campaign audience with included and blocked explanations', () => {
+  const preview = previewSmsCampaignAudience([
+    {
+      contact: { id: 'contact-ok', phone: '+15551234567' },
+      consent: { consent_status: SMS_CONSENT_STATUSES.OPTED_IN },
+    },
+    {
+      contact: { id: 'contact-no-consent', phone: '+15557654321' },
+      consent: null,
+    },
+    {
+      contact: { id: 'contact-opted-out', phone: '+15550001111' },
+      consent: { consent_status: SMS_CONSENT_STATUSES.OPTED_OUT },
+    },
+  ]);
+
+  assert.equal(preview.total, 3);
+  assert.equal(preview.includedCount, 1);
+  assert.equal(preview.blockedCount, 2);
+  assert.equal(preview.included[0].contactId, 'contact-ok');
+  assert.deepEqual(preview.blocked.map((row) => row.reasons[0].code), [
+    SMS_ELIGIBILITY_BLOCK_CODES.SMS_CONSENT_MISSING,
+    SMS_ELIGIBILITY_BLOCK_CODES.SMS_OPTED_OUT,
   ]);
 });
