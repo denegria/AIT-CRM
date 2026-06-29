@@ -113,7 +113,7 @@ test('builds stable conversation and idempotency keys', () => {
 test('rejects unsupported channels, directions, and statuses before persistence', () => {
   assert.throws(() => normalizeConversationMessageInput({
     organizationId: 'org-1',
-    channel: 'sms',
+    channel: 'email',
     providerAccountId: 'phone-1',
     providerThreadId: 'thread-1',
     externalParticipantId: 'customer-1',

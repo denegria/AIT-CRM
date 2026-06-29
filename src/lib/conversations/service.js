@@ -26,7 +26,10 @@ const OPEN_TASK_STATUSES = new Set(['open', 'in_progress', 'snoozed']);
 const HIGH_PRIORITY_TASKS = new Set(['high', 'urgent']);
 
 const PROVIDER_LABELS = Object.freeze({
+  [CONVERSATION_PROVIDERS.BANDWIDTH]: 'Bandwidth',
   [CONVERSATION_PROVIDERS.META]: 'Meta',
+  [CONVERSATION_PROVIDERS.TELNYX]: 'Telnyx',
+  [CONVERSATION_PROVIDERS.TWILIO]: 'Twilio',
 });
 
 function cleanText(value) {
@@ -622,6 +625,42 @@ export function whatsappConversationMessageInput({
     textBody: text,
     rawPayloadJson: raw,
     occurredAt,
+  });
+}
+
+export function smsConversationMessageInput({
+  organizationId,
+  businessUnitId = null,
+  contactId = null,
+  leadId = null,
+  channelId = null,
+  provider,
+  providerAccountId,
+  participantPhone,
+  messageId,
+  text = null,
+  timestamp = null,
+  raw = {},
+}) {
+  return normalizeConversationMessageInput({
+    organizationId,
+    businessUnitId,
+    contactId,
+    leadId,
+    channelId,
+    provider,
+    channel: CONVERSATION_CHANNELS.SMS,
+    direction: MESSAGE_DIRECTIONS.INBOUND,
+    deliveryStatus: MESSAGE_DELIVERY_STATUSES.RECEIVED,
+    providerAccountId,
+    providerThreadId: participantPhone,
+    externalParticipantId: participantPhone,
+    externalMessageId: messageId,
+    senderIdentity: participantPhone,
+    recipientIdentity: providerAccountId,
+    textBody: text,
+    rawPayloadJson: raw,
+    occurredAt: timestamp ? new Date(timestamp) : new Date(),
   });
 }
 
