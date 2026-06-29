@@ -20,6 +20,7 @@
     "test:comms-observability": "node --test src/lib/comms-observability/*.test.js",
     "test:timeline": "node --test src/lib/timeline/*.test.js",
     "test:conversations": "node --test src/lib/conversations/*.test.js",
+    "test:sms-consent": "node --test src/lib/communication-consent/*.test.js",
     "test:message-templates": "node --test src/lib/message-templates/*.test.js",
     "test:website-leads": "node --test src/lib/ingestion/website-leads.test.js",
     "profile:ait-signs": "python3 scripts/profile-ait-signs.py",

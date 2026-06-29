@@ -7,6 +7,11 @@ import {
   sanitizeWebhookBodyForAudit,
   verifyWebsiteLeadSecret,
 } from './website-leads.js';
+import {
+  SMS_CONSENT_EVENT_TYPES,
+  SMS_CONSENT_SOURCE_TYPES,
+  SMS_CONSENT_STATUSES,
+} from '../communication-consent/sms-consent.js';
 
 test('normalizes plain website lead JSON and preserves non-core form fields', () => {
   const { payload, lead } = normalizeWebsiteLeadSubmission({
@@ -304,6 +309,56 @@ test('creates a notification after a new website lead is promoted', async () => 
   assert.equal(taskInsert.params[11], 'New lead follow-up');
 });
 
+test('records refresh-site SMS decline in the consent ledger', async () => {
+  const { client, calls } = createWebsitePromotionClient();
+
+  const result = await ingestWebsiteLeadSubmission(client, {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-1',
+    body: {
+      externalId: 'refresh-contact-no-sms',
+      submissionType: 'contact_cta',
+      sourceName: 'AIT USA Refresh Site',
+      firstName: 'Maria',
+      lastName: 'Lopez',
+      phone: '(555) 010-9911',
+      communication: {
+        consent: {
+          contact: 'yes',
+          whatsapp: 'yes',
+          sms: 'no',
+        },
+        preference: 'WhatsApp',
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.duplicate, false);
+
+  const consentUpsert = calls.find((call) => call.sql.startsWith('insert into contact_channel_consents'));
+  assert.equal(consentUpsert.params[0], 'org-1');
+  assert.equal(consentUpsert.params[1], 'contact-1');
+  assert.equal(consentUpsert.params[2], 'bu-1');
+  assert.equal(consentUpsert.params[3], 'business_unit:bu-1');
+  assert.equal(consentUpsert.params[5], SMS_CONSENT_STATUSES.OPTED_OUT);
+  assert.equal(consentUpsert.params[6], SMS_CONSENT_SOURCE_TYPES.WEBSITE_FORM);
+  assert.equal(consentUpsert.params[7], 'website-lead:refresh-contact-no-sms');
+  assert.equal(consentUpsert.params[10], 'website_form_sms_declined');
+
+  const auditInsert = calls.find((call) => call.sql.startsWith('insert into contact_channel_consent_events'));
+  assert.equal(auditInsert.params[5], SMS_CONSENT_EVENT_TYPES.OPT_OUT);
+  assert.equal(auditInsert.params[6], SMS_CONSENT_STATUSES.OPTED_OUT);
+  assert.equal(auditInsert.params[12], 'website-lead:org-1:refresh-contact-no-sms:sms-consent');
+  const auditMetadata = JSON.parse(auditInsert.params[14]);
+  assert.deepEqual(auditMetadata.communicationConsent, {
+    contact: true,
+    whatsapp: true,
+    sms: false,
+  });
+  assert.equal(auditMetadata.communicationPreference, 'whatsapp');
+});
+
 test('persists refresh-site placement consent contract in audit and task metadata', async () => {
   const { client, calls } = createWebsitePromotionClient();
 
@@ -369,6 +424,20 @@ test('persists refresh-site placement consent contract in audit and task metadat
   const leadInsert = calls.find((call) => call.sql.startsWith('insert into leads'));
   assert.match(leadInsert.params[7], /communication=contact:yes,whatsapp:no,sms:yes,preference:sms/);
   assert.match(leadInsert.params[7], /placement=recommendation:Start with Level 3,score:74,score_band:A2-B1/);
+
+  const consentUpsert = calls.find((call) => call.sql.startsWith('insert into contact_channel_consents'));
+  assert.equal(consentUpsert.params[3], 'business_unit:bu-1');
+  assert.equal(consentUpsert.params[5], SMS_CONSENT_STATUSES.OPTED_IN);
+  assert.equal(consentUpsert.params[6], SMS_CONSENT_SOURCE_TYPES.WEBSITE_FORM);
+  assert.equal(consentUpsert.params[7], 'website-lead:refresh-placement-001');
+
+  const consentAuditInsert = calls.find((call) => call.sql.startsWith('insert into contact_channel_consent_events'));
+  assert.equal(consentAuditInsert.params[5], SMS_CONSENT_EVENT_TYPES.OPT_IN);
+  assert.equal(consentAuditInsert.params[6], SMS_CONSENT_STATUSES.OPTED_IN);
+  assert.equal(consentAuditInsert.params[12], 'website-lead:org-1:refresh-placement-001:sms-consent');
+  const consentAuditMetadata = JSON.parse(consentAuditInsert.params[14]);
+  assert.equal(consentAuditMetadata.submissionType, 'placement_test');
+  assert.equal(consentAuditMetadata.placement.scoreBand, 'A2-B1');
 
   const notificationInsert = calls.find((call) => call.sql.startsWith('insert into notifications'));
   const notificationMetadata = JSON.parse(notificationInsert.params[10]);
@@ -480,6 +549,15 @@ function createWebsitePromotionClient() {
         }
         if (normalizedSql.startsWith('insert into import_review_items')) {
           return { rows: [] };
+        }
+        if (normalizedSql.startsWith('select id from contact_channel_consent_events')) {
+          return { rows: [] };
+        }
+        if (normalizedSql.startsWith('insert into contact_channel_consents')) {
+          return { rows: [{ id: 'sms-consent-1', consent_status: params[5] }] };
+        }
+        if (normalizedSql.startsWith('insert into contact_channel_consent_events')) {
+          return { rows: [{ id: 'sms-consent-event-1' }] };
         }
         if (normalizedSql.startsWith('insert into notifications')) {
           return { rows: [{ id: 'notification-1' }] };

@@ -144,6 +144,75 @@ export const contacts = pgTable('contacts', {
   updatedAt,
 });
 
+export const contactChannelConsents = pgTable('contact_channel_consents', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  contactId: uuid('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').references(() => businessUnits.id, { onDelete: 'set null' }),
+  scopeKey: text('scope_key').notNull().default('organization'),
+  channel: text('channel').notNull(),
+  consentStatus: text('consent_status').notNull().default('unknown'),
+  optInSource: text('opt_in_source'),
+  optInReference: text('opt_in_reference'),
+  optInDisclosureText: text('opt_in_disclosure_text'),
+  optInOccurredAt: timestamp('opt_in_occurred_at', { withTimezone: true }),
+  optOutSource: text('opt_out_source'),
+  optOutReference: text('opt_out_reference'),
+  optOutReason: text('opt_out_reason'),
+  optOutOccurredAt: timestamp('opt_out_occurred_at', { withTimezone: true }),
+  metadataJson: jsonb('metadata_json').notNull().default({}),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  contactChannelScopeIdx: uniqueIndex('contact_channel_consents_contact_channel_scope_idx').on(
+    table.organizationId,
+    table.contactId,
+    table.channel,
+    table.scopeKey,
+  ),
+  orgChannelStatusIdx: index('contact_channel_consents_org_channel_status_idx').on(
+    table.organizationId,
+    table.channel,
+    table.consentStatus,
+  ),
+  businessUnitIdx: index('contact_channel_consents_business_unit_idx').on(table.businessUnitId),
+}));
+
+export const contactChannelConsentEvents = pgTable('contact_channel_consent_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  contactId: uuid('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').references(() => businessUnits.id, { onDelete: 'set null' }),
+  scopeKey: text('scope_key').notNull().default('organization'),
+  channel: text('channel').notNull(),
+  eventType: text('event_type').notNull(),
+  consentStatus: text('consent_status').notNull().default('unknown'),
+  sourceType: text('source_type'),
+  sourceReference: text('source_reference'),
+  actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+  provider: text('provider'),
+  providerEventId: text('provider_event_id'),
+  idempotencyKey: text('idempotency_key'),
+  disclosureText: text('disclosure_text'),
+  metadataJson: jsonb('metadata_json').notNull().default({}),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt,
+}, (table) => ({
+  orgIdempotencyIdx: uniqueIndex('contact_channel_consent_events_org_idempotency_idx').on(
+    table.organizationId,
+    table.idempotencyKey,
+  ),
+  contactOccurredIdx: index('contact_channel_consent_events_contact_occurred_idx').on(
+    table.contactId,
+    table.occurredAt,
+  ),
+  orgChannelOccurredIdx: index('contact_channel_consent_events_org_channel_occurred_idx').on(
+    table.organizationId,
+    table.channel,
+    table.occurredAt,
+  ),
+}));
+
 export const contactPeople = pgTable('contact_people', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
@@ -729,6 +798,8 @@ export const allTables = {
   userRoles,
   businessUnitMemberships,
   contacts,
+  contactChannelConsents,
+  contactChannelConsentEvents,
   contactPeople,
   leads,
   leadStatusHistory,

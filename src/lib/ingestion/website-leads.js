@@ -12,6 +12,12 @@ import {
   NOTIFICATION_SOURCES,
   createInboundLeadNotification,
 } from '../notifications/service.js';
+import {
+  SMS_CONSENT_EVENT_TYPES,
+  SMS_CONSENT_SOURCE_TYPES,
+  SMS_CONSENT_STATUSES,
+  recordSmsConsentEvent,
+} from '../communication-consent/sms-consent.js';
 import { normalizeWorkflowTags } from '../sales-workflow.js';
 import { createInboundLeadIntakeTask } from '../tasks/intake.js';
 
@@ -977,6 +983,39 @@ function websiteLeadMetadata(lead) {
   });
 }
 
+async function recordWebsiteLeadSmsConsent(client, {
+  organizationId,
+  businessUnitId,
+  contactId,
+  leadId,
+  sourceRowId,
+  lead,
+}) {
+  const smsConsent = lead.communicationConsent?.sms;
+  if (smsConsent !== true && smsConsent !== false) return null;
+
+  const referenceId = lead.externalId || sourceRowId || leadId;
+  return recordSmsConsentEvent(client, {
+    organizationId,
+    contactId,
+    businessUnitId,
+    eventType: smsConsent ? SMS_CONSENT_EVENT_TYPES.OPT_IN : SMS_CONSENT_EVENT_TYPES.OPT_OUT,
+    consentStatus: smsConsent ? SMS_CONSENT_STATUSES.OPTED_IN : SMS_CONSENT_STATUSES.OPTED_OUT,
+    sourceType: SMS_CONSENT_SOURCE_TYPES.WEBSITE_FORM,
+    sourceReference: referenceId ? `website-lead:${referenceId}` : 'website-lead',
+    idempotencyKey: referenceId ? `website-lead:${organizationId}:${referenceId}:sms-consent` : null,
+    optOutReason: smsConsent ? null : 'website_form_sms_declined',
+    metadataJson: compactMetadataObject({
+      sourceKey: lead.sourceKey || null,
+      externalId: lead.externalId || null,
+      sourceRowId,
+      leadId,
+      ...websiteLeadMetadata(lead),
+    }),
+    occurredAt: parseTimestamp(lead.submittedAt),
+  }, { useTransaction: false });
+}
+
 function originalNotesForLead(lead, sourceRowId) {
   const tags = lead.tags?.length ? lead.tags : [];
   const formFields = formatFormFieldsForNotes(lead.formFields);
@@ -1242,6 +1281,14 @@ export async function ingestWebsiteLeadSubmission(client, {
       contactId,
       leadId,
       assignedUserId,
+    });
+    await recordWebsiteLeadSmsConsent(client, {
+      organizationId,
+      businessUnitId,
+      contactId,
+      leadId,
+      sourceRowId,
+      lead,
     });
     const inboundLeadIdempotencyKey = `website:${lead.externalId || sourceRowId || leadId}`;
     const inboundLeadMetadata = {
