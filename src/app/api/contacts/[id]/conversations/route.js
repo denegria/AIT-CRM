@@ -3,6 +3,7 @@ import { Client } from 'pg';
 import { getDb } from '@/db/index.js';
 import { contacts } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
+import { sessionHasAdminRole } from '@/lib/auth/admin-policy.js';
 import { resolveContactById } from '@/lib/crm/access.js';
 import { crmErrorResponse } from '@/lib/crm/errors.js';
 import { listContactConversationMessages } from '@/lib/conversations/service.js';
@@ -76,6 +77,12 @@ export async function GET(request, { params }) {
 export async function POST(request, { params }) {
   const { error, session } = await requirePermission(request, PERMISSIONS.CRM_WRITE);
   if (error) return error;
+  if (!sessionHasAdminRole(session)) {
+    return NextResponse.json(
+      { error: 'Manual outbound sends require administrator access.' },
+      { status: 403 },
+    );
+  }
 
   const { id } = await params;
   const db = getDb();

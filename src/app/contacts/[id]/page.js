@@ -674,7 +674,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   }, [contact?.id, dataSource, conversationReloadKey]);
 
   useEffect(() => {
-    if (!access.canWriteCrm || !access.canReadSettings || dataSource !== 'postgres') return undefined;
+    if (!access.canSendOutboundMessages || !access.canReadSettings || dataSource !== 'postgres') return undefined;
     let cancelled = false;
     fetch('/api/message-templates?purpose=manual_follow_up&status=active', { cache: 'no-store' })
       .then(async (response) => {
@@ -691,7 +691,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [access.canReadSettings, access.canWriteCrm, dataSource]);
+  }, [access.canReadSettings, access.canSendOutboundMessages, dataSource]);
 
   const channelTemplates = useMemo(() => messageTemplates.filter((template) => (
     template.channel === manualSend.channel || template.channel === 'all'
@@ -1165,7 +1165,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   };
 
   const submitManualSend = () => {
-    if (!access.canWriteCrm || !contact?.id || manualSend.sending) return;
+    if (!access.canSendOutboundMessages || !contact?.id || manualSend.sending) return;
     const requestId = manualSend.requestId || newManualSendRequestId();
     setManualSend((current) => ({ ...current, sending: true, blockedReasons: [], error: '' }));
     fetch(`/api/contacts/${contact.id}/conversations`, {
@@ -1588,7 +1588,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   {conversationStatus === 'error' && <div className={s.timelineStatus}>Conversation sync unavailable</div>}
                 </div>
 
-                {access.canWriteCrm && dataSource === 'postgres' && (
+                {access.canSendOutboundMessages && dataSource === 'postgres' && (
                   <div className={s.manualSendBox}>
                     <div className={s.manualSendControls}>
                       <label className={s.manualSendField}>

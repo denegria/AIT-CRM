@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { Client } from 'pg';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
+import { sessionHasAdminRole } from '@/lib/auth/admin-policy.js';
 import { isUuid } from '@/lib/crm/validation.js';
 import {
   approveSmsCampaign,
@@ -100,6 +101,12 @@ async function assertCampaignAccess(client, session, campaignId) {
 export async function GET(request) {
   const { error, session } = await requirePermission(request, PERMISSIONS.CRM_READ);
   if (error) return error;
+  if (!sessionHasAdminRole(session)) {
+    return NextResponse.json(
+      { error: 'SMS campaign management requires administrator access.' },
+      { status: 403 },
+    );
+  }
 
   const { searchParams } = new URL(request.url);
   const requestedBusinessUnitId = cleanText(searchParams.get('businessUnitId'));
@@ -126,6 +133,12 @@ export async function GET(request) {
 export async function POST(request) {
   const { error, session } = await requirePermission(request, PERMISSIONS.CRM_WRITE);
   if (error) return error;
+  if (!sessionHasAdminRole(session)) {
+    return NextResponse.json(
+      { error: 'SMS campaign management requires administrator access.' },
+      { status: 403 },
+    );
+  }
 
   const body = await request.json().catch(() => ({}));
   const action = cleanText(body.action || 'create').toLowerCase();

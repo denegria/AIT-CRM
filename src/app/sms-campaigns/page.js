@@ -291,7 +291,11 @@ export default function SmsCampaignsPage() {
   if (dataSource !== 'postgres') return <div className="empty-state">SMS campaigns require the Postgres-backed app.</div>;
 
   const selectedBusinessUnit = accessibleBusinessUnits.find((unit) => unit.id === formBusinessUnitId);
-  const canWrite = Boolean(access.canWriteCrm);
+  const canManageCampaigns = Boolean(access.canManageSmsCampaigns);
+
+  if (!canManageCampaigns) {
+    return <div className="empty-state">SMS campaign management requires administrator access.</div>;
+  }
 
   return (
     <div className="fade-in">
@@ -325,7 +329,7 @@ export default function SmsCampaignsPage() {
                 className="input select"
                 value={formBusinessUnitId}
                 onChange={(event) => setForm((current) => ({ ...current, businessUnitId: event.target.value }))}
-                disabled={!canWrite}
+                disabled={!canManageCampaigns}
               >
                 {accessibleBusinessUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
               </select>
@@ -336,7 +340,7 @@ export default function SmsCampaignsPage() {
                 className="input"
                 value={form.name}
                 onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-                disabled={!canWrite}
+                disabled={!canManageCampaigns}
               />
             </div>
             <div className="grid-2" style={{gap:10}}>
@@ -346,7 +350,7 @@ export default function SmsCampaignsPage() {
                   className="input select"
                   value={form.audienceSegment}
                   onChange={(event) => setForm((current) => ({ ...current, audienceSegment: event.target.value }))}
-                  disabled={!canWrite}
+                  disabled={!canManageCampaigns}
                 >
                   {audienceSegments.map((segment) => <option key={segment.key} value={segment.key}>{segment.label}</option>)}
                 </select>
@@ -360,7 +364,7 @@ export default function SmsCampaignsPage() {
                   max="5000"
                   value={form.throttlePerHour}
                   onChange={(event) => setForm((current) => ({ ...current, throttlePerHour: event.target.value }))}
-                  disabled={!canWrite}
+                  disabled={!canManageCampaigns}
                 />
               </div>
             </div>
@@ -371,7 +375,7 @@ export default function SmsCampaignsPage() {
                   className="input select"
                   value={form.senderProvider}
                   onChange={(event) => setForm((current) => ({ ...current, senderProvider: event.target.value }))}
-                  disabled={!canWrite}
+                  disabled={!canManageCampaigns}
                 >
                   <option value="telnyx">Telnyx</option>
                   <option value="bandwidth">Bandwidth</option>
@@ -385,7 +389,7 @@ export default function SmsCampaignsPage() {
                   value={form.senderAccountId}
                   onChange={(event) => setForm((current) => ({ ...current, senderAccountId: event.target.value }))}
                   placeholder="Staging sender id"
-                  disabled={!canWrite}
+                  disabled={!canManageCampaigns}
                 />
               </div>
             </div>
@@ -396,16 +400,16 @@ export default function SmsCampaignsPage() {
                 rows={5}
                 value={form.messageBody}
                 onChange={(event) => setForm((current) => ({ ...current, messageBody: event.target.value }))}
-                disabled={!canWrite}
+                disabled={!canManageCampaigns}
                 style={{resize:'vertical',lineHeight:1.45}}
               />
             </div>
             <div className="flex-gap">
-              <button type="button" className="btn" onClick={handlePreviewDraft} disabled={!canWrite || busyAction === 'preview_draft' || !cleanText(formBusinessUnitId)}>
+              <button type="button" className="btn" onClick={handlePreviewDraft} disabled={!canManageCampaigns || busyAction === 'preview_draft' || !cleanText(formBusinessUnitId)}>
                 <Eye size={15} />
                 <span>{busyAction === 'preview_draft' ? 'Previewing' : 'Preview'}</span>
               </button>
-              <button type="submit" className="btn btn-primary" disabled={!canWrite || busyAction === 'create' || !cleanText(formBusinessUnitId) || !cleanText(form.name) || !cleanText(form.messageBody)}>
+              <button type="submit" className="btn btn-primary" disabled={!canManageCampaigns || busyAction === 'create' || !cleanText(formBusinessUnitId) || !cleanText(form.name) || !cleanText(form.messageBody)}>
                 <Save size={15} />
                 <span>{busyAction === 'create' ? 'Saving' : 'Save Draft'}</span>
               </button>
@@ -465,15 +469,15 @@ export default function SmsCampaignsPage() {
                     <Eye size={15} />
                     <span>Preview</span>
                   </button>
-                  <button type="button" className="btn" onClick={() => handleCampaignAction('snapshot')} disabled={!canWrite || busyAction === 'snapshot'}>
+                  <button type="button" className="btn" onClick={() => handleCampaignAction('snapshot')} disabled={!canManageCampaigns || busyAction === 'snapshot'}>
                     <ClipboardCheck size={15} />
                     <span>Snapshot</span>
                   </button>
-                  <button type="button" className="btn" onClick={() => handleCampaignAction('approve')} disabled={!canWrite || busyAction === 'approve'}>
+                  <button type="button" className="btn" onClick={() => handleCampaignAction('approve')} disabled={!canManageCampaigns || busyAction === 'approve'}>
                     <CheckCircle2 size={15} />
                     <span>Approve</span>
                   </button>
-                  <button type="button" className="btn btn-danger" onClick={() => handleCampaignAction('launch')} disabled={!canWrite || busyAction === 'launch'}>
+                  <button type="button" className="btn btn-danger" onClick={() => handleCampaignAction('launch')} disabled={!canManageCampaigns || busyAction === 'launch'}>
                     <Send size={15} />
                     <span>Launch Check</span>
                   </button>

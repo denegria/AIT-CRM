@@ -3,6 +3,7 @@ import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import * as seedData from './data';
 import { getDb } from '../db/index.js';
 import { hasPermission, isAuthEnabled, PERMISSIONS, SESSION_SECRET_ENV } from './auth';
+import { sessionHasAdminRole } from './auth/admin-policy.js';
 import {
   businessUnits as businessUnitsTable,
   contacts as contactsTable,
@@ -498,6 +499,8 @@ function authData({ authRequired = false, authError = '', currentUser = null } =
       canReadFinancials: false,
       canWriteFinancials: false,
       canWriteWorkOrders: false,
+      canManageSmsCampaigns: false,
+      canSendOutboundMessages: false,
     },
     importStaging: null,
     contacts: [],
@@ -510,6 +513,7 @@ function authData({ authRequired = false, authError = '', currentUser = null } =
 }
 
 function sessionAccess(session) {
+  const isAdmin = sessionHasAdminRole(session);
   return {
     canReadCrm: hasPermission(session, PERMISSIONS.CRM_READ),
     canWriteCrm: hasPermission(session, PERMISSIONS.CRM_WRITE),
@@ -521,6 +525,8 @@ function sessionAccess(session) {
     canReadFinancials: hasPermission(session, PERMISSIONS.FINANCIALS_READ),
     canWriteFinancials: hasPermission(session, PERMISSIONS.FINANCIALS_WRITE),
     canWriteWorkOrders: hasPermission(session, PERMISSIONS.WORK_ORDERS_WRITE),
+    canManageSmsCampaigns: isAdmin,
+    canSendOutboundMessages: isAdmin,
   };
 }
 
@@ -622,6 +628,8 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
         canReadFinancials: true,
         canWriteFinancials: true,
         canWriteWorkOrders: true,
+        canManageSmsCampaigns: true,
+        canSendOutboundMessages: true,
       },
     };
   }

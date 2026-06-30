@@ -108,6 +108,7 @@ export default function Sidebar() {
 
   const isClientViewScope = currentBusinessUnitId !== 'all' && isClientAccountBusinessUnit(currentBusinessUnit);
   const canUseFinancialsWorkspace = Boolean(access.canReadSettings || access.canReadReports || role === 'admin');
+  const canManageSmsCampaigns = Boolean(access.canManageSmsCampaigns);
   const hasBusinessUnitScope = accessibleBusinessUnits?.length > 0;
   const divisionBrand = useMemo(() => divisionBrandFor(currentBusinessUnit), [currentBusinessUnit]);
 
@@ -128,8 +129,9 @@ export default function Sidebar() {
     if (href === '/import-review' && !access.canReadImportReview) return false;
     if (href === '/reports' && !access.canReadReports) return false;
     if (href === '/financials' && (!access.canReadFinancials || !canUseFinancialsWorkspace)) return false;
+    if (href === '/sms-campaigns' && !canManageSmsCampaigns) return false;
     return true;
-  }), [access.canReadFinancials, access.canReadImportReview, access.canReadReports, access.canReadSettings, canUseFinancialsWorkspace, scopedNav]);
+  }), [access.canReadFinancials, access.canReadImportReview, access.canReadReports, access.canReadSettings, canManageSmsCampaigns, canUseFinancialsWorkspace, scopedNav]);
 
   const mobileNav = useMemo(() => {
     if (visibleNav.length <= 5) {
