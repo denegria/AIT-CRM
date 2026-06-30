@@ -3,6 +3,7 @@ import {
   evaluateSmsEligibility,
   smsConsentScopeKey,
 } from '../communication-consent/sms-consent.js';
+import { MESSAGE_DELIVERY_STATUSES } from '../conversations/constants.js';
 
 export const SMS_CAMPAIGN_STATUSES = Object.freeze({
   DRAFT: 'draft',
@@ -26,6 +27,9 @@ export const SMS_CAMPAIGN_EVENT_TYPES = Object.freeze({
   SCHEDULED: 'scheduled',
   CANCELLED: 'cancelled',
   LAUNCH_BLOCKED: 'launch_blocked',
+  LAUNCHED: 'launched',
+  COMPLETED: 'completed',
+  FAILED: 'failed',
 });
 
 export const SMS_CAMPAIGN_BLOCK_CODES = Object.freeze({
@@ -36,6 +40,9 @@ export const SMS_CAMPAIGN_BLOCK_CODES = Object.freeze({
   COMPLIANCE_NOT_READY: 'compliance_not_ready',
   AUDIENCE_EMPTY: 'audience_empty',
   LIVE_SEND_DISABLED: 'live_send_disabled',
+  PROVIDER_SEND_NOT_READY: 'provider_send_not_ready',
+  RECIPIENT_LIMIT_EXCEEDED: 'recipient_limit_exceeded',
+  RECIPIENT_NOT_ALLOWLISTED: 'recipient_not_allowlisted',
 });
 
 const FINAL_STATUSES = new Set([
@@ -551,10 +558,21 @@ export function evaluateSmsCampaignLaunchPolicy({
   campaign,
   preview = null,
   liveSendEnabled = false,
+  testSendMode = false,
+  providerSendReady = true,
+  maxLiveRecipients = null,
+  allowedRecipientPhones = [],
 } = {}) {
   const blockers = [];
   const providerReadiness = campaign?.providerReadinessJson || {};
   const complianceReadiness = campaign?.complianceReadinessJson || {};
+  const included = Array.isArray(preview?.included) ? preview.included : [];
+  const maxRecipients = Number(maxLiveRecipients);
+  const recipientAllowlist = new Set(
+    (Array.isArray(allowedRecipientPhones) ? allowedRecipientPhones : [])
+      .map(normalizeSmsCampaignPhone)
+      .filter(Boolean),
+  );
 
   if (!campaign || campaign.status !== SMS_CAMPAIGN_STATUSES.APPROVED) {
     blockers.push({
@@ -574,27 +592,29 @@ export function evaluateSmsCampaignLaunchPolicy({
       message: 'SMS sender/profile is required before launch.',
     });
   }
-  const missingProvider = readinessMissing(providerReadiness, ['providerConfigured', 'callbacksReady', 'senderMapped']);
-  if (missingProvider.length) {
-    blockers.push({
-      code: SMS_CAMPAIGN_BLOCK_CODES.PROVIDER_NOT_READY,
-      message: `SMS provider readiness is incomplete: ${missingProvider.join(', ')}.`,
-      missing: missingProvider,
-    });
-  }
-  const missingCompliance = readinessMissing(complianceReadiness, [
-    'tenDlcRegistered',
-    'privacyPolicyReady',
-    'termsReady',
-    'optInPathApproved',
-    'stopHelpCopyApproved',
-  ]);
-  if (missingCompliance.length) {
-    blockers.push({
-      code: SMS_CAMPAIGN_BLOCK_CODES.COMPLIANCE_NOT_READY,
-      message: `SMS compliance readiness is incomplete: ${missingCompliance.join(', ')}.`,
-      missing: missingCompliance,
-    });
+  if (!testSendMode) {
+    const missingProvider = readinessMissing(providerReadiness, ['providerConfigured', 'callbacksReady', 'senderMapped']);
+    if (missingProvider.length) {
+      blockers.push({
+        code: SMS_CAMPAIGN_BLOCK_CODES.PROVIDER_NOT_READY,
+        message: `SMS provider readiness is incomplete: ${missingProvider.join(', ')}.`,
+        missing: missingProvider,
+      });
+    }
+    const missingCompliance = readinessMissing(complianceReadiness, [
+      'tenDlcRegistered',
+      'privacyPolicyReady',
+      'termsReady',
+      'optInPathApproved',
+      'stopHelpCopyApproved',
+    ]);
+    if (missingCompliance.length) {
+      blockers.push({
+        code: SMS_CAMPAIGN_BLOCK_CODES.COMPLIANCE_NOT_READY,
+        message: `SMS compliance readiness is incomplete: ${missingCompliance.join(', ')}.`,
+        missing: missingCompliance,
+      });
+    }
   }
   if (preview && Number(preview.includedCount || 0) === 0) {
     blockers.push({
@@ -607,6 +627,29 @@ export function evaluateSmsCampaignLaunchPolicy({
       code: SMS_CAMPAIGN_BLOCK_CODES.LIVE_SEND_DISABLED,
       message: 'Live SMS sending is disabled for this slice.',
     });
+  }
+  if (liveSendEnabled && !providerSendReady) {
+    blockers.push({
+      code: SMS_CAMPAIGN_BLOCK_CODES.PROVIDER_SEND_NOT_READY,
+      message: 'SMS provider send credentials are not configured.',
+    });
+  }
+  if (liveSendEnabled && Number.isFinite(maxRecipients) && maxRecipients > 0 && included.length > maxRecipients) {
+    blockers.push({
+      code: SMS_CAMPAIGN_BLOCK_CODES.RECIPIENT_LIMIT_EXCEEDED,
+      message: `This send is capped at ${maxRecipients} recipient${maxRecipients === 1 ? '' : 's'}.`,
+    });
+  }
+  if (liveSendEnabled && recipientAllowlist.size) {
+    const blockedRecipients = included
+      .map((row) => normalizeSmsCampaignPhone(row.normalizedPhone || row.phone))
+      .filter((phone) => phone && !recipientAllowlist.has(phone));
+    if (blockedRecipients.length) {
+      blockers.push({
+        code: SMS_CAMPAIGN_BLOCK_CODES.RECIPIENT_NOT_ALLOWLISTED,
+        message: 'One or more recipients are not in the staging SMS send allowlist.',
+      });
+    }
   }
 
   return {
@@ -783,12 +826,21 @@ export async function requestSmsCampaignLaunch(client, {
   campaignId,
   actorUserId = null,
   liveSendEnabled = false,
+  testSendMode = false,
+  providerSendReady = true,
+  maxLiveRecipients = null,
+  allowedRecipientPhones = [],
+  sendSmsMessage = null,
 } = {}) {
+  let campaign;
+  let preview;
+  let policy;
+  let launchedCampaign;
   await client.query('begin');
   try {
-    const campaign = await loadSmsCampaign(client, { organizationId, campaignId, lock: true });
+    campaign = await loadSmsCampaign(client, { organizationId, campaignId, lock: true });
     if (!campaign) throw new Error('SMS campaign not found.');
-    const preview = await previewSmsCampaignAudience(client, {
+    preview = await previewSmsCampaignAudience(client, {
       organizationId,
       campaign,
     });
@@ -797,10 +849,14 @@ export async function requestSmsCampaignLaunch(client, {
       campaign: { ...campaign, updatedByUserId: actorUserId },
       preview,
     });
-    const policy = evaluateSmsCampaignLaunchPolicy({
+    policy = evaluateSmsCampaignLaunchPolicy({
       campaign,
       preview,
       liveSendEnabled,
+      testSendMode,
+      providerSendReady,
+      maxLiveRecipients,
+      allowedRecipientPhones,
     });
     if (policy.blocked) {
       const updated = await updateCampaignStatus(client, {
@@ -822,7 +878,106 @@ export async function requestSmsCampaignLaunch(client, {
       return { campaign: updated, preview, policy };
     }
 
-    throw new Error('Live SMS launch is not implemented in this slice.');
+    if (typeof sendSmsMessage !== 'function') {
+      throw new Error('SMS send function is required when live sending is enabled.');
+    }
+    launchedCampaign = await updateCampaignStatus(client, {
+      organizationId,
+      campaign,
+      status: SMS_CAMPAIGN_STATUSES.LAUNCHING,
+      actorUserId,
+      eventType: SMS_CAMPAIGN_EVENT_TYPES.LAUNCHED,
+      message: 'SMS campaign live send started.',
+      extraSetSql: ', launched_at = now()',
+      metadataJson: {
+        preview: {
+          includedCount: preview.includedCount,
+          blockedCount: preview.blockedCount,
+        },
+      },
+    });
+    await client.query('commit');
+  } catch (error) {
+    try {
+      await client.query('rollback');
+    } catch {}
+    throw error;
+  }
+
+  const sendResults = [];
+  for (const recipient of preview.included || []) {
+    const result = await sendSmsMessage({
+      campaign: launchedCampaign,
+      recipient,
+      text: recipient.messagePreview || launchedCampaign.messageBody,
+    });
+    sendResults.push({
+      contactId: recipient.contactId || null,
+      leadId: recipient.leadId || null,
+      phone: recipient.normalizedPhone || recipient.phone || null,
+      ok: Boolean(result?.ok),
+      providerMessageId: result?.providerMessageId || null,
+      providerStatus: result?.providerStatus || null,
+      error: result?.ok ? null : {
+        code: result?.code || 'sms_send_failed',
+        message: result?.reason || 'SMS provider send failed.',
+      },
+      providerResponse: result?.providerResponse || {},
+    });
+  }
+
+  const failed = sendResults.filter((result) => !result.ok);
+  await client.query('begin');
+  try {
+    for (const result of sendResults) {
+      await client.query(
+        `
+          update sms_campaign_recipients
+          set
+            delivery_status = $1,
+            provider_message_id = $2,
+            metadata_json = metadata_json || $3::jsonb,
+            updated_at = now()
+          where organization_id = $4
+            and campaign_id = $5
+            and normalized_phone = $6
+            and eligibility_status = 'included'
+        `,
+        [
+          result.ok ? MESSAGE_DELIVERY_STATUSES.PENDING : MESSAGE_DELIVERY_STATUSES.FAILED,
+          result.providerMessageId,
+          JSON.stringify({
+            providerStatus: result.providerStatus,
+            error: result.error,
+          }),
+          organizationId,
+          launchedCampaign.id,
+          normalizeSmsCampaignPhone(result.phone),
+        ],
+      );
+    }
+    const finalCampaign = await updateCampaignStatus(client, {
+      organizationId,
+      campaign: launchedCampaign,
+      status: failed.length ? SMS_CAMPAIGN_STATUSES.FAILED : SMS_CAMPAIGN_STATUSES.COMPLETED,
+      actorUserId,
+      eventType: failed.length ? SMS_CAMPAIGN_EVENT_TYPES.FAILED : SMS_CAMPAIGN_EVENT_TYPES.COMPLETED,
+      message: failed.length ? 'SMS campaign send failed for one or more recipients.' : 'SMS campaign send completed.',
+      extraSetSql: failed.length ? '' : ', completed_at = now()',
+      metadataJson: {
+        sentCount: sendResults.length - failed.length,
+        failedCount: failed.length,
+        providerMessages: sendResults.map((result) => ({
+          ok: result.ok,
+          phone: result.phone,
+          providerMessageId: result.providerMessageId,
+          providerStatus: result.providerStatus,
+          error: result.error,
+        })),
+      },
+    });
+    await client.query('commit');
+    return { campaign: finalCampaign, preview, policy, sendResults };
   } catch (error) {
     try {
       await client.query('rollback');

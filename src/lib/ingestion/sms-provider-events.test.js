@@ -192,7 +192,7 @@ test('normalizes SMS provider webhook shapes across Telnyx, Twilio, and Bandwidt
   assert.equal(telnyx.participantPhone, '+15550001111');
   assert.equal(telnyx.consentKeyword, 'STOP');
   assert.equal(smsProviderEventKey(telnyx), 'telnyx:sms-event:telnyx-event-1');
-  assert.equal(normalizeSmsPhone('(555) 222-3333'), '+5552223333');
+  assert.equal(normalizeSmsPhone('(555) 222-3333'), '+15552223333');
 
   const [twilio] = flattenSmsProviderEvents('twilio', {
     MessageSid: 'SM123',

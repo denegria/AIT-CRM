@@ -4,6 +4,10 @@ import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import { sessionHasAdminRole } from '@/lib/auth/admin-policy.js';
 import { isUuid } from '@/lib/crm/validation.js';
 import {
+  createSmsCampaignSendConfigFromEnv,
+  sendTelnyxSmsMessage,
+} from '@/lib/messaging/providers/sms.js';
+import {
   approveSmsCampaign,
   cancelSmsCampaign,
   createSmsCampaign,
@@ -218,11 +222,25 @@ export async function POST(request) {
       }
 
       if (action === 'launch') {
+        const sendConfig = createSmsCampaignSendConfigFromEnv(process.env);
         const result = await requestSmsCampaignLaunch(client, {
           organizationId: session.user.organizationId,
           campaignId: campaign.id,
           actorUserId: session.user.id,
-          liveSendEnabled: false,
+          liveSendEnabled: sendConfig.liveSendEnabled,
+          testSendMode: sendConfig.testSendMode,
+          providerSendReady: sendConfig.provider === 'telnyx'
+            && Boolean(sendConfig.telnyxApiKey)
+            && sendConfig.recipientAllowlist.length > 0,
+          maxLiveRecipients: sendConfig.maxRecipients,
+          allowedRecipientPhones: sendConfig.recipientAllowlist,
+          sendSmsMessage: async ({ campaign: launchCampaign, recipient, text }) => sendTelnyxSmsMessage({
+            apiKey: sendConfig.telnyxApiKey,
+            messagingProfileId: sendConfig.telnyxMessagingProfileId,
+            from: launchCampaign.senderAccountId,
+            to: recipient.normalizedPhone || recipient.phone,
+            text,
+          }),
         });
         return NextResponse.json(result, { status: result.policy?.blocked ? 409 : 200 });
       }

@@ -8,7 +8,14 @@ export const SMS_WEBHOOK_SHARED_SECRET_ENV = 'SMS_WEBHOOK_SHARED_SECRET';
 export const SMS_PROVIDER_ENV = 'SMS_PROVIDER';
 export const SMS_BUSINESS_UNIT_MAP_ENV = 'SMS_BUSINESS_UNIT_MAP';
 export const TELNYX_PUBLIC_KEY_ENV = 'TELNYX_PUBLIC_KEY';
+export const TELNYX_API_KEY_ENV = 'TELNYX_API_KEY';
+export const TELNYX_MESSAGING_PROFILE_ID_ENV = 'TELNYX_MESSAGING_PROFILE_ID';
 export const TWILIO_AUTH_TOKEN_ENV = 'TWILIO_AUTH_TOKEN';
+export const SMS_CAMPAIGN_LIVE_SEND_ENABLED_ENV = 'SMS_CAMPAIGN_LIVE_SEND_ENABLED';
+export const SMS_CAMPAIGN_LIVE_SEND_TEST_MODE_ENV = 'SMS_CAMPAIGN_LIVE_SEND_TEST_MODE';
+export const SMS_CAMPAIGN_LIVE_SEND_MAX_RECIPIENTS_ENV = 'SMS_CAMPAIGN_LIVE_SEND_MAX_RECIPIENTS';
+export const SMS_CAMPAIGN_LIVE_SEND_RECIPIENT_ALLOWLIST_ENV = 'SMS_CAMPAIGN_LIVE_SEND_RECIPIENT_ALLOWLIST';
+export const SMS_CAMPAIGN_PRODUCTION_SEND_ENABLED_ENV = 'SMS_CAMPAIGN_PRODUCTION_SEND_ENABLED';
 
 export const SMS_EVENT_KINDS = Object.freeze({
   INBOUND_MESSAGE: 'inbound_message',
@@ -60,6 +67,10 @@ function cleanNullableText(value) {
   return text || null;
 }
 
+function bool(value) {
+  return value === true || value === 'true' || value === 1 || value === '1';
+}
+
 function firstValue(value) {
   if (Array.isArray(value)) return value[0] || '';
   return value || '';
@@ -75,6 +86,7 @@ export function normalizeSmsPhone(value) {
   if (!text) return '';
   if (/^[A-Za-z][\w.-]*$/.test(text)) return text;
   const digits = text.replace(/\D+/g, '');
+  if (digits.length === 10) return `+1${digits}`;
   return digits ? `+${digits}` : text;
 }
 
@@ -92,6 +104,19 @@ export function parseSmsObjectMap(raw) {
   } catch {
     return {};
   }
+}
+
+function parseSmsPhoneList(raw) {
+  return String(raw || '')
+    .split(',')
+    .map(normalizeSmsPhone)
+    .filter(Boolean);
+}
+
+function positiveInteger(value, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(1, Math.floor(number));
 }
 
 export function createSmsProviderConfig({
@@ -118,6 +143,22 @@ export function createSmsProviderConfigFromEnv(env = process.env) {
     telnyxPublicKey: env[TELNYX_PUBLIC_KEY_ENV],
     twilioAuthToken: env[TWILIO_AUTH_TOKEN_ENV],
   });
+}
+
+export function createSmsCampaignSendConfigFromEnv(env = process.env) {
+  const vercelEnv = cleanLower(env.VERCEL_ENV);
+  const productionSendAllowed = bool(env[SMS_CAMPAIGN_PRODUCTION_SEND_ENABLED_ENV]);
+  const productionBlocked = vercelEnv === 'production' && !productionSendAllowed;
+  return {
+    provider: normalizeSmsProvider(env[SMS_PROVIDER_ENV] || CONVERSATION_PROVIDERS.TELNYX),
+    liveSendEnabled: bool(env[SMS_CAMPAIGN_LIVE_SEND_ENABLED_ENV]) && !productionBlocked,
+    testSendMode: bool(env[SMS_CAMPAIGN_LIVE_SEND_TEST_MODE_ENV]) && !productionBlocked,
+    maxRecipients: positiveInteger(env[SMS_CAMPAIGN_LIVE_SEND_MAX_RECIPIENTS_ENV], 1),
+    recipientAllowlist: parseSmsPhoneList(env[SMS_CAMPAIGN_LIVE_SEND_RECIPIENT_ALLOWLIST_ENV]),
+    telnyxApiKey: cleanText(env[TELNYX_API_KEY_ENV]),
+    telnyxMessagingProfileId: cleanText(env[TELNYX_MESSAGING_PROFILE_ID_ENV]),
+    productionBlocked,
+  };
 }
 
 function safeEqual(left, right) {
@@ -332,6 +373,74 @@ export function smsProviderEventKey(event = {}) {
     event.occurredAt instanceof Date ? event.occurredAt.toISOString() : cleanText(event.occurredAt) || 'unknown',
     event.text || event.deliveryStatus || 'event',
   ].join(':');
+}
+
+function telnyxError(response, body = {}) {
+  const firstError = Array.isArray(body?.errors) ? body.errors[0] : null;
+  return {
+    ok: false,
+    code: cleanText(firstError?.code) || `TELNYX_HTTP_${response?.status || 'ERROR'}`,
+    reason: cleanText(firstError?.detail || firstError?.title || body?.message) || 'Telnyx SMS send failed.',
+    providerStatus: response?.status || null,
+    providerResponse: body || {},
+  };
+}
+
+export async function sendTelnyxSmsMessage({
+  apiKey = '',
+  messagingProfileId = '',
+  from = '',
+  to = '',
+  text = '',
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const cleanApiKey = cleanText(apiKey);
+  const cleanFrom = normalizeSmsPhone(from);
+  const cleanTo = normalizeSmsPhone(to);
+  const cleanBody = cleanText(text);
+  if (!cleanApiKey || !cleanFrom || !cleanTo || !cleanBody) {
+    return {
+      ok: false,
+      code: 'TELNYX_SMS_INPUT_MISSING',
+      reason: 'Telnyx API key, sender number, recipient number, and message text are required.',
+    };
+  }
+
+  let response;
+  let body = {};
+  try {
+    response = await fetchImpl('https://api.telnyx.com/v2/messages', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${cleanApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: cleanFrom,
+        to: cleanTo,
+        text: cleanBody,
+        ...(cleanText(messagingProfileId) ? { messaging_profile_id: cleanText(messagingProfileId) } : {}),
+      }),
+    });
+    body = await response.json().catch(() => ({}));
+  } catch (error) {
+    return {
+      ok: false,
+      code: 'TELNYX_SMS_NETWORK_ERROR',
+      reason: error?.message || 'Telnyx SMS network request failed.',
+      providerResponse: {},
+    };
+  }
+
+  if (!response.ok) return telnyxError(response, body);
+
+  const data = body?.data || {};
+  return {
+    ok: true,
+    providerMessageId: cleanText(data.id),
+    providerStatus: cleanText(firstValue(data.to)?.status || data.status || 'queued'),
+    providerResponse: body,
+  };
 }
 
 export function resolveSmsBusinessUnitMapping(event = {}, config = {}) {

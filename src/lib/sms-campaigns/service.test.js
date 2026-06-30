@@ -150,6 +150,9 @@ function createServiceClient({ campaign = campaignRow(), candidates = audienceRo
             })],
           };
         }
+        if (normalized.startsWith('update sms_campaign_recipients')) {
+          return { rows: [{ id: `recipient-update-${calls.length}` }] };
+        }
 
         throw new Error('Unexpected query: ' + normalized);
       },
@@ -303,4 +306,115 @@ test('launch requests snapshot recipients and move to launch_blocked without sen
   assert.equal(update.params[0], SMS_CAMPAIGN_STATUSES.LAUNCH_BLOCKED);
   const launchEvent = calls.filter((call) => call.sql.startsWith('insert into sms_campaign_events')).at(-1);
   assert.equal(launchEvent.params[2], 'launch_blocked');
+});
+
+test('live launch sends a single allowlisted recipient and completes the campaign', async () => {
+  const { client, calls } = createServiceClient({
+    campaign: campaignRow({
+      status: SMS_CAMPAIGN_STATUSES.APPROVED,
+      sender_account_id: '+15552223333',
+      provider_readiness_json: {
+        providerConfigured: true,
+        callbacksReady: true,
+        senderMapped: true,
+      },
+      compliance_readiness_json: {
+        tenDlcRegistered: true,
+        privacyPolicyReady: true,
+        termsReady: true,
+        optInPathApproved: true,
+        stopHelpCopyApproved: true,
+      },
+    }),
+    candidates: [audienceRows()[0]],
+  });
+  const sent = [];
+
+  const result = await requestSmsCampaignLaunch(client, {
+    organizationId: 'org-1',
+    campaignId: 'campaign-1',
+    actorUserId: 'user-1',
+    liveSendEnabled: true,
+    providerSendReady: true,
+    maxLiveRecipients: 1,
+    allowedRecipientPhones: ['+15550001111'],
+    sendSmsMessage: async ({ campaign, recipient, text }) => {
+      sent.push({ campaignId: campaign.id, recipient, text });
+      return { ok: true, providerMessageId: 'telnyx-message-1', providerStatus: 'queued' };
+    },
+  });
+
+  assert.equal(result.campaign.status, SMS_CAMPAIGN_STATUSES.COMPLETED);
+  assert.equal(result.policy.ok, true);
+  assert.equal(result.sendResults.length, 1);
+  assert.equal(result.sendResults[0].providerMessageId, 'telnyx-message-1');
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].text, 'Hi Ada, ready to enroll?');
+
+  const recipientUpdate = calls.find((call) => call.sql.startsWith('update sms_campaign_recipients'));
+  assert.equal(recipientUpdate.params[0], 'pending');
+  assert.equal(recipientUpdate.params[1], 'telnyx-message-1');
+
+  const campaignUpdates = calls.filter((call) => call.sql.startsWith('update sms_campaigns'));
+  assert.deepEqual(campaignUpdates.map((call) => call.params[0]), [
+    SMS_CAMPAIGN_STATUSES.LAUNCHING,
+    SMS_CAMPAIGN_STATUSES.COMPLETED,
+  ]);
+});
+
+test('live launch policy blocks recipients outside the staging allowlist', () => {
+  const policy = evaluateSmsCampaignLaunchPolicy({
+    campaign: {
+      status: SMS_CAMPAIGN_STATUSES.APPROVED,
+      messageBody: 'Hello',
+      senderAccountId: '+15552223333',
+      providerReadinessJson: {
+        providerConfigured: true,
+        callbacksReady: true,
+        senderMapped: true,
+      },
+      complianceReadinessJson: {
+        tenDlcRegistered: true,
+        privacyPolicyReady: true,
+        termsReady: true,
+        optInPathApproved: true,
+        stopHelpCopyApproved: true,
+      },
+    },
+    preview: {
+      includedCount: 1,
+      included: [{ normalizedPhone: '+15550001111' }],
+    },
+    liveSendEnabled: true,
+    providerSendReady: true,
+    maxLiveRecipients: 1,
+    allowedRecipientPhones: ['+15559990000'],
+  });
+
+  assert.deepEqual(policy.blockers.map((blocker) => blocker.code), [
+    SMS_CAMPAIGN_BLOCK_CODES.RECIPIENT_NOT_ALLOWLISTED,
+  ]);
+});
+
+test('test send mode skips full provider and compliance readiness checks', () => {
+  const policy = evaluateSmsCampaignLaunchPolicy({
+    campaign: {
+      status: SMS_CAMPAIGN_STATUSES.APPROVED,
+      messageBody: 'Hello',
+      senderAccountId: '+15552223333',
+      providerReadinessJson: {},
+      complianceReadinessJson: {},
+    },
+    preview: {
+      includedCount: 1,
+      included: [{ normalizedPhone: '+15550001111' }],
+    },
+    liveSendEnabled: true,
+    testSendMode: true,
+    providerSendReady: true,
+    maxLiveRecipients: 1,
+    allowedRecipientPhones: ['+15550001111'],
+  });
+
+  assert.deepEqual(policy.blockers, []);
 });
