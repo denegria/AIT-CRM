@@ -2,14 +2,17 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   canAccessContactLead,
+  canAccessWorkOrder,
   canArchiveContactsDirectly,
   canManageCoordinatorAssignments,
+  canManageWorkOrderAssignments,
   canUseCoordinatorRoute,
   canUseRegularCoordinatorRoute,
   coordinatorUiPolicyForUser,
   filterContactsForSession,
   isRegularCoordinatorSession,
   isSeniorCoordinatorSession,
+  isWorkOrderSelfScopedSession,
 } from './coordinator-policy.js';
 
 function session(roleKeys, id = 'user-1') {
@@ -36,10 +39,39 @@ test('regular coordinator is owner scoped and cannot use direct archive or reass
   const regular = session(['account_manager']);
   assert.equal(isRegularCoordinatorSession(regular), true);
   assert.equal(canManageCoordinatorAssignments(regular), false);
+  assert.equal(canManageWorkOrderAssignments(regular), false);
   assert.equal(canArchiveContactsDirectly(regular), false);
   assert.equal(canAccessContactLead(regular, { assignedUserId: 'user-1' }), true);
   assert.equal(canAccessContactLead(regular, { assignedUserId: 'user-2' }), false);
   assert.equal(canAccessContactLead(regular, { assignedUserId: null }), false);
+});
+
+test('work order self-scope applies to employee roles but not senior coordinator roles', () => {
+  const regular = session(['account_manager']);
+  const designer = session(['designer']);
+  const senior = session(['senior_coordinator']);
+  const admin = session(['admin']);
+
+  assert.equal(isWorkOrderSelfScopedSession(regular), true);
+  assert.equal(isWorkOrderSelfScopedSession(designer), true);
+  assert.equal(isWorkOrderSelfScopedSession(senior), false);
+  assert.equal(isWorkOrderSelfScopedSession(admin), false);
+  assert.equal(canManageWorkOrderAssignments(regular), false);
+  assert.equal(canManageWorkOrderAssignments(designer), false);
+  assert.equal(canManageWorkOrderAssignments(senior), true);
+  assert.equal(canManageWorkOrderAssignments(admin), true);
+});
+
+test('work order access is assigned-user scoped for employee roles', () => {
+  const regular = session(['account_manager']);
+  const designer = session(['designer']);
+  const senior = session(['senior_coordinator']);
+
+  assert.equal(canAccessWorkOrder(regular, { businessUnitId: 'bu-1', assignedUserId: 'user-1' }), true);
+  assert.equal(canAccessWorkOrder(regular, { businessUnitId: 'bu-1', assignedUserId: 'user-2' }), false);
+  assert.equal(canAccessWorkOrder(designer, { businessUnitId: 'bu-1', assignedUserId: 'user-1' }), true);
+  assert.equal(canAccessWorkOrder(designer, { businessUnitId: 'bu-1', assignedUserId: 'user-2' }), false);
+  assert.equal(canAccessWorkOrder(senior, { businessUnitId: 'bu-1', assignedUserId: 'user-2' }), true);
 });
 
 test('regular coordinator UI policy locks owner-scoped surfaces to the current user', () => {
@@ -51,9 +83,12 @@ test('regular coordinator UI policy locks owner-scoped surfaces to the current u
 
   assert.equal(policy.isRegularCoordinator, true);
   assert.equal(policy.ownerScoped, true);
+  assert.equal(policy.workOrdersOwnerScoped, true);
   assert.equal(policy.canManageCoordinatorAssignments, false);
+  assert.equal(policy.canManageWorkOrderAssignments, false);
   assert.equal(policy.canArchiveContactsDirectly, false);
   assert.equal(policy.lockedOwnerUserId, 'coordinator-1');
+  assert.equal(policy.lockedWorkOrderOwnerUserId, 'coordinator-1');
 });
 
 test('senior coordinator UI policy keeps broad coordinator controls available', () => {
@@ -65,9 +100,12 @@ test('senior coordinator UI policy keeps broad coordinator controls available', 
 
   assert.equal(policy.isRegularCoordinator, false);
   assert.equal(policy.ownerScoped, false);
+  assert.equal(policy.workOrdersOwnerScoped, false);
   assert.equal(policy.canManageCoordinatorAssignments, true);
+  assert.equal(policy.canManageWorkOrderAssignments, true);
   assert.equal(policy.canArchiveContactsDirectly, true);
   assert.equal(policy.lockedOwnerUserId, '');
+  assert.equal(policy.lockedWorkOrderOwnerUserId, '');
 });
 
 test('regular coordinator route policy allows only personal CRM workspace routes', () => {
@@ -77,16 +115,16 @@ test('regular coordinator route policy allows only personal CRM workspace routes
   assert.equal(canUseRegularCoordinatorRoute('/clients/client-1?tab=financials'), true);
   assert.equal(canUseRegularCoordinatorRoute('/pipeline'), true);
   assert.equal(canUseRegularCoordinatorRoute('/tasks'), true);
+  assert.equal(canUseRegularCoordinatorRoute('/work-orders'), true);
+  assert.equal(canUseRegularCoordinatorRoute('/work-orders/work-order-1'), true);
 
-  assert.equal(canUseRegularCoordinatorRoute('/work-orders'), false);
-  assert.equal(canUseRegularCoordinatorRoute('/work-orders/work-order-1'), false);
   assert.equal(canUseRegularCoordinatorRoute('/financials'), false);
   assert.equal(canUseRegularCoordinatorRoute('/reports'), false);
   assert.equal(canUseRegularCoordinatorRoute('/settings'), false);
 });
 
 test('senior coordinator route policy keeps broad workspace routes available', () => {
-  assert.equal(canUseCoordinatorRoute(session(['account_manager']).user, '/work-orders'), false);
+  assert.equal(canUseCoordinatorRoute(session(['account_manager']).user, '/work-orders'), true);
   assert.equal(canUseCoordinatorRoute(session(['account_manager']).user, '/financials'), false);
   assert.equal(canUseCoordinatorRoute(session(['senior_coordinator']).user, '/work-orders'), true);
   assert.equal(canUseCoordinatorRoute(session(['admin']).user, '/settings'), true);

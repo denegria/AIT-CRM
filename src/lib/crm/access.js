@@ -4,17 +4,21 @@ import { isUuid } from './validation.js';
 export {
   ROLE_KEYS,
   canAccessContactLead,
+  canAccessWorkOrder,
   canArchiveContactsDirectly,
   canManageCoordinatorAssignments,
   filterContactsForSession,
   isRegularCoordinatorSession,
+  isWorkOrderSelfScopedSession,
   isSeniorCoordinatorSession,
   latestLeadByContactId,
   userHasRole,
 } from './coordinator-policy.js';
 import {
   canAccessContactLead,
+  canAccessWorkOrder,
   isRegularCoordinatorSession,
+  isWorkOrderSelfScopedSession,
 } from './coordinator-policy.js';
 
 export function canAccessBusinessUnit(session, businessUnitId) {
@@ -69,9 +73,21 @@ export function scopedTaskWhere(table, session) {
   return and(orgScope, eq(table.ownerUserId, session.user.id));
 }
 
+export function scopedWorkOrderWhere(table, session) {
+  const orgScope = scopedBusinessUnitWhere(table, session);
+  if (!isWorkOrderSelfScopedSession(session)) return orgScope;
+  return and(orgScope, eq(table.assignedUserId, session.user.id));
+}
+
 export function assertCanAccessContactLead(session, lead = null) {
   if (!canAccessContactLead(session, lead)) {
     throw createCrmError('Regular coordinators can only access contacts assigned to them.', 403);
+  }
+}
+
+export function assertCanAssignWorkOrderUser(session, userId, message = 'This user can only manage work orders assigned to them.') {
+  if (isWorkOrderSelfScopedSession(session) && userId !== session.user.id) {
+    throw createCrmError(message, 403);
   }
 }
 

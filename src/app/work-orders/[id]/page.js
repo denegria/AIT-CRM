@@ -8,6 +8,7 @@ import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
 import { generateWorkOrderPDF } from '@/lib/pdf';
 import { buildAitSignsDocument, formatAitSignsMoney } from '@/lib/ait-signs-document';
+import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import s from './WorkOrderDetail.module.css';
 
 function badgeKey(value) {
@@ -28,6 +29,7 @@ export default function WorkOrderDetailPage() {
     recordPayment,
     loaded,
     access,
+    currentUser,
     scopeLabel,
   } = useCRM();
   const [activeTab, setActiveTab] = useState('overview');
@@ -35,6 +37,13 @@ export default function WorkOrderDetailPage() {
   const [paymentForm, setPaymentForm] = useState(null);
   const canWriteWorkOrders = Boolean(access?.canWriteWorkOrders);
   const canWriteFinancials = Boolean(access?.canWriteFinancials);
+  const workOrderUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
+  const lockedWorkOrderOwnerId = workOrderUiPolicy.lockedWorkOrderOwnerUserId;
+  const editAssigneeOptions = useMemo(() => (
+    workOrderUiPolicy.workOrdersOwnerScoped && lockedWorkOrderOwnerId
+      ? employees.filter((employee) => employee.id === lockedWorkOrderOwnerId)
+      : employees
+  ), [employees, lockedWorkOrderOwnerId, workOrderUiPolicy.workOrdersOwnerScoped]);
 
   const workOrder = useMemo(
     () => workOrders.find((row) => row.id === params.id),
@@ -94,13 +103,16 @@ export default function WorkOrderDetailPage() {
 
   function openEditModal() {
     if (!canWriteWorkOrders || !workOrder) return;
-    setEditForm({ ...workOrder });
+    setEditForm({ ...workOrder, assignedTo: lockedWorkOrderOwnerId || workOrder.assignedTo || '' });
   }
 
   async function handleEditSave() {
     if (!editForm || !workOrder) return;
     try {
-      await updateWorkOrder(workOrder.id, editForm);
+      await updateWorkOrder(workOrder.id, {
+        ...editForm,
+        assignedTo: lockedWorkOrderOwnerId || editForm.assignedTo || '',
+      });
       toast('Work order updated');
       setEditForm(null);
     } catch (error) {
@@ -448,9 +460,12 @@ export default function WorkOrderDetailPage() {
             </div>
             <div className="form-group">
               <label className="form-label">Assigned To</label>
-              <select className="input select" value={editForm.assignedTo || ''} onChange={(event) => setEditForm((form) => ({ ...form, assignedTo: event.target.value }))}>
-                <option value="">Unassigned</option>
-                {employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
+              <select className="input select" value={editForm.assignedTo || ''} onChange={(event) => setEditForm((form) => ({ ...form, assignedTo: event.target.value }))} disabled={workOrderUiPolicy.workOrdersOwnerScoped}>
+                {!workOrderUiPolicy.workOrdersOwnerScoped && <option value="">Unassigned</option>}
+                {editForm.assignedTo && !editAssigneeOptions.some((employee) => employee.id === editForm.assignedTo) && (
+                  <option value={editForm.assignedTo}>{assignedEmployee?.name || 'Assigned user'}</option>
+                )}
+                {editAssigneeOptions.map((employee) => <option key={employee.id} value={employee.id}>{employee.name}</option>)}
               </select>
             </div>
           </div>
