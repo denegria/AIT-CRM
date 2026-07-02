@@ -41,6 +41,7 @@ const TASK_TYPE_OPTIONS = [
   ['document_request', 'Docs'],
   ['payment_follow_up', 'Payment'],
   ['manual_reminder', 'Manual'],
+  ['archive_approval', 'Archive Approval'],
 ];
 
 const DUE_OPTIONS = [
@@ -83,7 +84,7 @@ const FOLLOW_UP_OUTCOME_OPTIONS = [
   ['enrolled_or_won', 'Enrolled / won'],
 ];
 
-const TASK_CREATE_TYPE_OPTIONS = TASK_TYPE_OPTIONS.filter(([value]) => value !== 'all');
+const TASK_CREATE_TYPE_OPTIONS = TASK_TYPE_OPTIONS.filter(([value]) => !['all', 'archive_approval'].includes(value));
 const TASK_PRIORITY_OPTIONS = [
   ['low', 'Low'],
   ['medium', 'Medium'],
@@ -233,6 +234,11 @@ function isFacebookLeadFollowUp(task = {}) {
     String(task.sourceId || '').startsWith('facebook_lead_ads:');
 }
 
+function canReviewArchiveApprovals(user = {}) {
+  const roleKeys = [user.primaryRoleKey, ...(Array.isArray(user.roleKeys) ? user.roleKeys : [])].filter(Boolean);
+  return roleKeys.includes('admin') || roleKeys.includes('senior_coordinator');
+}
+
 function optionLabel(options, value) {
   return options.find(([optionValue]) => optionValue === value)?.[1] || titleCase(value);
 }
@@ -256,6 +262,7 @@ export default function FollowUpQueuePage() {
   const { toast } = useToast();
   const searchParams = useSearchParams();
   const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
+  const canReviewArchiveApprovalTasks = useMemo(() => canReviewArchiveApprovals(currentUser), [currentUser]);
   const lockedTaskOwnerFilter = coordinatorUiPolicy.ownerScoped && currentUser?.id ? '__me' : '';
   const prefillSignatureRef = useRef('');
   const [queueTasks, setQueueTasks] = useState([]);
@@ -273,6 +280,7 @@ export default function FollowUpQueuePage() {
   const [busyTaskId, setBusyTaskId] = useState('');
   const [completionTaskId, setCompletionTaskId] = useState('');
   const [followUpDrafts, setFollowUpDrafts] = useState({});
+  const [archiveDecisionDrafts, setArchiveDecisionDrafts] = useState({});
   const [createOpen, setCreateOpen] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState('');
@@ -536,10 +544,25 @@ export default function FollowUpQueuePage() {
         updateTask(task.id, localPatch);
         setQueueTasks((prev) => prev.map((row) => (row.id === task.id ? normalizeTask({ ...row, ...localPatch }, contacts) : row)));
       }
-      toast(action === 'complete' ? 'Task completed' : action === 'snooze' ? 'Task snoozed' : 'Task assigned');
+      toast(action === 'approve_archive'
+        ? 'Archive request approved'
+        : action === 'deny_archive'
+          ? 'Archive request denied'
+          : action === 'complete'
+            ? 'Task completed'
+            : action === 'snooze'
+              ? 'Task snoozed'
+              : 'Task assigned');
       if (action === 'complete') {
         setCompletionTaskId('');
         setFollowUpDrafts((prev) => {
+          const next = { ...prev };
+          delete next[task.id];
+          return next;
+        });
+      }
+      if (action === 'approve_archive' || action === 'deny_archive') {
+        setArchiveDecisionDrafts((prev) => {
           const next = { ...prev };
           delete next[task.id];
           return next;
@@ -876,6 +899,27 @@ export default function FollowUpQueuePage() {
     });
   }
 
+  function openArchiveDecision(task, decision) {
+    if (!canReviewArchiveApprovalTasks) return;
+    setArchiveDecisionDrafts((prev) => ({
+      ...prev,
+      [task.id]: {
+        decision,
+        reason: decision === 'approve'
+          ? task.metadataJson?.requestedReason || 'Archive request approved.'
+          : '',
+      },
+    }));
+  }
+
+  async function submitArchiveDecision(task) {
+    const draft = archiveDecisionDrafts[task.id] || {};
+    if (!draft.decision) return;
+    await applyTaskAction(task, draft.decision === 'approve' ? 'approve_archive' : 'deny_archive', {
+      reason: String(draft.reason || '').trim(),
+    });
+  }
+
   const resetFilters = () => setFilters({
     due: 'work',
     ownerUserId: lockedTaskOwnerFilter || 'all',
@@ -1188,6 +1232,8 @@ export default function FollowUpQueuePage() {
             const assignee = visibleAssignees.find((user) => user.id === task.ownerUserId);
             const draft = followUpDraft(task.id, task);
             const showFollowUpCompletion = completionTaskId === task.id && task.taskType === 'follow_up';
+            const isArchiveApprovalTask = task.taskType === 'archive_approval';
+            const archiveDecisionDraft = archiveDecisionDrafts[task.id] || null;
             const showEditPanel = editTaskId === task.id;
             return (
               <article key={task.id} className={`${s.queueItem} ${isOverdue ? s.queueItemOverdue : ''} ${isToday ? s.queueItemToday : ''}`}>
@@ -1233,7 +1279,7 @@ export default function FollowUpQueuePage() {
                   <button
                     className={`btn btn-sm ${s.iconButton}`}
                     data-tooltip="Edit task"
-                    disabled={!access.canWriteCrm || editBusy}
+                    disabled={!access.canWriteCrm || editBusy || isArchiveApprovalTask}
                     onClick={() => (showEditPanel ? setEditTaskId('') : openEditPanel(task))}
                     aria-label="Edit task"
                   >
@@ -1259,7 +1305,26 @@ export default function FollowUpQueuePage() {
                   >
                     <AlarmClock size={14} />
                   </button>
-                  {task.taskType === 'follow_up' ? (
+                  {isArchiveApprovalTask ? (
+                    <>
+                      <button
+                        className="btn btn-sm"
+                        disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task) || !canReviewArchiveApprovalTasks}
+                        onClick={() => openArchiveDecision(task, 'deny')}
+                      >
+                        <X size={14} />
+                        Deny
+                      </button>
+                      <button
+                        className="btn btn-sm btn-primary"
+                        disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task) || !canReviewArchiveApprovalTasks}
+                        onClick={() => openArchiveDecision(task, 'approve')}
+                      >
+                        <CheckCircle2 size={14} />
+                        Approve
+                      </button>
+                    </>
+                  ) : task.taskType === 'follow_up' ? (
                     <button
                       className="btn btn-sm btn-primary"
                       disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task)}
@@ -1500,6 +1565,51 @@ export default function FollowUpQueuePage() {
                       <button className="btn btn-sm btn-primary" type="button" onClick={() => submitFollowUpCompletion(task)} disabled={busyTaskId === task.id || !draft.note.trim()}>
                         <CheckCircle2 size={14} />
                         Save Outcome
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {isArchiveApprovalTask && archiveDecisionDraft && (
+                  <div className={s.completionPanel}>
+                    <label className={s.completionNote}>
+                      <span className="form-label">
+                        {archiveDecisionDraft.decision === 'approve' ? 'Approval Reason' : 'Denial Reason'}
+                      </span>
+                      <textarea
+                        className="textarea"
+                        rows={2}
+                        value={archiveDecisionDraft.reason}
+                        disabled={busyTaskId === task.id}
+                        onChange={(event) => setArchiveDecisionDrafts((prev) => ({
+                          ...prev,
+                          [task.id]: {
+                            ...archiveDecisionDraft,
+                            reason: event.target.value,
+                          },
+                        }))}
+                      />
+                    </label>
+                    <div className={s.completionActions}>
+                      <button
+                        className="btn btn-sm"
+                        type="button"
+                        disabled={busyTaskId === task.id}
+                        onClick={() => setArchiveDecisionDrafts((prev) => {
+                          const next = { ...prev };
+                          delete next[task.id];
+                          return next;
+                        })}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="btn btn-sm btn-primary"
+                        type="button"
+                        disabled={busyTaskId === task.id || (archiveDecisionDraft.decision === 'deny' && !String(archiveDecisionDraft.reason || '').trim())}
+                        onClick={() => submitArchiveDecision(task)}
+                      >
+                        <CheckCircle2 size={14} />
+                        {archiveDecisionDraft.decision === 'approve' ? 'Approve Archive' : 'Deny Archive'}
                       </button>
                     </div>
                   </div>

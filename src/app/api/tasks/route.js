@@ -55,6 +55,10 @@ import {
   toTaskPayload,
   updateTaskWithEvents,
 } from '@/lib/tasks/service.js';
+import {
+  canReviewArchiveApproval,
+  decideArchiveApprovalTask,
+} from '@/lib/tasks/archive-approvals.js';
 import { filterAssignableEmployees } from '@/lib/crm/assignable-employees.js';
 
 function stringParam(value) {
@@ -395,6 +399,9 @@ export async function POST(request) {
   if (!title) {
     return NextResponse.json({ error: 'Task title is required.' }, { status: 400 });
   }
+  if (stringParam(body.taskType) === TASK_TYPES.ARCHIVE_APPROVAL) {
+    return NextResponse.json({ error: 'Archive approval tasks must be created from a contact archive request.' }, { status: 400 });
+  }
 
   const db = getDb();
   try {
@@ -460,6 +467,34 @@ export async function PATCH(request) {
     }
     if (isRegularCoordinatorSession(session) && existingTask.ownerUserId !== session.user.id) {
       return NextResponse.json({ error: 'Regular coordinators can only access tasks assigned to them.' }, { status: 403 });
+    }
+    if (stringParam(body.taskType) === TASK_TYPES.ARCHIVE_APPROVAL && existingTask.taskType !== TASK_TYPES.ARCHIVE_APPROVAL) {
+      return NextResponse.json({ error: 'Archive approval tasks must be created from a contact archive request.' }, { status: 400 });
+    }
+
+    if (existingTask.taskType === TASK_TYPES.ARCHIVE_APPROVAL) {
+      const action = String(body.action || '').trim();
+      if (['approve_archive', 'deny_archive'].includes(action)) {
+        const result = await decideArchiveApprovalTask({
+          db,
+          organizationId: session.user.organizationId,
+          session,
+          existingTask,
+          decision: action === 'approve_archive' ? 'approve' : 'deny',
+          reason: body.reason || body.decisionReason || '',
+        });
+        return NextResponse.json({
+          task: toTaskPayload(result.task),
+          archivedContactId: result.archivedContact?.id || null,
+          decision: result.decision,
+        });
+      }
+      if (!canReviewArchiveApproval(session)) {
+        return NextResponse.json({ error: 'Regular coordinators cannot review archive approval tasks.' }, { status: 403 });
+      }
+      if (['complete', 'cancel'].includes(action)) {
+        return NextResponse.json({ error: 'Use approve or deny for archive approval tasks.' }, { status: 400 });
+      }
     }
 
     if (String(body.action || '').trim() === 'complete' && existingTask.taskType === TASK_TYPES.FOLLOW_UP) {

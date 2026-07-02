@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server.js';
 
 export function createCrmError(message, status = 400) {
   const error = new Error(message);
