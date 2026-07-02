@@ -697,7 +697,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
 
     const visibleContactRows = filterContactsForSession(contactRows, accessLeadRows || leadRows, session);
 
-    if (!visibleContactRows.length && !taskRows.length) {
+    if (!visibleContactRows.length && !taskRows.length && !workOrderRows.length) {
       return {
         ...emptyDbData(businessUnitRows, importStaging),
         currentUser: session.user,
