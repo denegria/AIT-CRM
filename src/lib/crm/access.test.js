@@ -7,6 +7,8 @@ import {
   canManageCoordinatorAssignments,
   canManageWorkOrderAssignments,
   canUseCoordinatorRoute,
+  canUseWorkOrderBusinessUnit,
+  canUseWorkOrdersWorkspace,
   canUseRegularCoordinatorRoute,
   coordinatorUiPolicyForUser,
   filterContactsForSession,
@@ -22,6 +24,8 @@ function session(roleKeys, id = 'user-1') {
       roleKeys,
       primaryRoleKey: roleKeys[0],
       businessUnitIds: ['bu-1'],
+      businessUnitMemberships: [{ id: 'bu-1', name: 'AIT Signs', isPrimary: true }],
+      businessUnitNamesById: { 'bu-1': 'AIT Signs' },
       canAccessAllBusinessUnits: roleKeys.includes('admin'),
     },
   };
@@ -72,6 +76,35 @@ test('work order access is assigned-user scoped for employee roles', () => {
   assert.equal(canAccessWorkOrder(designer, { businessUnitId: 'bu-1', assignedUserId: 'user-1' }), true);
   assert.equal(canAccessWorkOrder(designer, { businessUnitId: 'bu-1', assignedUserId: 'user-2' }), false);
   assert.equal(canAccessWorkOrder(senior, { businessUnitId: 'bu-1', assignedUserId: 'user-2' }), true);
+});
+
+test('ait usa-only employees cannot use the work orders workspace or data scope', () => {
+  const aitUsaOnly = session(['account_manager']);
+  aitUsaOnly.user.businessUnitIds = ['bu-usa'];
+  aitUsaOnly.user.businessUnitMemberships = [{ id: 'bu-usa', name: 'AIT USA Institute', isPrimary: true }];
+  aitUsaOnly.user.businessUnitNamesById = { 'bu-usa': 'AIT USA Institute' };
+
+  assert.equal(canUseWorkOrdersWorkspace(aitUsaOnly.user), false);
+  assert.equal(canUseWorkOrderBusinessUnit(aitUsaOnly, 'bu-usa'), false);
+  assert.equal(canUseCoordinatorRoute(aitUsaOnly.user, '/work-orders'), false);
+  assert.equal(canAccessWorkOrder(aitUsaOnly, { businessUnitId: 'bu-usa', assignedUserId: 'user-1' }), false);
+});
+
+test('mixed ait signs and ait usa employees keep signs-only work order access', () => {
+  const mixed = session(['account_manager']);
+  mixed.user.businessUnitIds = ['bu-usa', 'bu-signs'];
+  mixed.user.businessUnitMemberships = [
+    { id: 'bu-usa', name: 'AIT USA Institute', isPrimary: true },
+    { id: 'bu-signs', name: 'AIT Signs', isPrimary: false },
+  ];
+  mixed.user.businessUnitNamesById = { 'bu-usa': 'AIT USA Institute', 'bu-signs': 'AIT Signs' };
+
+  assert.equal(canUseWorkOrdersWorkspace(mixed.user), true);
+  assert.equal(canUseWorkOrderBusinessUnit(mixed, 'bu-signs'), true);
+  assert.equal(canUseWorkOrderBusinessUnit(mixed, 'bu-usa'), false);
+  assert.equal(canUseCoordinatorRoute(mixed.user, '/work-orders'), true);
+  assert.equal(canAccessWorkOrder(mixed, { businessUnitId: 'bu-signs', assignedUserId: 'user-1' }), true);
+  assert.equal(canAccessWorkOrder(mixed, { businessUnitId: 'bu-usa', assignedUserId: 'user-1' }), false);
 });
 
 test('regular coordinator UI policy locks owner-scoped surfaces to the current user', () => {

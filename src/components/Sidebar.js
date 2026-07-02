@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { publishLogout } from '@/lib/auth/session-sync.js';
 import { useCRM } from '@/lib/store';
-import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
+import { canUseWorkOrdersWorkspace, coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import { isClientAccountBusinessUnit } from '@/lib/crm/lifecycle';
 import s from './Sidebar.module.css';
 
@@ -115,6 +115,7 @@ export default function Sidebar() {
   const hasBusinessUnitScope = accessibleBusinessUnits?.length > 0;
   const divisionBrand = useMemo(() => divisionBrandFor(currentBusinessUnit), [currentBusinessUnit]);
   const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
+  const canUseWorkOrders = useMemo(() => canUseWorkOrdersWorkspace(currentUser), [currentUser]);
 
   useEffect(() => {
     document.title = divisionBrand.title;
@@ -129,6 +130,7 @@ export default function Sidebar() {
 
   const visibleNav = useMemo(() => scopedNav.filter(({ href }) => {
     if (coordinatorUiPolicy.isRegularCoordinator && !regularCoordinatorNav.has(href)) return false;
+    if (href === '/work-orders' && !canUseWorkOrders) return false;
     if (href === '/settings' && !access.canReadSettings) return false;
     if (href === '/comms-ops' && !access.canReadSettings) return false;
     if (href === '/import-review' && !access.canReadImportReview) return false;
@@ -136,7 +138,7 @@ export default function Sidebar() {
     if (href === '/financials' && (!access.canReadFinancials || !canUseFinancialsWorkspace)) return false;
     if (href === '/sms-campaigns' && !canManageSmsCampaigns) return false;
     return true;
-  }), [access.canReadFinancials, access.canReadImportReview, access.canReadReports, access.canReadSettings, canManageSmsCampaigns, canUseFinancialsWorkspace, coordinatorUiPolicy.isRegularCoordinator, scopedNav]);
+  }), [access.canReadFinancials, access.canReadImportReview, access.canReadReports, access.canReadSettings, canManageSmsCampaigns, canUseFinancialsWorkspace, canUseWorkOrders, coordinatorUiPolicy.isRegularCoordinator, scopedNav]);
 
   const mobileNav = useMemo(() => {
     if (visibleNav.length <= 5) {

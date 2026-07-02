@@ -50,6 +50,48 @@ export function isWorkOrderSelfScopedSession(session = {}) {
   return roleKeys.includes(ROLE_KEYS.ACCOUNT_MANAGER) || roleKeys.includes('designer');
 }
 
+export function isWorkOrdersBusinessUnit(unit = {}) {
+  return /ait\s*signs/i.test(String(unit?.name || unit?.businessUnitName || '').trim());
+}
+
+export function workOrderBusinessUnitIdsForUser(user = {}) {
+  if (user?.canAccessAllBusinessUnits) return null;
+
+  const memberships = Array.isArray(user?.businessUnitMemberships)
+    ? user.businessUnitMemberships
+    : [];
+  if (memberships.length) {
+    return [
+      ...new Set(
+        memberships
+          .filter(isWorkOrdersBusinessUnit)
+          .map((unit) => unit.id || unit.businessUnitId)
+          .filter(Boolean),
+      ),
+    ];
+  }
+
+  const businessUnitIds = Array.isArray(user?.businessUnitIds) ? user.businessUnitIds.filter(Boolean) : [];
+  const namesById = user?.businessUnitNamesById && typeof user.businessUnitNamesById === 'object'
+    ? user.businessUnitNamesById
+    : {};
+  const namedIds = businessUnitIds.filter((id) => isWorkOrdersBusinessUnit({ name: namesById[id] }));
+  if (Object.keys(namesById).length) return namedIds;
+
+  return businessUnitIds;
+}
+
+export function canUseWorkOrdersWorkspace(user = {}) {
+  const allowedIds = workOrderBusinessUnitIdsForUser(user);
+  return allowedIds === null || allowedIds.length > 0;
+}
+
+export function canUseWorkOrderBusinessUnit(session = {}, businessUnitId = '') {
+  if (!businessUnitId) return false;
+  const allowedIds = workOrderBusinessUnitIdsForUser(session?.user);
+  return allowedIds === null || allowedIds.includes(businessUnitId);
+}
+
 export function canManageWorkOrderAssignments(session = {}) {
   return !isWorkOrderSelfScopedSession(session);
 }
@@ -62,6 +104,7 @@ export function canAccessWorkOrder(session = {}, workOrder = {}) {
   );
   if (!canAccessBusinessUnit) return false;
   if (!isWorkOrderSelfScopedSession(session)) return true;
+  if (!canUseWorkOrderBusinessUnit(session, businessUnitId)) return false;
   return Boolean(workOrder?.assignedUserId && workOrder.assignedUserId === session.user?.id);
 }
 
@@ -100,6 +143,10 @@ export function canUseRegularCoordinatorRoute(pathname = '') {
 
 export function canUseCoordinatorRoute(user = {}, pathname = '') {
   const policy = coordinatorUiPolicyForUser(user);
+  const normalizedPath = String(pathname || '/').split(/[?#]/)[0] || '/';
+  if (normalizedPath === '/work-orders' || normalizedPath.startsWith('/work-orders/')) {
+    return canUseWorkOrdersWorkspace(user);
+  }
   return !policy.isRegularCoordinator || canUseRegularCoordinatorRoute(pathname);
 }
 

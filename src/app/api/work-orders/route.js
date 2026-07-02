@@ -16,6 +16,7 @@ import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import {
   canAccessBusinessUnit,
   canAccessWorkOrder,
+  assertCanUseWorkOrderBusinessUnit,
   assertCanAssignWorkOrderUser,
   resolveBusinessUnitId,
   resolveContactById,
@@ -178,6 +179,7 @@ export async function POST(request) {
       contactId: String(body.contactId || '').trim(),
     });
     const businessUnitId = await resolveCreateBusinessUnitId(db, session, body, contact);
+    assertCanUseWorkOrderBusinessUnit(session, businessUnitId);
     const leadId = await resolveLeadId(db, contact?.id || null);
     const estimateId = await resolveEstimateId(db, session, body.estimateId, { businessUnitId, contact });
     const assignedUserId = await resolveAssignedUserId(db, session, body.assignedTo, businessUnitId);
@@ -255,6 +257,7 @@ export async function PATCH(request) {
         throw createCrmError('No business units available for this organization.');
       }
     }
+    assertCanUseWorkOrderBusinessUnit(session, businessUnitId);
 
     const patch = { updatedAt: new Date(), businessUnitId };
     if (contactProvided) patch.contactId = contact?.id || null;
