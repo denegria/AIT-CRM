@@ -375,7 +375,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {dataSource === 'postgres' && !importStaging?.latestBatch && contacts.length === 0 && (
+      {dataSource === 'postgres' && access.canReadImportReview && !importStaging?.latestBatch && contacts.length === 0 && (
         <div className="card" style={{marginBottom:20, padding:16, borderColor:'var(--accent)'}}>
           <div className="card-title" style={{marginBottom:4}}>Getting started with AIT Signs CRM</div>
           <p className="page-subtitle" style={{margin:0, marginBottom:16}}>
