@@ -6,6 +6,7 @@ import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import { generateWorkOrderPDF } from '@/lib/pdf';
+import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 
 const empty = { number:'', title:'', client:'', contactId:'', businessUnitId:'', estimateId:'', priority:'Medium', status:'Pending', assignedTo:'', dueDate:'', description:'', estimatedCost:0 };
 
@@ -75,10 +76,18 @@ export default function WorkOrdersPage() {
   const [ownerFilter, setOwnerFilter] = useState(() => searchParams.get('ownerUserId') || 'all');
   const contactPrefillRef = useRef('');
   const canWriteWorkOrders = Boolean(access?.canWriteWorkOrders);
+  const workOrderUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
+  const lockedWorkOrderOwnerId = workOrderUiPolicy.lockedWorkOrderOwnerUserId;
+  const effectiveOwnerFilter = workOrderUiPolicy.workOrdersOwnerScoped && lockedWorkOrderOwnerId ? '__me' : ownerFilter;
   const selectedContact = contacts.find((entry) => entry.id === form.contactId) || null;
+  const assigneeOptions = useMemo(() => (
+    workOrderUiPolicy.workOrdersOwnerScoped && lockedWorkOrderOwnerId
+      ? employees.filter((employee) => employee.id === lockedWorkOrderOwnerId)
+      : employees
+  ), [employees, lockedWorkOrderOwnerId, workOrderUiPolicy.workOrdersOwnerScoped]);
   const availableAssignees = useMemo(() => (
-    employees.filter((employee) => canAssignEmployeeToBusinessUnit(employee, form.businessUnitId))
-  ), [employees, form.businessUnitId]);
+    assigneeOptions.filter((employee) => canAssignEmployeeToBusinessUnit(employee, form.businessUnitId))
+  ), [assigneeOptions, form.businessUnitId]);
   const estimateOptions = useMemo(() => (
     financials
       .filter(isEstimateRecord)
@@ -99,11 +108,11 @@ export default function WorkOrdersPage() {
       contactId: prefillContact?.id || '',
       client: prefillContact?.name || '',
       title: prefillContact?.name ? `Work order for ${prefillContact.name}` : '',
-      assignedTo: firstAssigneeForBusinessUnit(employees, businessUnitId)?.id || '',
+      assignedTo: lockedWorkOrderOwnerId || firstAssigneeForBusinessUnit(assigneeOptions, businessUnitId)?.id || '',
       dueDate: new Date().toISOString().slice(0,10),
     });
     setDrawer('new');
-  }, [accessibleBusinessUnits, canWriteWorkOrders, currentBusinessUnitId, employees, workOrders.length]);
+  }, [accessibleBusinessUnits, assigneeOptions, canWriteWorkOrders, currentBusinessUnitId, lockedWorkOrderOwnerId, workOrders.length]);
 
   useEffect(() => {
     if (!loaded || !canWriteWorkOrders || contactPrefillRef.current || typeof window === 'undefined') return;
@@ -116,7 +125,7 @@ export default function WorkOrdersPage() {
   }, [canWriteWorkOrders, contacts, loaded, openNew]);
   const openEdit = (row) => {
     if (!canWriteWorkOrders) return;
-    setForm({ ...row });
+    setForm({ ...row, assignedTo: lockedWorkOrderOwnerId || row.assignedTo || '' });
     setDrawer(row);
   };
   const close = () => setDrawer(null);
@@ -145,14 +154,14 @@ export default function WorkOrdersPage() {
       const businessUnitId = contact?.businessUnitId || contact?.primaryBusinessUnitId || current.businessUnitId || '';
       const assignedTo = canAssignEmployeeToBusinessUnit(employees.find((entry) => entry.id === current.assignedTo), businessUnitId)
         ? current.assignedTo
-        : firstAssigneeForBusinessUnit(employees, businessUnitId)?.id || '';
+        : lockedWorkOrderOwnerId || firstAssigneeForBusinessUnit(assigneeOptions, businessUnitId)?.id || '';
       return {
         ...current,
         contactId,
         client: contact?.name || '',
         businessUnitId,
         estimateId: '',
-        assignedTo,
+        assignedTo: lockedWorkOrderOwnerId || assignedTo,
       };
     });
   };
@@ -160,12 +169,12 @@ export default function WorkOrdersPage() {
     setForm((current) => {
       const assignedTo = canAssignEmployeeToBusinessUnit(employees.find((entry) => entry.id === current.assignedTo), businessUnitId)
         ? current.assignedTo
-        : firstAssigneeForBusinessUnit(employees, businessUnitId)?.id || '';
+        : lockedWorkOrderOwnerId || firstAssigneeForBusinessUnit(assigneeOptions, businessUnitId)?.id || '';
       return {
         ...current,
         businessUnitId,
         estimateId: '',
-        assignedTo,
+        assignedTo: lockedWorkOrderOwnerId || assignedTo,
       };
     });
   };
@@ -187,7 +196,7 @@ export default function WorkOrdersPage() {
 
   const filtered = workOrders
     .filter(w => statusFilter === 'All' || (statusFilter === 'Open' ? w.status !== 'Completed' : w.status === statusFilter))
-    .filter(w => ownerFilter === 'all' || w.assignedTo === (ownerFilter === '__me' ? currentUser?.id : ownerFilter));
+    .filter(w => effectiveOwnerFilter === 'all' || w.assignedTo === (effectiveOwnerFilter === '__me' ? currentUser?.id : effectiveOwnerFilter));
 
   const [selectedIds, setSelectedIds] = useState([]);
 
@@ -269,11 +278,17 @@ export default function WorkOrdersPage() {
                 <option value="All">All Statuses</option>
                 {['Open','Pending','In Progress','Completed','On Hold'].map(s=><option key={s} value={s}>{s}</option>)}
               </select>
-              <select className="input select" style={{width:150, padding:'4px 8px'}} value={ownerFilter} onChange={e=>setOwnerFilter(e.target.value)}>
-                <option value="all">All Owners</option>
-                {currentUser?.id && <option value="__me">Me</option>}
-                {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
-              </select>
+              {workOrderUiPolicy.workOrdersOwnerScoped ? (
+                <select className="input select" style={{width:150, padding:'4px 8px'}} value="__me" disabled>
+                  <option value="__me">My Work Orders</option>
+                </select>
+              ) : (
+                <select className="input select" style={{width:150, padding:'4px 8px'}} value={ownerFilter} onChange={e=>setOwnerFilter(e.target.value)}>
+                  <option value="all">All Owners</option>
+                  {currentUser?.id && <option value="__me">Me</option>}
+                  {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+                </select>
+              )}
               {role === 'admin' && selectedIds.length > 0 && (
                 <button className="btn fade-in" onClick={exportSelected} data-tooltip="Sample feature — exports selected rows to CSV">
                   Export Selected ({selectedIds.length})
@@ -360,8 +375,8 @@ export default function WorkOrdersPage() {
           </div>
           <div className="form-group">
             <label className="form-label">Assigned To</label>
-            <select className="input select" value={form.assignedTo} onChange={e => setForm(f=>({...f,assignedTo:e.target.value}))}>
-              <option value="">Unassigned</option>
+            <select className="input select" value={form.assignedTo} onChange={e => setForm(f=>({...f,assignedTo:e.target.value}))} disabled={workOrderUiPolicy.workOrdersOwnerScoped}>
+              {!workOrderUiPolicy.workOrdersOwnerScoped && <option value="">Unassigned</option>}
               {form.assignedTo && !availableAssignees.some((employee) => employee.id === form.assignedTo) && (
                 <option value={form.assignedTo}>{empName(form.assignedTo)} (outside {scopeLabel.toLowerCase()})</option>
               )}

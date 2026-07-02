@@ -15,10 +15,13 @@ import {
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import {
   canAccessBusinessUnit,
+  canAccessWorkOrder,
+  assertCanAssignWorkOrderUser,
   resolveBusinessUnitId,
   resolveContactById,
 } from '@/lib/crm/access.js';
 import { isAssignableEmployee } from '@/lib/crm/assignable-employees.js';
+import { isWorkOrderSelfScopedSession } from '@/lib/crm/coordinator-policy.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
 import { isUuid } from '@/lib/crm/validation.js';
 import {
@@ -103,9 +106,10 @@ async function resolveEstimateId(db, session, estimateId, { businessUnitId, cont
 }
 
 async function resolveAssignedUserId(db, session, assignedTo, businessUnitId) {
-  const assignedUserId = String(assignedTo || '').trim();
+  const assignedUserId = String(assignedTo || (isWorkOrderSelfScopedSession(session) ? session.user.id : '')).trim();
   if (!assignedUserId) return null;
   if (!isUuid(assignedUserId)) throw createCrmError('A valid assignee is required.');
+  assertCanAssignWorkOrderUser(session, assignedUserId);
 
   const [user] = await db
     .select({ id: users.id, name: users.name, email: users.email, isActive: users.isActive })
@@ -155,10 +159,6 @@ async function resolveCreateBusinessUnitId(db, session, body, contact) {
     throw createCrmError('No business units available for this organization.');
   }
   return businessUnitId;
-}
-
-function canAccessWorkOrder(session, workOrder) {
-  return canAccessBusinessUnit(session, workOrder.businessUnitId);
 }
 
 export async function POST(request) {

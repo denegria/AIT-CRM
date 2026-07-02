@@ -33,6 +33,7 @@ import {
   scopedContactWhere,
   scopedOrgWhere,
   scopedTaskWhere,
+  scopedWorkOrderWhere,
 } from './crm/access.js';
 import { toBusinessUnitPayload } from './crm/payloads.js';
 import { isPipelineEligibleContact, workflowFromLead } from './sales-workflow';
@@ -673,7 +674,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       db.select().from(businessUnitsTable).where(scopedOrgWhere(businessUnitsTable, session)).orderBy(asc(businessUnitsTable.name)),
       db.select().from(contactsTable).where(scopedContactWhere(contactsTable, session)).orderBy(desc(contactsTable.createdAt)),
       db.select().from(leadsTable).where(scopedBusinessUnitWhere(leadsTable, session)).orderBy(desc(leadsTable.createdAt)),
-      db.select().from(workOrdersTable).where(scopedBusinessUnitWhere(workOrdersTable, session)).orderBy(desc(workOrdersTable.createdAt)),
+      db.select().from(workOrdersTable).where(scopedWorkOrderWhere(workOrdersTable, session)).orderBy(desc(workOrdersTable.createdAt)),
       db.select().from(estimatesTable).where(scopedBusinessUnitWhere(estimatesTable, session)).orderBy(desc(estimatesTable.createdAt)),
       db.select().from(financialDocumentsTable).where(scopedBusinessUnitWhere(financialDocumentsTable, session)).orderBy(desc(financialDocumentsTable.createdAt)),
       db.select().from(paymentSnapshotsTable).where(scopedBusinessUnitWhere(paymentSnapshotsTable, session)).orderBy(desc(paymentSnapshotsTable.createdAt)),
@@ -732,7 +733,10 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
         contactPeople: contactPeopleRows,
       },
     );
-    const contactLookup = new Map(contacts.map((contact) => [contact.id, contact]));
+    const contactLookup = new Map([
+      ...contactRows.map((contact) => [contact.id, { name: contact.name }]),
+      ...contacts.map((contact) => [contact.id, contact]),
+    ]);
     const workOrders = mapWorkOrders(workOrderRows, contactLookup);
     const financials = mapFinancials(estimateRows, paymentRowsWithContactLinks, contactLookup, financialDocumentRows);
     const tasks = mapTasks(taskRows, contactLookup);

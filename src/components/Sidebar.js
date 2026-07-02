@@ -26,8 +26,8 @@ const nav = [
   { href: '/settings', label: 'Settings', Icon: Settings },
 ];
 
-const mobilePrimaryPriority = ['/', '/clients', '/contacts', '/pipeline', '/tasks'];
-const regularCoordinatorNav = new Set(['/', '/clients', '/contacts', '/pipeline', '/tasks']);
+const mobilePrimaryPriority = ['/', '/clients', '/contacts', '/pipeline', '/tasks', '/work-orders'];
+const regularCoordinatorNav = new Set(['/', '/clients', '/contacts', '/pipeline', '/tasks', '/work-orders']);
 const scopePersistenceKeys = ['ait-crm-business-unit-scope', 'ait-crm-scope-user-id'];
 
 const roleLabels = {

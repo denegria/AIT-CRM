@@ -38,15 +38,46 @@ export function canArchiveContactsDirectly(session = {}) {
   return !isRegularCoordinatorSession(session);
 }
 
+export function isWorkOrderSelfScopedSession(session = {}) {
+  const roleKeys = roleKeysForUser(session?.user);
+  if ([
+    ROLE_KEYS.ADMIN,
+    ROLE_KEYS.SENIOR_COORDINATOR,
+    ROLE_KEYS.SALES_MANAGER,
+  ].some((roleKey) => roleKeys.includes(roleKey))) {
+    return false;
+  }
+  return roleKeys.includes(ROLE_KEYS.ACCOUNT_MANAGER) || roleKeys.includes('designer');
+}
+
+export function canManageWorkOrderAssignments(session = {}) {
+  return !isWorkOrderSelfScopedSession(session);
+}
+
+export function canAccessWorkOrder(session = {}, workOrder = {}) {
+  const businessUnitId = workOrder?.businessUnitId || '';
+  const canAccessBusinessUnit = Boolean(
+    session.user?.canAccessAllBusinessUnits ||
+    (businessUnitId && Array.isArray(session.user?.businessUnitIds) && session.user.businessUnitIds.includes(businessUnitId))
+  );
+  if (!canAccessBusinessUnit) return false;
+  if (!isWorkOrderSelfScopedSession(session)) return true;
+  return Boolean(workOrder?.assignedUserId && workOrder.assignedUserId === session.user?.id);
+}
+
 export function coordinatorUiPolicyForUser(user = {}) {
   const session = { user };
   const isRegularCoordinator = isRegularCoordinatorSession(session);
+  const workOrdersOwnerScoped = isWorkOrderSelfScopedSession(session);
   return {
     isRegularCoordinator,
     ownerScoped: isRegularCoordinator,
+    workOrdersOwnerScoped,
     canManageCoordinatorAssignments: canManageCoordinatorAssignments(session),
+    canManageWorkOrderAssignments: canManageWorkOrderAssignments(session),
     canArchiveContactsDirectly: canArchiveContactsDirectly(session),
     lockedOwnerUserId: isRegularCoordinator ? user?.id || '' : '',
+    lockedWorkOrderOwnerUserId: workOrdersOwnerScoped ? user?.id || '' : '',
   };
 }
 
@@ -56,6 +87,7 @@ const REGULAR_COORDINATOR_ROUTE_PREFIXES = Object.freeze([
   '/contacts',
   '/pipeline',
   '/tasks',
+  '/work-orders',
 ]);
 
 export function canUseRegularCoordinatorRoute(pathname = '') {
