@@ -7,18 +7,22 @@ export {
   canAccessWorkOrder,
   canArchiveContactsDirectly,
   canManageCoordinatorAssignments,
+  canUseWorkOrderBusinessUnit,
   filterContactsForSession,
   isRegularCoordinatorSession,
   isWorkOrderSelfScopedSession,
   isSeniorCoordinatorSession,
   latestLeadByContactId,
   userHasRole,
+  workOrderBusinessUnitIdsForUser,
 } from './coordinator-policy.js';
 import {
   canAccessContactLead,
   canAccessWorkOrder,
+  canUseWorkOrderBusinessUnit,
   isRegularCoordinatorSession,
   isWorkOrderSelfScopedSession,
+  workOrderBusinessUnitIdsForUser,
 } from './coordinator-policy.js';
 
 export function canAccessBusinessUnit(session, businessUnitId) {
@@ -74,9 +78,23 @@ export function scopedTaskWhere(table, session) {
 }
 
 export function scopedWorkOrderWhere(table, session) {
-  const orgScope = scopedBusinessUnitWhere(table, session);
-  if (!isWorkOrderSelfScopedSession(session)) return orgScope;
-  return and(orgScope, eq(table.assignedUserId, session.user.id));
+  if (!isWorkOrderSelfScopedSession(session)) return scopedBusinessUnitWhere(table, session);
+
+  const orgScope = scopedOrgWhere(table, session);
+  const allowedWorkOrderBusinessUnitIds = workOrderBusinessUnitIdsForUser(session.user);
+  if (Array.isArray(allowedWorkOrderBusinessUnitIds) && !allowedWorkOrderBusinessUnitIds.length) {
+    return sql`false`;
+  }
+
+  const businessUnitScope = Array.isArray(allowedWorkOrderBusinessUnitIds)
+    ? inArray(table.businessUnitId, allowedWorkOrderBusinessUnitIds)
+    : undefined;
+
+  return and(
+    orgScope,
+    businessUnitScope,
+    eq(table.assignedUserId, session.user.id),
+  );
 }
 
 export function assertCanAccessContactLead(session, lead = null) {
@@ -87,6 +105,12 @@ export function assertCanAccessContactLead(session, lead = null) {
 
 export function assertCanAssignWorkOrderUser(session, userId, message = 'This user can only manage work orders assigned to them.') {
   if (isWorkOrderSelfScopedSession(session) && userId !== session.user.id) {
+    throw createCrmError(message, 403);
+  }
+}
+
+export function assertCanUseWorkOrderBusinessUnit(session, businessUnitId, message = 'This account can only use AIT Signs work orders assigned to them.') {
+  if (isWorkOrderSelfScopedSession(session) && !canUseWorkOrderBusinessUnit(session, businessUnitId)) {
     throw createCrmError(message, 403);
   }
 }

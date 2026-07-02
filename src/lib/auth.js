@@ -4,6 +4,7 @@ import { and, desc, eq, gt, isNull } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 import { getDb } from '@/db/index.js';
 import {
+  businessUnits,
   businessUnitMemberships,
   permissions,
   rolePermissions,
@@ -169,15 +170,22 @@ async function loadSession(token) {
     db
       .select({
         businessUnitId: businessUnitMemberships.businessUnitId,
+        businessUnitName: businessUnits.name,
         isPrimary: businessUnitMemberships.isPrimary,
       })
       .from(businessUnitMemberships)
+      .innerJoin(businessUnits, eq(businessUnitMemberships.businessUnitId, businessUnits.id))
       .where(eq(businessUnitMemberships.userId, sessionRow.userId))
       .orderBy(desc(businessUnitMemberships.isPrimary), businessUnitMemberships.createdAt),
   ]);
 
   const roleKeys = [...new Set(roleRows.map((role) => role.key))];
   const permissionKeys = [...new Set(permissionRows.map((permission) => permission.key))];
+  const membershipPayload = membershipRows.map((row) => ({
+    id: row.businessUnitId,
+    name: row.businessUnitName || '',
+    isPrimary: Boolean(row.isPrimary),
+  }));
 
   return {
     sessionId: sessionRow.sessionId,
@@ -190,6 +198,8 @@ async function loadSession(token) {
       primaryRoleKey: roleKeys.includes('admin') ? 'admin' : roleKeys[0] || 'account_manager',
       permissions: permissionKeys,
       businessUnitIds: membershipRows.map((row) => row.businessUnitId),
+      businessUnitMemberships: membershipPayload,
+      businessUnitNamesById: Object.fromEntries(membershipPayload.map((row) => [row.id, row.name])),
       primaryBusinessUnitId: membershipRows.find((row) => row.isPrimary)?.businessUnitId || membershipRows[0]?.businessUnitId || null,
       canAccessAllBusinessUnits: permissionKeys.includes(PERMISSIONS.BUSINESS_UNITS_ALL),
     },
