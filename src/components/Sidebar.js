@@ -5,6 +5,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { publishLogout } from '@/lib/auth/session-sync.js';
 import { useCRM } from '@/lib/store';
+import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import { isClientAccountBusinessUnit } from '@/lib/crm/lifecycle';
 import s from './Sidebar.module.css';
 
@@ -24,6 +25,7 @@ const nav = [
 ];
 
 const mobilePrimaryPriority = ['/', '/clients', '/contacts', '/pipeline', '/tasks'];
+const regularCoordinatorNav = new Set(['/', '/clients', '/contacts', '/pipeline', '/tasks']);
 const scopePersistenceKeys = ['ait-crm-business-unit-scope', 'ait-crm-scope-user-id'];
 
 const roleLabels = {
@@ -109,6 +111,7 @@ export default function Sidebar() {
   const canUseFinancialsWorkspace = Boolean(access.canReadSettings || access.canReadReports || role === 'admin');
   const hasBusinessUnitScope = accessibleBusinessUnits?.length > 0;
   const divisionBrand = useMemo(() => divisionBrandFor(currentBusinessUnit), [currentBusinessUnit]);
+  const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
 
   useEffect(() => {
     document.title = divisionBrand.title;
@@ -122,13 +125,14 @@ export default function Sidebar() {
   }), [isClientViewScope]);
 
   const visibleNav = useMemo(() => scopedNav.filter(({ href }) => {
+    if (coordinatorUiPolicy.isRegularCoordinator && !regularCoordinatorNav.has(href)) return false;
     if (href === '/settings' && !access.canReadSettings) return false;
     if (href === '/comms-ops' && !access.canReadSettings) return false;
     if (href === '/import-review' && !access.canReadImportReview) return false;
     if (href === '/reports' && !access.canReadReports) return false;
     if (href === '/financials' && (!access.canReadFinancials || !canUseFinancialsWorkspace)) return false;
     return true;
-  }), [access.canReadFinancials, access.canReadImportReview, access.canReadReports, access.canReadSettings, canUseFinancialsWorkspace, scopedNav]);
+  }), [access.canReadFinancials, access.canReadImportReview, access.canReadReports, access.canReadSettings, canUseFinancialsWorkspace, coordinatorUiPolicy.isRegularCoordinator, scopedNav]);
 
   const mobileNav = useMemo(() => {
     if (visibleNav.length <= 5) {

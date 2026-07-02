@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
+import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import { validateManualContactIdentity } from '@/lib/crm/contact-input';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
 import {
@@ -207,6 +208,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     leadDateTo,
     courseFilter,
   } = contactFilterStateFromParams(searchParams);
+  const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
+  const effectiveOwnerFilter = coordinatorUiPolicy.lockedOwnerUserId || ownerFilter;
   const updateFilterQuery = useCallback((patch) => {
     const nextQuery = contactFilterQuery({
       statusFilter,
@@ -221,7 +224,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     router.replace(nextQuery ? `${routeBase}?${nextQuery}` : routeBase, { scroll: false });
   }, [courseFilter, directoryFacet, leadDateFrom, leadDateScope, leadDateTo, ownerFilter, routeBase, router, statusFilter]);
   const setStatusFilter = useCallback((value) => updateFilterQuery({ statusFilter: value }), [updateFilterQuery]);
-  const setOwnerFilter = useCallback((value) => updateFilterQuery({ ownerFilter: value }), [updateFilterQuery]);
+  const setOwnerFilter = useCallback((value) => {
+    if (coordinatorUiPolicy.ownerScoped) return;
+    updateFilterQuery({ ownerFilter: value });
+  }, [coordinatorUiPolicy.ownerScoped, updateFilterQuery]);
   const setDirectoryFacet = useCallback((value) => updateFilterQuery({ directoryFacet: value }), [updateFilterQuery]);
   const setLeadDateScope = useCallback((value) => updateFilterQuery({ leadDateScope: value }), [updateFilterQuery]);
   const setLeadDateFrom = useCallback((value) => updateFilterQuery({ leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM, leadDateFrom: value }), [updateFilterQuery]);
@@ -306,6 +312,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       currentStage: defaultStatuses[0] || empty.status,
       businessUnitId: defaultBusinessUnitId,
       primaryBusinessUnitId: defaultBusinessUnitId,
+      assignedTo: coordinatorUiPolicy.lockedOwnerUserId || empty.assignedTo,
     });
     setFormError('');
     setDrawer('new');
@@ -313,7 +320,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const openEdit = (row) => { if (!canWrite) return; setForm({ ...row }); setFormError(''); setDrawer(row); };
   const close = () => { setDrawer(null); setFormError(''); };
   const requestDelete = () => {
-    if (!canWrite || !drawer || drawer === 'new') return;
+    if (!canWrite || !coordinatorUiPolicy.canArchiveContactsDirectly || !drawer || drawer === 'new') return;
     setDeleteTarget(drawer);
   };
   const confirmDelete = () => {
@@ -336,15 +343,18 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       return;
     }
     setFormError('');
+    const payload = coordinatorUiPolicy.lockedOwnerUserId
+      ? { ...form, assignedTo: coordinatorUiPolicy.lockedOwnerUserId }
+      : form;
     if (drawer === 'new') {
-      addContact(form)
+      addContact(payload)
         .then(() => {
           toast(`${singularLabel} created successfully`);
           close();
         })
         .catch((error) => toast(error?.message || `${singularLabel} create failed.`, 'error'));
     } else {
-      updateContact(drawer.id, form)
+      updateContact(drawer.id, payload)
         .then(() => {
           toast(`${singularLabel} updated successfully`);
           close();
@@ -400,10 +410,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const statusOwnerFilteredContacts = useMemo(() => dateScopedRows.filter((contact) => (
     contactMatchesStatusOwnerCourse(contact, {
       statusFilter,
-      ownerFilter,
+      ownerFilter: effectiveOwnerFilter,
       courseFilter: DEFAULT_CONTACT_COURSE_FILTER,
     })
-  )), [dateScopedRows, ownerFilter, statusFilter]);
+  )), [dateScopedRows, effectiveOwnerFilter, statusFilter]);
   const courseFilterOptions = useMemo(
     () => buildCourseFilterOptions(statusOwnerFilteredContacts),
     [statusOwnerFilteredContacts],
@@ -433,10 +443,11 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     return effectiveDirectoryFacet.replaceAll('_', ' ');
   }, [effectiveDirectoryFacet, facetGroups]);
   const selectedOwnerLabel = useMemo(() => {
-    if (ownerFilter === 'all') return '';
-    if (ownerFilter === 'unassigned') return 'Unassigned';
-    return ownerOptions.find((owner) => owner.id === ownerFilter)?.label || 'Selected owner';
-  }, [ownerFilter, ownerOptions]);
+    if (coordinatorUiPolicy.ownerScoped) return 'My Contacts';
+    if (effectiveOwnerFilter === 'all') return '';
+    if (effectiveOwnerFilter === 'unassigned') return 'Unassigned';
+    return ownerOptions.find((owner) => owner.id === effectiveOwnerFilter)?.label || 'Selected owner';
+  }, [coordinatorUiPolicy.ownerScoped, effectiveOwnerFilter, ownerOptions]);
   const selectedCourseLabel = useMemo(() => {
     if (courseFilter === DEFAULT_CONTACT_COURSE_FILTER) return '';
     return courseFilterOptions.find((option) => option.value === courseFilter)?.label || courseFilter;
@@ -474,7 +485,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     selectedOwnerLabel ? {
       key: 'owner',
       label: selectedOwnerLabel,
-      onRemove: () => setOwnerFilter(DEFAULT_CONTACT_OWNER_FILTER),
+      onRemove: coordinatorUiPolicy.ownerScoped ? null : () => setOwnerFilter(DEFAULT_CONTACT_OWNER_FILTER),
     } : null,
     selectedFacetLabel ? {
       key: 'facet',
@@ -490,6 +501,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     setCourseFilter,
     setDirectoryFacet,
     setOwnerFilter,
+    coordinatorUiPolicy.ownerScoped,
     setStatusFilter,
     statusFilter,
     updateFilterQuery,
@@ -498,7 +510,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     leadDateFrom !== DEFAULT_CONTACT_LEAD_DATE_FROM ||
     leadDateTo !== DEFAULT_CONTACT_LEAD_DATE_TO ||
     statusFilter !== DEFAULT_CONTACT_STATUS_FILTER ||
-    ownerFilter !== DEFAULT_CONTACT_OWNER_FILTER ||
+    (!coordinatorUiPolicy.ownerScoped && ownerFilter !== DEFAULT_CONTACT_OWNER_FILTER) ||
     courseFilter !== DEFAULT_CONTACT_COURSE_FILTER ||
     effectiveDirectoryFacet !== DEFAULT_CONTACT_FACET_FILTER;
   const resetFilters = () => {
@@ -507,7 +519,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
       leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
       statusFilter: DEFAULT_CONTACT_STATUS_FILTER,
-      ownerFilter: DEFAULT_CONTACT_OWNER_FILTER,
+      ownerFilter: coordinatorUiPolicy.lockedOwnerUserId || DEFAULT_CONTACT_OWNER_FILTER,
       directoryFacet: DEFAULT_CONTACT_FACET_FILTER,
       courseFilter: DEFAULT_CONTACT_COURSE_FILTER,
     });
@@ -663,12 +675,23 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                         </label>
                         <label className="contacts-filter-field">
                           <span>Owner</span>
-                          <select className="input select" value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}>
-                            <option value="all">All Owners</option>
-                            <option value="unassigned">Unassigned</option>
-                            {ownerOptions.map((owner) => (
-                              <option key={owner.id} value={owner.id}>{owner.label}</option>
-                            ))}
+                          <select
+                            className="input select"
+                            value={effectiveOwnerFilter}
+                            disabled={coordinatorUiPolicy.ownerScoped}
+                            onChange={(event) => setOwnerFilter(event.target.value)}
+                          >
+                            {coordinatorUiPolicy.ownerScoped ? (
+                              <option value={coordinatorUiPolicy.lockedOwnerUserId}>My Contacts</option>
+                            ) : (
+                              <>
+                                <option value="all">All Owners</option>
+                                <option value="unassigned">Unassigned</option>
+                                {ownerOptions.map((owner) => (
+                                  <option key={owner.id} value={owner.id}>{owner.label}</option>
+                                ))}
+                              </>
+                            )}
                           </select>
                         </label>
                       </div>
@@ -736,7 +759,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
 
       <Modal open={!!drawer} onClose={close} title={drawer === 'new' ? `New ${singularLabel}` : `Edit ${singularLabel}`}
         footer={<>
-          {canWrite && drawer && drawer !== 'new' && (
+          {canWrite && coordinatorUiPolicy.canArchiveContactsDirectly && drawer && drawer !== 'new' && (
             <button className="btn btn-danger" type="button" onClick={requestDelete}>Delete</button>
           )}
           <button className="btn" onClick={close}>Cancel</button>
@@ -791,15 +814,19 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
             </select>
           </div>
         </div>
-        <div className="form-group">
-          <label className="form-label">Assigned To</label>
-          <select className="input select" value={form.assignedTo || ''} onChange={e => setForm(f => ({...f, assignedTo: e.target.value}))}>
-            <option value="">Unassigned</option>
-            {ownerOptions.map((owner) => (
-              <option key={owner.id} value={owner.id}>{owner.label}</option>
-            ))}
-          </select>
-        </div>
+        {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
+          <div className="form-group">
+            <label className="form-label">Assigned To</label>
+            <select className="input select" value={form.assignedTo || ''} onChange={e => setForm(f => ({...f, assignedTo: e.target.value}))}>
+              <option value="">Unassigned</option>
+              {ownerOptions.map((owner) => (
+                <option key={owner.id} value={owner.id}>{owner.label}</option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          <input type="hidden" value={form.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
+        )}
         <div className="form-group">
           <label className="form-label">{scopeLabel}</label>
           <select
