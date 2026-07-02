@@ -6,7 +6,7 @@ import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import { generateWorkOrderPDF } from '@/lib/pdf';
-import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
+import { canUseWorkOrdersForBusinessUnit, coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 
 const empty = { number:'', title:'', client:'', contactId:'', businessUnitId:'', estimateId:'', priority:'Medium', status:'Pending', assignedTo:'', dueDate:'', description:'', estimatedCost:0 };
 
@@ -77,6 +77,10 @@ export default function WorkOrdersPage() {
   const contactPrefillRef = useRef('');
   const canWriteWorkOrders = Boolean(access?.canWriteWorkOrders);
   const workOrderUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
+  const canUseCurrentWorkOrders = useMemo(
+    () => canUseWorkOrdersForBusinessUnit(currentUser, currentBusinessUnit),
+    [currentBusinessUnit, currentUser],
+  );
   const lockedWorkOrderOwnerId = workOrderUiPolicy.lockedWorkOrderOwnerUserId;
   const effectiveOwnerFilter = workOrderUiPolicy.workOrdersOwnerScoped && lockedWorkOrderOwnerId ? '__me' : ownerFilter;
   const selectedContact = contacts.find((entry) => entry.id === form.contactId) || null;
@@ -123,6 +127,11 @@ export default function WorkOrdersPage() {
     contactPrefillRef.current = contactId;
     queueMicrotask(() => openNew(contact));
   }, [canWriteWorkOrders, contacts, loaded, openNew]);
+
+  useEffect(() => {
+    if (!loaded || canUseCurrentWorkOrders) return;
+    router.replace('/');
+  }, [canUseCurrentWorkOrders, loaded, router]);
   const openEdit = (row) => {
     if (!canWriteWorkOrders) return;
     setForm({ ...row, assignedTo: lockedWorkOrderOwnerId || row.assignedTo || '' });
@@ -214,6 +223,9 @@ export default function WorkOrdersPage() {
   };
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
+  if (!canUseCurrentWorkOrders) {
+    return <div className="empty-state">Work Orders are available from the AIT Signs division.</div>;
+  }
 
   return (
     <div className="fade-in">

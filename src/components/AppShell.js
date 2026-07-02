@@ -6,16 +6,20 @@ import CommandPalette from '@/components/CommandPalette';
 import NotificationBell from '@/components/NotificationBell';
 import SessionSwitchGuard from '@/components/SessionSwitchGuard';
 import Sidebar from '@/components/Sidebar';
-import { canUseCoordinatorRoute } from '@/lib/crm/coordinator-policy.js';
+import { canUseCoordinatorRoute, canUseWorkOrdersForBusinessUnit } from '@/lib/crm/coordinator-policy.js';
 import { useCRM } from '@/lib/store';
 
 export default function AppShell({ children }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { accessibleBusinessUnits, currentUser, loaded } = useCRM();
+  const { accessibleBusinessUnits, currentBusinessUnit, currentUser, loaded } = useCRM();
   const isPublicJoinPage = pathname === '/join';
   const hasMobileScopeBar = accessibleBusinessUnits?.length > 0;
-  const canUseRoute = isPublicJoinPage || canUseCoordinatorRoute(currentUser, pathname);
+  const isWorkOrdersRoute = pathname === '/work-orders' || pathname.startsWith('/work-orders/');
+  const canUseRoute = isPublicJoinPage || (
+    canUseCoordinatorRoute(currentUser, pathname) &&
+    (!isWorkOrdersRoute || canUseWorkOrdersForBusinessUnit(currentUser, currentBusinessUnit))
+  );
 
   useEffect(() => {
     if (!loaded || canUseRoute) return;

@@ -92,6 +92,12 @@ export function canUseWorkOrderBusinessUnit(session = {}, businessUnitId = '') {
   return allowedIds === null || allowedIds.includes(businessUnitId);
 }
 
+export function canUseWorkOrdersForBusinessUnit(user = {}, businessUnit = {}) {
+  if (!businessUnit?.id || !isWorkOrdersBusinessUnit(businessUnit)) return false;
+  const allowedIds = workOrderBusinessUnitIdsForUser(user);
+  return allowedIds === null || allowedIds.includes(businessUnit.id);
+}
+
 export function canManageWorkOrderAssignments(session = {}) {
   return !isWorkOrderSelfScopedSession(session);
 }
