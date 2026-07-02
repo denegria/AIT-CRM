@@ -4,6 +4,8 @@ import {
   canAccessContactLead,
   canArchiveContactsDirectly,
   canManageCoordinatorAssignments,
+  canUseCoordinatorRoute,
+  canUseRegularCoordinatorRoute,
   coordinatorUiPolicyForUser,
   filterContactsForSession,
   isRegularCoordinatorSession,
@@ -66,6 +68,28 @@ test('senior coordinator UI policy keeps broad coordinator controls available', 
   assert.equal(policy.canManageCoordinatorAssignments, true);
   assert.equal(policy.canArchiveContactsDirectly, true);
   assert.equal(policy.lockedOwnerUserId, '');
+});
+
+test('regular coordinator route policy allows only personal CRM workspace routes', () => {
+  assert.equal(canUseRegularCoordinatorRoute('/'), true);
+  assert.equal(canUseRegularCoordinatorRoute('/contacts'), true);
+  assert.equal(canUseRegularCoordinatorRoute('/contacts/contact-1'), true);
+  assert.equal(canUseRegularCoordinatorRoute('/clients/client-1?tab=financials'), true);
+  assert.equal(canUseRegularCoordinatorRoute('/pipeline'), true);
+  assert.equal(canUseRegularCoordinatorRoute('/tasks'), true);
+
+  assert.equal(canUseRegularCoordinatorRoute('/work-orders'), false);
+  assert.equal(canUseRegularCoordinatorRoute('/work-orders/work-order-1'), false);
+  assert.equal(canUseRegularCoordinatorRoute('/financials'), false);
+  assert.equal(canUseRegularCoordinatorRoute('/reports'), false);
+  assert.equal(canUseRegularCoordinatorRoute('/settings'), false);
+});
+
+test('senior coordinator route policy keeps broad workspace routes available', () => {
+  assert.equal(canUseCoordinatorRoute(session(['account_manager']).user, '/work-orders'), false);
+  assert.equal(canUseCoordinatorRoute(session(['account_manager']).user, '/financials'), false);
+  assert.equal(canUseCoordinatorRoute(session(['senior_coordinator']).user, '/work-orders'), true);
+  assert.equal(canUseCoordinatorRoute(session(['admin']).user, '/settings'), true);
 });
 
 test('regular coordinator contact list keeps only contacts whose latest lead is assigned to them', () => {

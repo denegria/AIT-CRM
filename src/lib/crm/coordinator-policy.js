@@ -50,6 +50,27 @@ export function coordinatorUiPolicyForUser(user = {}) {
   };
 }
 
+const REGULAR_COORDINATOR_ROUTE_PREFIXES = Object.freeze([
+  '/',
+  '/clients',
+  '/contacts',
+  '/pipeline',
+  '/tasks',
+]);
+
+export function canUseRegularCoordinatorRoute(pathname = '') {
+  const normalizedPath = String(pathname || '/').split(/[?#]/)[0] || '/';
+  return REGULAR_COORDINATOR_ROUTE_PREFIXES.some((routePrefix) => {
+    if (routePrefix === '/') return normalizedPath === '/';
+    return normalizedPath === routePrefix || normalizedPath.startsWith(`${routePrefix}/`);
+  });
+}
+
+export function canUseCoordinatorRoute(user = {}, pathname = '') {
+  const policy = coordinatorUiPolicyForUser(user);
+  return !policy.isRegularCoordinator || canUseRegularCoordinatorRoute(pathname);
+}
+
 function timeValue(value) {
   const time = value instanceof Date ? value.getTime() : new Date(value || '').getTime();
   return Number.isNaN(time) ? 0 : time;

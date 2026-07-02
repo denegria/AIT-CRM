@@ -1,17 +1,26 @@
 'use client';
 
-import { usePathname } from 'next/navigation';
+import { useEffect } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import CommandPalette from '@/components/CommandPalette';
 import NotificationBell from '@/components/NotificationBell';
 import SessionSwitchGuard from '@/components/SessionSwitchGuard';
 import Sidebar from '@/components/Sidebar';
+import { canUseCoordinatorRoute } from '@/lib/crm/coordinator-policy.js';
 import { useCRM } from '@/lib/store';
 
 export default function AppShell({ children }) {
   const pathname = usePathname();
-  const { accessibleBusinessUnits } = useCRM();
+  const router = useRouter();
+  const { accessibleBusinessUnits, currentUser, loaded } = useCRM();
   const isPublicJoinPage = pathname === '/join';
   const hasMobileScopeBar = accessibleBusinessUnits?.length > 0;
+  const canUseRoute = isPublicJoinPage || canUseCoordinatorRoute(currentUser, pathname);
+
+  useEffect(() => {
+    if (!loaded || canUseRoute) return;
+    router.replace('/');
+  }, [canUseRoute, loaded, router]);
 
   if (isPublicJoinPage) {
     return <main className="public-main-content">{children}</main>;
@@ -27,7 +36,9 @@ export default function AppShell({ children }) {
           <header className="app-topbar" aria-label="Workspace notifications">
             <NotificationBell />
           </header>
-          {children}
+          {loaded && !canUseRoute ? (
+            <div className="empty-state">This workspace is limited to your assigned CRM queue.</div>
+          ) : children}
         </main>
       </div>
     </>
