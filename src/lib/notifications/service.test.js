@@ -5,6 +5,22 @@ import {
   buildInboundLeadNotification,
   createInboundLeadNotification,
 } from './service.js';
+import {
+  canReadInboundLeadNotifications,
+  canReadNotification,
+} from './access.js';
+
+function session(roleKeys, overrides = {}) {
+  return {
+    user: {
+      id: 'user-1',
+      roleKeys,
+      businessUnitIds: ['bu-1'],
+      canAccessAllBusinessUnits: false,
+      ...overrides,
+    },
+  };
+}
 
 test('builds reusable inbound lead notifications with contact deep links', () => {
   const notification = buildInboundLeadNotification({
@@ -62,4 +78,26 @@ test('persists inbound lead notifications idempotently', async () => {
     'website_form',
     'Wix Lead - Website Form',
   ]);
+});
+
+test('regular coordinators cannot read broad inbound lead notifications', () => {
+  const notification = {
+    type: 'inbound_lead',
+    businessUnitId: 'bu-1',
+    userId: null,
+  };
+
+  assert.equal(canReadInboundLeadNotifications(session(['account_manager'])), false);
+  assert.equal(canReadNotification(session(['account_manager']), notification), false);
+});
+
+test('senior coordinators can read inbound lead notifications for their business units', () => {
+  const notification = {
+    type: 'inbound_lead',
+    businessUnitId: 'bu-1',
+    userId: null,
+  };
+
+  assert.equal(canReadInboundLeadNotifications(session(['account_manager', 'senior_coordinator'])), true);
+  assert.equal(canReadNotification(session(['account_manager', 'senior_coordinator']), notification), true);
 });

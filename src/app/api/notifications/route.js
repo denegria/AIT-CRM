@@ -1,15 +1,10 @@
 import { NextResponse } from 'next/server';
-import { and, desc, eq, inArray, isNull, or, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
 import { notifications } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
-
-function canReadNotification(session, row) {
-  if (row.userId && row.userId !== session.user.id) return false;
-  if (session.user.canAccessAllBusinessUnits) return true;
-  if (!row.businessUnitId) return true;
-  return session.user.businessUnitIds.includes(row.businessUnitId);
-}
+import { canReadInboundLeadNotifications, canReadNotification } from '@/lib/notifications/access.js';
+import { NOTIFICATION_TYPES } from '@/lib/notifications/service.js';
 
 function notificationAccessWhere(session) {
   const base = [
@@ -21,6 +16,9 @@ function notificationAccessWhere(session) {
     base.push(businessUnitIds.length
       ? or(isNull(notifications.businessUnitId), inArray(notifications.businessUnitId, businessUnitIds))
       : isNull(notifications.businessUnitId));
+  }
+  if (!canReadInboundLeadNotifications(session)) {
+    base.push(ne(notifications.type, NOTIFICATION_TYPES.INBOUND_LEAD));
   }
   return and(...base);
 }
