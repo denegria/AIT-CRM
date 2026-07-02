@@ -5,9 +5,15 @@ export const ROLE_KEYS = Object.freeze({
   SALES_MANAGER: 'sales_manager',
 });
 
+export function roleKeysForUser(user = {}) {
+  return [
+    user?.primaryRoleKey,
+    ...(Array.isArray(user?.roleKeys) ? user.roleKeys : []),
+  ].filter(Boolean);
+}
+
 export function userHasRole(user = {}, roleKey) {
-  const roleKeys = Array.isArray(user?.roleKeys) ? user.roleKeys : [];
-  return user?.primaryRoleKey === roleKey || roleKeys.includes(roleKey);
+  return roleKeysForUser(user).includes(roleKey);
 }
 
 export function isSeniorCoordinatorSession(session = {}) {
@@ -15,7 +21,7 @@ export function isSeniorCoordinatorSession(session = {}) {
 }
 
 export function isRegularCoordinatorSession(session = {}) {
-  const roleKeys = Array.isArray(session?.user?.roleKeys) ? session.user.roleKeys : [];
+  const roleKeys = roleKeysForUser(session?.user);
   if (!roleKeys.includes(ROLE_KEYS.ACCOUNT_MANAGER)) return false;
   return ![
     ROLE_KEYS.ADMIN,
@@ -30,6 +36,18 @@ export function canManageCoordinatorAssignments(session = {}) {
 
 export function canArchiveContactsDirectly(session = {}) {
   return !isRegularCoordinatorSession(session);
+}
+
+export function coordinatorUiPolicyForUser(user = {}) {
+  const session = { user };
+  const isRegularCoordinator = isRegularCoordinatorSession(session);
+  return {
+    isRegularCoordinator,
+    ownerScoped: isRegularCoordinator,
+    canManageCoordinatorAssignments: canManageCoordinatorAssignments(session),
+    canArchiveContactsDirectly: canArchiveContactsDirectly(session),
+    lockedOwnerUserId: isRegularCoordinator ? user?.id || '' : '',
+  };
 }
 
 function timeValue(value) {

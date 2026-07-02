@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
+import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import { generateInvoicePDF, generateEstimatePDF, generateReceiptPDF, generateAitUsaReceiptPDF } from '@/lib/pdf';
 import s from './ContactDetail.module.css';
 import {
@@ -400,6 +401,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     }
     return mapped;
   }, [currentUser, employees]);
+  const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
   const [noteInput, setNoteInput] = useState('');
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [followUpDraft, setFollowUpDraft] = useState(null);
@@ -780,6 +782,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     }
     updateContact(contact.id, {
       ...editForm,
+      ...(coordinatorUiPolicy.lockedOwnerUserId ? { assignedTo: coordinatorUiPolicy.lockedOwnerUserId } : {}),
       statusChangeReason: isClosedStatusReopen ? editForm.statusChangeReason : '',
       ...(editForm.leadProfile ? { leadProfile: editForm.leadProfile } : {}),
     })
@@ -794,7 +797,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   };
 
   const handleArchiveContact = () => {
-    if (!contact || archiveBusy) return;
+    if (!contact || archiveBusy || !coordinatorUiPolicy.canArchiveContactsDirectly) return;
     const reason = cleanText(archiveReason) || 'Archived from contact profile.';
     setArchiveBusy(true);
     deleteContact(contact.id, { reason })
@@ -882,7 +885,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           contactMethod: followUpDraft.contactMethod,
           note: followUpDraft.note,
           nextDueAt: dateInputToIso(followUpDraft.nextDueDate),
-          nextOwnerUserId: followUpDraft.nextOwnerUserId || currentUser?.id || null,
+          nextOwnerUserId: coordinatorUiPolicy.lockedOwnerUserId || followUpDraft.nextOwnerUserId || currentUser?.id || null,
           leadProfile: followUpDraft.leadProfile,
         }),
       });
@@ -1979,20 +1982,22 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               />
             </div>
           </div>
-          <div className="form-group">
-            <label className="form-label">Next Owner</label>
-            <select
-              className="input select"
-              value={followUpDraft.nextOwnerUserId}
-              disabled={followUpBusy}
-              onChange={(event) => updateFollowUpDraft({ nextOwnerUserId: event.target.value })}
-            >
-              <option value="" disabled>Select owner</option>
-              {ownerOptions.map((owner) => (
-                <option key={owner.id} value={owner.id}>{owner.label}</option>
-              ))}
-            </select>
-          </div>
+          {coordinatorUiPolicy.canManageCoordinatorAssignments && (
+            <div className="form-group">
+              <label className="form-label">Next Owner</label>
+              <select
+                className="input select"
+                value={followUpDraft.nextOwnerUserId}
+                disabled={followUpBusy}
+                onChange={(event) => updateFollowUpDraft({ nextOwnerUserId: event.target.value })}
+              >
+                <option value="" disabled>Select owner</option>
+                {ownerOptions.map((owner) => (
+                  <option key={owner.id} value={owner.id}>{owner.label}</option>
+                ))}
+              </select>
+            </div>
+          )}
           {isAitUsaContact && (
             <>
               <div className="grid-2">
@@ -2162,16 +2167,20 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               </div>
             </>
           )}
-          <div className="form-group">
-            <label className="form-label">Assigned To</label>
-            <select className="input select" value={editForm.assignedTo || ''} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
-              <option value="">Unassigned</option>
-              {ownerOptions.map((owner) => (
-                <option key={owner.id} value={owner.id}>{owner.label}</option>
-              ))}
-            </select>
-          </div>
-          {access.canWriteCrm && (
+          {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
+            <div className="form-group">
+              <label className="form-label">Assigned To</label>
+              <select className="input select" value={editForm.assignedTo || ''} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
+                <option value="">Unassigned</option>
+                {ownerOptions.map((owner) => (
+                  <option key={owner.id} value={owner.id}>{owner.label}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <input type="hidden" value={editForm.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
+          )}
+          {access.canWriteCrm && coordinatorUiPolicy.canArchiveContactsDirectly ? (
             <div className="empty-state" style={{padding: 12, marginTop: 12, borderColor: 'var(--danger-muted)'}}>
               <div style={{fontWeight: 700, color: 'var(--danger)', marginBottom: 4}}>Danger zone</div>
               <div style={{fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 10}}>
@@ -2188,7 +2197,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 Archive {singularLabel}
               </button>
             </div>
-          )}
+          ) : access.canWriteCrm ? (
+            <div className="empty-state" style={{padding: 12, marginTop: 12}}>
+              Archive approval requests are coming in MIS-235.
+            </div>
+          ) : null}
         </Modal>
       )}
 

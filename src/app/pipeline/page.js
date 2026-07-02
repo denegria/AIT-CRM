@@ -7,6 +7,7 @@ import KanbanBoard from '@/components/KanbanBoard';
 import { useToast } from '@/components/Toast';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
 import { useCRM } from '@/lib/store';
+import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import {
   isPipelineNewLeadBucket,
   matchesPipelineQuickFilter,
@@ -170,11 +171,13 @@ export default function PipelinePage() {
   const [bulkAssignMode, setBulkAssignMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
   const parsedFilters = useMemo(() => pipelineFilterStateFromParams(new URLSearchParams(pipelineSearchQuery)), [pipelineSearchQuery]);
-  const ownerFilter = parsedFilters.ownerFilter === DEFAULT_PIPELINE_OWNER_FILTER &&
+  const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
+  const ownerFilter = coordinatorUiPolicy.lockedOwnerUserId ||
+    (parsedFilters.ownerFilter === DEFAULT_PIPELINE_OWNER_FILTER &&
     currentUser?.id &&
     !currentUser.canAccessAllBusinessUnits
     ? 'unassigned'
-    : parsedFilters.ownerFilter;
+    : parsedFilters.ownerFilter);
   const {
     workflowFilter,
     sourceFilter,
@@ -194,7 +197,10 @@ export default function PipelinePage() {
     router.replace(nextQuery ? `/pipeline?${nextQuery}` : '/pipeline', { scroll: false });
   };
   const setWorkflowFilter = (value) => updatePipelineFilterQuery({ workflowFilter: value });
-  const setOwnerFilter = (value) => updatePipelineFilterQuery({ ownerFilter: value });
+  const setOwnerFilter = (value) => {
+    if (coordinatorUiPolicy.ownerScoped) return;
+    updatePipelineFilterQuery({ ownerFilter: value });
+  };
   const setSourceFilter = (value) => updatePipelineFilterQuery({ sourceFilter: value });
   const setActivityFilter = (value) => updatePipelineFilterQuery({ activityFilter: value });
   const setSearch = (value) => updatePipelineFilterQuery({ search: value });
@@ -319,11 +325,12 @@ export default function PipelinePage() {
   ), [pipelineRows]);
   const selectedRows = useMemo(() => pipelineRows.filter((contact) => selectedIds.includes(contact.id)), [pipelineRows, selectedIds]);
   const selectedOwnerLabel = useMemo(() => {
+    if (coordinatorUiPolicy.ownerScoped) return 'My Pipeline';
     if (ownerFilter === DEFAULT_PIPELINE_OWNER_FILTER) return '';
     if (ownerFilter === 'unassigned') return 'Unassigned';
     if (ownerFilter === currentUser?.id) return 'Me';
     return ownerOptions.find((owner) => owner.id === ownerFilter)?.label || 'Selected owner';
-  }, [currentUser?.id, ownerFilter, ownerOptions]);
+  }, [coordinatorUiPolicy.ownerScoped, currentUser?.id, ownerFilter, ownerOptions]);
   const selectedDateLabel = dateScopeLabel(leadDateScope, leadDateFrom, leadDateTo);
   const dateFilterIsDefault = leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE &&
     leadDateFrom === DEFAULT_CONTACT_LEAD_DATE_FROM &&
@@ -349,7 +356,7 @@ export default function PipelinePage() {
     selectedOwnerLabel ? {
       key: 'owner',
       label: selectedOwnerLabel,
-      onRemove: () => setOwnerFilter(DEFAULT_PIPELINE_OWNER_FILTER),
+      onRemove: coordinatorUiPolicy.ownerScoped ? null : () => setOwnerFilter(DEFAULT_PIPELINE_OWNER_FILTER),
     } : null,
     sourceFilter !== DEFAULT_PIPELINE_SOURCE_FILTER ? {
       key: 'source',
@@ -376,7 +383,7 @@ export default function PipelinePage() {
     leadDateFrom !== DEFAULT_CONTACT_LEAD_DATE_FROM ||
     leadDateTo !== DEFAULT_CONTACT_LEAD_DATE_TO ||
     workflowFilter !== DEFAULT_PIPELINE_WORKFLOW_FILTER ||
-    ownerFilter !== DEFAULT_PIPELINE_OWNER_FILTER ||
+    (!coordinatorUiPolicy.ownerScoped && ownerFilter !== DEFAULT_PIPELINE_OWNER_FILTER) ||
     sourceFilter !== DEFAULT_PIPELINE_SOURCE_FILTER ||
     activityFilter !== DEFAULT_PIPELINE_ACTIVITY_FILTER ||
     search !== DEFAULT_PIPELINE_SEARCH ||
@@ -387,7 +394,7 @@ export default function PipelinePage() {
   const resetFilters = () => {
     updatePipelineFilterQuery({
       workflowFilter: DEFAULT_PIPELINE_WORKFLOW_FILTER,
-      ownerFilter: DEFAULT_PIPELINE_OWNER_FILTER,
+      ownerFilter: coordinatorUiPolicy.lockedOwnerUserId || DEFAULT_PIPELINE_OWNER_FILTER,
       sourceFilter: DEFAULT_PIPELINE_SOURCE_FILTER,
       activityFilter: DEFAULT_PIPELINE_ACTIVITY_FILTER,
       search: DEFAULT_PIPELINE_SEARCH,
@@ -411,7 +418,7 @@ export default function PipelinePage() {
       .catch((error) => toast(error?.message || 'Stage update failed.', 'error'));
   };
   const assignSelectedToMe = () => {
-    if (!currentUser?.id || !selectedRows.length) return;
+    if (!currentUser?.id || !selectedRows.length || !coordinatorUiPolicy.canManageCoordinatorAssignments) return;
     Promise.all(selectedRows.map((contact) => updateContact(contact.id, { assignedTo: currentUser.id })))
       .then(() => {
         setSelectedIds([]);
@@ -421,6 +428,7 @@ export default function PipelinePage() {
       .catch((error) => toast(error?.message || 'Bulk assignment failed.', 'error'));
   };
   const toggleBulkAssignMode = () => {
+    if (!coordinatorUiPolicy.canManageCoordinatorAssignments) return;
     if (bulkAssignMode) setSelectedIds([]);
     setBulkAssignMode(!bulkAssignMode);
   };
@@ -438,10 +446,12 @@ export default function PipelinePage() {
           <button className="btn" onClick={() => nextLead ? router.push(`/contacts/${nextLead.id}`) : toast('No lead matches the current filters.', 'error')}>
             <ArrowRight size={14} /> Work Next Lead
           </button>
-          <button className="btn" onClick={() => setOwnerFilter('unassigned')}>
-            <AlertCircle size={14} /> Unassigned
-          </button>
-          {canWrite && currentUser?.id && (
+          {!coordinatorUiPolicy.ownerScoped && (
+            <button className="btn" onClick={() => setOwnerFilter('unassigned')}>
+              <AlertCircle size={14} /> Unassigned
+            </button>
+          )}
+          {canWrite && currentUser?.id && coordinatorUiPolicy.canManageCoordinatorAssignments && (
             <button className={`btn ${bulkAssignMode ? 'btn-primary' : ''}`} type="button" onClick={toggleBulkAssignMode}>
               <UserRoundCheck size={14} /> Bulk Assign
             </button>
@@ -463,10 +473,12 @@ export default function PipelinePage() {
           <Clock3 size={18} />
           <div><strong>{pipelineStats.active}</strong><span>active pipeline</span></div>
         </div>
-        <div className={s.statCard}>
-          <UserRoundCheck size={18} />
-          <div><strong>{pipelineStats.unassigned}</strong><span>unassigned contacts</span></div>
-        </div>
+        {!coordinatorUiPolicy.ownerScoped && (
+          <div className={s.statCard}>
+            <UserRoundCheck size={18} />
+            <div><strong>{pipelineStats.unassigned}</strong><span>unassigned contacts</span></div>
+          </div>
+        )}
       </div>
 
       {showPipelineScopeSelector && (
@@ -577,13 +589,24 @@ export default function PipelinePage() {
                       <div className={s.filterGrid}>
                         <label className={s.filterField}>
                           <span>Owner</span>
-                          <select className="input select" value={ownerFilter} onChange={(event) => setOwnerFilter(event.target.value)}>
-                            <option value="all">{canUseConsolidatedScope ? 'Team Pipeline' : 'All Owners'}</option>
-                            <option value="unassigned">Unassigned</option>
-                            {currentUser?.id && <option value={currentUser.id}>Me</option>}
-                            {ownerOptions.map((owner) => (
-                              <option key={owner.id} value={owner.id}>{owner.label}</option>
-                            ))}
+                          <select
+                            className="input select"
+                            value={ownerFilter}
+                            disabled={coordinatorUiPolicy.ownerScoped}
+                            onChange={(event) => setOwnerFilter(event.target.value)}
+                          >
+                            {coordinatorUiPolicy.ownerScoped ? (
+                              <option value={coordinatorUiPolicy.lockedOwnerUserId}>My Pipeline</option>
+                            ) : (
+                              <>
+                                <option value="all">{canUseConsolidatedScope ? 'Team Pipeline' : 'All Owners'}</option>
+                                <option value="unassigned">Unassigned</option>
+                                {currentUser?.id && <option value={currentUser.id}>Me</option>}
+                                {ownerOptions.map((owner) => (
+                                  <option key={owner.id} value={owner.id}>{owner.label}</option>
+                                ))}
+                              </>
+                            )}
                           </select>
                         </label>
                         <label className={s.filterField}>
@@ -659,7 +682,7 @@ export default function PipelinePage() {
         </div>
       </section>
 
-      {bulkAssignMode && (
+      {bulkAssignMode && coordinatorUiPolicy.canManageCoordinatorAssignments && (
         <div className={s.bulkBar}>
           <div>
             <ListFilter size={14} />

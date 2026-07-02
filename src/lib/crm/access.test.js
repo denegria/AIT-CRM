@@ -4,6 +4,7 @@ import {
   canAccessContactLead,
   canArchiveContactsDirectly,
   canManageCoordinatorAssignments,
+  coordinatorUiPolicyForUser,
   filterContactsForSession,
   isRegularCoordinatorSession,
   isSeniorCoordinatorSession,
@@ -37,6 +38,34 @@ test('regular coordinator is owner scoped and cannot use direct archive or reass
   assert.equal(canAccessContactLead(regular, { assignedUserId: 'user-1' }), true);
   assert.equal(canAccessContactLead(regular, { assignedUserId: 'user-2' }), false);
   assert.equal(canAccessContactLead(regular, { assignedUserId: null }), false);
+});
+
+test('regular coordinator UI policy locks owner-scoped surfaces to the current user', () => {
+  const policy = coordinatorUiPolicyForUser({
+    id: 'coordinator-1',
+    primaryRoleKey: 'account_manager',
+    roleKeys: [],
+  });
+
+  assert.equal(policy.isRegularCoordinator, true);
+  assert.equal(policy.ownerScoped, true);
+  assert.equal(policy.canManageCoordinatorAssignments, false);
+  assert.equal(policy.canArchiveContactsDirectly, false);
+  assert.equal(policy.lockedOwnerUserId, 'coordinator-1');
+});
+
+test('senior coordinator UI policy keeps broad coordinator controls available', () => {
+  const policy = coordinatorUiPolicyForUser({
+    id: 'senior-1',
+    primaryRoleKey: 'senior_coordinator',
+    roleKeys: ['account_manager', 'senior_coordinator'],
+  });
+
+  assert.equal(policy.isRegularCoordinator, false);
+  assert.equal(policy.ownerScoped, false);
+  assert.equal(policy.canManageCoordinatorAssignments, true);
+  assert.equal(policy.canArchiveContactsDirectly, true);
+  assert.equal(policy.lockedOwnerUserId, '');
 });
 
 test('regular coordinator contact list keeps only contacts whose latest lead is assigned to them', () => {

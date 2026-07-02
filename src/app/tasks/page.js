@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useCRM } from '@/lib/store';
 import { isAssignableEmployee } from '@/lib/crm/assignable-employees.js';
+import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import { lifecycleBucket } from '@/lib/contact-directory-view.js';
 import {
   isTaskClosed,
@@ -254,12 +255,14 @@ export default function FollowUpQueuePage() {
   } = useCRM();
   const { toast } = useToast();
   const searchParams = useSearchParams();
+  const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
+  const lockedTaskOwnerFilter = coordinatorUiPolicy.ownerScoped && currentUser?.id ? '__me' : '';
   const prefillSignatureRef = useRef('');
   const [queueTasks, setQueueTasks] = useState([]);
   const [assignees, setAssignees] = useState([]);
   const [filters, setFilters] = useState({
     due: DUE_OPTION_VALUES.has(searchParams.get('due')) ? searchParams.get('due') : 'work',
-    ownerUserId: searchParams.get('ownerUserId') || (searchParams.get('mine') === 'true' ? '__me' : 'all'),
+    ownerUserId: lockedTaskOwnerFilter || searchParams.get('ownerUserId') || (searchParams.get('mine') === 'true' ? '__me' : 'all'),
     businessUnitId: searchParams.get('businessUnitId') || (currentBusinessUnitId === 'all' || currentBusinessUnitId === 'unassigned' ? 'all' : currentBusinessUnitId),
     taskType: TASK_TYPE_OPTIONS.some(([value]) => value === searchParams.get('taskType')) ? searchParams.get('taskType') : 'all',
     status: STATUS_OPTION_VALUES.has(searchParams.get('status')) ? searchParams.get('status') : 'all',
@@ -303,7 +306,16 @@ export default function FollowUpQueuePage() {
     ];
   }, [currentUser, employees]);
 
-  const visibleAssignees = assignees.length ? assignees : fallbackAssignees;
+  const visibleAssignees = useMemo(() => {
+    const options = assignees.length ? assignees : fallbackAssignees;
+    if (!coordinatorUiPolicy.ownerScoped || !currentUser?.id) return options;
+    const current = options.find((user) => user.id === currentUser.id) || {
+      id: currentUser.id,
+      name: currentUser.name || currentUser.email || 'Me',
+      email: currentUser.email || '',
+    };
+    return [current];
+  }, [assignees, coordinatorUiPolicy.ownerScoped, currentUser, fallbackAssignees]);
   const accessibleContacts = allContacts?.length ? allContacts : contacts;
   const businessUnitById = useMemo(
     () => new Map((accessibleBusinessUnits || []).map((unit) => [unit.id, unit])),
@@ -474,7 +486,7 @@ export default function FollowUpQueuePage() {
   const showUnassignedLeadFollowUps = () => setFilters((prev) => ({
     ...prev,
     due: 'work',
-    ownerUserId: 'unassigned',
+    ownerUserId: coordinatorUiPolicy.ownerScoped ? '__me' : 'unassigned',
     taskType: 'follow_up',
     status: 'open',
     link: 'contact',
@@ -605,7 +617,7 @@ export default function FollowUpQueuePage() {
     setCreateDraft({
       ...baseDraft,
       ...overrides,
-      ownerUserId: overrides.ownerUserId || baseDraft.ownerUserId || defaultOwnerUserId(currentUser, visibleAssignees),
+      ownerUserId: coordinatorUiPolicy.lockedOwnerUserId || overrides.ownerUserId || baseDraft.ownerUserId || defaultOwnerUserId(currentUser, visibleAssignees),
     });
     setCreateContactSearch('');
     setCreateError('');
@@ -700,6 +712,7 @@ export default function FollowUpQueuePage() {
         businessUnitId,
         contactId,
         ownerUserId: selectedContact.assignedTo || defaultOwnerUserId(currentUser, visibleAssignees),
+        ...(coordinatorUiPolicy.lockedOwnerUserId ? { ownerUserId: coordinatorUiPolicy.lockedOwnerUserId } : {}),
       });
       setCreateContactSearch(selectedContact.name || selectedContact.client || '');
       setCreateError('');
@@ -708,7 +721,7 @@ export default function FollowUpQueuePage() {
     return () => {
       cancelled = true;
     };
-  }, [accessibleBusinessUnits, accessibleContacts, currentBusinessUnitId, currentUser, searchParams, visibleAssignees]);
+  }, [accessibleBusinessUnits, accessibleContacts, coordinatorUiPolicy.lockedOwnerUserId, currentBusinessUnitId, currentUser, searchParams, visibleAssignees]);
 
   async function submitCreatedTask(event) {
     event.preventDefault();
@@ -742,6 +755,7 @@ export default function FollowUpQueuePage() {
           taskType: createDraft.taskType,
           dueAt: dateInputToIso(createDraft.dueDate),
           ownerUserId: createDraft.ownerUserId || null,
+          ...(coordinatorUiPolicy.lockedOwnerUserId ? { ownerUserId: coordinatorUiPolicy.lockedOwnerUserId } : {}),
           businessUnitId: createDraft.businessUnitId,
           contactId: createDraft.contactId || null,
           priority: createDraft.priority,
@@ -801,6 +815,7 @@ export default function FollowUpQueuePage() {
             taskType: editDraft.taskType,
             dueAt: dateInputToIso(editDraft.dueDate),
             ownerUserId: editDraft.ownerUserId || null,
+            ...(coordinatorUiPolicy.lockedOwnerUserId ? { ownerUserId: coordinatorUiPolicy.lockedOwnerUserId } : {}),
             businessUnitId: editDraft.businessUnitId,
             contactId: editDraft.contactId || null,
             priority: editDraft.priority,
@@ -824,8 +839,8 @@ export default function FollowUpQueuePage() {
           taskType: editDraft.taskType,
           dueAt: dateInputToIso(editDraft.dueDate),
           dueDate: editDraft.dueDate,
-          ownerUserId: editDraft.ownerUserId || '',
-          assignedTo: editDraft.ownerUserId || '',
+          ownerUserId: coordinatorUiPolicy.lockedOwnerUserId || editDraft.ownerUserId || '',
+          assignedTo: coordinatorUiPolicy.lockedOwnerUserId || editDraft.ownerUserId || '',
           businessUnitId: editDraft.businessUnitId,
           contactId: editDraft.contactId || '',
           priority: editDraft.priority,
@@ -857,12 +872,13 @@ export default function FollowUpQueuePage() {
       leadProfile: draft.leadProfile,
       nextDueAt: dateInputToIso(draft.nextDueDate),
       nextOwnerUserId: draft.nextOwnerUserId || task.ownerUserId || null,
+      ...(coordinatorUiPolicy.lockedOwnerUserId ? { nextOwnerUserId: coordinatorUiPolicy.lockedOwnerUserId } : {}),
     });
   }
 
   const resetFilters = () => setFilters({
     due: 'work',
-    ownerUserId: 'all',
+    ownerUserId: lockedTaskOwnerFilter || 'all',
     businessUnitId: currentBusinessUnitId === 'all' || currentBusinessUnitId === 'unassigned' ? 'all' : currentBusinessUnitId,
     taskType: 'all',
     status: 'all',
@@ -972,13 +988,17 @@ export default function FollowUpQueuePage() {
                 {TASK_RECURRENCE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </label>
-            <label>
-              <span className="form-label">Owner *</span>
-              <select className="select" value={createDraft.ownerUserId} disabled={createBusy} onChange={(event) => updateCreateDraft({ ownerUserId: event.target.value })}>
-                <option value="" disabled>Select owner</option>
-                {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
-              </select>
-            </label>
+            {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
+              <label>
+                <span className="form-label">Owner *</span>
+                <select className="select" value={createDraft.ownerUserId} disabled={createBusy} onChange={(event) => updateCreateDraft({ ownerUserId: event.target.value })}>
+                  <option value="" disabled>Select owner</option>
+                  {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
+                </select>
+              </label>
+            ) : (
+              <input type="hidden" value={coordinatorUiPolicy.lockedOwnerUserId || createDraft.ownerUserId} readOnly />
+            )}
             <label>
               <span className="form-label">{scopeLabel} *</span>
               <select className="select" value={createDraft.businessUnitId} disabled={createBusy} onChange={(event) => updateCreateBusinessUnit(event.target.value)}>
@@ -1026,15 +1046,17 @@ export default function FollowUpQueuePage() {
         <div className={s.summaryTile}><span className={s.summaryValue}>{stats.currentWork}</span><span className={s.summaryLabel}>Current Work</span></div>
         <div className={s.summaryTile}><span className={s.summaryValue}>{stats.dueToday}</span><span className={s.summaryLabel}>Due Today</span></div>
         <div className={s.summaryTile}><span className={s.summaryValue}>{stats.overdue}</span><span className={s.summaryLabel}>Overdue</span></div>
-        <button className={`${s.summaryTile} ${s.summaryButton}`} type="button" onClick={showUnassignedLeadFollowUps}>
-          <span className={s.summaryValue}>{stats.unassigned}</span>
-          <span className={s.summaryLabel}>Unassigned</span>
-        </button>
+        {!coordinatorUiPolicy.ownerScoped && (
+          <button className={`${s.summaryTile} ${s.summaryButton}`} type="button" onClick={showUnassignedLeadFollowUps}>
+            <span className={s.summaryValue}>{stats.unassigned}</span>
+            <span className={s.summaryLabel}>Unassigned</span>
+          </button>
+        )}
         <div className={s.summaryTile}><span className={s.summaryValue}>{stats.completedToday}</span><span className={s.summaryLabel}>Done Today</span></div>
       </div>
 
       <div className="card">
-        {unassignedLeadFollowUps.length > 0 && (
+        {!coordinatorUiPolicy.ownerScoped && unassignedLeadFollowUps.length > 0 && (
           <div className={s.intakeAlert}>
             <div className={s.intakeAlertText}>
               <span className={s.intakeAlertTitle}>New lead follow-ups need owners</span>
@@ -1069,11 +1091,22 @@ export default function FollowUpQueuePage() {
           </label>
           <label className={s.filterGroup}>
             <span className="form-label">Owner</span>
-            <select className="select" value={filters.ownerUserId} onChange={(event) => setFilters((prev) => ({ ...prev, ownerUserId: event.target.value }))}>
-              <option value="all">All Owners</option>
-              {currentUser?.id && <option value="__me">My Tasks</option>}
-              <option value="unassigned">Unassigned</option>
-              {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
+            <select
+              className="select"
+              value={filters.ownerUserId}
+              disabled={coordinatorUiPolicy.ownerScoped}
+              onChange={(event) => setFilters((prev) => ({ ...prev, ownerUserId: event.target.value }))}
+            >
+              {coordinatorUiPolicy.ownerScoped ? (
+                <option value="__me">My Tasks</option>
+              ) : (
+                <>
+                  <option value="all">All Owners</option>
+                  {currentUser?.id && <option value="__me">My Tasks</option>}
+                  <option value="unassigned">Unassigned</option>
+                  {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
+                </>
+              )}
             </select>
           </label>
           <label className={s.filterGroup}>
@@ -1179,19 +1212,23 @@ export default function FollowUpQueuePage() {
                   )}
                   <div className={s.mutedText}>{task.contactName || 'No contact linked'}</div>
                 </div>
-                <label className={s.assigneeSelect}>
+                <div className={s.assigneeSelect}>
                   <span className={s.compactLabel}>Owner</span>
-                  <select
-                    className="select"
-                    value={task.ownerUserId || ''}
-                    disabled={!access.canWriteCrm || busyTaskId === task.id}
-                    onChange={(event) => applyTaskAction(task, 'assign', { ownerUserId: event.target.value || null })}
-                  >
-                    <option value="" disabled>Select owner</option>
-                    {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
-                  </select>
+                  {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
+                    <select
+                      className="select"
+                      value={task.ownerUserId || ''}
+                      disabled={!access.canWriteCrm || busyTaskId === task.id}
+                      onChange={(event) => applyTaskAction(task, 'assign', { ownerUserId: event.target.value || null })}
+                    >
+                      <option value="" disabled>Select owner</option>
+                      {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
+                    </select>
+                  ) : (
+                    <div className={s.dueText}>{assignee?.name || assignee?.email || 'Me'}</div>
+                  )}
                   {assignee?.email && <span className={s.mutedText}>{assignee.email}</span>}
-                </label>
+                </div>
                 <div className={s.actions}>
                   <button
                     className={`btn btn-sm ${s.iconButton}`}
@@ -1202,15 +1239,17 @@ export default function FollowUpQueuePage() {
                   >
                     <Pencil size={14} />
                   </button>
-                  <button
-                    className={`btn btn-sm ${s.iconButton}`}
-                    data-tooltip="Assign to me"
-                    disabled={!access.canWriteCrm || busyTaskId === task.id || !currentUser?.id}
-                    onClick={() => applyTaskAction(task, 'assign', { ownerUserId: currentUser.id })}
-                    aria-label="Assign to me"
-                  >
-                    <UserPlus size={14} />
-                  </button>
+                  {coordinatorUiPolicy.canManageCoordinatorAssignments && (
+                    <button
+                      className={`btn btn-sm ${s.iconButton}`}
+                      data-tooltip="Assign to me"
+                      disabled={!access.canWriteCrm || busyTaskId === task.id || !currentUser?.id}
+                      onClick={() => applyTaskAction(task, 'assign', { ownerUserId: currentUser.id })}
+                      aria-label="Assign to me"
+                    >
+                      <UserPlus size={14} />
+                    </button>
+                  )}
                   <button
                     className={`btn btn-sm ${s.iconButton}`}
                     data-tooltip="Snooze one day"
@@ -1279,13 +1318,17 @@ export default function FollowUpQueuePage() {
                         {TASK_RECURRENCE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                       </select>
                     </label>
-                    <label>
-                      <span className="form-label">Owner</span>
-                      <select className="select" value={editDraft.ownerUserId} disabled={editBusy} onChange={(event) => updateEditDraft({ ownerUserId: event.target.value })}>
-                        <option value="" disabled>Select owner</option>
-                        {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
-                      </select>
-                    </label>
+                    {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
+                      <label>
+                        <span className="form-label">Owner</span>
+                        <select className="select" value={editDraft.ownerUserId} disabled={editBusy} onChange={(event) => updateEditDraft({ ownerUserId: event.target.value })}>
+                          <option value="" disabled>Select owner</option>
+                          {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
+                        </select>
+                      </label>
+                    ) : (
+                      <input type="hidden" value={coordinatorUiPolicy.lockedOwnerUserId || editDraft.ownerUserId} readOnly />
+                    )}
                     <label>
                       <span className="form-label">{scopeLabel}</span>
                       <select className="select" value={editDraft.businessUnitId} disabled={editBusy} onChange={(event) => updateEditBusinessUnit(event.target.value)}>
@@ -1363,18 +1406,20 @@ export default function FollowUpQueuePage() {
                         onChange={(event) => updateFollowUpDraft(task.id, { nextDueDate: event.target.value })}
                       />
                     </label>
-                    <label className={s.filterGroup}>
-                      <span className="form-label">Next Owner</span>
-                      <select
-                        className="select"
-                        value={draft.nextOwnerUserId}
-                        disabled={busyTaskId === task.id}
-                        onChange={(event) => updateFollowUpDraft(task.id, { nextOwnerUserId: event.target.value })}
-                      >
-                        <option value="" disabled>Select owner</option>
-                        {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
-                      </select>
-                    </label>
+                    {coordinatorUiPolicy.canManageCoordinatorAssignments && (
+                      <label className={s.filterGroup}>
+                        <span className="form-label">Next Owner</span>
+                        <select
+                          className="select"
+                          value={draft.nextOwnerUserId}
+                          disabled={busyTaskId === task.id}
+                          onChange={(event) => updateFollowUpDraft(task.id, { nextOwnerUserId: event.target.value })}
+                        >
+                          <option value="" disabled>Select owner</option>
+                          {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
+                        </select>
+                      </label>
+                    )}
                     <div className={s.profileFields}>
                       <label className={s.filterGroup}>
                         <span className="form-label">Program</span>
