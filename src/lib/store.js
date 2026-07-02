@@ -490,11 +490,18 @@ export function CRMProvider({ children, initialData }) {
     const existing = contacts.find(c => c.id === id);
     setContacts(p => p.filter(c => c.id!==id));
     if (isPostgres && access.canWriteCrm) {
-      return callContactsApi('DELETE', { id, ...options }).catch((error) => {
-        console.error(error);
-        if (existing) setContacts(p => [existing, ...p]);
-        throw error;
-      });
+      return callContactsApi('DELETE', { id, ...options })
+        .then((result) => {
+          if (result?.approvalRequested && existing) {
+            setContacts(p => [existing, ...p.filter(c => c.id !== id)]);
+          }
+          return result;
+        })
+        .catch((error) => {
+          console.error(error);
+          if (existing) setContacts(p => [existing, ...p]);
+          throw error;
+        });
     }
     return Promise.resolve({ id });
   }, [access.canWriteCrm, callContactsApi, contacts, isPostgres]);

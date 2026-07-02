@@ -26,6 +26,8 @@ import {
   latestLeadForContact,
   updateContactWithLeadAndNotes,
 } from '@/lib/crm/write-helpers.js';
+import { createOrReuseArchiveApprovalTask } from '@/lib/tasks/archive-approvals.js';
+import { toTaskPayload } from '@/lib/tasks/service.js';
 import { workflowFromLead } from '@/lib/sales-workflow';
 import { summarizeContactTouch } from '@/lib/contact-touch.js';
 
@@ -390,12 +392,6 @@ export async function DELETE(request) {
   }
 
   const db = getDb();
-  if (!canArchiveContactsDirectly(session)) {
-    return NextResponse.json(
-      { error: 'Regular coordinators cannot directly archive contacts. Request an archive approval instead.' },
-      { status: 403 },
-    );
-  }
   const [existing] = await db
     .select()
     .from(contacts)
@@ -408,14 +404,39 @@ export async function DELETE(request) {
   if (!canAccessContact(session, existing)) {
     return NextResponse.json({ error: 'Insufficient business-unit access.' }, { status: 403 });
   }
+  let lead = null;
   try {
-    assertCanAccessContactLead(session, await latestLeadForContact(db, session.user.organizationId, id));
+    lead = await latestLeadForContact(db, session.user.organizationId, id);
+    assertCanAccessContactLead(session, lead);
   } catch (error) {
     return crmErrorResponse(error);
   }
 
   const archiveReason = String(body.reason || body.archiveReason || 'Archived by employee request.').trim()
     || 'Archived by employee request.';
+  if (!canArchiveContactsDirectly(session)) {
+    try {
+      const { task, reused } = await createOrReuseArchiveApprovalTask({
+        db,
+        organizationId: session.user.organizationId,
+        session,
+        contact: existing,
+        lead,
+        reason: archiveReason,
+      });
+      return NextResponse.json({
+        ok: true,
+        id,
+        archived: false,
+        approvalRequested: true,
+        reused,
+        task: toTaskPayload(task),
+      }, { status: reused ? 200 : 202 });
+    } catch (error) {
+      return crmErrorResponse(error);
+    }
+  }
+
   const archivedAt = new Date();
   const archived = await db.transaction(async (tx) => {
     const [row] = await tx

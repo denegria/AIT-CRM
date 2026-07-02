@@ -5,6 +5,7 @@ export const TASK_TYPES = Object.freeze({
   DOCUMENT_REQUEST: 'document_request',
   PAYMENT_FOLLOW_UP: 'payment_follow_up',
   MANUAL_REMINDER: 'manual_reminder',
+  ARCHIVE_APPROVAL: 'archive_approval',
 });
 
 export const TASK_STATUSES = Object.freeze({

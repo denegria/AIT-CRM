@@ -797,15 +797,17 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   };
 
   const handleArchiveContact = () => {
-    if (!contact || archiveBusy || !coordinatorUiPolicy.canArchiveContactsDirectly) return;
+    if (!contact || archiveBusy || !access.canWriteCrm) return;
     const reason = cleanText(archiveReason) || 'Archived from contact profile.';
     setArchiveBusy(true);
     deleteContact(contact.id, { reason })
-      .then(() => {
-        toast(`${singularLabel} archived`);
+      .then((result) => {
+        toast(result?.approvalRequested
+          ? `Archive approval requested for ${contact.name || singularLabel.toLowerCase()}`
+          : `${singularLabel} archived`);
         setArchiveConfirmOpen(false);
         setIsEditModalOpen(false);
-        router.push(isClientMode ? '/clients' : '/contacts');
+        if (!result?.approvalRequested) router.push(isClientMode ? '/clients' : '/contacts');
       })
       .catch((error) => toast(error.message || 'Archive failed', 'error'))
       .finally(() => setArchiveBusy(false));
@@ -2180,11 +2182,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           ) : (
             <input type="hidden" value={editForm.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
           )}
-          {access.canWriteCrm && coordinatorUiPolicy.canArchiveContactsDirectly ? (
+          {access.canWriteCrm ? (
             <div className="empty-state" style={{padding: 12, marginTop: 12, borderColor: 'var(--danger-muted)'}}>
               <div style={{fontWeight: 700, color: 'var(--danger)', marginBottom: 4}}>Danger zone</div>
               <div style={{fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 10}}>
-                Archive removes this {singularLabel.toLowerCase()} from normal CRM lists. History is retained for audit and recovery.
+                {coordinatorUiPolicy.canArchiveContactsDirectly
+                  ? `Archive removes this ${singularLabel.toLowerCase()} from normal CRM lists. History is retained for audit and recovery.`
+                  : `Request senior approval to archive this ${singularLabel.toLowerCase()}. The contact stays active until approved.`}
               </div>
               <button
                 className="btn btn-danger"
@@ -2194,12 +2198,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   setArchiveConfirmOpen(true);
                 }}
               >
-                Archive {singularLabel}
+                {coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive ${singularLabel}` : 'Request Archive Approval'}
               </button>
-            </div>
-          ) : access.canWriteCrm ? (
-            <div className="empty-state" style={{padding: 12, marginTop: 12}}>
-              Archive approval requests are coming in MIS-235.
             </div>
           ) : null}
         </Modal>
@@ -2209,18 +2209,22 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         <Modal
           open={archiveConfirmOpen}
           onClose={() => !archiveBusy && setArchiveConfirmOpen(false)}
-          title={`Archive ${singularLabel}`}
+          title={coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive ${singularLabel}` : 'Request archive approval'}
           footer={(
             <>
               <button className="btn" type="button" disabled={archiveBusy} onClick={() => setArchiveConfirmOpen(false)}>Cancel</button>
               <button className="btn btn-danger" type="button" disabled={archiveBusy} onClick={handleArchiveContact}>
-                {archiveBusy ? 'Archiving...' : `Archive ${singularLabel}`}
+                {archiveBusy
+                  ? (coordinatorUiPolicy.canArchiveContactsDirectly ? 'Archiving...' : 'Requesting...')
+                  : (coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive ${singularLabel}` : 'Request Approval')}
               </button>
             </>
           )}
         >
           <div className="empty-state" style={{padding: 12, marginBottom: 12}}>
-            This removes the {singularLabel.toLowerCase()} from normal CRM lists and selectors. Notes, timeline, lead history, and linked records remain in the database for audit.
+            {coordinatorUiPolicy.canArchiveContactsDirectly
+              ? `This removes the ${singularLabel.toLowerCase()} from normal CRM lists and selectors. Notes, timeline, lead history, and linked records remain in the database for audit.`
+              : `This creates an approval task for a senior coordinator or admin. The ${singularLabel.toLowerCase()} remains active unless the request is approved.`}
           </div>
           <div className="form-group">
             <label className="form-label">Reason</label>

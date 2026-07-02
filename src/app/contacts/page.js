@@ -320,16 +320,18 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const openEdit = (row) => { if (!canWrite) return; setForm({ ...row }); setFormError(''); setDrawer(row); };
   const close = () => { setDrawer(null); setFormError(''); };
   const requestDelete = () => {
-    if (!canWrite || !coordinatorUiPolicy.canArchiveContactsDirectly || !drawer || drawer === 'new') return;
+    if (!canWrite || !drawer || drawer === 'new') return;
     setDeleteTarget(drawer);
   };
   const confirmDelete = () => {
     if (!deleteTarget) return;
     deleteContact(deleteTarget.id, { reason: 'Archived from contacts directory.' })
-      .then(() => {
-        toast(`${singularLabel} archived`);
+      .then((result) => {
+        toast(result?.approvalRequested
+          ? `Archive approval requested for ${deleteTarget.name || singularLabel.toLowerCase()}`
+          : `${singularLabel} archived`);
         setDeleteTarget(null);
-        close();
+        if (!result?.approvalRequested) close();
       })
       .catch((error) => toast(error?.message || 'Archive failed.', 'error'));
   };
@@ -759,8 +761,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
 
       <Modal open={!!drawer} onClose={close} title={drawer === 'new' ? `New ${singularLabel}` : `Edit ${singularLabel}`}
         footer={<>
-          {canWrite && coordinatorUiPolicy.canArchiveContactsDirectly && drawer && drawer !== 'new' && (
-            <button className="btn btn-danger" type="button" onClick={requestDelete}>Delete</button>
+          {canWrite && drawer && drawer !== 'new' && (
+            <button className="btn btn-danger" type="button" onClick={requestDelete}>
+              {coordinatorUiPolicy.canArchiveContactsDirectly ? 'Delete' : 'Request Archive'}
+            </button>
           )}
           <button className="btn" onClick={close}>Cancel</button>
           <button className="btn btn-primary" onClick={save}>Save</button>
@@ -898,9 +902,11 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         open={!!deleteTarget}
         onClose={() => setDeleteTarget(null)}
         onConfirm={confirmDelete}
-        title={`Archive ${singularLabel}`}
-        message={`Archive ${deleteTarget?.name || `this ${singularLabel.toLowerCase()}`}? It will be removed from normal CRM lists, but history remains available in the database for audit/recovery.`}
-        confirmLabel="Archive"
+        title={coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive ${singularLabel}` : `Request archive approval`}
+        message={coordinatorUiPolicy.canArchiveContactsDirectly
+          ? `Archive ${deleteTarget?.name || `this ${singularLabel.toLowerCase()}`}? It will be removed from normal CRM lists, but history remains available in the database for audit/recovery.`
+          : `Request senior approval to archive ${deleteTarget?.name || `this ${singularLabel.toLowerCase()}`}? The contact will stay active until the request is approved.`}
+        confirmLabel={coordinatorUiPolicy.canArchiveContactsDirectly ? 'Archive' : 'Request Approval'}
         variant="danger"
       />
     </div>
