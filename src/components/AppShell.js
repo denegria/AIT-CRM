@@ -24,7 +24,13 @@ export default function AppShell({ children }) {
   useEffect(() => {
     if (!loaded || canUseRoute) return;
     router.replace('/');
-  }, [canUseRoute, loaded, router]);
+    const fallback = window.setTimeout(() => {
+      if (window.location.pathname === pathname) {
+        window.location.replace('/');
+      }
+    }, 750);
+    return () => window.clearTimeout(fallback);
+  }, [canUseRoute, loaded, pathname, router]);
 
   if (isPublicJoinPage) {
     return <main className="public-main-content">{children}</main>;
@@ -41,7 +47,11 @@ export default function AppShell({ children }) {
             <NotificationBell />
           </header>
           {loaded && !canUseRoute ? (
-            <div className="empty-state">This workspace is limited to your assigned CRM queue.</div>
+            <div className="empty-state">
+              {isWorkOrdersRoute
+                ? 'Work Orders are available from the AIT Signs division.'
+                : 'This workspace is limited to your assigned CRM queue.'}
+            </div>
           ) : children}
         </main>
       </div>
