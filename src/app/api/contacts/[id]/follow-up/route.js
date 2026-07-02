@@ -10,7 +10,10 @@ import {
 } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import {
+  assertCanAccessContactLead,
+  assertCanAssignUser,
   canAccessBusinessUnit,
+  isRegularCoordinatorSession,
   resolveContactById,
 } from '@/lib/crm/access.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
@@ -66,6 +69,7 @@ async function resolveOrganizationUserId(db, session, value, fieldName = 'ownerU
     .limit(1);
 
   if (!user) throw createCrmError('Task owner not found.', 404);
+  assertCanAssignUser(session, user.id, 'Regular coordinators cannot assign tasks to other users.');
   return user.id;
 }
 
@@ -102,6 +106,9 @@ async function findOldestOpenFollowUpTask(db, session, contactId) {
   ];
   if (!session.user.canAccessAllBusinessUnits) {
     conditions.push(inArray(tasks.businessUnitId, session.user.businessUnitIds));
+  }
+  if (isRegularCoordinatorSession(session)) {
+    conditions.push(eq(tasks.ownerUserId, session.user.id));
   }
 
   const [task] = await db
@@ -224,6 +231,8 @@ export async function GET(request, { params }) {
       contactsTable: contacts,
       contactId: id,
     });
+    const lead = await resolveLatestLeadForContact(db, session.user.organizationId, contact.id);
+    assertCanAccessContactLead(session, lead);
     const task = await findOldestOpenFollowUpTask(db, session, contact.id);
     return NextResponse.json({ task: safeTaskSummary(task) });
   } catch (err) {
@@ -265,6 +274,9 @@ export async function POST(request, { params }) {
     if (existingTask && !canAccessBusinessUnit(session, existingTask.businessUnitId)) {
       throw createCrmError('Insufficient business-unit access.', 403);
     }
+    if (existingTask && isRegularCoordinatorSession(session) && existingTask.ownerUserId !== session.user.id) {
+      throw createCrmError('Regular coordinators can only access tasks assigned to them.', 403);
+    }
 
     const lead = existingTask?.leadId
       ? (await db
@@ -273,6 +285,7 @@ export async function POST(request, { params }) {
           .where(and(eq(leads.id, existingTask.leadId), eq(leads.organizationId, session.user.organizationId)))
           .limit(1))[0] || null
       : await resolveLatestLeadForContact(db, session.user.organizationId, contact.id);
+    assertCanAccessContactLead(session, lead);
 
     const businessUnitId = existingTask?.businessUnitId || lead?.businessUnitId || contact.primaryBusinessUnitId;
     if (!businessUnitId) throw createCrmError('A business unit is required to log follow-up.');

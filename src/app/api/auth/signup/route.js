@@ -12,7 +12,7 @@ import {
 import { createUserSession, hashPassword, setAuthCookie } from '@/lib/auth';
 import { verifySignupInviteToken } from '@/lib/signup-invites';
 
-const INVITE_ROLE_KEYS = ['account_manager', 'designer', 'sales_manager'];
+const INVITE_ROLE_KEYS = ['account_manager', 'senior_coordinator', 'designer', 'sales_manager'];
 const MANAGED_ROLE_KEYS = ['admin', ...INVITE_ROLE_KEYS];
 
 function normalizeEmail(value) {

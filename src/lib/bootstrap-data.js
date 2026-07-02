@@ -26,9 +26,12 @@ import {
   conversationMessages as conversationMessagesTable,
 } from '../db/schema.js';
 import {
+  filterContactsForSession,
+  isRegularCoordinatorSession,
   scopedBusinessUnitWhere,
   scopedContactWhere,
   scopedOrgWhere,
+  scopedTaskWhere,
 } from './crm/access.js';
 import { toBusinessUnitPayload } from './crm/payloads.js';
 import { isPipelineEligibleContact, workflowFromLead } from './sales-workflow';
@@ -656,6 +659,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       userRows,
       membershipRows,
       userRoleRows,
+      accessLeadRows,
       importStaging,
     ] = await Promise.all([
       db.select().from(businessUnitsTable).where(scopedOrgWhere(businessUnitsTable, session)).orderBy(asc(businessUnitsTable.name)),
@@ -669,7 +673,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       db.select().from(activityEventsTable).where(scopedOrgWhere(activityEventsTable, session)).orderBy(desc(activityEventsTable.createdAt)),
       db.select().from(conversationMessagesTable).where(scopedOrgWhere(conversationMessagesTable, session)).orderBy(desc(conversationMessagesTable.occurredAt)),
       db.select().from(contactPeopleTable).where(scopedOrgWhere(contactPeopleTable, session)).orderBy(desc(contactPeopleTable.isPrimary), asc(contactPeopleTable.name)),
-      db.select().from(tasksTable).where(scopedBusinessUnitWhere(tasksTable, session)).orderBy(asc(tasksTable.dueAt), desc(tasksTable.createdAt)),
+      db.select().from(tasksTable).where(scopedTaskWhere(tasksTable, session)).orderBy(asc(tasksTable.dueAt), desc(tasksTable.createdAt)),
       db.select().from(usersTable).where(and(
         eq(usersTable.organizationId, session.user.organizationId),
         eq(usersTable.isActive, true),
@@ -683,11 +687,16 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
         .from(userRolesTable)
         .innerJoin(rolesTable, eq(userRolesTable.roleId, rolesTable.id))
         .where(eq(rolesTable.organizationId, session.user.organizationId)),
+      isRegularCoordinatorSession(session)
+        ? db.select().from(leadsTable).where(scopedOrgWhere(leadsTable, session)).orderBy(desc(leadsTable.createdAt))
+        : Promise.resolve(null),
       access.canReadImportReview ? getImportStagingSummary(db) : Promise.resolve(null),
     ]);
     const employees = mapEmployees(userRows, membershipRows, userRoleRows);
 
-    if (!contactRows.length && !taskRows.length) {
+    const visibleContactRows = filterContactsForSession(contactRows, accessLeadRows || leadRows, session);
+
+    if (!visibleContactRows.length && !taskRows.length) {
       return {
         ...emptyDbData(businessUnitRows, importStaging),
         currentUser: session.user,
@@ -701,7 +710,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       workOrderRows,
     });
     const contacts = mapContacts(
-      contactRows,
+      visibleContactRows,
       leadRows,
       noteRows,
       eventRows,

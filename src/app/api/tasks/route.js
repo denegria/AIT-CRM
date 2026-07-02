@@ -13,7 +13,10 @@ import {
 } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import {
+  assertCanAccessContactLead,
+  assertCanAssignUser,
   canAccessBusinessUnit,
+  isRegularCoordinatorSession,
   resolveBusinessUnitId,
   resolveContactById,
 } from '@/lib/crm/access.js';
@@ -82,7 +85,8 @@ function endOfToday() {
   return end;
 }
 
-async function listAssignableUsers(db, organizationId) {
+async function listAssignableUsers(db, session) {
+  const organizationId = session.user.organizationId;
   const userRows = await db
     .select({
       id: users.id,
@@ -113,10 +117,14 @@ async function listAssignableUsers(db, organizationId) {
     roleKeysByUserId.set(role.userId, roleKeys);
   }
 
-  return filterAssignableEmployees(userRows.map((user) => ({
+  let assignableUsers = filterAssignableEmployees(userRows.map((user) => ({
     ...user,
     roleKeys: roleKeysByUserId.get(user.id) || [],
-  }))).map((user) => ({
+  })));
+  if (isRegularCoordinatorSession(session)) {
+    assignableUsers = assignableUsers.filter((user) => user.id === session.user.id);
+  }
+  return assignableUsers.map((user) => ({
     id: user.id,
     name: user.name,
     email: user.email,
@@ -134,6 +142,7 @@ async function resolveOrganizationUserId(db, session, value, fieldName = 'ownerU
     .limit(1);
 
   if (!user) throw createCrmError('Task owner not found.', 404);
+  assertCanAssignUser(session, user.id, 'Regular coordinators cannot assign tasks to other users.');
   return user.id;
 }
 
@@ -213,6 +222,9 @@ async function resolveTaskLinks(db, session, body) {
     : null;
   const lead = explicitLead || latestContactLead;
   const workOrder = await resolveWorkOrderById(db, session, workOrderId);
+  if (contact || lead) {
+    assertCanAccessContactLead(session, lead);
+  }
 
   if (contact && lead?.contactId && lead.contactId !== contact.id) {
     throw createCrmError('Task lead must belong to the selected contact.');
@@ -337,6 +349,10 @@ export async function GET(request) {
       status: stringParam(searchParams.get('status')),
       taskType: stringParam(searchParams.get('taskType')),
     };
+    if (isRegularCoordinatorSession(session)) {
+      filters.ownerUserId = session.user.id;
+      filters.unassigned = false;
+    }
 
     if (requestedBusinessUnitId) {
       filters.businessUnitId = await resolveBusinessUnitId({
@@ -360,7 +376,7 @@ export async function GET(request) {
       businessUnitIds,
       filters,
     });
-    const assignableUsers = await listAssignableUsers(db, session.user.organizationId);
+    const assignableUsers = await listAssignableUsers(db, session);
     return NextResponse.json({
       tasks: rows.map(toTaskPayload),
       users: assignableUsers,
@@ -386,7 +402,7 @@ export async function POST(request) {
     const ownerUserId = await resolveOrganizationUserId(
       db,
       session,
-      body.ownerUserId || body.assignedTo,
+      body.ownerUserId || body.assignedTo || (isRegularCoordinatorSession(session) ? session.user.id : ''),
     );
     if (!ownerUserId) throw createCrmError('Task owner is required.');
     const dueAt = parseTaskDateTime(body.dueAt || body.dueDate, 'dueAt');
@@ -441,6 +457,9 @@ export async function PATCH(request) {
     if (!existingTask) return NextResponse.json({ error: 'Task not found.' }, { status: 404 });
     if (!canAccessBusinessUnit(session, existingTask.businessUnitId)) {
       return NextResponse.json({ error: 'Insufficient business-unit access.' }, { status: 403 });
+    }
+    if (isRegularCoordinatorSession(session) && existingTask.ownerUserId !== session.user.id) {
+      return NextResponse.json({ error: 'Regular coordinators can only access tasks assigned to them.' }, { status: 403 });
     }
 
     if (String(body.action || '').trim() === 'complete' && existingTask.taskType === TASK_TYPES.FOLLOW_UP) {

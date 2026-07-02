@@ -1,7 +1,8 @@
-export const MANAGED_ROLE_KEYS = Object.freeze(['admin', 'designer', 'account_manager', 'sales_manager']);
+export const MANAGED_ROLE_KEYS = Object.freeze(['admin', 'senior_coordinator', 'designer', 'account_manager', 'sales_manager']);
 
 export const ROLE_LABELS = Object.freeze({
   admin: 'Administrator',
+  senior_coordinator: 'Senior Coordinator',
   designer: 'Designer',
   account_manager: 'Account Coordinator',
   sales_manager: 'Sales Manager',
