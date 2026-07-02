@@ -5,7 +5,7 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { publishLogout } from '@/lib/auth/session-sync.js';
 import { useCRM } from '@/lib/store';
-import { canUseWorkOrdersWorkspace, coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
+import { canUseWorkOrdersForBusinessUnit, coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import { isClientAccountBusinessUnit } from '@/lib/crm/lifecycle';
 import s from './Sidebar.module.css';
 
@@ -115,7 +115,10 @@ export default function Sidebar() {
   const hasBusinessUnitScope = accessibleBusinessUnits?.length > 0;
   const divisionBrand = useMemo(() => divisionBrandFor(currentBusinessUnit), [currentBusinessUnit]);
   const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
-  const canUseWorkOrders = useMemo(() => canUseWorkOrdersWorkspace(currentUser), [currentUser]);
+  const canUseWorkOrders = useMemo(
+    () => canUseWorkOrdersForBusinessUnit(currentUser, currentBusinessUnit),
+    [currentBusinessUnit, currentUser],
+  );
 
   useEffect(() => {
     document.title = divisionBrand.title;

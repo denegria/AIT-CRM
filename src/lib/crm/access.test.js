@@ -8,6 +8,7 @@ import {
   canManageWorkOrderAssignments,
   canUseCoordinatorRoute,
   canUseWorkOrderBusinessUnit,
+  canUseWorkOrdersForBusinessUnit,
   canUseWorkOrdersWorkspace,
   canUseRegularCoordinatorRoute,
   coordinatorUiPolicyForUser,
@@ -100,6 +101,8 @@ test('mixed ait signs and ait usa employees keep signs-only work order access', 
   mixed.user.businessUnitNamesById = { 'bu-usa': 'AIT USA Institute', 'bu-signs': 'AIT Signs' };
 
   assert.equal(canUseWorkOrdersWorkspace(mixed.user), true);
+  assert.equal(canUseWorkOrdersForBusinessUnit(mixed.user, { id: 'bu-signs', name: 'AIT Signs' }), true);
+  assert.equal(canUseWorkOrdersForBusinessUnit(mixed.user, { id: 'bu-usa', name: 'AIT USA Institute' }), false);
   assert.equal(canUseWorkOrderBusinessUnit(mixed, 'bu-signs'), true);
   assert.equal(canUseWorkOrderBusinessUnit(mixed, 'bu-usa'), false);
   assert.equal(canUseCoordinatorRoute(mixed.user, '/work-orders'), true);
