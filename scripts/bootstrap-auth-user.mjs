@@ -19,6 +19,7 @@ const PERMISSIONS = {
   ],
   designer: ['crm:read', 'work_orders:write'],
   account_manager: ['crm:read', 'crm:write', 'financials:read', 'financials:write', 'work_orders:write'],
+  senior_coordinator: ['crm:read', 'crm:write', 'financials:read', 'financials:write', 'work_orders:write'],
   sales_manager: ['crm:read', 'crm:write', 'reports:read', 'financials:read'],
 };
 
@@ -26,6 +27,7 @@ const ROLE_NAMES = {
   admin: 'Administrator',
   designer: 'Designer',
   account_manager: 'Account Coordinator',
+  senior_coordinator: 'Senior Coordinator',
   sales_manager: 'Sales Manager',
 };
 

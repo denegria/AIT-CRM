@@ -4,7 +4,11 @@ import { getDb } from '@/db/index.js';
 import { activityEvents, businessUnits, contacts, users } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import {
+  assertCanAccessContactLead,
+  assertCanAssignUser,
+  canArchiveContactsDirectly,
   canAccessContact,
+  isRegularCoordinatorSession,
   resolveBusinessUnitId,
   resolveOptionalBusinessUnitId,
 } from '@/lib/crm/access.js';
@@ -117,6 +121,7 @@ async function resolveAssignableUserId(db, session, value, fieldName = 'assigned
   const id = String(value || '').trim();
   if (!id) return null;
   if (!isUuid(id)) throw createCrmError(`${fieldName} must be a valid user id.`);
+  assertCanAssignUser(session, id);
 
   const [user] = await db
     .select({ id: users.id })
@@ -183,7 +188,11 @@ export async function POST(request) {
   }
   let assignedUserId = null;
   try {
-    assignedUserId = await resolveAssignableUserId(db, session, body.assignedTo);
+    assignedUserId = await resolveAssignableUserId(
+      db,
+      session,
+      body.assignedTo || (isRegularCoordinatorSession(session) ? session.user.id : ''),
+    );
   } catch (error) {
     return crmErrorResponse(error);
   }
@@ -268,6 +277,11 @@ export async function PATCH(request) {
   }
 
   let lead = await latestLeadForContact(db, session.user.organizationId, id);
+  try {
+    assertCanAccessContactLead(session, lead);
+  } catch (error) {
+    return crmErrorResponse(error);
+  }
   const statusBusinessUnitId = hasBusinessUnitPatch && patch.primaryBusinessUnitId
     ? patch.primaryBusinessUnitId
     : lead?.businessUnitId || existing.primaryBusinessUnitId;
@@ -376,6 +390,12 @@ export async function DELETE(request) {
   }
 
   const db = getDb();
+  if (!canArchiveContactsDirectly(session)) {
+    return NextResponse.json(
+      { error: 'Regular coordinators cannot directly archive contacts. Request an archive approval instead.' },
+      { status: 403 },
+    );
+  }
   const [existing] = await db
     .select()
     .from(contacts)
@@ -387,6 +407,11 @@ export async function DELETE(request) {
   }
   if (!canAccessContact(session, existing)) {
     return NextResponse.json({ error: 'Insufficient business-unit access.' }, { status: 403 });
+  }
+  try {
+    assertCanAccessContactLead(session, await latestLeadForContact(db, session.user.organizationId, id));
+  } catch (error) {
+    return crmErrorResponse(error);
   }
 
   const archiveReason = String(body.reason || body.archiveReason || 'Archived by employee request.').trim()

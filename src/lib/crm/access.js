@@ -1,6 +1,21 @@
 import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { createCrmError } from './errors.js';
 import { isUuid } from './validation.js';
+export {
+  ROLE_KEYS,
+  canAccessContactLead,
+  canArchiveContactsDirectly,
+  canManageCoordinatorAssignments,
+  filterContactsForSession,
+  isRegularCoordinatorSession,
+  isSeniorCoordinatorSession,
+  latestLeadByContactId,
+  userHasRole,
+} from './coordinator-policy.js';
+import {
+  canAccessContactLead,
+  isRegularCoordinatorSession,
+} from './coordinator-policy.js';
 
 export function canAccessBusinessUnit(session, businessUnitId) {
   return Boolean(
@@ -46,6 +61,24 @@ export function scopedContactWhere(table, session) {
       inArray(table.primaryBusinessUnitId, session.user.businessUnitIds),
     ),
   );
+}
+
+export function scopedTaskWhere(table, session) {
+  const orgScope = scopedBusinessUnitWhere(table, session);
+  if (!isRegularCoordinatorSession(session)) return orgScope;
+  return and(orgScope, eq(table.ownerUserId, session.user.id));
+}
+
+export function assertCanAccessContactLead(session, lead = null) {
+  if (!canAccessContactLead(session, lead)) {
+    throw createCrmError('Regular coordinators can only access contacts assigned to them.', 403);
+  }
+}
+
+export function assertCanAssignUser(session, userId, message = 'Regular coordinators cannot assign work to other users.') {
+  if (isRegularCoordinatorSession(session) && userId !== session.user.id) {
+    throw createCrmError(message, 403);
+  }
 }
 
 export async function resolveBusinessUnitId({

@@ -14,11 +14,12 @@ test('assignable employee policy excludes staging test and automation accounts',
     { id: 'user-4', name: 'Inactive Employee', email: 'inactive@aitusa.com', roleKeys: ['designer'], isActive: false },
     { id: 'user-5', name: 'Jessica Vega', email: 'jessica@aitusa.com', roleKeys: ['designer'] },
     { id: 'user-6', name: 'Alvaro Denegri', email: 'alvarodenegri98@gmail.com', roleKeys: ['admin'] },
+    { id: 'user-7', name: 'Lili Senior', email: 'lili@aitusa.com', roleKeys: ['senior_coordinator'] },
   ];
 
   assert.deepEqual(
     filterAssignableEmployees(users).map((user) => user.id),
-    ['user-1', 'user-5'],
+    ['user-1', 'user-5', 'user-7'],
   );
 });
 

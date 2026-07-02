@@ -30,6 +30,7 @@ const scopePersistenceKeys = ['ait-crm-business-unit-scope', 'ait-crm-scope-user
 
 const roleLabels = {
   admin: 'Administrator',
+  senior_coordinator: 'Senior Coordinator',
   account_manager: 'Account Coordinator',
   designer: 'Designer',
   sales_manager: 'Sales Manager',

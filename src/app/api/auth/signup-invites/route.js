@@ -5,7 +5,7 @@ import { businessUnits, roles } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import { createSignupInviteToken } from '@/lib/signup-invites';
 
-const INVITE_ROLE_KEYS = ['account_manager', 'designer', 'sales_manager'];
+const INVITE_ROLE_KEYS = ['account_manager', 'senior_coordinator', 'designer', 'sales_manager'];
 const DEFAULT_EXPIRES_IN_SECONDS = 2 * 60 * 60;
 const MAX_EXPIRES_IN_SECONDS = 24 * 60 * 60;
 

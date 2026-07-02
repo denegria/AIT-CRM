@@ -1,5 +1,6 @@
 export const ASSIGNABLE_EMPLOYEE_ROLE_KEYS = Object.freeze([
   'admin',
+  'senior_coordinator',
   'account_manager',
   'designer',
   'sales_manager',

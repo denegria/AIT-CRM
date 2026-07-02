@@ -12,6 +12,7 @@ import { buildMembershipRows } from './user-access-values.js';
 test('managed role input only accepts first-party role keys', () => {
   assert.equal(normalizeManagedRoleKey('admin'), 'admin');
   assert.equal(normalizeManagedRoleKey('owner'), '');
+  assert.equal(normalizeManagedRoleKey('senior_coordinator'), 'senior_coordinator');
   assert.equal(normalizeManagedRoleKey(' account_manager '), 'account_manager');
 });
 
@@ -20,6 +21,14 @@ test('account manager role displays as account coordinator', () => {
     key: 'account_manager',
     label: 'Account Coordinator',
   });
+});
+
+test('senior coordinator role is managed and division-scoped', () => {
+  assert.deepEqual(toRoleOption('senior_coordinator'), {
+    key: 'senior_coordinator',
+    label: 'Senior Coordinator',
+  });
+  assert.equal(requiresBusinessUnitMembership('senior_coordinator'), true);
 });
 
 test('non-admin role drafts require explicit business-unit memberships', () => {
