@@ -1400,7 +1400,9 @@ export default function FollowUpQueuePage() {
             return (
               <article key={task.id} className={`${s.queueItem} ${isOverdue ? s.queueItemOverdue : ''} ${isToday ? s.queueItemToday : ''}`}>
                 <div>
-                  <div className={s.taskTitle}>{task.title}</div>
+                  <Link className={`${s.taskTitle} ${s.taskTitleLink}`} href={`/tasks/${encodeURIComponent(task.id)}`}>
+                    {task.title}
+                  </Link>
                   {task.description && <div className={s.taskDescription}>{task.description}</div>}
                   <div className={s.metaLine}>
                     <span className={`badge ${taskBadgeClass(task)}`}>{titleCase(task.status)}</span>
@@ -1880,7 +1882,9 @@ export default function FollowUpQueuePage() {
                 return (
                   <article key={`completed-${task.id}`} className={s.completedItem}>
                     <div>
-                      <div className={s.taskTitle}>{task.title}</div>
+                      <Link className={`${s.taskTitle} ${s.taskTitleLink}`} href={`/tasks/${encodeURIComponent(task.id)}`}>
+                        {task.title}
+                      </Link>
                       <div className={s.metaLine}>
                         <span className="badge badge-completed">Completed</span>
                         <span className={`badge badge-${task.priority}`}>{titleCase(task.priority)}</span>

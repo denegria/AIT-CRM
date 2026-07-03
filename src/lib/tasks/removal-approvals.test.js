@@ -140,7 +140,9 @@ test('regular coordinator task removal requests create reviewer-owned approval t
   assert.equal(result.targetTask.metadataJson.removalApproval.decision, 'pending');
   assert.equal(db.inserted[0].sourceType, 'task_removal_approval');
   assert.equal(db.inserted[0].metadataJson.targetTaskId, 'task-target');
-  assert.equal(db.inserted.some((row) => row.type === 'task_removal_approval_requested'), true);
+  const notification = db.inserted.find((row) => row.type === 'task_removal_approval_requested');
+  assert.equal(Boolean(notification), true);
+  assert.equal(notification.href, '/tasks/approval-task');
 });
 
 test('regular coordinator task removal requests reuse an existing open approval task', async () => {

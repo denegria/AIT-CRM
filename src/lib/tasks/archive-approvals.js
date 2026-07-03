@@ -131,7 +131,7 @@ async function notifyReviewer(tx, { organizationId, businessUnitId, contactId, l
       sourceType: ARCHIVE_APPROVAL_SOURCE_TYPE,
       title: `Archive approval requested - ${cleanText(contactName) || 'Contact'}`,
       body: 'Review the archive approval task before the contact is removed from active CRM lists.',
-      href: '/tasks?taskType=archive_approval',
+      href: `/tasks/${taskId}`,
       contactId,
       leadId: leadId || null,
       metadataJson: {

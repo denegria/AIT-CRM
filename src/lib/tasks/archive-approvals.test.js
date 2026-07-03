@@ -147,7 +147,9 @@ test('regular coordinator archive requests create a reviewer-owned approval task
   assert.equal(db.inserted[0].taskType, TASK_TYPES.ARCHIVE_APPROVAL);
   assert.equal(db.inserted[0].metadataJson.requesterUserId, 'user-1');
   assert.equal(db.inserted[0].metadataJson.requestedReason, 'Duplicate imported contact.');
-  assert.equal(db.inserted.some((row) => row.type === 'archive_approval_requested'), true);
+  const notification = db.inserted.find((row) => row.type === 'archive_approval_requested');
+  assert.equal(Boolean(notification), true);
+  assert.equal(notification.href, '/tasks/task-new');
 });
 
 test('only senior coordinators and admins can review archive approvals', async () => {

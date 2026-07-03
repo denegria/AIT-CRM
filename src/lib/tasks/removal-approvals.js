@@ -145,7 +145,7 @@ async function notifyTaskRemovalReviewer(tx, {
       sourceType: TASK_REMOVAL_APPROVAL_SOURCE_TYPE,
       title: `Task removal requested - ${cleanText(targetTask.title) || 'Task'}`,
       body: 'Review the task removal request before it is canceled from active work.',
-      href: '/tasks?taskType=task_removal_approval',
+      href: `/tasks/${approvalTaskId}`,
       contactId: targetTask.contactId || null,
       leadId: targetTask.leadId || null,
       metadataJson: {

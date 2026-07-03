@@ -39,7 +39,7 @@ test('task calendar events include open recurring task due dates', () => {
       description: 'Review open lead handoffs.',
       date: '2026-06-12',
       type: 'deadline',
-      href: '/tasks',
+      href: '/tasks/task-recurring',
       contactId: '',
       businessUnitId: 'bu-usa',
     },

@@ -398,6 +398,15 @@
   line-height: 1.25;
 }
 
+.taskTitleLink {
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.taskTitleLink:hover {
+  color: var(--accent);
+}
+
 .taskDescription {
   margin-top: 4px;
   color: var(--text-secondary);
