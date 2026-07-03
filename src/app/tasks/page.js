@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
-  AlarmClock,
   CheckCircle2,
   Pencil,
   ExternalLink,
@@ -31,6 +30,7 @@ import {
   taskDateKey,
 } from '@/lib/tasks/visibility.js';
 import { useToast } from '@/components/Toast';
+import Modal from '@/components/Modal';
 import s from './FollowUpQueue.module.css';
 
 const TASK_TYPE_OPTIONS = [
@@ -107,13 +107,6 @@ function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function addDays(days) {
-  const date = new Date();
-  date.setDate(date.getDate() + days);
-  date.setHours(9, 0, 0, 0);
-  return date.toISOString();
-}
-
 function dateInputToIso(value) {
   if (!value) return null;
   const date = new Date(`${value}T09:00:00`);
@@ -153,6 +146,7 @@ function defaultBusinessUnitId(currentBusinessUnitId, accessibleBusinessUnits = 
 function defaultCreateDraft({ currentBusinessUnitId, accessibleBusinessUnits, currentUser }) {
   return {
     title: '',
+    description: '',
     taskType: 'manual_reminder',
     dueDate: todayKey(),
     ownerUserId: currentUser?.id || '',
@@ -170,6 +164,7 @@ function defaultOwnerUserId(currentUser, assignees = []) {
 function editDraftFromTask(task) {
   return {
     title: task.title || '',
+    description: task.description || '',
     taskType: task.taskType || 'manual_reminder',
     dueDate: dateKey(task.dueAt),
     ownerUserId: task.ownerUserId || '',
@@ -178,6 +173,27 @@ function editDraftFromTask(task) {
     priority: task.priority || 'medium',
     recurrenceFrequency: task.recurrence?.frequency || 'none',
   };
+}
+
+function taskTypeForFilter(value) {
+  return TASK_CREATE_TYPE_OPTIONS.some(([optionValue]) => optionValue === value)
+    ? value
+    : '';
+}
+
+function ownerForFilter(value, currentUser, visibleAssignees = []) {
+  if (value === '__me') return currentUser?.id || '';
+  if (!value || value === 'all' || value === 'unassigned') return '';
+  return visibleAssignees.some((user) => user.id === value) ? value : '';
+}
+
+function dueDateForFilter(value) {
+  if (value === 'upcoming') {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    return tomorrow.toISOString().slice(0, 10);
+  }
+  return todayKey();
 }
 
 function normalizeTask(task, contacts = []) {
@@ -351,9 +367,10 @@ export default function FollowUpQueuePage() {
           status && status !== bucket.label ? status : '',
         ].filter(Boolean);
         const name = contact.name || contact.client || 'Unnamed contact';
+        const channel = contact.phone || contact.email || 'No contact channel';
         return {
           contact,
-          label: context.length ? `${name} - ${context.join(' - ')}` : name,
+          label: [name, channel, ...context].filter(Boolean).join(' - '),
         };
       })
       .sort((a, b) => a.label.localeCompare(b.label));
@@ -389,6 +406,10 @@ export default function FollowUpQueuePage() {
   const editContactOptions = useMemo(
     () => contactOptionsForBusinessUnit(editDraft.businessUnitId),
     [contactOptionsForBusinessUnit, editDraft.businessUnitId],
+  );
+  const selectedCreateContact = useMemo(
+    () => (accessibleContacts || []).find((contact) => contact.id === createDraft.contactId) || null,
+    [accessibleContacts, createDraft.contactId],
   );
 
   const readTasks = useCallback(async () => {
@@ -637,10 +658,23 @@ export default function FollowUpQueuePage() {
 
   function openCreatePanel(overrides = {}) {
     const baseDraft = defaultCreateDraft({ currentBusinessUnitId, accessibleBusinessUnits, currentUser });
+    const scopedTaskType = taskTypeForFilter(filters.taskType);
+    const scopedOwner = ownerForFilter(filters.ownerUserId, currentUser, visibleAssignees);
+    const scopedBusinessUnit = filters.businessUnitId && filters.businessUnitId !== 'all'
+      ? filters.businessUnitId
+      : '';
     setCreateDraft({
       ...baseDraft,
+      taskType: scopedTaskType || baseDraft.taskType,
+      dueDate: dueDateForFilter(filters.due),
+      businessUnitId: scopedBusinessUnit || baseDraft.businessUnitId,
+      ownerUserId: scopedOwner || baseDraft.ownerUserId || defaultOwnerUserId(currentUser, visibleAssignees),
       ...overrides,
-      ownerUserId: coordinatorUiPolicy.lockedOwnerUserId || overrides.ownerUserId || baseDraft.ownerUserId || defaultOwnerUserId(currentUser, visibleAssignees),
+      ownerUserId: coordinatorUiPolicy.lockedOwnerUserId ||
+        overrides.ownerUserId ||
+        scopedOwner ||
+        baseDraft.ownerUserId ||
+        defaultOwnerUserId(currentUser, visibleAssignees),
     });
     setCreateContactSearch('');
     setCreateError('');
@@ -775,6 +809,7 @@ export default function FollowUpQueuePage() {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           title,
+          description: createDraft.description,
           taskType: createDraft.taskType,
           dueAt: dateInputToIso(createDraft.dueDate),
           ownerUserId: createDraft.ownerUserId || null,
@@ -835,6 +870,7 @@ export default function FollowUpQueuePage() {
             id: editTaskId,
             action: 'update',
             title,
+            description: editDraft.description,
             taskType: editDraft.taskType,
             dueAt: dateInputToIso(editDraft.dueDate),
             ownerUserId: editDraft.ownerUserId || null,
@@ -859,6 +895,7 @@ export default function FollowUpQueuePage() {
       } else {
         const localPatch = {
           title,
+          description: editDraft.description,
           taskType: editDraft.taskType,
           dueAt: dateInputToIso(editDraft.dueDate),
           dueDate: editDraft.dueDate,
@@ -986,18 +1023,41 @@ export default function FollowUpQueuePage() {
         </div>
       </div>
 
-      {createOpen && (
-        <form className={s.createPanel} onSubmit={submitCreatedTask}>
-          <div className={s.createPanelHeader}>
-            <div>
-              <h2 className={s.createTitle}>New task</h2>
-            </div>
-            <button className={`btn btn-sm ${s.iconButton}`} type="button" onClick={() => setCreateOpen(false)} aria-label="Close new task panel">
-              <X size={14} />
+      <Modal
+        open={createOpen}
+        onClose={() => {
+          if (!createBusy) setCreateOpen(false);
+        }}
+        title="New Task"
+        drawerClassName={s.createDrawer}
+        footer={(
+          <>
+            <button className="btn btn-sm" type="button" disabled={createBusy} onClick={() => setCreateOpen(false)}>Cancel</button>
+            <button className="btn btn-sm btn-primary" type="submit" form="new-task-form" disabled={createBusy || !canSubmitCreate}>
+              <Plus size={14} />
+              Create Task
             </button>
+          </>
+        )}
+      >
+        <form id="new-task-form" className={s.createForm} onSubmit={submitCreatedTask}>
+          <div className={s.createIntro}>
+            <div>
+              <span className={s.createIntroLabel}>Task setup</span>
+              <p>Capture the owner, deadline, and contact context before it joins the queue.</p>
+            </div>
+            <span className={s.createRequired}>* Required</span>
           </div>
-          <div className={s.createGrid}>
-            <label className={s.createTitleField}>
+
+          <section className={s.createSection}>
+            <div className={s.createSectionHeader}>
+              <span className={s.createSectionIndex}>1</span>
+              <div>
+                <h2 className={s.createSectionTitle}>What</h2>
+                <p className={s.createSectionCopy}>Name the work and set its urgency.</p>
+              </div>
+            </div>
+            <label>
               <span className="form-label">Title *</span>
               <input
                 className="input"
@@ -1006,32 +1066,33 @@ export default function FollowUpQueuePage() {
                 aria-required="true"
                 disabled={createBusy}
                 onChange={(event) => updateCreateDraft({ title: event.target.value })}
-                placeholder="Call client about next step"
+                placeholder="Call student about next step"
               />
             </label>
-            <label>
-              <span className="form-label">Task Type</span>
-              <select className="select" value={createDraft.taskType} disabled={createBusy} onChange={(event) => updateCreateDraft({ taskType: event.target.value })}>
-                {TASK_CREATE_TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-            </label>
-            <label>
-              <span className="form-label">Due Date *</span>
-              <input
-                className="input"
-                type="date"
-                value={createDraft.dueDate}
-                required
-                disabled={createBusy}
-                onChange={(event) => updateCreateDraft({ dueDate: event.target.value })}
-              />
-            </label>
-            <label>
-              <span className="form-label">Repeats</span>
-              <select className="select" value={createDraft.recurrenceFrequency} disabled={createBusy} onChange={(event) => updateCreateDraft({ recurrenceFrequency: event.target.value })}>
-                {TASK_RECURRENCE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-            </label>
+            <div className={s.createSplit}>
+              <label>
+                <span className="form-label">Task Type</span>
+                <select className="select" value={createDraft.taskType} disabled={createBusy} onChange={(event) => updateCreateDraft({ taskType: event.target.value })}>
+                  {TASK_CREATE_TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+              <label>
+                <span className="form-label">Priority</span>
+                <select className="select" value={createDraft.priority} disabled={createBusy} onChange={(event) => updateCreateDraft({ priority: event.target.value })}>
+                  {TASK_PRIORITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <section className={s.createSection}>
+            <div className={s.createSectionHeader}>
+              <span className={s.createSectionIndex}>2</span>
+              <div>
+                <h2 className={s.createSectionTitle}>Who</h2>
+                <p className={s.createSectionCopy}>Assign responsibility and keep the task in the right division.</p>
+              </div>
+            </div>
             {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
               <label>
                 <span className="form-label">Owner *</span>
@@ -1049,20 +1110,53 @@ export default function FollowUpQueuePage() {
                 {accessibleBusinessUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
               </select>
             </label>
-            <label>
-              <span className="form-label">Priority</span>
-              <select className="select" value={createDraft.priority} disabled={createBusy} onChange={(event) => updateCreateDraft({ priority: event.target.value })}>
-                {TASK_PRIORITY_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-            </label>
-            <label className={`${s.createContactField} ${s.contactPicker}`}>
+          </section>
+
+          <section className={s.createSection}>
+            <div className={s.createSectionHeader}>
+              <span className={s.createSectionIndex}>3</span>
+              <div>
+                <h2 className={s.createSectionTitle}>When</h2>
+                <p className={s.createSectionCopy}>Choose the first due date. Recurrence stays optional.</p>
+              </div>
+            </div>
+            <div className={s.createSplit}>
+              <label>
+                <span className="form-label">Due Date *</span>
+                <input
+                  className="input"
+                  type="date"
+                  value={createDraft.dueDate}
+                  required
+                  disabled={createBusy}
+                  onChange={(event) => updateCreateDraft({ dueDate: event.target.value })}
+                />
+              </label>
+              <label>
+                <span className="form-label">Repeats</span>
+                <select className="select" value={createDraft.recurrenceFrequency} disabled={createBusy} onChange={(event) => updateCreateDraft({ recurrenceFrequency: event.target.value })}>
+                  {TASK_RECURRENCE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <section className={s.createSection}>
+            <div className={s.createSectionHeader}>
+              <span className={s.createSectionIndex}>4</span>
+              <div>
+                <h2 className={s.createSectionTitle}>Context</h2>
+                <p className={s.createSectionCopy}>Link the student or leave clear instructions for the assignee.</p>
+              </div>
+            </div>
+            <label className={s.contactPicker}>
               <span className="form-label">Contact</span>
               <input
                 className="input"
                 value={createContactSearch}
                 disabled={createBusy}
                 onChange={(event) => setCreateContactSearch(event.target.value)}
-                placeholder="Search contact by name, email, phone, or status"
+                placeholder="Search name, phone, email, or status"
               />
               <select className="select" value={createDraft.contactId} disabled={createBusy} onChange={(event) => updateCreateContact(event.target.value)}>
                 <option value="">No contact linked</option>
@@ -1074,17 +1168,28 @@ export default function FollowUpQueuePage() {
                   : `${contactOptions.length} available contacts`}
               </span>
             </label>
-          </div>
+            {selectedCreateContact && (
+              <div className={s.selectedContact}>
+                <span>{selectedCreateContact.name || selectedCreateContact.client || 'Selected contact'}</span>
+                <small>{[selectedCreateContact.phone || selectedCreateContact.email || 'No channel', selectedCreateContact.currentStage || selectedCreateContact.status].filter(Boolean).join(' - ')}</small>
+              </div>
+            )}
+            <label>
+              <span className="form-label">Description</span>
+              <textarea
+                className={s.createTextarea}
+                rows={3}
+                value={createDraft.description}
+                disabled={createBusy}
+                onChange={(event) => updateCreateDraft({ description: event.target.value })}
+                placeholder="Useful context, call notes, or instructions"
+              />
+            </label>
+          </section>
+
           {createError && <div className={s.createError}>{createError}</div>}
-          <div className={s.createActions}>
-            <button className="btn btn-sm" type="button" disabled={createBusy} onClick={() => setCreateOpen(false)}>Cancel</button>
-            <button className="btn btn-sm btn-primary" type="submit" disabled={createBusy || !canSubmitCreate}>
-              <Plus size={14} />
-              Create Task
-            </button>
-          </div>
         </form>
-      )}
+      </Modal>
 
       <div className={s.summaryGrid}>
         <div className={s.summaryTile}><span className={s.summaryValue}>{stats.currentWork}</span><span className={s.summaryLabel}>Current Work</span></div>
@@ -1235,6 +1340,11 @@ export default function FollowUpQueuePage() {
             const isArchiveApprovalTask = task.taskType === 'archive_approval';
             const archiveDecisionDraft = archiveDecisionDrafts[task.id] || null;
             const showEditPanel = editTaskId === task.id;
+            const showAssignToMe = coordinatorUiPolicy.canManageCoordinatorAssignments &&
+              !isArchiveApprovalTask &&
+              !isTaskClosed(task) &&
+              currentUser?.id &&
+              task.ownerUserId !== currentUser.id;
             return (
               <article key={task.id} className={`${s.queueItem} ${isOverdue ? s.queueItemOverdue : ''} ${isToday ? s.queueItemToday : ''}`}>
                 <div>
@@ -1285,7 +1395,7 @@ export default function FollowUpQueuePage() {
                   >
                     <Pencil size={14} />
                   </button>
-                  {coordinatorUiPolicy.canManageCoordinatorAssignments && (
+                  {showAssignToMe && (
                     <button
                       className={`btn btn-sm ${s.iconButton}`}
                       data-tooltip="Assign to me"
@@ -1296,15 +1406,6 @@ export default function FollowUpQueuePage() {
                       <UserPlus size={14} />
                     </button>
                   )}
-                  <button
-                    className={`btn btn-sm ${s.iconButton}`}
-                    data-tooltip="Snooze one day"
-                    disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task)}
-                    onClick={() => applyTaskAction(task, 'snooze', { snoozedUntil: addDays(1) })}
-                    aria-label="Snooze one day"
-                  >
-                    <AlarmClock size={14} />
-                  </button>
                   {isArchiveApprovalTask ? (
                     <>
                       <button
@@ -1358,6 +1459,16 @@ export default function FollowUpQueuePage() {
                         value={editDraft.title}
                         disabled={editBusy}
                         onChange={(event) => updateEditDraft({ title: event.target.value })}
+                      />
+                    </label>
+                    <label className={s.createContactField}>
+                      <span className="form-label">Description</span>
+                      <textarea
+                        className="textarea"
+                        rows={2}
+                        value={editDraft.description}
+                        disabled={editBusy}
+                        onChange={(event) => updateEditDraft({ description: event.target.value })}
                       />
                     </label>
                     <label>
