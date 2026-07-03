@@ -42,6 +42,7 @@ const TASK_TYPE_OPTIONS = [
   ['payment_follow_up', 'Payment'],
   ['manual_reminder', 'Manual'],
   ['archive_approval', 'Archive Approval'],
+  ['task_removal_approval', 'Task Removal Approval'],
 ];
 
 const DUE_OPTIONS = [
@@ -84,7 +85,7 @@ const FOLLOW_UP_OUTCOME_OPTIONS = [
   ['enrolled_or_won', 'Enrolled / won'],
 ];
 
-const TASK_CREATE_TYPE_OPTIONS = TASK_TYPE_OPTIONS.filter(([value]) => !['all', 'archive_approval'].includes(value));
+const TASK_CREATE_TYPE_OPTIONS = TASK_TYPE_OPTIONS.filter(([value]) => !['all', 'archive_approval', 'task_removal_approval'].includes(value));
 const TASK_PRIORITY_OPTIONS = [
   ['low', 'Low'],
   ['medium', 'Medium'],
@@ -297,6 +298,7 @@ export default function FollowUpQueuePage() {
   const [completionTaskId, setCompletionTaskId] = useState('');
   const [followUpDrafts, setFollowUpDrafts] = useState({});
   const [archiveDecisionDrafts, setArchiveDecisionDrafts] = useState({});
+  const [removalDecisionDrafts, setRemovalDecisionDrafts] = useState({});
   const [createOpen, setCreateOpen] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState('');
@@ -536,6 +538,10 @@ export default function FollowUpQueuePage() {
         if (!response.ok) throw new Error(result.error || 'Task update failed.');
         const nextTask = normalizeTask(result.task, contacts);
         setQueueTasks((prev) => prev.map((row) => (row.id === task.id ? nextTask : row)));
+        if (result.targetTask) {
+          const normalizedTargetTask = normalizeTask(result.targetTask, contacts);
+          setQueueTasks((prev) => prev.map((row) => (row.id === normalizedTargetTask.id ? normalizedTargetTask : row)));
+        }
         if (result.nextTask) {
           const normalizedNextTask = normalizeTask(result.nextTask, contacts);
           setQueueTasks((prev) => [normalizedNextTask, ...prev]);
@@ -555,12 +561,14 @@ export default function FollowUpQueuePage() {
           ownerUserId: nextTask.ownerUserId,
           dueDate: dateKey(nextTask.dueAt),
           dueAt: nextTask.dueAt,
+          metadataJson: nextTask.metadataJson,
         });
       } else {
         const localPatch = {
           ...(action === 'complete' ? { completed: true, status: 'completed', taskStatus: 'completed' } : {}),
           ...(action === 'snooze' ? { dueDate: dateKey(payload.snoozedUntil), dueAt: payload.snoozedUntil, status: 'snoozed', taskStatus: 'snoozed' } : {}),
           ...(action === 'assign' ? { assignedTo: payload.ownerUserId || '', ownerUserId: payload.ownerUserId || '' } : {}),
+          ...(action === 'cancel' ? { status: 'canceled', taskStatus: 'canceled', canceledAt: new Date().toISOString() } : {}),
         };
         updateTask(task.id, localPatch);
         setQueueTasks((prev) => prev.map((row) => (row.id === task.id ? normalizeTask({ ...row, ...localPatch }, contacts) : row)));
@@ -569,11 +577,19 @@ export default function FollowUpQueuePage() {
         ? 'Archive request approved'
         : action === 'deny_archive'
           ? 'Archive request denied'
-          : action === 'complete'
-            ? 'Task completed'
-            : action === 'snooze'
-              ? 'Task snoozed'
-              : 'Task assigned');
+          : action === 'approve_task_removal'
+            ? 'Task removal approved'
+            : action === 'deny_task_removal'
+              ? 'Task removal denied'
+              : action === 'request_cancel' || action === 'request_removal'
+                ? 'Task removal requested'
+                : action === 'cancel'
+                  ? 'Task canceled'
+                  : action === 'complete'
+                    ? 'Task completed'
+                    : action === 'snooze'
+                      ? 'Task snoozed'
+                      : 'Task assigned');
       if (action === 'complete') {
         setCompletionTaskId('');
         setFollowUpDrafts((prev) => {
@@ -584,6 +600,13 @@ export default function FollowUpQueuePage() {
       }
       if (action === 'approve_archive' || action === 'deny_archive') {
         setArchiveDecisionDrafts((prev) => {
+          const next = { ...prev };
+          delete next[task.id];
+          return next;
+        });
+      }
+      if (action === 'approve_task_removal' || action === 'deny_task_removal') {
+        setRemovalDecisionDrafts((prev) => {
           const next = { ...prev };
           delete next[task.id];
           return next;
@@ -953,6 +976,27 @@ export default function FollowUpQueuePage() {
     const draft = archiveDecisionDrafts[task.id] || {};
     if (!draft.decision) return;
     await applyTaskAction(task, draft.decision === 'approve' ? 'approve_archive' : 'deny_archive', {
+      reason: String(draft.reason || '').trim(),
+    });
+  }
+
+  function openRemovalDecision(task, decision) {
+    if (!canReviewArchiveApprovalTasks) return;
+    setRemovalDecisionDrafts((prev) => ({
+      ...prev,
+      [task.id]: {
+        decision,
+        reason: decision === 'approve'
+          ? task.metadataJson?.requestedReason || 'Task cancellation approved.'
+          : '',
+      },
+    }));
+  }
+
+  async function submitRemovalDecision(task) {
+    const draft = removalDecisionDrafts[task.id] || {};
+    if (!draft.decision) return;
+    await applyTaskAction(task, draft.decision === 'approve' ? 'approve_task_removal' : 'deny_task_removal', {
       reason: String(draft.reason || '').trim(),
     });
   }
@@ -1338,13 +1382,21 @@ export default function FollowUpQueuePage() {
             const draft = followUpDraft(task.id, task);
             const showFollowUpCompletion = completionTaskId === task.id && task.taskType === 'follow_up';
             const isArchiveApprovalTask = task.taskType === 'archive_approval';
+            const isTaskRemovalApprovalTask = task.taskType === 'task_removal_approval';
             const archiveDecisionDraft = archiveDecisionDrafts[task.id] || null;
+            const removalDecisionDraft = removalDecisionDrafts[task.id] || null;
             const showEditPanel = editTaskId === task.id;
+            const removalApprovalPending = task.metadataJson?.removalApproval?.decision === 'pending';
             const showAssignToMe = coordinatorUiPolicy.canManageCoordinatorAssignments &&
               !isArchiveApprovalTask &&
+              !isTaskRemovalApprovalTask &&
               !isTaskClosed(task) &&
               currentUser?.id &&
               task.ownerUserId !== currentUser.id;
+            const showCancelAction = !isArchiveApprovalTask &&
+              !isTaskRemovalApprovalTask &&
+              !isTaskClosed(task) &&
+              !removalApprovalPending;
             return (
               <article key={task.id} className={`${s.queueItem} ${isOverdue ? s.queueItemOverdue : ''} ${isToday ? s.queueItemToday : ''}`}>
                 <div>
@@ -1389,7 +1441,7 @@ export default function FollowUpQueuePage() {
                   <button
                     className={`btn btn-sm ${s.iconButton}`}
                     data-tooltip="Edit task"
-                    disabled={!access.canWriteCrm || editBusy || isArchiveApprovalTask}
+                    disabled={!access.canWriteCrm || editBusy || isArchiveApprovalTask || isTaskRemovalApprovalTask}
                     onClick={() => (showEditPanel ? setEditTaskId('') : openEditPanel(task))}
                     aria-label="Edit task"
                   >
@@ -1425,6 +1477,25 @@ export default function FollowUpQueuePage() {
                         Approve
                       </button>
                     </>
+                  ) : isTaskRemovalApprovalTask ? (
+                    <>
+                      <button
+                        className="btn btn-sm"
+                        disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task) || !canReviewArchiveApprovalTasks}
+                        onClick={() => openRemovalDecision(task, 'deny')}
+                      >
+                        <X size={14} />
+                        Deny
+                      </button>
+                      <button
+                        className="btn btn-sm btn-primary"
+                        disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task) || !canReviewArchiveApprovalTasks}
+                        onClick={() => openRemovalDecision(task, 'approve')}
+                      >
+                        <CheckCircle2 size={14} />
+                        Approve
+                      </button>
+                    </>
                   ) : task.taskType === 'follow_up' ? (
                     <button
                       className="btn btn-sm btn-primary"
@@ -1443,6 +1514,25 @@ export default function FollowUpQueuePage() {
                       <CheckCircle2 size={14} />
                       Complete
                     </button>
+                  )}
+                  {showCancelAction && (
+                    <button
+                      className={`btn btn-sm ${coordinatorUiPolicy.ownerScoped ? '' : 'btn-danger'}`}
+                      disabled={!access.canWriteCrm || busyTaskId === task.id}
+                      onClick={() => applyTaskAction(
+                        task,
+                        coordinatorUiPolicy.ownerScoped ? 'request_cancel' : 'cancel',
+                        coordinatorUiPolicy.ownerScoped
+                          ? { reason: 'Task cancellation requested from the task queue.' }
+                          : {},
+                      )}
+                    >
+                      <X size={14} />
+                      {coordinatorUiPolicy.ownerScoped ? 'Request Cancel' : 'Cancel'}
+                    </button>
+                  )}
+                  {removalApprovalPending && (
+                    <span className="badge badge-pending">Cancel Requested</span>
                   )}
                   {task.contactId && (
                     <Link className={`btn btn-sm ${s.iconButton}`} href={`/contacts/${task.contactId}`} data-tooltip="Open contact" aria-label="Open contact">
@@ -1721,6 +1811,51 @@ export default function FollowUpQueuePage() {
                       >
                         <CheckCircle2 size={14} />
                         {archiveDecisionDraft.decision === 'approve' ? 'Approve Archive' : 'Deny Archive'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {isTaskRemovalApprovalTask && removalDecisionDraft && (
+                  <div className={s.completionPanel}>
+                    <label className={s.completionNote}>
+                      <span className="form-label">
+                        {removalDecisionDraft.decision === 'approve' ? 'Approval Reason' : 'Denial Reason'}
+                      </span>
+                      <textarea
+                        className="textarea"
+                        rows={2}
+                        value={removalDecisionDraft.reason}
+                        disabled={busyTaskId === task.id}
+                        onChange={(event) => setRemovalDecisionDrafts((prev) => ({
+                          ...prev,
+                          [task.id]: {
+                            ...removalDecisionDraft,
+                            reason: event.target.value,
+                          },
+                        }))}
+                      />
+                    </label>
+                    <div className={s.completionActions}>
+                      <button
+                        className="btn btn-sm"
+                        type="button"
+                        disabled={busyTaskId === task.id}
+                        onClick={() => setRemovalDecisionDrafts((prev) => {
+                          const next = { ...prev };
+                          delete next[task.id];
+                          return next;
+                        })}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="btn btn-sm btn-primary"
+                        type="button"
+                        disabled={busyTaskId === task.id || (removalDecisionDraft.decision === 'deny' && !String(removalDecisionDraft.reason || '').trim())}
+                        onClick={() => submitRemovalDecision(task)}
+                      >
+                        <CheckCircle2 size={14} />
+                        {removalDecisionDraft.decision === 'approve' ? 'Approve Cancel' : 'Deny Cancel'}
                       </button>
                     </div>
                   </div>

@@ -6,6 +6,7 @@ export const TASK_TYPES = Object.freeze({
   PAYMENT_FOLLOW_UP: 'payment_follow_up',
   MANUAL_REMINDER: 'manual_reminder',
   ARCHIVE_APPROVAL: 'archive_approval',
+  TASK_REMOVAL_APPROVAL: 'task_removal_approval',
 });
 
 export const TASK_STATUSES = Object.freeze({

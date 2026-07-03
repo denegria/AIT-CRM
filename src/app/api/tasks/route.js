@@ -59,6 +59,11 @@ import {
   canReviewArchiveApproval,
   decideArchiveApprovalTask,
 } from '@/lib/tasks/archive-approvals.js';
+import {
+  canReviewTaskRemovalApproval,
+  createOrReuseTaskRemovalApprovalTask,
+  decideTaskRemovalApprovalTask,
+} from '@/lib/tasks/removal-approvals.js';
 import { filterAssignableEmployees } from '@/lib/crm/assignable-employees.js';
 
 function stringParam(value) {
@@ -402,6 +407,9 @@ export async function POST(request) {
   if (stringParam(body.taskType) === TASK_TYPES.ARCHIVE_APPROVAL) {
     return NextResponse.json({ error: 'Archive approval tasks must be created from a contact archive request.' }, { status: 400 });
   }
+  if (stringParam(body.taskType) === TASK_TYPES.TASK_REMOVAL_APPROVAL) {
+    return NextResponse.json({ error: 'Task removal approval tasks must be created from a task removal request.' }, { status: 400 });
+  }
 
   const db = getDb();
   try {
@@ -471,9 +479,12 @@ export async function PATCH(request) {
     if (stringParam(body.taskType) === TASK_TYPES.ARCHIVE_APPROVAL && existingTask.taskType !== TASK_TYPES.ARCHIVE_APPROVAL) {
       return NextResponse.json({ error: 'Archive approval tasks must be created from a contact archive request.' }, { status: 400 });
     }
+    if (stringParam(body.taskType) === TASK_TYPES.TASK_REMOVAL_APPROVAL && existingTask.taskType !== TASK_TYPES.TASK_REMOVAL_APPROVAL) {
+      return NextResponse.json({ error: 'Task removal approval tasks must be created from a task removal request.' }, { status: 400 });
+    }
+    const action = String(body.action || '').trim();
 
     if (existingTask.taskType === TASK_TYPES.ARCHIVE_APPROVAL) {
-      const action = String(body.action || '').trim();
       if (['approve_archive', 'deny_archive'].includes(action)) {
         const result = await decideArchiveApprovalTask({
           db,
@@ -495,6 +506,46 @@ export async function PATCH(request) {
       if (['complete', 'cancel'].includes(action)) {
         return NextResponse.json({ error: 'Use approve or deny for archive approval tasks.' }, { status: 400 });
       }
+    }
+
+    if (existingTask.taskType === TASK_TYPES.TASK_REMOVAL_APPROVAL) {
+      if (['approve_task_removal', 'deny_task_removal'].includes(action)) {
+        const result = await decideTaskRemovalApprovalTask({
+          db,
+          organizationId: session.user.organizationId,
+          session,
+          existingTask,
+          decision: action === 'approve_task_removal' ? 'approve' : 'deny',
+          reason: body.reason || body.decisionReason || '',
+        });
+        return NextResponse.json({
+          task: toTaskPayload(result.task),
+          targetTask: toTaskPayload(result.targetTask),
+          decision: result.decision,
+        });
+      }
+      if (!canReviewTaskRemovalApproval(session)) {
+        return NextResponse.json({ error: 'Regular coordinators cannot review task removal approval tasks.' }, { status: 403 });
+      }
+      if (['complete', 'cancel'].includes(action)) {
+        return NextResponse.json({ error: 'Use approve or deny for task removal approval tasks.' }, { status: 400 });
+      }
+    }
+
+    if (isRegularCoordinatorSession(session) && ['cancel', 'request_cancel', 'request_removal'].includes(action)) {
+      const result = await createOrReuseTaskRemovalApprovalTask({
+        db,
+        organizationId: session.user.organizationId,
+        session,
+        targetTask: existingTask,
+        reason: body.reason || body.decisionReason || '',
+      });
+      return NextResponse.json({
+        task: toTaskPayload(result.targetTask || existingTask),
+        approvalTask: toTaskPayload(result.task),
+        approvalRequested: true,
+        reused: result.reused,
+      }, { status: result.reused ? 200 : 202 });
     }
 
     if (String(body.action || '').trim() === 'complete' && existingTask.taskType === TASK_TYPES.FOLLOW_UP) {
