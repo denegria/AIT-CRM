@@ -70,7 +70,7 @@ export function lifecycleBucket(row = {}) {
       return {
         label: 'Source history',
         tone: 'muted',
-        detail: 'Hidden from active pipeline',
+        detail: 'Outside current board',
       };
     }
     if (row.hasRecentFollowUpTouch) {

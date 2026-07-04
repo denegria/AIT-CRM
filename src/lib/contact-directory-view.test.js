@@ -60,7 +60,7 @@ test('AIT Signs lifecycle buckets distinguish source history from current work',
     {
       label: 'Source history',
       tone: 'muted',
-      detail: 'Hidden from active pipeline',
+      detail: 'Outside current board',
     },
   );
   assert.deepEqual(

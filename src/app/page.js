@@ -118,12 +118,11 @@ export default function Dashboard() {
     const signsWorkOrder = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_work_order', { currentUserId, now }).length;
     const signsFulfillment = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_fulfillment', { currentUserId, now }).length;
     const signsPayment = filterContactsByDirectoryFacet(aitSignsContacts, 'signs_payment_balance', { currentUserId, now }).length;
-    const signsFirstOutreach = filterContactsByDirectoryFacet(aitSignsCurrentContacts, 'needs_first_outreach', { currentUserId, now }).filter(isAitSigns).length;
+    const signsFirstOutreach = aitSignsCurrentContacts.filter((contact) => isAitSigns(contact) && contact.needsFirstOutreach).length;
     const pendingEstimates = financials.filter(isPendingEstimate);
     const pendingEstimateValue = pendingEstimates.reduce((sum, record) => sum + Number(record.amount || 0), 0);
     const usaNewLeads = filterContactsByDirectoryFacet(aitUsaContacts, 'usa_new_lead', { currentUserId, now }).length;
     const usaFollowUp = filterContactsByDirectoryFacet(aitUsaContacts, 'usa_follow_up', { currentUserId, now }).length;
-    const usaFirstOutreach = filterContactsByDirectoryFacet(aitUsaContacts, 'needs_first_outreach', { currentUserId, now }).filter(isAitUsa).length;
     const usaBadContactChannel = filterContactsByDirectoryFacet(aitUsaContacts, 'usa_bad_contact_channel', { currentUserId, now }).length;
 
     return {
@@ -152,7 +151,6 @@ export default function Dashboard() {
       pendingEstimateValue,
       usaNewLeads,
       usaFollowUp,
-      usaFirstOutreach,
       usaBadContactChannel,
     };
   }, [contacts, currentUserId, dashboardNow, financials, isAdminView, tasks, workOrders]);
@@ -206,15 +204,15 @@ export default function Dashboard() {
     if (workflowKey === WORKFLOW_KEYS.AIT_USA) {
       return [
         taskCard,
-        { label: 'Current Leads', value: kpis.usaNewLeads + kpis.usaFollowUp, change: 'Enrollment pipeline', trend: 'up', href: '/contacts?leadDateScope=current&facet=usa_new_lead' },
-        { label: 'Follow-ups Due', value: kpis.usaFollowUp, change: `${kpis.usaFirstOutreach} first outreach`, trend: 'up', href: '/contacts?leadDateScope=current&facet=usa_follow_up' },
+        { label: 'New Leads', value: kpis.usaNewLeads, change: 'Enrollment pipeline', trend: 'up', href: '/contacts?leadDateScope=current&status=New+Lead' },
+        { label: 'Follow-ups Due', value: kpis.usaFollowUp, change: 'Active follow-up status', trend: 'up', href: '/contacts?leadDateScope=current&status=Follow+Up' },
         { label: 'Bad Contact Channel', value: kpis.usaBadContactChannel, change: 'Needs cleanup', trend: kpis.usaBadContactChannel ? 'down' : 'up', href: '/contacts?leadDateScope=current&facet=usa_bad_contact_channel' },
       ];
     }
 
     if (workflowKey === WORKFLOW_KEYS.AIT_SIGNS) {
       const signsLeadCard = kpis.signsFirstOutreach
-        ? { label: 'Needs First Outreach', value: kpis.signsFirstOutreach, change: `${kpis.signsIntake} in intake`, trend: 'up', href: '/contacts?leadDateScope=current&facet=needs_first_outreach' }
+        ? { label: 'Signs Intake', value: kpis.signsIntake, change: `${kpis.signsFirstOutreach} new records`, trend: 'up', href: '/contacts?leadDateScope=current&status=Intake' }
         : { label: 'Signs Intake', value: kpis.signsIntake, change: 'New Signs work', trend: 'up', href: '/contacts?facet=signs_intake' };
       return [
         taskCard,
@@ -230,7 +228,7 @@ export default function Dashboard() {
       { label: 'Open Work Orders', value: kpis.activeWOs, change: `${workOrders.filter(w=>w.status==='In Progress').length} in progress`, trend: 'up', href: '/work-orders?status=open' },
       canReadFinancials
         ? { label: 'Pending Estimates', value: moneyLabel(kpis.pendingEstimateValue), change: `${kpis.pendingEstimates} estimates`, trend: 'up', href: '/financials' }
-        : { label: 'Needs First Outreach', value: kpis.needsFirstOutreach, change: 'Ready to assign', trend: 'up', href: '/contacts?leadDateScope=current&facet=needs_first_outreach' },
+        : { label: 'New Leads', value: kpis.needsFirstOutreach, change: 'Ready to assign', trend: 'up', href: '/contacts?leadDateScope=current&status=New+Lead' },
     ];
   }, [canReadFinancials, currentBusinessUnit, isAdminView, kpis, workOrders]);
 

@@ -186,6 +186,7 @@ export default function DataTable({
         )
       ) : (
         <>
+        <div className={s.tableScroller}>
         <table className={s.table}>
           <thead><tr>
             {selectable && (
@@ -244,6 +245,7 @@ export default function DataTable({
             ))}
           </tbody>
         </table>
+        </div>
         <div className={s.mobileCards}>
           {filtered.map((row) => (
             <div key={row.id} className={s.mobileCard}>

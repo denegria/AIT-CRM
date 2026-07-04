@@ -3,9 +3,11 @@ import test from 'node:test';
 
 import {
   buildCourseFilterOptions,
+  buildSourceFilterOptions,
   contactMatchesLeadDateScope,
   contactFilterQuery,
   contactFilterStateFromParams,
+  contactMatchesSource,
   contactMatchesStatusOwnerCourse,
   courseForContactDirectoryFilter,
   courseTagsForDirectoryRow,
@@ -13,8 +15,8 @@ import {
   pipelineFilterStateFromParams,
 } from './contact-directory-filters.js';
 
-test('contact filter params parse status, course, date, owner, and facet state', () => {
-  const params = new URLSearchParams('status=Course+Completed&course=Forklift&leadDateScope=custom&leadDateFrom=2026-01-01&leadDateTo=2026-06-30&owner=user-1&facet=usa_course_completed');
+test('contact filter params parse status, source, course, date, owner, and facet state', () => {
+  const params = new URLSearchParams('status=Course+Completed&source=WordPress+Website+Form&course=Forklift&leadDateScope=custom&leadDateFrom=2026-01-01&leadDateTo=2026-06-30&owner=user-1&facet=usa_course_completed');
 
   assert.deepEqual(contactFilterStateFromParams(params), {
     statusFilter: 'Course Completed',
@@ -24,18 +26,19 @@ test('contact filter params parse status, course, date, owner, and facet state',
     leadDateFrom: '2026-01-01',
     leadDateTo: '2026-06-30',
     courseFilter: 'Forklift',
+    sourceFilter: 'WordPress Website Form',
   });
   assert.equal(
     contactFilterQuery(contactFilterStateFromParams(params)),
-    'leadDateScope=custom&leadDateFrom=2026-01-01&leadDateTo=2026-06-30&status=Course+Completed&owner=user-1&facet=usa_course_completed&course=Forklift',
+    'leadDateScope=custom&leadDateFrom=2026-01-01&leadDateTo=2026-06-30&owner=user-1&status=Course+Completed&source=WordPress+Website+Form&facet=usa_course_completed&course=Forklift',
   );
 });
 
 test('contact filter query omits default filters', () => {
   assert.equal(contactFilterQuery(), '');
   assert.equal(
-    contactFilterQuery({ statusFilter: 'Enrolled', courseFilter: 'OSHA' }),
-    'status=Enrolled&course=OSHA',
+    contactFilterQuery({ statusFilter: 'Enrolled', sourceFilter: 'Website', courseFilter: 'OSHA' }),
+    'status=Enrolled&source=Website&course=OSHA',
   );
 });
 
@@ -73,13 +76,15 @@ test('lead date scopes support current year, all leads, and custom time frames',
   );
 });
 
-test('pipeline filter params preserve date, owner, source, bucket, search, and compact state', () => {
-  const params = new URLSearchParams('leadDateScope=custom&leadDateFrom=2026-02-01&leadDateTo=2026-05-30&workflow=needs_first_outreach&owner=unassigned&source=Website&activity=recent_7&q=anna&compact=0');
+test('pipeline filter params preserve date, owner, status, source, course, activity, search, and compact state', () => {
+  const params = new URLSearchParams('leadDateScope=custom&leadDateFrom=2026-02-01&leadDateTo=2026-05-30&workflow=new_leads&owner=unassigned&status=New+Lead&source=Website&course=OSHA&activity=recent_7&q=anna&compact=0');
 
   assert.deepEqual(pipelineFilterStateFromParams(params), {
-    workflowFilter: 'needs_first_outreach',
+    workflowFilter: 'all',
+    statusFilter: 'New Lead',
     ownerFilter: 'unassigned',
     sourceFilter: 'Website',
+    courseFilter: 'OSHA',
     activityFilter: 'recent_7',
     search: 'anna',
     leadDateScope: 'custom',
@@ -89,7 +94,26 @@ test('pipeline filter params preserve date, owner, source, bucket, search, and c
   });
   assert.equal(
     pipelineFilterQuery(pipelineFilterStateFromParams(params)),
-    'leadDateScope=custom&leadDateFrom=2026-02-01&leadDateTo=2026-05-30&workflow=needs_first_outreach&owner=unassigned&source=Website&activity=recent_7&q=anna&compact=0',
+    'leadDateScope=custom&leadDateFrom=2026-02-01&leadDateTo=2026-05-30&owner=unassigned&status=New+Lead&source=Website&course=OSHA&activity=recent_7&q=anna&compact=0',
+  );
+});
+
+test('contact source filter options use directory source labels', () => {
+  const contacts = [
+    { id: 'wordpress', source: 'WordPress Website Form' },
+    { id: 'workbook', sourceCategory: 'Workbook Import', source: 'work_order' },
+    { id: 'wordpress-2', source: 'WordPress Website Form' },
+  ];
+
+  assert.deepEqual(
+    buildSourceFilterOptions(contacts).map((option) => [option.label, option.count]),
+    [['WordPress Website Form', 2], ['Workbook Import', 1]],
+  );
+  assert.deepEqual(
+    contacts
+      .filter((contact) => contactMatchesSource(contact, { sourceFilter: 'WordPress Website Form' }))
+      .map((contact) => contact.id),
+    ['wordpress', 'wordpress-2'],
   );
 });
 

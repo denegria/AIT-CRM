@@ -163,7 +163,7 @@ test('contact directory signal labels summarize useful row context', () => {
       needsFirstOutreach: true,
       processPills: ['ready_for_follow_up', 'missing_phone'],
     }),
-    ['First Outreach', 'Missing Phone', 'Ready Follow-up'],
+    ['Missing Phone', 'Ready Follow-up'],
   );
 });
 

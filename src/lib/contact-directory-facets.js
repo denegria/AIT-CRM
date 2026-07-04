@@ -102,7 +102,7 @@ export const CONTACT_DIRECTORY_FACET_GROUPS = [
     facets: [
       { id: 'all', label: 'All', matches: () => true },
       { id: 'mine', label: 'Mine', matches: assignedToCurrentUser },
-      ...CORE_CONTACT_BUCKETS.filter((facet) => facet.id !== 'unassigned'),
+      ...CORE_CONTACT_BUCKETS.filter((facet) => !['unassigned', 'needs_first_outreach'].includes(facet.id)),
       { id: 'no_recent_touch', label: 'No Recent Touch', matches: (contact, options = {}) => isNoRecentTouch(contact, options.now) },
       { id: 'needs_contact_info', label: 'Needs Contact Info', matches: needsContactInfo },
       { id: 'invalid_phone', label: 'Invalid Phone', matches: hasInvalidPhone },
@@ -191,7 +191,6 @@ export function contactDirectorySignalLabels(contact = {}, options = {}) {
     if (text && !signals.includes(text)) signals.push(text);
   };
 
-  if (contact.needsFirstOutreach) add('First Outreach');
   if (!hasPhone(contact)) add('Missing Phone');
   if (hasInvalidPhone(contact)) add('Invalid Phone');
   if (!hasEmail(contact)) add('Missing Email');
@@ -199,7 +198,10 @@ export function contactDirectorySignalLabels(contact = {}, options = {}) {
   if (contact.isWrongNumber) add('Wrong Number');
   if (isSourceReview(contact)) add('Source Review');
   if (hasBalanceOrPayment(contact)) add('Balance / Payment');
-  for (const pill of contact.processPills || []) add(labelForContactProcessPill(pill));
+  for (const pill of contact.processPills || []) {
+    if (token(pill) === 'needs_first_outreach') continue;
+    add(labelForContactProcessPill(pill));
+  }
 
   return signals.slice(0, 5);
 }
