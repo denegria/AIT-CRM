@@ -44,7 +44,7 @@ import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { AlertCircle, ListFilter, RotateCcw, UserRoundCheck, X } from 'lucide-react';
+import { AlertCircle, ListFilter, RotateCcw, UserRoundCheck } from 'lucide-react';
 
 const empty = {
   name: '',
@@ -616,18 +616,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       courseFilter: DEFAULT_CONTACT_COURSE_FILTER,
     });
   };
-  const invalidPhoneScopeSummary = useMemo(() => {
-    if (effectiveDirectoryFacet !== 'invalid_phone') return '';
-    const counts = new Map();
-    for (const contact of filteredContacts) {
-      const label = contact.divisionLabel || businessUnitById.get(contact.businessUnitId || contact.primaryBusinessUnitId)?.name || 'Unassigned';
-      counts.set(label, (counts.get(label) || 0) + 1);
-    }
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .map(([label, count]) => `${label}: ${count}`)
-      .join(' · ');
-  }, [businessUnitById, effectiveDirectoryFacet, filteredContacts]);
   const mobileFieldKeys = columnMode === 'ait_signs'
     ? ['phone', 'sourceCategoryText', 'linkedPeopleSummary', 'accountSnapshotText', 'assignedLabel', 'lastTouch', 'lastEdited']
     : columnMode === 'ait_usa'
@@ -635,7 +623,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       : ['phone', 'workflow', 'signalText', 'assignedLabel', 'divisionLabel', 'lastTouch', 'lastEdited'];
   const directoryScopeName = directoryBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`;
   const summaryNoun = pluralLabel.toLowerCase();
-  const directorySummary = `${filteredContacts.length.toLocaleString()} matching ${summaryNoun} of ${directoryContacts.length.toLocaleString()} ${summaryNoun} in ${directoryScopeName}`;
+  const directorySummary = `${filteredContacts.length.toLocaleString()} matching ${summaryNoun} in ${directoryScopeName}`;
   const formBusinessUnitId = form.businessUnitId || form.primaryBusinessUnitId || '';
   const formBusinessUnit = businessUnitById.get(formBusinessUnitId) || null;
   const isAitUsaForm = workflowForBusinessUnit(formBusinessUnit).key === WORKFLOW_KEYS.AIT_USA;
@@ -657,26 +645,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           columns={columns}
           data={filteredContacts}
           searchPlaceholder={`Search ${pluralLabel.toLowerCase()}...`}
-          toolbarMeta={(
-            <div className="contacts-table-filter-summary">
-              <div className="contacts-active-chips" aria-label="Active filter summary">
-                {activeFilterChips.map((chip) => {
-                  const chipClass = `contacts-active-chip ${chip.primary ? 'primary' : ''} ${chip.onRemove ? 'removable' : ''}`;
-                  return chip.onRemove ? (
-                    <button key={chip.key} type="button" className={chipClass} onClick={chip.onRemove} title={`Remove ${chip.label}`}>
-                      <span>{chip.label}</span>
-                      <X size={12} />
-                    </button>
-                  ) : (
-                    <span key={chip.key} className={chipClass}>{chip.label}</span>
-                  );
-                })}
-              </div>
-              {invalidPhoneScopeSummary && (
-                <small>{invalidPhoneScopeSummary}</small>
-              )}
-            </div>
-          )}
           toolbarAfterColumns={(
             <div className="contacts-filter-popover-anchor">
               <button

@@ -12,6 +12,7 @@
   justify-content: flex-end;
   gap: 8px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .scopeBar {
@@ -60,19 +61,9 @@
 
 .filterTopline {
   display: grid;
-  grid-template-columns: minmax(220px, 340px) minmax(0, 1fr) auto;
+  grid-template-columns: minmax(220px, 1fr) auto;
   align-items: center;
   gap: 10px;
-  min-width: 0;
-}
-
-.filterSummary {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-height: 34px;
   min-width: 0;
 }
 
@@ -81,7 +72,7 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
 }
@@ -123,7 +114,6 @@
   line-height: 1.15;
 }
 
-.activeChips,
 .filterPills {
   display: flex;
   flex-wrap: wrap;
@@ -131,7 +121,6 @@
   min-width: 0;
 }
 
-.activeChip,
 .filterPill {
   display: inline-flex;
   align-items: center;
@@ -145,45 +134,6 @@
   font-size: var(--text-xs);
   font-weight: 750;
   line-height: 1.2;
-}
-
-.activeChip {
-  min-height: 34px;
-  padding: 5px 9px;
-  font-size: 10px;
-  font-family: var(--font-sans);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.activeChip.removable {
-  cursor: pointer;
-  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
-}
-
-.activeChip.removable:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.activeChip span {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.activeChip svg {
-  flex: 0 0 auto;
-  color: currentColor;
-  opacity: 0.75;
-}
-
-.activeChip.primary {
-  border-color: color-mix(in srgb, var(--accent) 32%, var(--border-subtle));
-  background: var(--accent-muted);
-  color: var(--accent);
 }
 
 .filterPopoverAnchor {
@@ -900,11 +850,6 @@
     gap: 12px;
   }
 
-  .pipelineActions,
-  .pipelineActions :global(.btn) {
-    width: 100%;
-  }
-
   .scopeBar {
     align-items: stretch;
     flex-direction: column;
@@ -920,10 +865,12 @@
   }
 
   .filterToolbar {
-    justify-content: flex-start;
+    justify-content: stretch;
   }
 
   .filterToolbar,
+  .pipelineActions,
+  .pipelineActions :global(.btn),
   .filterMenuButton {
     width: 100%;
   }

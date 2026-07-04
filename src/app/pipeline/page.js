@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertCircle, ArrowRight, ListFilter, RotateCcw, Search, UserPlus, UserRoundCheck, X } from 'lucide-react';
+import { AlertCircle, ArrowRight, ListFilter, RotateCcw, Search, UserPlus, UserRoundCheck } from 'lucide-react';
 import KanbanBoard from '@/components/KanbanBoard';
 import { useToast } from '@/components/Toast';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
@@ -518,26 +518,6 @@ export default function PipelinePage() {
           <h1 className="page-title">Pipeline</h1>
           <p className="page-subtitle">{pipelineSummary}</p>
         </div>
-        <div className={s.pipelineActions}>
-          <button className="btn" onClick={() => nextLead ? router.push(`/contacts/${nextLead.id}`) : toast('No lead matches the current filters.', 'error')}>
-            <ArrowRight size={14} /> Work Next Lead
-          </button>
-          {!coordinatorUiPolicy.ownerScoped && (
-            <button className="btn" onClick={() => setOwnerFilter('unassigned')}>
-              <AlertCircle size={14} /> Unassigned
-            </button>
-          )}
-          {canWrite && currentUser?.id && coordinatorUiPolicy.canManageCoordinatorAssignments && (
-            <button className={`btn ${bulkAssignMode ? 'btn-primary' : ''}`} type="button" onClick={toggleBulkAssignMode}>
-              <UserRoundCheck size={14} /> Bulk Assign
-            </button>
-          )}
-          {canWrite && (
-            <button className="btn btn-primary" onClick={() => router.push('/contacts')}>
-              <UserPlus size={14} /> Add Contact
-            </button>
-          )}
-        </div>
       </div>
 
       {showPipelineScopeSelector && (
@@ -571,22 +551,27 @@ export default function PipelinePage() {
               aria-label="Search pipeline"
             />
           </label>
-          <div className={s.filterSummary}>
-            <div className={s.activeChips} aria-label="Active pipeline filter summary">
-              {activeFilterChips.map((chip) => {
-                const chipClass = `${s.activeChip} ${chip.primary ? s.primary : ''} ${chip.onRemove ? s.removable : ''}`;
-                return chip.onRemove ? (
-                  <button key={chip.key} type="button" className={chipClass} onClick={chip.onRemove} title={`Remove ${chip.label}`}>
-                    <span>{chip.label}</span>
-                    <X size={12} />
-                  </button>
-                ) : (
-                  <span key={chip.key} className={chipClass}>{chip.label}</span>
-                );
-              })}
-            </div>
-          </div>
           <div className={s.filterToolbar}>
+            <div className={s.pipelineActions}>
+              <button className="btn" onClick={() => nextLead ? router.push(`/contacts/${nextLead.id}`) : toast('No lead matches the current filters.', 'error')}>
+                <ArrowRight size={14} /> Work Next Lead
+              </button>
+              {!coordinatorUiPolicy.ownerScoped && (
+                <button className="btn" onClick={() => setOwnerFilter('unassigned')}>
+                  <AlertCircle size={14} /> Unassigned
+                </button>
+              )}
+              {canWrite && currentUser?.id && coordinatorUiPolicy.canManageCoordinatorAssignments && (
+                <button className={`btn ${bulkAssignMode ? 'btn-primary' : ''}`} type="button" onClick={toggleBulkAssignMode}>
+                  <UserRoundCheck size={14} /> Bulk Assign
+                </button>
+              )}
+              {canWrite && (
+                <button className="btn btn-primary" onClick={() => router.push('/contacts')}>
+                  <UserPlus size={14} /> Add Contact
+                </button>
+              )}
+            </div>
             <div className={s.filterPopoverAnchor}>
               <button
                 className={`${s.filterMenuButton} ${filterMenuOpen ? s.active : ''}`}

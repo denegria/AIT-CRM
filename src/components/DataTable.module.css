@@ -21,11 +21,13 @@
   width:15px; height:15px; color:var(--text-muted); pointer-events:none;
 }
 .toolbarMeta {
+  grid-column:2;
   align-self:center;
   justify-self:start;
   min-width:0;
 }
 .toolbarActions {
+  grid-column:3;
   position:relative;
   display:flex;
   align-items:center;
