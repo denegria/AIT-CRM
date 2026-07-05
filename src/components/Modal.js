@@ -2,7 +2,7 @@
 import { useEffect } from 'react';
 import s from './Modal.module.css';
 
-export default function Modal({ open, onClose, title, children, footer }) {
+export default function Modal({ open, onClose, title, children, footer, drawerClassName = '' }) {
   useEffect(() => {
     if (open) document.body.style.overflow = 'hidden';
     else document.body.style.overflow = '';
@@ -13,7 +13,7 @@ export default function Modal({ open, onClose, title, children, footer }) {
   return (
     <>
       <div className={s.overlay} onClick={onClose} />
-      <div className={s.drawer}>
+      <div className={`${s.drawer} ${drawerClassName}`}>
         <div className={s.header}>
           <div className={s.title}>{title}</div>
           <button className={s.closeBtn} onClick={onClose}>✕</button>

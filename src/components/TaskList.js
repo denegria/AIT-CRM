@@ -71,7 +71,13 @@ export default function TaskList({
               </button>
             )}
             <div className={s.content}>
-              <div className={`${s.taskTitle} ${t.completed ? s.taskTitleDone : ''}`}>{t.title}</div>
+              {t.id ? (
+                <Link className={`${s.taskTitle} ${s.taskTitleLink} ${t.completed ? s.taskTitleDone : ''}`} href={`/tasks/${encodeURIComponent(t.id)}`}>
+                  {t.title}
+                </Link>
+              ) : (
+                <div className={`${s.taskTitle} ${t.completed ? s.taskTitleDone : ''}`}>{t.title}</div>
+              )}
               <div className={s.meta}>
                 <span className={`${s.metaItem} ${t.dueDate <= today && !t.completed ? s.overdue : ''}`}>
                   {t.dueDate === today ? 'Today' : t.dueDate}

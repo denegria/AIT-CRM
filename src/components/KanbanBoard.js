@@ -113,7 +113,6 @@ function cardSummary(item) {
 function cardChips(item) {
   if (isAitUsa(item)) {
     return [
-      item.needsFirstOutreach ? 'First Outreach' : '',
       item.qualityDisposition === 'ready_for_follow_up' ? 'Ready Follow-up' : titleLabel(item.qualityDisposition),
       contactabilityLabel(item),
     ].filter(Boolean).slice(0, 3);
@@ -268,7 +267,7 @@ export default function KanbanBoard({
                     <div className={s.cardWorkflow}>
                       <div className={s.workflowStage}>
                         {item.needsFirstOutreach && <AlertCircle size={12} />}
-                        <span>{item.currentStage || item.status}</span>
+                        <span>{item.needsFirstOutreach && item.status ? item.status : (item.currentStage || item.status)}</span>
                       </div>
                       {item.nextAction && !isDefaultFirstOutreachAction(item.nextAction) && (
                         <div className={s.workflowAction}>{item.nextAction}</div>

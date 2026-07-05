@@ -10,6 +10,7 @@ import {
   normalizeLifecycleStatus,
 } from './crm/lifecycle.js';
 import {
+  directorySourceText,
   isCurrentLeadDateScope,
   leadDateForDirectoryScope,
 } from './contact-directory-view.js';
@@ -18,15 +19,19 @@ export const DEFAULT_CONTACT_STATUS_FILTER = 'All';
 export const DEFAULT_CONTACT_OWNER_FILTER = 'all';
 export const DEFAULT_CONTACT_FACET_FILTER = 'all';
 export const DEFAULT_CONTACT_COURSE_FILTER = 'all';
+export const DEFAULT_CONTACT_SOURCE_FILTER = 'all';
 export const DEFAULT_CONTACT_LEAD_DATE_SCOPE = 'current';
+export const CONTACT_LEAD_DATE_SCOPE_QUARTER = 'quarter';
 export const CONTACT_LEAD_DATE_SCOPE_ALL = 'all';
 export const CONTACT_LEAD_DATE_SCOPE_CUSTOM = 'custom';
 export const DEFAULT_CONTACT_LEAD_DATE_FROM = '';
 export const DEFAULT_CONTACT_LEAD_DATE_TO = '';
 
 export const DEFAULT_PIPELINE_WORKFLOW_FILTER = 'all';
+export const DEFAULT_PIPELINE_STATUS_FILTER = DEFAULT_CONTACT_STATUS_FILTER;
 export const DEFAULT_PIPELINE_OWNER_FILTER = 'all';
 export const DEFAULT_PIPELINE_SOURCE_FILTER = 'all';
+export const DEFAULT_PIPELINE_COURSE_FILTER = DEFAULT_CONTACT_COURSE_FILTER;
 export const DEFAULT_PIPELINE_ACTIVITY_FILTER = 'all';
 export const DEFAULT_PIPELINE_SEARCH = '';
 export const DEFAULT_PIPELINE_COMPACT_MODE = true;
@@ -110,7 +115,11 @@ export function facetFromContactParams(searchParams) {
 
 export function leadDateScopeFromContactParams(searchParams) {
   const value = paramValue(searchParams, 'leadDateScope');
-  if (value === CONTACT_LEAD_DATE_SCOPE_ALL || value === CONTACT_LEAD_DATE_SCOPE_CUSTOM) return value;
+  if (
+    value === CONTACT_LEAD_DATE_SCOPE_QUARTER ||
+    value === CONTACT_LEAD_DATE_SCOPE_ALL ||
+    value === CONTACT_LEAD_DATE_SCOPE_CUSTOM
+  ) return value;
   return DEFAULT_CONTACT_LEAD_DATE_SCOPE;
 }
 
@@ -126,6 +135,10 @@ export function courseFromContactParams(searchParams) {
   return clean(paramValue(searchParams, 'course')) || DEFAULT_CONTACT_COURSE_FILTER;
 }
 
+export function sourceFromContactParams(searchParams) {
+  return clean(paramValue(searchParams, 'source')) || DEFAULT_CONTACT_SOURCE_FILTER;
+}
+
 export function contactFilterStateFromParams(searchParams) {
   return {
     statusFilter: statusFromContactParams(searchParams),
@@ -135,6 +148,7 @@ export function contactFilterStateFromParams(searchParams) {
     leadDateFrom: leadDateFromContactParams(searchParams),
     leadDateTo: leadDateToContactParams(searchParams),
     courseFilter: courseFromContactParams(searchParams),
+    sourceFilter: sourceFromContactParams(searchParams),
   };
 }
 
@@ -146,16 +160,19 @@ export function contactFilterQuery({
   leadDateFrom = DEFAULT_CONTACT_LEAD_DATE_FROM,
   leadDateTo = DEFAULT_CONTACT_LEAD_DATE_TO,
   courseFilter = DEFAULT_CONTACT_COURSE_FILTER,
+  sourceFilter = DEFAULT_CONTACT_SOURCE_FILTER,
 } = {}) {
   const params = new URLSearchParams();
   if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_ALL);
+  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_QUARTER) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_QUARTER);
   if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
     params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_CUSTOM);
     if (leadDateFrom) params.set('leadDateFrom', leadDateFrom);
     if (leadDateTo) params.set('leadDateTo', leadDateTo);
   }
-  if (statusFilter && statusFilter !== DEFAULT_CONTACT_STATUS_FILTER) params.set('status', statusFilter);
   if (ownerFilter && ownerFilter !== DEFAULT_CONTACT_OWNER_FILTER) params.set('owner', ownerFilter);
+  if (statusFilter && statusFilter !== DEFAULT_CONTACT_STATUS_FILTER) params.set('status', statusFilter);
+  if (sourceFilter && sourceFilter !== DEFAULT_CONTACT_SOURCE_FILTER) params.set('source', sourceFilter);
   if (directoryFacet && directoryFacet !== DEFAULT_CONTACT_FACET_FILTER) params.set('facet', directoryFacet);
   if (courseFilter && courseFilter !== DEFAULT_CONTACT_COURSE_FILTER) params.set('course', courseFilter);
   return params.toString();
@@ -168,6 +185,16 @@ export function contactMatchesLeadDateScope(contact = {}, {
   now = new Date(),
 } = {}) {
   if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) return true;
+  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_QUARTER) {
+    const nowDate = now instanceof Date ? now : new Date(now);
+    const year = nowDate.getUTCFullYear();
+    const quarterStartMonth = Math.floor(nowDate.getUTCMonth() / 3) * 3;
+    const fromTime = Date.UTC(year, quarterStartMonth, 1);
+    const toTime = Date.UTC(year, quarterStartMonth + 3, 0, 23, 59, 59, 999);
+    const contactTime = dateOnlyTime(leadDateForDirectoryScope(contact));
+    if (contactTime == null) return false;
+    return contactTime >= fromTime && contactTime <= toTime;
+  }
   if (leadDateScope !== CONTACT_LEAD_DATE_SCOPE_CUSTOM) return isCurrentLeadDateScope(contact, now);
 
   const fromTime = dateOnlyTime(leadDateFrom);
@@ -224,6 +251,30 @@ export function buildCourseFilterOptions(contacts = []) {
   return [...byKey.values()].sort((a, b) => a.label.localeCompare(b.label));
 }
 
+export function sourceForContactFilter(contact = {}) {
+  return directorySourceText(contact);
+}
+
+export function contactMatchesSource(contact = {}, {
+  sourceFilter = DEFAULT_CONTACT_SOURCE_FILTER,
+} = {}) {
+  return sourceFilter === DEFAULT_CONTACT_SOURCE_FILTER ||
+    normalized(sourceForContactFilter(contact)) === normalized(sourceFilter);
+}
+
+export function buildSourceFilterOptions(contacts = []) {
+  const byKey = new Map();
+  for (const contact of contacts) {
+    const label = sourceForContactFilter(contact);
+    const key = normalized(label);
+    if (!key) continue;
+    const existing = byKey.get(key) || { value: label, label, count: 0 };
+    existing.count += 1;
+    byKey.set(key, existing);
+  }
+  return [...byKey.values()].sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export function courseTagsForDirectoryRow(row = {}) {
   if (!isAitUsaCourseStatus(row)) return [];
   const course = courseForContactDirectoryFilter(row);
@@ -236,9 +287,11 @@ export function courseTagsForDirectoryRow(row = {}) {
 
 export function pipelineFilterStateFromParams(searchParams) {
   return {
-    workflowFilter: clean(paramValue(searchParams, 'workflow')) || DEFAULT_PIPELINE_WORKFLOW_FILTER,
+    workflowFilter: DEFAULT_PIPELINE_WORKFLOW_FILTER,
+    statusFilter: statusFromContactParams(searchParams) || DEFAULT_PIPELINE_STATUS_FILTER,
     ownerFilter: ownerFromContactParams(searchParams) || DEFAULT_PIPELINE_OWNER_FILTER,
     sourceFilter: clean(paramValue(searchParams, 'source')) || DEFAULT_PIPELINE_SOURCE_FILTER,
+    courseFilter: courseFromContactParams(searchParams) || DEFAULT_PIPELINE_COURSE_FILTER,
     activityFilter: clean(paramValue(searchParams, 'activity')) || DEFAULT_PIPELINE_ACTIVITY_FILTER,
     search: clean(paramValue(searchParams, 'q')) || DEFAULT_PIPELINE_SEARCH,
     leadDateScope: leadDateScopeFromContactParams(searchParams),
@@ -249,9 +302,10 @@ export function pipelineFilterStateFromParams(searchParams) {
 }
 
 export function pipelineFilterQuery({
-  workflowFilter = DEFAULT_PIPELINE_WORKFLOW_FILTER,
+  statusFilter = DEFAULT_PIPELINE_STATUS_FILTER,
   ownerFilter = DEFAULT_PIPELINE_OWNER_FILTER,
   sourceFilter = DEFAULT_PIPELINE_SOURCE_FILTER,
+  courseFilter = DEFAULT_PIPELINE_COURSE_FILTER,
   activityFilter = DEFAULT_PIPELINE_ACTIVITY_FILTER,
   search = DEFAULT_PIPELINE_SEARCH,
   leadDateScope = DEFAULT_CONTACT_LEAD_DATE_SCOPE,
@@ -261,14 +315,16 @@ export function pipelineFilterQuery({
 } = {}) {
   const params = new URLSearchParams();
   if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_ALL);
+  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_QUARTER) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_QUARTER);
   if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
     params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_CUSTOM);
     if (leadDateFrom) params.set('leadDateFrom', leadDateFrom);
     if (leadDateTo) params.set('leadDateTo', leadDateTo);
   }
-  if (workflowFilter && workflowFilter !== DEFAULT_PIPELINE_WORKFLOW_FILTER) params.set('workflow', workflowFilter);
   if (ownerFilter && ownerFilter !== DEFAULT_PIPELINE_OWNER_FILTER) params.set('owner', ownerFilter);
+  if (statusFilter && statusFilter !== DEFAULT_PIPELINE_STATUS_FILTER) params.set('status', statusFilter);
   if (sourceFilter && sourceFilter !== DEFAULT_PIPELINE_SOURCE_FILTER) params.set('source', sourceFilter);
+  if (courseFilter && courseFilter !== DEFAULT_PIPELINE_COURSE_FILTER) params.set('course', courseFilter);
   if (activityFilter && activityFilter !== DEFAULT_PIPELINE_ACTIVITY_FILTER) params.set('activity', activityFilter);
   if (search) params.set('q', search);
   if (compactMode !== DEFAULT_PIPELINE_COMPACT_MODE) params.set('compact', compactMode ? '1' : '0');

@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
@@ -13,19 +13,23 @@ import {
 } from '@/lib/contact-directory-facets';
 import {
   buildCourseFilterOptions,
+  buildSourceFilterOptions,
   contactFilterQuery,
   contactFilterStateFromParams,
   contactMatchesLeadDateScope,
+  contactMatchesSource,
   contactMatchesStatusOwnerCourse,
   courseTagsForDirectoryRow,
   CONTACT_LEAD_DATE_SCOPE_ALL,
   CONTACT_LEAD_DATE_SCOPE_CUSTOM,
+  CONTACT_LEAD_DATE_SCOPE_QUARTER,
   DEFAULT_CONTACT_COURSE_FILTER,
   DEFAULT_CONTACT_FACET_FILTER,
   DEFAULT_CONTACT_LEAD_DATE_FROM,
   DEFAULT_CONTACT_LEAD_DATE_SCOPE,
   DEFAULT_CONTACT_LEAD_DATE_TO,
   DEFAULT_CONTACT_OWNER_FILTER,
+  DEFAULT_CONTACT_SOURCE_FILTER,
   DEFAULT_CONTACT_STATUS_FILTER,
 } from '@/lib/contact-directory-filters';
 import {
@@ -41,7 +45,8 @@ import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { AlertCircle, ListFilter, RotateCcw, UserRoundCheck, X } from 'lucide-react';
+import TimeframeFilterPanel from '@/components/TimeframeFilterPanel';
+import { Activity, AlertCircle, BadgeDollarSign, Clock3, ListFilter, PhoneOff, RotateCcw, UserRoundCheck, UsersRound } from 'lucide-react';
 
 const empty = {
   name: '',
@@ -49,13 +54,146 @@ const empty = {
   phone: '',
   address: '',
   status: 'New Lead',
-  currentStage: 'Needs First Outreach',
+  currentStage: 'New Lead',
   source: 'Wix Historical Import',
   assignedTo: '',
   tags: [],
   nextAction: '',
   notes: [],
 };
+
+const CONTACT_FILTER_CHIP_LABELS = {
+  leadDateScope: 'Timeframe',
+  owner: 'Owner',
+  status: 'Status',
+  source: 'Source',
+  course: 'Course',
+  facet: 'Segments',
+};
+
+const CONTACT_SEGMENT_GROUPS = [
+  {
+    id: 'follow_up_signals',
+    label: 'Follow-up Signals',
+    facets: ['active', 'no_recent_touch'],
+  },
+  {
+    id: 'contact_quality',
+    label: 'Contact Quality',
+    facets: ['invalid_phone', 'needs_contact_info', 'usa_bad_contact_channel'],
+  },
+  {
+    id: 'relationship_signals',
+    label: 'Relationship Signals',
+    facets: ['signs_linked_people', 'signs_payment_balance'],
+  },
+];
+
+const CONTACT_SEGMENT_META = {
+  all: {
+    label: 'All Segments',
+    description: 'Show every matching contact',
+    icon: ListFilter,
+  },
+  active: {
+    description: 'Open records with current work',
+    icon: Activity,
+  },
+  no_recent_touch: {
+    description: 'No touch in the last 30 days',
+    icon: Clock3,
+  },
+  invalid_phone: {
+    description: 'Phone number needs cleanup',
+    icon: PhoneOff,
+  },
+  needs_contact_info: {
+    description: 'Missing phone and email',
+    icon: AlertCircle,
+  },
+  usa_bad_contact_channel: {
+    label: 'Bad Contact Channel',
+    description: 'Wrong number, do-not-contact, or no reachable channel',
+    icon: PhoneOff,
+  },
+  signs_linked_people: {
+    description: 'Contacts connected to other people',
+    icon: UsersRound,
+  },
+  signs_payment_balance: {
+    description: 'Payment or balance activity exists',
+    icon: BadgeDollarSign,
+  },
+};
+
+function ownerInitials(label = '') {
+  const parts = String(label || '')
+    .replace(/@.*/, '')
+    .split(/\s+|[._-]/)
+    .filter(Boolean)
+    .slice(0, 2);
+  return (parts.map((part) => part[0]).join('') || 'U').toUpperCase();
+}
+
+function ownerMeta(employee = {}) {
+  const role = (employee.roleKeys || [])
+    .map((key) => String(key).replaceAll('_', ' '))
+    .join(', ');
+  return role || employee.email || 'Team member';
+}
+
+function matchesOwnerSearch(owner, query) {
+  if (!query) return true;
+  const haystack = [owner.label, owner.email, owner.meta].join(' ').toLowerCase();
+  return haystack.includes(query.trim().toLowerCase());
+}
+
+function buildVisibleSegmentGroups(facetGroups = [], activeFacetId = 'all') {
+  const facetById = new Map(
+    facetGroups.flatMap((group) => group.facets.map((facet) => [facet.id, facet])),
+  );
+  const allFacet = facetById.get('all') || { id: 'all', label: 'All', count: 0 };
+  const groups = CONTACT_SEGMENT_GROUPS
+    .map((group) => ({
+      ...group,
+      facets: group.facets
+        .map((id) => facetById.get(id))
+        .filter((facet) => facet && (facet.count > 0 || activeFacetId === facet.id)),
+    }))
+    .filter((group) => group.facets.length > 0);
+  const visibleIds = new Set(['all', ...groups.flatMap((group) => group.facets.map((facet) => facet.id))]);
+  return { allFacet, groups, visibleIds };
+}
+
+function SegmentIcon({ id }) {
+  const Icon = CONTACT_SEGMENT_META[id]?.icon || ListFilter;
+  return (
+    <span className="contacts-segment-icon" aria-hidden="true">
+      <Icon size={15} />
+    </span>
+  );
+}
+
+function SegmentTile({ facet, active, onClick }) {
+  const meta = CONTACT_SEGMENT_META[facet.id] || {};
+  return (
+    <button
+      type="button"
+      className={`contacts-segment-row ${active ? 'active' : ''} ${facet.count === 0 ? 'is-empty' : ''}`}
+      onClick={onClick}
+      disabled={facet.count === 0 && !active}
+      aria-pressed={active}
+    >
+      <SegmentIcon id={facet.id} />
+      <span className="contacts-segment-copy">
+        <strong>{meta.label || facet.label}</strong>
+        <small>{meta.description || 'Signal-based contact segment'}</small>
+      </span>
+      <span className="contacts-segment-count">{facet.count}</span>
+      <span className="contacts-segment-check" aria-hidden="true" />
+    </button>
+  );
+}
 
 function TagList({ tags = [] }) {
   if (!tags.length) return null;
@@ -69,11 +207,12 @@ function TagList({ tags = [] }) {
 }
 
 function WorkflowCell({ row }) {
+  const stageLabel = row.needsFirstOutreach && row.status ? row.status : (row.currentStage || row.status);
   return (
     <div className="workflow-cell">
       <div className="workflow-line">
         {row.needsFirstOutreach ? <AlertCircle size={13} /> : <UserRoundCheck size={13} />}
-        <span>{row.currentStage || row.status}</span>
+        <span>{stageLabel}</span>
       </div>
       {row.nextAction && <div className="workflow-next">{row.nextAction}</div>}
       <TagList tags={row.tags || []} />
@@ -157,6 +296,7 @@ function BucketCell({ row }) {
 }
 
 function dateScopeLabel(scope = DEFAULT_CONTACT_LEAD_DATE_SCOPE, from = '', to = '') {
+  if (scope === CONTACT_LEAD_DATE_SCOPE_QUARTER) return 'This Quarter';
   if (scope === CONTACT_LEAD_DATE_SCOPE_ALL) return 'All Leads';
   if (scope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
     if (from && to) return `${from} to ${to}`;
@@ -194,7 +334,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const [formError, setFormError] = useState('');
   const [facetNow] = useState(() => Date.now());
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
-  const [filterMenuTab, setFilterMenuTab] = useState('date');
+  const [activeFilterSection, setActiveFilterSection] = useState('timeframe');
+  const [ownerSearch, setOwnerSearch] = useState('');
   const isClientsMode = mode === 'clients';
   const singularLabel = isClientsMode ? 'Client' : 'Contact';
   const pluralLabel = isClientsMode ? 'Clients' : 'Contacts';
@@ -207,22 +348,35 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     leadDateFrom,
     leadDateTo,
     courseFilter,
+    sourceFilter,
   } = contactFilterStateFromParams(searchParams);
   const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
   const effectiveOwnerFilter = coordinatorUiPolicy.lockedOwnerUserId || ownerFilter;
+  const hasExplicitLeadDateFilter =
+    searchParams.has('leadDateScope') ||
+    searchParams.has('leadDateFrom') ||
+    searchParams.has('leadDateTo');
+  const effectiveLeadDateScope = coordinatorUiPolicy.ownerScoped && !hasExplicitLeadDateFilter
+    ? CONTACT_LEAD_DATE_SCOPE_ALL
+    : leadDateScope;
   const updateFilterQuery = useCallback((patch) => {
     const nextQuery = contactFilterQuery({
       statusFilter,
-      ownerFilter,
+      ownerFilter: coordinatorUiPolicy.ownerScoped ? DEFAULT_CONTACT_OWNER_FILTER : ownerFilter,
       directoryFacet,
       leadDateScope,
       leadDateFrom,
       leadDateTo,
       courseFilter,
+      sourceFilter,
       ...patch,
     });
     router.replace(nextQuery ? `${routeBase}?${nextQuery}` : routeBase, { scroll: false });
-  }, [courseFilter, directoryFacet, leadDateFrom, leadDateScope, leadDateTo, ownerFilter, routeBase, router, statusFilter]);
+  }, [coordinatorUiPolicy.ownerScoped, courseFilter, directoryFacet, leadDateFrom, leadDateScope, leadDateTo, ownerFilter, routeBase, router, sourceFilter, statusFilter]);
+  useEffect(() => {
+    if (!coordinatorUiPolicy.ownerScoped || (!searchParams.has('owner') && !searchParams.has('ownerUserId'))) return;
+    updateFilterQuery({ ownerFilter: DEFAULT_CONTACT_OWNER_FILTER });
+  }, [coordinatorUiPolicy.ownerScoped, searchParams, updateFilterQuery]);
   const setStatusFilter = useCallback((value) => updateFilterQuery({ statusFilter: value }), [updateFilterQuery]);
   const setOwnerFilter = useCallback((value) => {
     if (coordinatorUiPolicy.ownerScoped) return;
@@ -230,9 +384,13 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   }, [coordinatorUiPolicy.ownerScoped, updateFilterQuery]);
   const setDirectoryFacet = useCallback((value) => updateFilterQuery({ directoryFacet: value }), [updateFilterQuery]);
   const setLeadDateScope = useCallback((value) => updateFilterQuery({ leadDateScope: value }), [updateFilterQuery]);
-  const setLeadDateFrom = useCallback((value) => updateFilterQuery({ leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM, leadDateFrom: value }), [updateFilterQuery]);
-  const setLeadDateTo = useCallback((value) => updateFilterQuery({ leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM, leadDateTo: value }), [updateFilterQuery]);
+  const setLeadDateRange = useCallback((from, to) => updateFilterQuery({
+    leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM,
+    leadDateFrom: from,
+    leadDateTo: to,
+  }), [updateFilterQuery]);
   const setCourseFilter = useCallback((value) => updateFilterQuery({ courseFilter: value }), [updateFilterQuery]);
+  const setSourceFilter = useCallback((value) => updateFilterQuery({ sourceFilter: value }), [updateFilterQuery]);
 
   const directoryContacts = useMemo(() => {
     return contacts;
@@ -275,8 +433,15 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       .map((employee) => ({
         id: employee.id,
         label: employee.name || employee.email || 'Unnamed User',
+        email: employee.email || '',
+        initials: ownerInitials(employee.name || employee.email || 'Unnamed User'),
+        meta: ownerMeta(employee),
       }));
   }, [employees]);
+  const visibleOwnerOptions = useMemo(
+    () => ownerOptions.filter((owner) => owner.id !== currentUser?.id && matchesOwnerSearch(owner, ownerSearch)),
+    [currentUser?.id, ownerOptions, ownerSearch],
+  );
   const facetContext = useMemo(() => ({
     businessUnitById,
     currentUserId: currentUser?.id,
@@ -391,14 +556,20 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
 
   const dateScopedRows = useMemo(() => {
     return directoryRows.filter((contact) => contactMatchesLeadDateScope(contact, {
-      leadDateScope,
+      leadDateScope: effectiveLeadDateScope,
       leadDateFrom,
       leadDateTo,
     }));
-  }, [directoryRows, leadDateFrom, leadDateScope, leadDateTo]);
+  }, [directoryRows, effectiveLeadDateScope, leadDateFrom, leadDateTo]);
   const allDateLeadCount = directoryRows.length;
   const currentLeadCount = useMemo(
     () => directoryRows.filter((contact) => contactMatchesLeadDateScope(contact)).length,
+    [directoryRows],
+  );
+  const quarterLeadCount = useMemo(
+    () => directoryRows.filter((contact) => contactMatchesLeadDateScope(contact, {
+      leadDateScope: CONTACT_LEAD_DATE_SCOPE_QUARTER,
+    })).length,
     [directoryRows],
   );
   const customLeadCount = useMemo(
@@ -416,22 +587,42 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       courseFilter: DEFAULT_CONTACT_COURSE_FILTER,
     })
   )), [dateScopedRows, effectiveOwnerFilter, statusFilter]);
-  const courseFilterOptions = useMemo(
-    () => buildCourseFilterOptions(statusOwnerFilteredContacts),
+  const sourceFilterOptions = useMemo(
+    () => buildSourceFilterOptions(statusOwnerFilteredContacts),
     [statusOwnerFilteredContacts],
   );
-  const baseFilteredContacts = useMemo(() => statusOwnerFilteredContacts.filter((contact) => (
+  const sourceFilteredContacts = useMemo(() => statusOwnerFilteredContacts.filter((contact) => (
+    contactMatchesSource(contact, { sourceFilter })
+  )), [sourceFilter, statusOwnerFilteredContacts]);
+  const courseFilterOptions = useMemo(
+    () => buildCourseFilterOptions(sourceFilteredContacts),
+    [sourceFilteredContacts],
+  );
+  const baseFilteredContacts = useMemo(() => sourceFilteredContacts.filter((contact) => (
     contactMatchesStatusOwnerCourse(contact, {
       statusFilter: DEFAULT_CONTACT_STATUS_FILTER,
       ownerFilter: DEFAULT_CONTACT_OWNER_FILTER,
       courseFilter,
     })
-  )), [courseFilter, statusOwnerFilteredContacts]);
+  )), [courseFilter, sourceFilteredContacts]);
   const facetGroups = useMemo(
     () => buildContactDirectoryFacetGroups(baseFilteredContacts, facetContext),
     [baseFilteredContacts, facetContext],
   );
   const effectiveDirectoryFacet = directoryFacet || 'all';
+  const visibleSegmentGroups = useMemo(
+    () => buildVisibleSegmentGroups(facetGroups, effectiveDirectoryFacet),
+    [effectiveDirectoryFacet, facetGroups],
+  );
+  useEffect(() => {
+    if (
+      directoryFacet &&
+      directoryFacet !== DEFAULT_CONTACT_FACET_FILTER &&
+      !visibleSegmentGroups.visibleIds.has(directoryFacet)
+    ) {
+      setDirectoryFacet(DEFAULT_CONTACT_FACET_FILTER);
+    }
+  }, [directoryFacet, setDirectoryFacet, visibleSegmentGroups.visibleIds]);
   const filteredContacts = useMemo(
     () => filterContactsByDirectoryFacet(baseFilteredContacts, effectiveDirectoryFacet, facetContext),
     [baseFilteredContacts, effectiveDirectoryFacet, facetContext],
@@ -454,18 +645,26 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     if (courseFilter === DEFAULT_CONTACT_COURSE_FILTER) return '';
     return courseFilterOptions.find((option) => option.value === courseFilter)?.label || courseFilter;
   }, [courseFilter, courseFilterOptions]);
+  const selectedSourceLabel = useMemo(() => {
+    if (sourceFilter === DEFAULT_CONTACT_SOURCE_FILTER) return '';
+    return sourceFilterOptions.find((option) => option.value === sourceFilter)?.label || sourceFilter;
+  }, [sourceFilter, sourceFilterOptions]);
   const selectedDateLabel = useMemo(
-    () => dateScopeLabel(leadDateScope, leadDateFrom, leadDateTo),
-    [leadDateFrom, leadDateScope, leadDateTo],
+    () => dateScopeLabel(effectiveLeadDateScope, leadDateFrom, leadDateTo),
+    [effectiveLeadDateScope, leadDateFrom, leadDateTo],
   );
-  const dateFilterIsDefault = leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE &&
-    leadDateFrom === DEFAULT_CONTACT_LEAD_DATE_FROM &&
-    leadDateTo === DEFAULT_CONTACT_LEAD_DATE_TO;
+  const regularImplicitLeadDate = coordinatorUiPolicy.ownerScoped && !hasExplicitLeadDateFilter;
+  const dateFilterIsDefault = regularImplicitLeadDate ||
+    (
+      leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE &&
+      leadDateFrom === DEFAULT_CONTACT_LEAD_DATE_FROM &&
+      leadDateTo === DEFAULT_CONTACT_LEAD_DATE_TO
+    );
   const activeFilterChips = useMemo(() => [
-    {
+    regularImplicitLeadDate ? null : {
       key: 'leadDateScope',
       label: selectedDateLabel,
-      primary: true,
+      primary: !coordinatorUiPolicy.ownerScoped,
       onRemove: dateFilterIsDefault
         ? null
         : () => updateFilterQuery({
@@ -474,20 +673,26 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
         }),
     },
+    selectedOwnerLabel ? {
+      key: 'owner',
+      label: selectedOwnerLabel,
+      primary: coordinatorUiPolicy.ownerScoped,
+      onRemove: coordinatorUiPolicy.ownerScoped ? null : () => setOwnerFilter(DEFAULT_CONTACT_OWNER_FILTER),
+    } : null,
     statusFilter !== DEFAULT_CONTACT_STATUS_FILTER ? {
       key: 'status',
       label: statusFilter,
       onRemove: () => setStatusFilter(DEFAULT_CONTACT_STATUS_FILTER),
     } : null,
+    selectedSourceLabel ? {
+      key: 'source',
+      label: selectedSourceLabel,
+      onRemove: () => setSourceFilter(DEFAULT_CONTACT_SOURCE_FILTER),
+    } : null,
     selectedCourseLabel ? {
       key: 'course',
       label: selectedCourseLabel,
       onRemove: () => setCourseFilter(DEFAULT_CONTACT_COURSE_FILTER),
-    } : null,
-    selectedOwnerLabel ? {
-      key: 'owner',
-      label: selectedOwnerLabel,
-      onRemove: coordinatorUiPolicy.ownerScoped ? null : () => setOwnerFilter(DEFAULT_CONTACT_OWNER_FILTER),
     } : null,
     selectedFacetLabel ? {
       key: 'facet',
@@ -500,44 +705,74 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     selectedDateLabel,
     selectedFacetLabel,
     selectedOwnerLabel,
+    selectedSourceLabel,
     setCourseFilter,
     setDirectoryFacet,
     setOwnerFilter,
     coordinatorUiPolicy.ownerScoped,
     setStatusFilter,
+    setSourceFilter,
     statusFilter,
+    regularImplicitLeadDate,
     updateFilterQuery,
   ]);
-  const hasNonDefaultFilters = leadDateScope !== DEFAULT_CONTACT_LEAD_DATE_SCOPE ||
-    leadDateFrom !== DEFAULT_CONTACT_LEAD_DATE_FROM ||
-    leadDateTo !== DEFAULT_CONTACT_LEAD_DATE_TO ||
+  const activeFilterCount = activeFilterChips.filter((chip) => chip.onRemove).length;
+  const filterSummaryChips = activeFilterChips.filter((chip) => chip.onRemove).slice(0, 3);
+  const hasNonDefaultLeadDateFilter = coordinatorUiPolicy.ownerScoped
+    ? hasExplicitLeadDateFilter
+    : leadDateScope !== DEFAULT_CONTACT_LEAD_DATE_SCOPE ||
+      leadDateFrom !== DEFAULT_CONTACT_LEAD_DATE_FROM ||
+      leadDateTo !== DEFAULT_CONTACT_LEAD_DATE_TO;
+  const hasNonDefaultFilters = hasNonDefaultLeadDateFilter ||
     statusFilter !== DEFAULT_CONTACT_STATUS_FILTER ||
     (!coordinatorUiPolicy.ownerScoped && ownerFilter !== DEFAULT_CONTACT_OWNER_FILTER) ||
+    sourceFilter !== DEFAULT_CONTACT_SOURCE_FILTER ||
     courseFilter !== DEFAULT_CONTACT_COURSE_FILTER ||
     effectiveDirectoryFacet !== DEFAULT_CONTACT_FACET_FILTER;
+  const filterSections = [
+    {
+      id: 'timeframe',
+      label: 'Timeframe',
+      summary: regularImplicitLeadDate ? 'All owned records' : selectedDateLabel,
+    },
+    {
+      id: 'owner',
+      label: 'Owner',
+      summary: selectedOwnerLabel || 'All Owners',
+    },
+    {
+      id: 'status',
+      label: 'Status',
+      summary: statusFilter === DEFAULT_CONTACT_STATUS_FILTER ? 'All Statuses' : statusFilter,
+    },
+    {
+      id: 'source',
+      label: 'Source',
+      summary: selectedSourceLabel || 'All Sources',
+    },
+    (courseFilterOptions.length > 0 || courseFilter !== DEFAULT_CONTACT_COURSE_FILTER) ? {
+      id: 'course',
+      label: 'Course',
+      summary: selectedCourseLabel || 'All Courses',
+    } : null,
+    visibleSegmentGroups.groups.length > 0 ? {
+      id: 'segments',
+      label: 'Segments',
+      summary: selectedFacetLabel || 'All Segments',
+    } : null,
+  ].filter(Boolean);
   const resetFilters = () => {
     updateFilterQuery({
       leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE,
       leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
       leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
       statusFilter: DEFAULT_CONTACT_STATUS_FILTER,
-      ownerFilter: coordinatorUiPolicy.lockedOwnerUserId || DEFAULT_CONTACT_OWNER_FILTER,
+      ownerFilter: DEFAULT_CONTACT_OWNER_FILTER,
+      sourceFilter: DEFAULT_CONTACT_SOURCE_FILTER,
       directoryFacet: DEFAULT_CONTACT_FACET_FILTER,
       courseFilter: DEFAULT_CONTACT_COURSE_FILTER,
     });
   };
-  const invalidPhoneScopeSummary = useMemo(() => {
-    if (effectiveDirectoryFacet !== 'invalid_phone') return '';
-    const counts = new Map();
-    for (const contact of filteredContacts) {
-      const label = contact.divisionLabel || businessUnitById.get(contact.businessUnitId || contact.primaryBusinessUnitId)?.name || 'Unassigned';
-      counts.set(label, (counts.get(label) || 0) + 1);
-    }
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .map(([label, count]) => `${label}: ${count}`)
-      .join(' · ');
-  }, [businessUnitById, effectiveDirectoryFacet, filteredContacts]);
   const mobileFieldKeys = columnMode === 'ait_signs'
     ? ['phone', 'sourceCategoryText', 'linkedPeopleSummary', 'accountSnapshotText', 'assignedLabel', 'lastTouch', 'lastEdited']
     : columnMode === 'ait_usa'
@@ -545,7 +780,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       : ['phone', 'workflow', 'signalText', 'assignedLabel', 'divisionLabel', 'lastTouch', 'lastEdited'];
   const directoryScopeName = directoryBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`;
   const summaryNoun = pluralLabel.toLowerCase();
-  const directorySummary = `${filteredContacts.length.toLocaleString()} matching ${summaryNoun} of ${directoryContacts.length.toLocaleString()} ${summaryNoun} in ${directoryScopeName}`;
+  const directorySummary = `${filteredContacts.length.toLocaleString()} matching ${summaryNoun} in ${directoryScopeName}`;
   const formBusinessUnitId = form.businessUnitId || form.primaryBusinessUnitId || '';
   const formBusinessUnit = businessUnitById.get(formBusinessUnitId) || null;
   const isAitUsaForm = workflowForBusinessUnit(formBusinessUnit).key === WORKFLOW_KEYS.AIT_USA;
@@ -567,27 +802,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           columns={columns}
           data={filteredContacts}
           searchPlaceholder={`Search ${pluralLabel.toLowerCase()}...`}
-          toolbarMeta={(
-            <div className="contacts-table-filter-summary">
-              <div className="contacts-active-chips" aria-label="Active filter summary">
-                {activeFilterChips.map((chip) => {
-                  const chipClass = `contacts-active-chip ${chip.primary ? 'primary' : ''} ${chip.onRemove ? 'removable' : ''}`;
-                  return chip.onRemove ? (
-                    <button key={chip.key} type="button" className={chipClass} onClick={chip.onRemove} title={`Remove ${chip.label}`}>
-                      <span>{chip.label}</span>
-                      <X size={12} />
-                    </button>
-                  ) : (
-                    <span key={chip.key} className={chipClass}>{chip.label}</span>
-                  );
-                })}
-              </div>
-              {invalidPhoneScopeSummary && (
-                <small>{invalidPhoneScopeSummary}</small>
-              )}
-            </div>
-          )}
-          toolbarAfterColumns={(
+          toolbarAfterSearch={(
             <div className="contacts-filter-popover-anchor">
               <button
                 className={`contacts-filter-menu-button ${filterMenuOpen ? 'active' : ''}`}
@@ -597,144 +812,276 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
               >
                 <ListFilter size={15} />
                 Filters
-                {hasNonDefaultFilters && <strong>{activeFilterChips.filter((chip) => chip.onRemove).length}</strong>}
+                {hasNonDefaultFilters && <strong>{activeFilterCount}</strong>}
               </button>
 
               {filterMenuOpen && (
                 <div className="contacts-filter-menu" role="dialog" aria-label="Contact filters">
-                  <div className="contacts-filter-tabs" role="tablist" aria-label="Contact filter sections">
-                    {[
-                      ['date', 'Date'],
-                      ['filters', 'Workflow'],
-                      ['buckets', 'Segments'],
-                    ].map(([id, label]) => (
-                      <button
-                        key={id}
-                        type="button"
-                        className={`contacts-filter-tab ${filterMenuTab === id ? 'active' : ''}`}
-                        onClick={() => setFilterMenuTab(id)}
-                        role="tab"
-                        aria-selected={filterMenuTab === id}
-                      >
-                        {label}
-                      </button>
-                    ))}
+                  <div className="contacts-filter-summary-strip" aria-label="Selected contact filters">
+                    {filterSummaryChips.length > 0 ? (
+                      <>
+                        {filterSummaryChips.map((chip) => (
+                          <span key={chip.key} className="contacts-filter-summary-item">
+                            <small>{CONTACT_FILTER_CHIP_LABELS[chip.key] || 'Filter'}</small>
+                            <strong>{chip.label}</strong>
+                          </span>
+                        ))}
+                        {activeFilterCount > filterSummaryChips.length && (
+                          <span className="contacts-filter-summary-more">+{activeFilterCount - filterSummaryChips.length}</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="contacts-filter-summary-empty">Default contact view</span>
+                    )}
                   </div>
 
-                  <div className="contacts-filter-body">
-                    {filterMenuTab === 'date' && (
-                      <div className="contacts-filter-section">
-                        <div className="contacts-facet-pills">
-                          {[
-                            [DEFAULT_CONTACT_LEAD_DATE_SCOPE, 'Current Year', currentLeadCount],
-                            [CONTACT_LEAD_DATE_SCOPE_ALL, 'All Leads', allDateLeadCount],
-                            [CONTACT_LEAD_DATE_SCOPE_CUSTOM, 'Custom Time Frame', customLeadCount],
-                          ].map(([id, label, count]) => (
+                  <div className="contacts-filter-shell">
+                    <div className="contacts-filter-section-list" role="tablist" aria-label="Contact filter sections">
+                      {filterSections.map((section) => (
+                        <button
+                          key={section.id}
+                          type="button"
+                          className={`contacts-filter-section-button ${activeFilterSection === section.id ? 'active' : ''}`}
+                          onClick={() => setActiveFilterSection(section.id)}
+                          role="tab"
+                          aria-selected={activeFilterSection === section.id}
+                          aria-label={`${section.label}: ${section.summary}`}
+                        >
+                          <span>{section.label}</span>
+                          <small>{section.summary}</small>
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className={`contacts-filter-detail ${['timeframe', 'owner', 'status', 'source', 'course'].includes(activeFilterSection) ? 'contacts-filter-detail-compact' : ''}`}>
+                      {activeFilterSection === 'timeframe' && (
+                        <section className="contacts-filter-block">
+                          <div className="contacts-filter-heading">Timeframe</div>
+                          <TimeframeFilterPanel
+                            activeScope={effectiveLeadDateScope}
+                            counts={{
+                              quarter: quarterLeadCount,
+                              current: currentLeadCount,
+                              all: allDateLeadCount,
+                              custom: customLeadCount,
+                            }}
+                            leadDateFrom={leadDateFrom}
+                            leadDateTo={leadDateTo}
+                            onDateRangeChange={setLeadDateRange}
+                            onScopeChange={setLeadDateScope}
+                          />
+                        </section>
+                      )}
+
+                      {activeFilterSection === 'owner' && (
+                        <section className="contacts-filter-block contacts-owner-filter">
+                          <div className="contacts-filter-heading">Owner</div>
+                          <div className="contacts-owner-scope-grid" aria-label="Owner scope">
                             <button
-                              key={id}
                               type="button"
-                              className={`contacts-facet-pill ${leadDateScope === id ? 'active' : ''}`}
-                              onClick={() => setLeadDateScope(id)}
-                              aria-pressed={leadDateScope === id}
+                              className={`contacts-owner-tile ${effectiveOwnerFilter === DEFAULT_CONTACT_OWNER_FILTER && !coordinatorUiPolicy.ownerScoped ? 'active' : ''}`}
+                              disabled={coordinatorUiPolicy.ownerScoped}
+                              onClick={() => setOwnerFilter(DEFAULT_CONTACT_OWNER_FILTER)}
+                              aria-pressed={effectiveOwnerFilter === DEFAULT_CONTACT_OWNER_FILTER && !coordinatorUiPolicy.ownerScoped}
                             >
-                              <span>{label}</span>
-                              <strong>{count}</strong>
+                              <span>All Owners</span>
+                              <small>Full team view</small>
                             </button>
-                          ))}
-                        </div>
-                        <div className="contacts-date-range">
-                          <label>
-                            <span>From</span>
-                            <input className="input" type="date" value={leadDateFrom} onChange={(event) => setLeadDateFrom(event.target.value)} />
-                          </label>
-                          <label>
-                            <span>To</span>
-                            <input className="input" type="date" value={leadDateTo} onChange={(event) => setLeadDateTo(event.target.value)} />
-                          </label>
-                        </div>
-                      </div>
-                    )}
-
-                    {filterMenuTab === 'filters' && (
-                      <div className="contacts-filter-grid">
-                        <label className="contacts-filter-field">
-                          <span>Status</span>
-                          <select className="input select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                            <option value={DEFAULT_CONTACT_STATUS_FILTER}>All Statuses</option>
-                            {statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
-                          </select>
-                        </label>
-                        <label className="contacts-filter-field">
-                          <span>Course</span>
-                          <select className="input select" value={courseFilter} onChange={(event) => setCourseFilter(event.target.value)}>
-                            <option value={DEFAULT_CONTACT_COURSE_FILTER}>All Courses</option>
-                            {courseFilterOptions.map((option) => (
-                              <option key={option.value} value={option.value}>
-                                {option.label} ({option.count})
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <label className="contacts-filter-field">
-                          <span>Owner</span>
-                          <select
-                            className="input select"
-                            value={effectiveOwnerFilter}
-                            disabled={coordinatorUiPolicy.ownerScoped}
-                            onChange={(event) => setOwnerFilter(event.target.value)}
-                          >
-                            {coordinatorUiPolicy.ownerScoped ? (
-                              <option value={coordinatorUiPolicy.lockedOwnerUserId}>My Contacts</option>
-                            ) : (
-                              <>
-                                <option value="all">All Owners</option>
-                                <option value="unassigned">Unassigned</option>
-                                {ownerOptions.map((owner) => (
-                                  <option key={owner.id} value={owner.id}>{owner.label}</option>
-                                ))}
-                              </>
-                            )}
-                          </select>
-                        </label>
-                      </div>
-                    )}
-
-                    {filterMenuTab === 'buckets' && (
-                      <div className="contacts-facet-groups">
-                        {facetGroups.map((group) => (
-                          <div key={group.id} className="contacts-facet-group">
-                            <div className="contacts-facet-label">{group.label}</div>
-                            <div className="contacts-facet-pills">
-                              {group.facets
-                                .filter((facet) => facet.count > 0 || facet.id === 'all' || effectiveDirectoryFacet === facet.id)
-                                .map((facet) => (
-                                  <button
-                                    key={facet.id}
-                                    type="button"
-                                    className={`contacts-facet-pill ${effectiveDirectoryFacet === facet.id ? 'active' : ''} ${facet.count === 0 ? 'is-empty' : ''}`}
-                                    onClick={() => setDirectoryFacet(facet.id)}
-                                    disabled={facet.count === 0 && directoryFacet !== facet.id}
-                                    aria-pressed={effectiveDirectoryFacet === facet.id}
-                                  >
-                                    <span>{facet.label}</span>
-                                    <strong>{facet.count}</strong>
-                                  </button>
-                                ))}
-                            </div>
+                            <button
+                              type="button"
+                              className={`contacts-owner-tile ${coordinatorUiPolicy.ownerScoped || effectiveOwnerFilter === currentUser?.id ? 'active' : ''}`}
+                              disabled={!currentUser?.id || (coordinatorUiPolicy.ownerScoped && !coordinatorUiPolicy.lockedOwnerUserId)}
+                              onClick={() => currentUser?.id && setOwnerFilter(currentUser.id)}
+                              aria-pressed={coordinatorUiPolicy.ownerScoped || effectiveOwnerFilter === currentUser?.id}
+                            >
+                              <span>My Contacts</span>
+                              <small>{coordinatorUiPolicy.ownerScoped ? 'Role default' : 'Assigned to me'}</small>
+                            </button>
+                            <button
+                              type="button"
+                              className={`contacts-owner-tile ${effectiveOwnerFilter === 'unassigned' ? 'active' : ''}`}
+                              disabled={coordinatorUiPolicy.ownerScoped}
+                              onClick={() => setOwnerFilter('unassigned')}
+                              aria-pressed={effectiveOwnerFilter === 'unassigned'}
+                            >
+                              <span>Unassigned</span>
+                              <small>Needs owner</small>
+                            </button>
                           </div>
-                        ))}
-                      </div>
-                    )}
+
+                          {coordinatorUiPolicy.ownerScoped ? (
+                            <p className="contacts-owner-note">Locked to your assigned contacts.</p>
+                          ) : (
+                            <div className="contacts-owner-staff">
+                              <label className="contacts-owner-search">
+                                <span>Specific staff</span>
+                                <input
+                                  className="input"
+                                  type="search"
+                                  value={ownerSearch}
+                                  onChange={(event) => setOwnerSearch(event.target.value)}
+                                  placeholder="Search staff..."
+                                />
+                              </label>
+                              <div className="contacts-owner-list" role="listbox" aria-label="Staff owner filters">
+                                {visibleOwnerOptions.length > 0 ? (
+                                  visibleOwnerOptions.map((owner) => (
+                                    <button
+                                      key={owner.id}
+                                      type="button"
+                                      className={`contacts-owner-row ${effectiveOwnerFilter === owner.id ? 'active' : ''}`}
+                                      onClick={() => setOwnerFilter(owner.id)}
+                                      aria-selected={effectiveOwnerFilter === owner.id}
+                                      role="option"
+                                    >
+                                      <span className="contacts-owner-avatar" aria-hidden="true">{owner.initials}</span>
+                                      <span className="contacts-owner-copy">
+                                        <strong>{owner.label}</strong>
+                                        <small>{owner.meta}</small>
+                                      </span>
+                                    </button>
+                                  ))
+                                ) : (
+                                  <span className="contacts-owner-empty">No matching staff</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </section>
+                      )}
+
+                      {activeFilterSection === 'status' && (
+                        <section className="contacts-filter-block">
+                          <div className="contacts-filter-heading">Status</div>
+                          <div className="contacts-option-list" role="listbox" aria-label="Contact status filters">
+                            <button
+                              type="button"
+                              className={`contacts-option-tile ${statusFilter === DEFAULT_CONTACT_STATUS_FILTER ? 'active' : ''}`}
+                              onClick={() => setStatusFilter(DEFAULT_CONTACT_STATUS_FILTER)}
+                              aria-selected={statusFilter === DEFAULT_CONTACT_STATUS_FILTER}
+                              role="option"
+                            >
+                              <span>All Statuses</span>
+                              <small>Do not narrow by stage</small>
+                            </button>
+                            {statusOptions.map((status) => (
+                              <button
+                                key={status}
+                                type="button"
+                                className={`contacts-option-tile ${statusFilter === status ? 'active' : ''}`}
+                                onClick={() => setStatusFilter(status)}
+                                aria-selected={statusFilter === status}
+                                role="option"
+                              >
+                                <span>{status}</span>
+                                <small>Only this stage</small>
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+
+                      {activeFilterSection === 'source' && (
+                        <section className="contacts-filter-block">
+                          <div className="contacts-filter-heading">Source</div>
+                          <div className="contacts-option-list" role="listbox" aria-label="Contact source filters">
+                            <button
+                              type="button"
+                              className={`contacts-option-tile ${sourceFilter === DEFAULT_CONTACT_SOURCE_FILTER ? 'active' : ''}`}
+                              onClick={() => setSourceFilter(DEFAULT_CONTACT_SOURCE_FILTER)}
+                              aria-selected={sourceFilter === DEFAULT_CONTACT_SOURCE_FILTER}
+                              role="option"
+                            >
+                              <span>All Sources</span>
+                              <strong>{statusOwnerFilteredContacts.length}</strong>
+                            </button>
+                            {sourceFilterOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className={`contacts-option-tile ${sourceFilter === option.value ? 'active' : ''}`}
+                                onClick={() => setSourceFilter(option.value)}
+                                aria-selected={sourceFilter === option.value}
+                                role="option"
+                              >
+                                <span>{option.label}</span>
+                                <strong>{option.count}</strong>
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+
+                      {activeFilterSection === 'course' && (courseFilterOptions.length > 0 || courseFilter !== DEFAULT_CONTACT_COURSE_FILTER) && (
+                        <section className="contacts-filter-block">
+                          <div className="contacts-filter-heading">Course</div>
+                          <div className="contacts-option-list" role="listbox" aria-label="Contact course filters">
+                            <button
+                              type="button"
+                              className={`contacts-option-tile ${courseFilter === DEFAULT_CONTACT_COURSE_FILTER ? 'active' : ''}`}
+                              onClick={() => setCourseFilter(DEFAULT_CONTACT_COURSE_FILTER)}
+                              aria-selected={courseFilter === DEFAULT_CONTACT_COURSE_FILTER}
+                              role="option"
+                            >
+                              <span>All Courses</span>
+                              <strong>{sourceFilteredContacts.length}</strong>
+                            </button>
+                            {courseFilterOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className={`contacts-option-tile ${courseFilter === option.value ? 'active' : ''}`}
+                                onClick={() => setCourseFilter(option.value)}
+                                aria-selected={courseFilter === option.value}
+                                role="option"
+                              >
+                                <span>{option.label}</span>
+                                <strong>{option.count}</strong>
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+
+                      {activeFilterSection === 'segments' && visibleSegmentGroups.groups.length > 0 && (
+                        <section className="contacts-filter-block contacts-segment-filter">
+                          <SegmentTile
+                            facet={visibleSegmentGroups.allFacet}
+                            active={effectiveDirectoryFacet === 'all'}
+                            onClick={() => setDirectoryFacet(DEFAULT_CONTACT_FACET_FILTER)}
+                          />
+                          <div className="contacts-segment-groups">
+                            {visibleSegmentGroups.groups.map((group) => (
+                              <div key={group.id} className="contacts-segment-group">
+                                <div className="contacts-segment-label">{group.label}</div>
+                                <div className="contacts-segment-list">
+                                  {group.facets.map((facet) => (
+                                    <SegmentTile
+                                      key={facet.id}
+                                      facet={facet}
+                                      active={effectiveDirectoryFacet === facet.id}
+                                      onClick={() => setDirectoryFacet(facet.id)}
+                                    />
+                                  ))}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+                    </div>
                   </div>
 
                   <div className="contacts-filter-footer">
-                    <span>{filteredContacts.length} matching {pluralLabel.toLowerCase()}</span>
-                    {hasNonDefaultFilters && (
-                      <button className="contacts-filter-reset" type="button" onClick={resetFilters}>
-                        <RotateCcw size={13} />
-                        Reset all
-                      </button>
-                    )}
+                    <div className="contacts-filter-footer-meta">
+                      <span>{filteredContacts.length.toLocaleString()} shown of {dateScopedRows.length.toLocaleString()}</span>
+                      {hasNonDefaultFilters && (
+                        <button className="contacts-filter-reset" type="button" onClick={resetFilters}>
+                          <RotateCcw size={13} />
+                          Reset
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

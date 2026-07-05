@@ -21,7 +21,7 @@ export function buildTaskCalendarEvents(tasks = []) {
         description: task.description || '',
         date: dueDate,
         type: 'deadline',
-        href: '/tasks',
+        href: task.id ? `/tasks/${task.id}` : '/tasks',
         contactId: task.contactId || '',
         businessUnitId: task.businessUnitId || '',
       };
