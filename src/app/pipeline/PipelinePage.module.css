@@ -175,8 +175,8 @@
   max-height: min(72vh, 560px);
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
-  gap: 10px;
-  padding: 12px;
+  gap: 6px;
+  padding: 10px;
   border: 1px solid color-mix(in srgb, var(--border-subtle) 86%, transparent);
   border-radius: var(--radius-xl);
   background: linear-gradient(180deg, var(--bg-elevated), color-mix(in srgb, var(--bg-secondary) 86%, var(--bg-elevated)));
@@ -238,7 +238,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  padding: 0 0 2px;
+  padding: 0;
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -248,11 +248,11 @@
 .filterSummaryEmpty {
   flex: 0 1 auto;
   min-width: 0;
-  min-height: 26px;
+  min-height: 24px;
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 4px 8px;
+  padding: 3px 8px;
   border: 1px solid color-mix(in srgb, var(--border-subtle) 78%, transparent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--bg-tertiary) 48%, var(--bg-secondary));
@@ -284,10 +284,10 @@
   display: grid;
   grid-template-columns: 156px minmax(0, 1fr);
   align-items: start;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
   min-height: 0;
-  padding-top: 4px;
+  padding-top: 6px;
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -817,7 +817,7 @@
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
-  padding-top: 10px;
+  padding-top: 8px;
   border-top: 1px solid var(--border-subtle);
   color: var(--text-muted);
   font-size: var(--text-xs);
@@ -827,10 +827,15 @@
 .filterFooterMeta {
   display: flex;
   flex: 1 1 auto;
-  align-items: center;
+  align-items: flex-end;
   justify-content: space-between;
   gap: 10px;
   min-width: 0;
+}
+
+.filterFooterMeta > span {
+  line-height: 1.2;
+  padding-bottom: 1px;
 }
 
 .filterFooterActions {

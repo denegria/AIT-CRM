@@ -859,7 +859,7 @@ export default function PipelinePage() {
 
                   <div className={s.filterFooter}>
                     <div className={s.filterFooterMeta}>
-                      <span>{pipelineRows.length} shown of {pipelineScopedRows.length}</span>
+                      <span>{pipelineRows.length.toLocaleString()} shown of {pipelineScopedRows.length.toLocaleString()}</span>
                       <div className={s.filterFooterActions}>
                         {hasNonDefaultFilters && (
                           <button className={s.filterReset} type="button" onClick={resetFilters}>

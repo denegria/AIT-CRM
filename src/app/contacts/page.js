@@ -1074,7 +1074,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
 
                   <div className="contacts-filter-footer">
                     <div className="contacts-filter-footer-meta">
-                      <span>{filteredContacts.length} shown</span>
+                      <span>{filteredContacts.length.toLocaleString()} shown of {dateScopedRows.length.toLocaleString()}</span>
                       {hasNonDefaultFilters && (
                         <button className="contacts-filter-reset" type="button" onClick={resetFilters}>
                           <RotateCcw size={13} />
