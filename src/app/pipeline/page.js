@@ -608,39 +608,6 @@ export default function PipelinePage() {
 
               {filterMenuOpen && (
                 <div className={s.filterMenu} role="dialog" aria-label="Pipeline filters">
-                  <div className={s.filterMenuHeader}>
-                    <div className={s.filterTitle}>
-                      <span>Refine pipeline cards</span>
-                      {activeFilterCount > 0 && <em>{activeFilterCount}</em>}
-                    </div>
-                    <div className={s.filterMenuActions}>
-                      {hasNonDefaultFilters && (
-                        <button className={s.filterReset} type="button" onClick={resetFilters}>
-                          <RotateCcw size={13} />
-                          Reset
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className={s.filterSummaryStrip} aria-label="Selected pipeline filters">
-                    {filterSummaryChips.length > 0 ? (
-                      <>
-                        {filterSummaryChips.map((chip) => (
-                          <span key={chip.key} className={s.filterSummaryItem}>
-                            <small>{PIPELINE_FILTER_CHIP_LABELS[chip.key] || 'Filter'}</small>
-                            <strong>{chip.label}</strong>
-                          </span>
-                        ))}
-                        {activeFilterCount > filterSummaryChips.length && (
-                          <span className={s.filterSummaryMore}>+{activeFilterCount - filterSummaryChips.length}</span>
-                        )}
-                      </>
-                    ) : (
-                      <span className={s.filterSummaryEmpty}>Default pipeline view</span>
-                    )}
-                  </div>
-
                   <div className={s.filterShell}>
                     <div className={s.filterSectionList} role="tablist" aria-label="Pipeline filter sections">
                       {filterSections.map((section) => (
@@ -873,11 +840,38 @@ export default function PipelinePage() {
                   </div>
 
                   <div className={s.filterFooter}>
-                    <span>{pipelineRows.length} shown of {pipelineScopedRows.length}</span>
-                    <label className={`${s.compactToggle} ${s.footerToggle}`}>
-                      <input type="checkbox" checked={compactMode} onChange={(event) => setCompactMode(event.target.checked)} />
-                      Compact cards
-                    </label>
+                    <div className={`${s.filterFooterSummary} ${s.filterSummaryStrip}`} aria-label="Selected pipeline filters">
+                      {filterSummaryChips.length > 0 ? (
+                        <>
+                          {filterSummaryChips.map((chip) => (
+                            <span key={chip.key} className={s.filterSummaryItem}>
+                              <small>{PIPELINE_FILTER_CHIP_LABELS[chip.key] || 'Filter'}</small>
+                              <strong>{chip.label}</strong>
+                            </span>
+                          ))}
+                          {activeFilterCount > filterSummaryChips.length && (
+                            <span className={s.filterSummaryMore}>+{activeFilterCount - filterSummaryChips.length}</span>
+                          )}
+                        </>
+                      ) : (
+                        <span className={s.filterSummaryEmpty}>Default pipeline view</span>
+                      )}
+                    </div>
+                    <div className={s.filterFooterMeta}>
+                      <span>{pipelineRows.length} shown of {pipelineScopedRows.length}</span>
+                      <div className={s.filterFooterActions}>
+                        {hasNonDefaultFilters && (
+                          <button className={s.filterReset} type="button" onClick={resetFilters}>
+                            <RotateCcw size={13} />
+                            Reset
+                          </button>
+                        )}
+                        <label className={`${s.compactToggle} ${s.footerToggle}`}>
+                          <input type="checkbox" checked={compactMode} onChange={(event) => setCompactMode(event.target.checked)} />
+                          Compact cards
+                        </label>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
