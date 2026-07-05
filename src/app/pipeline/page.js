@@ -58,6 +58,28 @@ const PIPELINE_FILTER_CHIP_LABELS = {
   cards: 'Cards',
 };
 
+function ownerInitials(label = '') {
+  const parts = String(label || '')
+    .replace(/@.*/, '')
+    .split(/\s+|[._-]/)
+    .filter(Boolean)
+    .slice(0, 2);
+  return (parts.map((part) => part[0]).join('') || 'U').toUpperCase();
+}
+
+function ownerMeta(employee = {}) {
+  const role = (employee.roleKeys || [])
+    .map((key) => String(key).replaceAll('_', ' '))
+    .join(', ');
+  return role || employee.email || 'Team member';
+}
+
+function matchesOwnerSearch(owner, query) {
+  if (!query) return true;
+  const haystack = [owner.label, owner.email, owner.meta].join(' ').toLowerCase();
+  return haystack.includes(query.trim().toLowerCase());
+}
+
 function matchesSearch(contact, query) {
   if (!query) return true;
   const haystack = [
@@ -172,6 +194,7 @@ export default function PipelinePage() {
   const [pipelineBusinessUnitId, setPipelineBusinessUnitId] = useState('');
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [activeFilterSection, setActiveFilterSection] = useState('timeframe');
+  const [ownerSearch, setOwnerSearch] = useState('');
   const [mobileStageFilter, setMobileStageFilter] = useState('all');
   const [mobileMoveCardId, setMobileMoveCardId] = useState('');
   const [bulkAssignMode, setBulkAssignMode] = useState(false);
@@ -299,8 +322,15 @@ export default function PipelinePage() {
       .map((employee) => ({
         id: employee.id,
         label: employee.name || employee.email || 'Unnamed User',
+        email: employee.email || '',
+        initials: ownerInitials(employee.name || employee.email || 'Unnamed User'),
+        meta: ownerMeta(employee),
       }));
   }, [currentUser?.id, employees]);
+  const visibleOwnerOptions = useMemo(
+    () => ownerOptions.filter((owner) => matchesOwnerSearch(owner, ownerSearch)),
+    [ownerOptions, ownerSearch],
+  );
 
   const normalizedSearch = search.trim().toLowerCase();
   const pipelineRows = useMemo(() => pipelineScopedRows.filter((contact) => {
@@ -653,29 +683,79 @@ export default function PipelinePage() {
                       )}
 
                       {activeFilterSection === 'owner' && (
-                        <section className={s.filterBlock}>
+                        <section className={`${s.filterBlock} ${s.ownerFilter}`}>
                           <div className={s.filterHeading}>Owner</div>
-                          <label className={s.filterField}>
-                            <select
-                              className="input select"
-                              value={ownerFilter}
+                          <div className={s.ownerScopeGrid} aria-label="Pipeline owner scope">
+                            <button
+                              type="button"
+                              className={`${s.ownerTile} ${ownerFilter === DEFAULT_PIPELINE_OWNER_FILTER && !coordinatorUiPolicy.ownerScoped ? s.active : ''}`}
                               disabled={coordinatorUiPolicy.ownerScoped}
-                              onChange={(event) => setOwnerFilter(event.target.value)}
+                              onClick={() => setOwnerFilter(DEFAULT_PIPELINE_OWNER_FILTER)}
+                              aria-pressed={ownerFilter === DEFAULT_PIPELINE_OWNER_FILTER && !coordinatorUiPolicy.ownerScoped}
                             >
-                              {coordinatorUiPolicy.ownerScoped ? (
-                                <option value={coordinatorUiPolicy.lockedOwnerUserId}>My Pipeline</option>
-                              ) : (
-                                <>
-                                  <option value="all">{canUseConsolidatedScope ? 'Team Pipeline' : 'All Owners'}</option>
-                                  <option value="unassigned">Unassigned</option>
-                                  {currentUser?.id && <option value={currentUser.id}>Me</option>}
-                                  {ownerOptions.map((owner) => (
-                                    <option key={owner.id} value={owner.id}>{owner.label}</option>
-                                  ))}
-                                </>
-                              )}
-                            </select>
-                          </label>
+                              <span>{canUseConsolidatedScope ? 'Team Pipeline' : 'All Owners'}</span>
+                              <small>Full owner view</small>
+                            </button>
+                            <button
+                              type="button"
+                              className={`${s.ownerTile} ${coordinatorUiPolicy.ownerScoped || ownerFilter === currentUser?.id ? s.active : ''}`}
+                              disabled={!currentUser?.id || (coordinatorUiPolicy.ownerScoped && !coordinatorUiPolicy.lockedOwnerUserId)}
+                              onClick={() => currentUser?.id && setOwnerFilter(currentUser.id)}
+                              aria-pressed={coordinatorUiPolicy.ownerScoped || ownerFilter === currentUser?.id}
+                            >
+                              <span>My Pipeline</span>
+                              <small>{coordinatorUiPolicy.ownerScoped ? 'Role default' : 'Assigned to me'}</small>
+                            </button>
+                            <button
+                              type="button"
+                              className={`${s.ownerTile} ${ownerFilter === 'unassigned' ? s.active : ''}`}
+                              disabled={coordinatorUiPolicy.ownerScoped}
+                              onClick={() => setOwnerFilter('unassigned')}
+                              aria-pressed={ownerFilter === 'unassigned'}
+                            >
+                              <span>Unassigned</span>
+                              <small>Needs owner</small>
+                            </button>
+                          </div>
+
+                          {coordinatorUiPolicy.ownerScoped ? (
+                            <p className={s.ownerNote}>Locked to your assigned pipeline.</p>
+                          ) : (
+                            <div className={s.ownerStaff}>
+                              <label className={s.ownerSearch}>
+                                <span>Specific staff</span>
+                                <input
+                                  className="input"
+                                  type="search"
+                                  value={ownerSearch}
+                                  onChange={(event) => setOwnerSearch(event.target.value)}
+                                  placeholder="Search staff..."
+                                />
+                              </label>
+                              <div className={s.ownerList} role="listbox" aria-label="Staff pipeline owner filters">
+                                {visibleOwnerOptions.length > 0 ? (
+                                  visibleOwnerOptions.map((owner) => (
+                                    <button
+                                      key={owner.id}
+                                      type="button"
+                                      className={`${s.ownerRow} ${ownerFilter === owner.id ? s.active : ''}`}
+                                      onClick={() => setOwnerFilter(owner.id)}
+                                      aria-selected={ownerFilter === owner.id}
+                                      role="option"
+                                    >
+                                      <span className={s.ownerAvatar} aria-hidden="true">{owner.initials}</span>
+                                      <span className={s.ownerCopy}>
+                                        <strong>{owner.label}</strong>
+                                        <small>{owner.meta}</small>
+                                      </span>
+                                    </button>
+                                  ))
+                                ) : (
+                                  <span className={s.ownerEmpty}>No matching staff</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </section>
                       )}
 

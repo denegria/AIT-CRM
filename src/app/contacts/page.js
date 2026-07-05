@@ -69,6 +69,28 @@ const CONTACT_FILTER_CHIP_LABELS = {
   facet: 'Segments',
 };
 
+function ownerInitials(label = '') {
+  const parts = String(label || '')
+    .replace(/@.*/, '')
+    .split(/\s+|[._-]/)
+    .filter(Boolean)
+    .slice(0, 2);
+  return (parts.map((part) => part[0]).join('') || 'U').toUpperCase();
+}
+
+function ownerMeta(employee = {}) {
+  const role = (employee.roleKeys || [])
+    .map((key) => String(key).replaceAll('_', ' '))
+    .join(', ');
+  return role || employee.email || 'Team member';
+}
+
+function matchesOwnerSearch(owner, query) {
+  if (!query) return true;
+  const haystack = [owner.label, owner.email, owner.meta].join(' ').toLowerCase();
+  return haystack.includes(query.trim().toLowerCase());
+}
+
 function TagList({ tags = [] }) {
   if (!tags.length) return null;
   return (
@@ -208,6 +230,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const [facetNow] = useState(() => Date.now());
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [activeFilterSection, setActiveFilterSection] = useState('timeframe');
+  const [ownerSearch, setOwnerSearch] = useState('');
   const isClientsMode = mode === 'clients';
   const singularLabel = isClientsMode ? 'Client' : 'Contact';
   const pluralLabel = isClientsMode ? 'Clients' : 'Contacts';
@@ -302,8 +325,15 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       .map((employee) => ({
         id: employee.id,
         label: employee.name || employee.email || 'Unnamed User',
+        email: employee.email || '',
+        initials: ownerInitials(employee.name || employee.email || 'Unnamed User'),
+        meta: ownerMeta(employee),
       }));
   }, [employees]);
+  const visibleOwnerOptions = useMemo(
+    () => ownerOptions.filter((owner) => owner.id !== currentUser?.id && matchesOwnerSearch(owner, ownerSearch)),
+    [currentUser?.id, ownerOptions, ownerSearch],
+  );
   const facetContext = useMemo(() => ({
     businessUnitById,
     currentUserId: currentUser?.id,
@@ -747,28 +777,79 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                       )}
 
                       {activeFilterSection === 'owner' && (
-                        <section className="contacts-filter-block">
+                        <section className="contacts-filter-block contacts-owner-filter">
                           <div className="contacts-filter-heading">Owner</div>
-                          <label className="contacts-filter-field">
-                            <select
-                              className="input select"
-                              value={effectiveOwnerFilter}
+                          <div className="contacts-owner-scope-grid" aria-label="Owner scope">
+                            <button
+                              type="button"
+                              className={`contacts-owner-tile ${effectiveOwnerFilter === DEFAULT_CONTACT_OWNER_FILTER && !coordinatorUiPolicy.ownerScoped ? 'active' : ''}`}
                               disabled={coordinatorUiPolicy.ownerScoped}
-                              onChange={(event) => setOwnerFilter(event.target.value)}
+                              onClick={() => setOwnerFilter(DEFAULT_CONTACT_OWNER_FILTER)}
+                              aria-pressed={effectiveOwnerFilter === DEFAULT_CONTACT_OWNER_FILTER && !coordinatorUiPolicy.ownerScoped}
                             >
-                              {coordinatorUiPolicy.ownerScoped ? (
-                                <option value={coordinatorUiPolicy.lockedOwnerUserId}>My Contacts</option>
-                              ) : (
-                                <>
-                                  <option value="all">All Owners</option>
-                                  <option value="unassigned">Unassigned</option>
-                                  {ownerOptions.map((owner) => (
-                                    <option key={owner.id} value={owner.id}>{owner.label}</option>
-                                  ))}
-                                </>
-                              )}
-                            </select>
-                          </label>
+                              <span>All Owners</span>
+                              <small>Full team view</small>
+                            </button>
+                            <button
+                              type="button"
+                              className={`contacts-owner-tile ${coordinatorUiPolicy.ownerScoped || effectiveOwnerFilter === currentUser?.id ? 'active' : ''}`}
+                              disabled={!currentUser?.id || (coordinatorUiPolicy.ownerScoped && !coordinatorUiPolicy.lockedOwnerUserId)}
+                              onClick={() => currentUser?.id && setOwnerFilter(currentUser.id)}
+                              aria-pressed={coordinatorUiPolicy.ownerScoped || effectiveOwnerFilter === currentUser?.id}
+                            >
+                              <span>My Contacts</span>
+                              <small>{coordinatorUiPolicy.ownerScoped ? 'Role default' : 'Assigned to me'}</small>
+                            </button>
+                            <button
+                              type="button"
+                              className={`contacts-owner-tile ${effectiveOwnerFilter === 'unassigned' ? 'active' : ''}`}
+                              disabled={coordinatorUiPolicy.ownerScoped}
+                              onClick={() => setOwnerFilter('unassigned')}
+                              aria-pressed={effectiveOwnerFilter === 'unassigned'}
+                            >
+                              <span>Unassigned</span>
+                              <small>Needs owner</small>
+                            </button>
+                          </div>
+
+                          {coordinatorUiPolicy.ownerScoped ? (
+                            <p className="contacts-owner-note">Locked to your assigned contacts.</p>
+                          ) : (
+                            <div className="contacts-owner-staff">
+                              <label className="contacts-owner-search">
+                                <span>Specific staff</span>
+                                <input
+                                  className="input"
+                                  type="search"
+                                  value={ownerSearch}
+                                  onChange={(event) => setOwnerSearch(event.target.value)}
+                                  placeholder="Search staff..."
+                                />
+                              </label>
+                              <div className="contacts-owner-list" role="listbox" aria-label="Staff owner filters">
+                                {visibleOwnerOptions.length > 0 ? (
+                                  visibleOwnerOptions.map((owner) => (
+                                    <button
+                                      key={owner.id}
+                                      type="button"
+                                      className={`contacts-owner-row ${effectiveOwnerFilter === owner.id ? 'active' : ''}`}
+                                      onClick={() => setOwnerFilter(owner.id)}
+                                      aria-selected={effectiveOwnerFilter === owner.id}
+                                      role="option"
+                                    >
+                                      <span className="contacts-owner-avatar" aria-hidden="true">{owner.initials}</span>
+                                      <span className="contacts-owner-copy">
+                                        <strong>{owner.label}</strong>
+                                        <small>{owner.meta}</small>
+                                      </span>
+                                    </button>
+                                  ))
+                                ) : (
+                                  <span className="contacts-owner-empty">No matching staff</span>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </section>
                       )}
 
