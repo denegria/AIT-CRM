@@ -9,6 +9,7 @@ import {
   contactFilterStateFromParams,
   contactMatchesSource,
   contactMatchesStatusOwnerCourse,
+  CONTACT_LEAD_DATE_SCOPE_QUARTER,
   courseForContactDirectoryFilter,
   courseTagsForDirectoryRow,
   pipelineFilterQuery,
@@ -42,10 +43,11 @@ test('contact filter query omits default filters', () => {
   );
 });
 
-test('lead date scopes support current year, all leads, and custom time frames', () => {
+test('lead date scopes support quarter, current year, all leads, and custom time frames', () => {
   const now = new Date('2026-06-24T00:00:00.000Z');
   const rows = [
     { id: 'current', workflowKey: 'ait_usa', status: 'New Lead', leadCreatedAt: '2026-02-01T12:00:00.000Z' },
+    { id: 'quarter', workflowKey: 'ait_usa', status: 'New Lead', leadCreatedAt: '2026-05-01T12:00:00.000Z' },
     { id: 'prior', workflowKey: 'ait_usa', status: 'New Lead', leadCreatedAt: '2025-11-20T12:00:00.000Z' },
     { id: 'terminal', workflowKey: 'ait_usa', status: 'Dropped / Quit', leadCreatedAt: '2026-04-10T12:00:00.000Z' },
     { id: 'undated', workflowKey: 'default', status: 'New Lead' },
@@ -55,13 +57,19 @@ test('lead date scopes support current year, all leads, and custom time frames',
     rows
       .filter((contact) => contactMatchesLeadDateScope(contact, { now }))
       .map((contact) => contact.id),
-    ['current', 'undated'],
+    ['current', 'quarter', 'undated'],
+  );
+  assert.deepEqual(
+    rows
+      .filter((contact) => contactMatchesLeadDateScope(contact, { leadDateScope: CONTACT_LEAD_DATE_SCOPE_QUARTER, now }))
+      .map((contact) => contact.id),
+    ['quarter', 'terminal'],
   );
   assert.deepEqual(
     rows
       .filter((contact) => contactMatchesLeadDateScope(contact, { leadDateScope: 'all', now }))
       .map((contact) => contact.id),
-    ['current', 'prior', 'terminal', 'undated'],
+    ['current', 'quarter', 'prior', 'terminal', 'undated'],
   );
   assert.deepEqual(
     rows
@@ -73,6 +81,10 @@ test('lead date scopes support current year, all leads, and custom time frames',
       }))
       .map((contact) => contact.id),
     ['current', 'prior'],
+  );
+  assert.equal(
+    contactFilterQuery({ leadDateScope: CONTACT_LEAD_DATE_SCOPE_QUARTER }),
+    'leadDateScope=quarter',
   );
 });
 

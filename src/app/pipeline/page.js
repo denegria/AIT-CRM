@@ -18,6 +18,7 @@ import {
   contactMatchesStatusOwnerCourse,
   CONTACT_LEAD_DATE_SCOPE_ALL,
   CONTACT_LEAD_DATE_SCOPE_CUSTOM,
+  CONTACT_LEAD_DATE_SCOPE_QUARTER,
   DEFAULT_CONTACT_LEAD_DATE_FROM,
   DEFAULT_CONTACT_LEAD_DATE_SCOPE,
   DEFAULT_CONTACT_LEAD_DATE_TO,
@@ -31,6 +32,7 @@ import {
   pipelineFilterQuery,
   pipelineFilterStateFromParams,
 } from '@/lib/contact-directory-filters';
+import TimeframeFilterPanel from '@/components/TimeframeFilterPanel';
 import s from './PipelinePage.module.css';
 
 const AIT_USA_CLOSED_OUTCOME_ORDER = new Map([
@@ -161,6 +163,7 @@ function optionLabel(options = [], value = '') {
 }
 
 function dateScopeLabel(scope = DEFAULT_CONTACT_LEAD_DATE_SCOPE, from = '', to = '') {
+  if (scope === CONTACT_LEAD_DATE_SCOPE_QUARTER) return 'This Quarter';
   if (scope === CONTACT_LEAD_DATE_SCOPE_ALL) return 'All Leads';
   if (scope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
     if (from && to) return `${from} to ${to}`;
@@ -247,8 +250,11 @@ export default function PipelinePage() {
   const setSearch = (value) => updatePipelineFilterQuery({ search: value });
   const setCompactMode = (value) => updatePipelineFilterQuery({ compactMode: value });
   const setLeadDateScope = (value) => updatePipelineFilterQuery({ leadDateScope: value });
-  const setLeadDateFrom = (value) => updatePipelineFilterQuery({ leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM, leadDateFrom: value });
-  const setLeadDateTo = (value) => updatePipelineFilterQuery({ leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM, leadDateTo: value });
+  const setLeadDateRange = (from, to) => updatePipelineFilterQuery({
+    leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM,
+    leadDateFrom: from,
+    leadDateTo: to,
+  });
   const canWrite = access.canWriteCrm;
   const {
     activeWorkflow,
@@ -297,6 +303,12 @@ export default function PipelinePage() {
   const allPipelineCount = eligibleScopedRows.length;
   const currentPipelineCount = useMemo(
     () => eligibleScopedRows.filter((contact) => contactMatchesLeadDateScope(contact)).length,
+    [eligibleScopedRows],
+  );
+  const quarterPipelineCount = useMemo(
+    () => eligibleScopedRows.filter((contact) => contactMatchesLeadDateScope(contact, {
+      leadDateScope: CONTACT_LEAD_DATE_SCOPE_QUARTER,
+    })).length,
     [eligibleScopedRows],
   );
   const customPipelineCount = useMemo(
@@ -647,38 +659,23 @@ export default function PipelinePage() {
                       ))}
                     </div>
 
-                    <div className={`${s.filterDetail} ${['owner', 'status', 'source', 'course', 'activity'].includes(activeFilterSection) ? s.filterDetailCompact : ''}`}>
+                    <div className={`${s.filterDetail} ${['timeframe', 'owner', 'status', 'source', 'course', 'activity'].includes(activeFilterSection) ? s.filterDetailCompact : ''}`}>
                       {activeFilterSection === 'timeframe' && (
                         <section className={s.filterBlock}>
                           <div className={s.filterHeading}>Timeframe</div>
-                          <div className={s.filterPills}>
-                            {[
-                              [DEFAULT_CONTACT_LEAD_DATE_SCOPE, 'Current Year', currentPipelineCount],
-                              [CONTACT_LEAD_DATE_SCOPE_ALL, 'All Leads', allPipelineCount],
-                              [CONTACT_LEAD_DATE_SCOPE_CUSTOM, 'Custom Time Frame', customPipelineCount],
-                            ].map(([id, label, count]) => (
-                              <button
-                                key={id}
-                                type="button"
-                                className={`${s.filterPill} ${effectiveLeadDateScope === id ? s.active : ''}`}
-                                onClick={() => setLeadDateScope(id)}
-                                aria-pressed={effectiveLeadDateScope === id}
-                              >
-                                <span>{label}</span>
-                                <strong>{count}</strong>
-                              </button>
-                            ))}
-                          </div>
-                          <div className={s.dateRange}>
-                            <label>
-                              <span>From</span>
-                              <input className="input" type="date" value={leadDateFrom} onChange={(event) => setLeadDateFrom(event.target.value)} />
-                            </label>
-                            <label>
-                              <span>To</span>
-                              <input className="input" type="date" value={leadDateTo} onChange={(event) => setLeadDateTo(event.target.value)} />
-                            </label>
-                          </div>
+                          <TimeframeFilterPanel
+                            activeScope={effectiveLeadDateScope}
+                            counts={{
+                              quarter: quarterPipelineCount,
+                              current: currentPipelineCount,
+                              all: allPipelineCount,
+                              custom: customPipelineCount,
+                            }}
+                            leadDateFrom={leadDateFrom}
+                            leadDateTo={leadDateTo}
+                            onDateRangeChange={setLeadDateRange}
+                            onScopeChange={setLeadDateScope}
+                          />
                         </section>
                       )}
 

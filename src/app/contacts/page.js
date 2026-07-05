@@ -22,6 +22,7 @@ import {
   courseTagsForDirectoryRow,
   CONTACT_LEAD_DATE_SCOPE_ALL,
   CONTACT_LEAD_DATE_SCOPE_CUSTOM,
+  CONTACT_LEAD_DATE_SCOPE_QUARTER,
   DEFAULT_CONTACT_COURSE_FILTER,
   DEFAULT_CONTACT_FACET_FILTER,
   DEFAULT_CONTACT_LEAD_DATE_FROM,
@@ -44,6 +45,7 @@ import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import TimeframeFilterPanel from '@/components/TimeframeFilterPanel';
 import { Activity, AlertCircle, BadgeDollarSign, Clock3, ListFilter, PhoneOff, RotateCcw, UserRoundCheck, UsersRound } from 'lucide-react';
 
 const empty = {
@@ -294,6 +296,7 @@ function BucketCell({ row }) {
 }
 
 function dateScopeLabel(scope = DEFAULT_CONTACT_LEAD_DATE_SCOPE, from = '', to = '') {
+  if (scope === CONTACT_LEAD_DATE_SCOPE_QUARTER) return 'This Quarter';
   if (scope === CONTACT_LEAD_DATE_SCOPE_ALL) return 'All Leads';
   if (scope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
     if (from && to) return `${from} to ${to}`;
@@ -381,8 +384,11 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   }, [coordinatorUiPolicy.ownerScoped, updateFilterQuery]);
   const setDirectoryFacet = useCallback((value) => updateFilterQuery({ directoryFacet: value }), [updateFilterQuery]);
   const setLeadDateScope = useCallback((value) => updateFilterQuery({ leadDateScope: value }), [updateFilterQuery]);
-  const setLeadDateFrom = useCallback((value) => updateFilterQuery({ leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM, leadDateFrom: value }), [updateFilterQuery]);
-  const setLeadDateTo = useCallback((value) => updateFilterQuery({ leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM, leadDateTo: value }), [updateFilterQuery]);
+  const setLeadDateRange = useCallback((from, to) => updateFilterQuery({
+    leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM,
+    leadDateFrom: from,
+    leadDateTo: to,
+  }), [updateFilterQuery]);
   const setCourseFilter = useCallback((value) => updateFilterQuery({ courseFilter: value }), [updateFilterQuery]);
   const setSourceFilter = useCallback((value) => updateFilterQuery({ sourceFilter: value }), [updateFilterQuery]);
 
@@ -558,6 +564,12 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const allDateLeadCount = directoryRows.length;
   const currentLeadCount = useMemo(
     () => directoryRows.filter((contact) => contactMatchesLeadDateScope(contact)).length,
+    [directoryRows],
+  );
+  const quarterLeadCount = useMemo(
+    () => directoryRows.filter((contact) => contactMatchesLeadDateScope(contact, {
+      leadDateScope: CONTACT_LEAD_DATE_SCOPE_QUARTER,
+    })).length,
     [directoryRows],
   );
   const customLeadCount = useMemo(
@@ -856,38 +868,23 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                       ))}
                     </div>
 
-                    <div className={`contacts-filter-detail ${['owner', 'status', 'source', 'course'].includes(activeFilterSection) ? 'contacts-filter-detail-compact' : ''}`}>
+                    <div className={`contacts-filter-detail ${['timeframe', 'owner', 'status', 'source', 'course'].includes(activeFilterSection) ? 'contacts-filter-detail-compact' : ''}`}>
                       {activeFilterSection === 'timeframe' && (
                         <section className="contacts-filter-block">
                           <div className="contacts-filter-heading">Timeframe</div>
-                          <div className="contacts-facet-pills">
-                            {[
-                              [DEFAULT_CONTACT_LEAD_DATE_SCOPE, 'Current Year', currentLeadCount],
-                              [CONTACT_LEAD_DATE_SCOPE_ALL, 'All Leads', allDateLeadCount],
-                              [CONTACT_LEAD_DATE_SCOPE_CUSTOM, 'Custom Time Frame', customLeadCount],
-                            ].map(([id, label, count]) => (
-                              <button
-                                key={id}
-                                type="button"
-                                className={`contacts-facet-pill ${effectiveLeadDateScope === id ? 'active' : ''}`}
-                                onClick={() => setLeadDateScope(id)}
-                                aria-pressed={effectiveLeadDateScope === id}
-                              >
-                                <span>{label}</span>
-                                <strong>{count}</strong>
-                              </button>
-                            ))}
-                          </div>
-                          <div className="contacts-date-range">
-                            <label>
-                              <span>From</span>
-                              <input className="input" type="date" value={leadDateFrom} onChange={(event) => setLeadDateFrom(event.target.value)} />
-                            </label>
-                            <label>
-                              <span>To</span>
-                              <input className="input" type="date" value={leadDateTo} onChange={(event) => setLeadDateTo(event.target.value)} />
-                            </label>
-                          </div>
+                          <TimeframeFilterPanel
+                            activeScope={effectiveLeadDateScope}
+                            counts={{
+                              quarter: quarterLeadCount,
+                              current: currentLeadCount,
+                              all: allDateLeadCount,
+                              custom: customLeadCount,
+                            }}
+                            leadDateFrom={leadDateFrom}
+                            leadDateTo={leadDateTo}
+                            onDateRangeChange={setLeadDateRange}
+                            onScopeChange={setLeadDateScope}
+                          />
                         </section>
                       )}
 

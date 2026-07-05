@@ -21,6 +21,7 @@ export const DEFAULT_CONTACT_FACET_FILTER = 'all';
 export const DEFAULT_CONTACT_COURSE_FILTER = 'all';
 export const DEFAULT_CONTACT_SOURCE_FILTER = 'all';
 export const DEFAULT_CONTACT_LEAD_DATE_SCOPE = 'current';
+export const CONTACT_LEAD_DATE_SCOPE_QUARTER = 'quarter';
 export const CONTACT_LEAD_DATE_SCOPE_ALL = 'all';
 export const CONTACT_LEAD_DATE_SCOPE_CUSTOM = 'custom';
 export const DEFAULT_CONTACT_LEAD_DATE_FROM = '';
@@ -114,7 +115,11 @@ export function facetFromContactParams(searchParams) {
 
 export function leadDateScopeFromContactParams(searchParams) {
   const value = paramValue(searchParams, 'leadDateScope');
-  if (value === CONTACT_LEAD_DATE_SCOPE_ALL || value === CONTACT_LEAD_DATE_SCOPE_CUSTOM) return value;
+  if (
+    value === CONTACT_LEAD_DATE_SCOPE_QUARTER ||
+    value === CONTACT_LEAD_DATE_SCOPE_ALL ||
+    value === CONTACT_LEAD_DATE_SCOPE_CUSTOM
+  ) return value;
   return DEFAULT_CONTACT_LEAD_DATE_SCOPE;
 }
 
@@ -159,6 +164,7 @@ export function contactFilterQuery({
 } = {}) {
   const params = new URLSearchParams();
   if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_ALL);
+  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_QUARTER) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_QUARTER);
   if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
     params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_CUSTOM);
     if (leadDateFrom) params.set('leadDateFrom', leadDateFrom);
@@ -179,6 +185,16 @@ export function contactMatchesLeadDateScope(contact = {}, {
   now = new Date(),
 } = {}) {
   if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) return true;
+  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_QUARTER) {
+    const nowDate = now instanceof Date ? now : new Date(now);
+    const year = nowDate.getUTCFullYear();
+    const quarterStartMonth = Math.floor(nowDate.getUTCMonth() / 3) * 3;
+    const fromTime = Date.UTC(year, quarterStartMonth, 1);
+    const toTime = Date.UTC(year, quarterStartMonth + 3, 0, 23, 59, 59, 999);
+    const contactTime = dateOnlyTime(leadDateForDirectoryScope(contact));
+    if (contactTime == null) return false;
+    return contactTime >= fromTime && contactTime <= toTime;
+  }
   if (leadDateScope !== CONTACT_LEAD_DATE_SCOPE_CUSTOM) return isCurrentLeadDateScope(contact, now);
 
   const fromTime = dateOnlyTime(leadDateFrom);
@@ -299,6 +315,7 @@ export function pipelineFilterQuery({
 } = {}) {
   const params = new URLSearchParams();
   if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_ALL);
+  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_QUARTER) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_QUARTER);
   if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
     params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_CUSTOM);
     if (leadDateFrom) params.set('leadDateFrom', leadDateFrom);
