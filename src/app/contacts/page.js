@@ -44,7 +44,7 @@ import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { AlertCircle, ListFilter, RotateCcw, UserRoundCheck } from 'lucide-react';
+import { Activity, AlertCircle, BadgeDollarSign, Clock3, ListFilter, PhoneOff, RotateCcw, UserRoundCheck, UsersRound } from 'lucide-react';
 
 const empty = {
   name: '',
@@ -69,6 +69,61 @@ const CONTACT_FILTER_CHIP_LABELS = {
   facet: 'Segments',
 };
 
+const CONTACT_SEGMENT_GROUPS = [
+  {
+    id: 'follow_up_signals',
+    label: 'Follow-up Signals',
+    facets: ['active', 'no_recent_touch'],
+  },
+  {
+    id: 'contact_quality',
+    label: 'Contact Quality',
+    facets: ['invalid_phone', 'needs_contact_info', 'usa_bad_contact_channel'],
+  },
+  {
+    id: 'relationship_signals',
+    label: 'Relationship Signals',
+    facets: ['signs_linked_people', 'signs_payment_balance'],
+  },
+];
+
+const CONTACT_SEGMENT_META = {
+  all: {
+    label: 'All Segments',
+    description: 'Show every matching contact',
+    icon: ListFilter,
+  },
+  active: {
+    description: 'Open records with current work',
+    icon: Activity,
+  },
+  no_recent_touch: {
+    description: 'No touch in the last 30 days',
+    icon: Clock3,
+  },
+  invalid_phone: {
+    description: 'Phone number needs cleanup',
+    icon: PhoneOff,
+  },
+  needs_contact_info: {
+    description: 'Missing phone and email',
+    icon: AlertCircle,
+  },
+  usa_bad_contact_channel: {
+    label: 'Bad Contact Channel',
+    description: 'Wrong number, do-not-contact, or no reachable channel',
+    icon: PhoneOff,
+  },
+  signs_linked_people: {
+    description: 'Contacts connected to other people',
+    icon: UsersRound,
+  },
+  signs_payment_balance: {
+    description: 'Payment or balance activity exists',
+    icon: BadgeDollarSign,
+  },
+};
+
 function ownerInitials(label = '') {
   const parts = String(label || '')
     .replace(/@.*/, '')
@@ -89,6 +144,53 @@ function matchesOwnerSearch(owner, query) {
   if (!query) return true;
   const haystack = [owner.label, owner.email, owner.meta].join(' ').toLowerCase();
   return haystack.includes(query.trim().toLowerCase());
+}
+
+function buildVisibleSegmentGroups(facetGroups = [], activeFacetId = 'all') {
+  const facetById = new Map(
+    facetGroups.flatMap((group) => group.facets.map((facet) => [facet.id, facet])),
+  );
+  const allFacet = facetById.get('all') || { id: 'all', label: 'All', count: 0 };
+  const groups = CONTACT_SEGMENT_GROUPS
+    .map((group) => ({
+      ...group,
+      facets: group.facets
+        .map((id) => facetById.get(id))
+        .filter((facet) => facet && (facet.count > 0 || activeFacetId === facet.id)),
+    }))
+    .filter((group) => group.facets.length > 0);
+  const visibleIds = new Set(['all', ...groups.flatMap((group) => group.facets.map((facet) => facet.id))]);
+  return { allFacet, groups, visibleIds };
+}
+
+function SegmentIcon({ id }) {
+  const Icon = CONTACT_SEGMENT_META[id]?.icon || ListFilter;
+  return (
+    <span className="contacts-segment-icon" aria-hidden="true">
+      <Icon size={15} />
+    </span>
+  );
+}
+
+function SegmentTile({ facet, active, onClick }) {
+  const meta = CONTACT_SEGMENT_META[facet.id] || {};
+  return (
+    <button
+      type="button"
+      className={`contacts-segment-row ${active ? 'active' : ''} ${facet.count === 0 ? 'is-empty' : ''}`}
+      onClick={onClick}
+      disabled={facet.count === 0 && !active}
+      aria-pressed={active}
+    >
+      <SegmentIcon id={facet.id} />
+      <span className="contacts-segment-copy">
+        <strong>{meta.label || facet.label}</strong>
+        <small>{meta.description || 'Signal-based contact segment'}</small>
+      </span>
+      <span className="contacts-segment-count">{facet.count}</span>
+      <span className="contacts-segment-check" aria-hidden="true" />
+    </button>
+  );
 }
 
 function TagList({ tags = [] }) {
@@ -496,6 +598,19 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     [baseFilteredContacts, facetContext],
   );
   const effectiveDirectoryFacet = directoryFacet || 'all';
+  const visibleSegmentGroups = useMemo(
+    () => buildVisibleSegmentGroups(facetGroups, effectiveDirectoryFacet),
+    [effectiveDirectoryFacet, facetGroups],
+  );
+  useEffect(() => {
+    if (
+      directoryFacet &&
+      directoryFacet !== DEFAULT_CONTACT_FACET_FILTER &&
+      !visibleSegmentGroups.visibleIds.has(directoryFacet)
+    ) {
+      setDirectoryFacet(DEFAULT_CONTACT_FACET_FILTER);
+    }
+  }, [directoryFacet, setDirectoryFacet, visibleSegmentGroups.visibleIds]);
   const filteredContacts = useMemo(
     () => filterContactsByDirectoryFacet(baseFilteredContacts, effectiveDirectoryFacet, facetContext),
     [baseFilteredContacts, effectiveDirectoryFacet, facetContext],
@@ -628,7 +743,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       label: 'Course',
       summary: selectedCourseLabel || 'All Courses',
     } : null,
-    facetGroups.length > 0 ? {
+    visibleSegmentGroups.groups.length > 0 ? {
       id: 'segments',
       label: 'Segments',
       summary: selectedFacetLabel || 'All Segments',
@@ -946,29 +1061,26 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                         </section>
                       )}
 
-                      {activeFilterSection === 'segments' && facetGroups.length > 0 && (
-                        <section className="contacts-filter-block">
-                          <div className="contacts-filter-heading">Segments</div>
-                          <div className="contacts-facet-groups">
-                            {facetGroups.map((group) => (
-                              <div key={group.id} className="contacts-facet-group">
-                                <div className="contacts-facet-label">{group.label}</div>
-                                <div className="contacts-facet-pills">
-                                  {group.facets
-                                    .filter((facet) => facet.count > 0 || facet.id === 'all' || effectiveDirectoryFacet === facet.id)
-                                    .map((facet) => (
-                                      <button
-                                        key={facet.id}
-                                        type="button"
-                                        className={`contacts-facet-pill ${effectiveDirectoryFacet === facet.id ? 'active' : ''} ${facet.count === 0 ? 'is-empty' : ''}`}
-                                        onClick={() => setDirectoryFacet(facet.id)}
-                                        disabled={facet.count === 0 && directoryFacet !== facet.id}
-                                        aria-pressed={effectiveDirectoryFacet === facet.id}
-                                      >
-                                        <span>{facet.label}</span>
-                                        <strong>{facet.count}</strong>
-                                      </button>
-                                    ))}
+                      {activeFilterSection === 'segments' && visibleSegmentGroups.groups.length > 0 && (
+                        <section className="contacts-filter-block contacts-segment-filter">
+                          <SegmentTile
+                            facet={visibleSegmentGroups.allFacet}
+                            active={effectiveDirectoryFacet === 'all'}
+                            onClick={() => setDirectoryFacet(DEFAULT_CONTACT_FACET_FILTER)}
+                          />
+                          <div className="contacts-segment-groups">
+                            {visibleSegmentGroups.groups.map((group) => (
+                              <div key={group.id} className="contacts-segment-group">
+                                <div className="contacts-segment-label">{group.label}</div>
+                                <div className="contacts-segment-list">
+                                  {group.facets.map((facet) => (
+                                    <SegmentTile
+                                      key={facet.id}
+                                      facet={facet}
+                                      active={effectiveDirectoryFacet === facet.id}
+                                      onClick={() => setDirectoryFacet(facet.id)}
+                                    />
+                                  ))}
                                 </div>
                               </div>
                             ))}
