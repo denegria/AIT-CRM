@@ -647,7 +647,7 @@ export default function PipelinePage() {
                       ))}
                     </div>
 
-                    <div className={s.filterDetail}>
+                    <div className={`${s.filterDetail} ${['owner', 'status', 'source', 'course', 'activity'].includes(activeFilterSection) ? s.filterDetailCompact : ''}`}>
                       {activeFilterSection === 'timeframe' && (
                         <section className={s.filterBlock}>
                           <div className={s.filterHeading}>Timeframe</div>
@@ -762,57 +762,114 @@ export default function PipelinePage() {
                       {activeFilterSection === 'status' && (
                         <section className={s.filterBlock}>
                           <div className={s.filterHeading}>Status</div>
-                          <label className={s.filterField}>
-                            <select className="input select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                              <option value={DEFAULT_PIPELINE_STATUS_FILTER}>All Statuses</option>
-                              {pipelineStatusOptions.map((option) => (
-                                <option key={option.value} value={option.value}>{option.label}</option>
-                              ))}
-                            </select>
-                          </label>
+                          <div className={s.optionList} role="listbox" aria-label="Pipeline status filters">
+                            <button
+                              type="button"
+                              className={`${s.optionTile} ${statusFilter === DEFAULT_PIPELINE_STATUS_FILTER ? s.active : ''}`}
+                              onClick={() => setStatusFilter(DEFAULT_PIPELINE_STATUS_FILTER)}
+                              aria-selected={statusFilter === DEFAULT_PIPELINE_STATUS_FILTER}
+                              role="option"
+                            >
+                              <span>All Statuses</span>
+                              <small>All active stages</small>
+                            </button>
+                            {pipelineStatusOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className={`${s.optionTile} ${statusFilter === option.value ? s.active : ''}`}
+                                onClick={() => setStatusFilter(option.value)}
+                                aria-selected={statusFilter === option.value}
+                                role="option"
+                              >
+                                <span>{option.label}</span>
+                                <small>Only this stage</small>
+                              </button>
+                            ))}
+                          </div>
                         </section>
                       )}
 
                       {activeFilterSection === 'source' && (
                         <section className={s.filterBlock}>
                           <div className={s.filterHeading}>Source</div>
-                          <label className={s.filterField}>
-                            <select className="input select" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
-                              <option value="all">All Sources</option>
-                              {sourceOptions.map((source) => (
-                                <option key={source} value={source}>{source}</option>
-                              ))}
-                            </select>
-                          </label>
+                          <div className={s.optionList} role="listbox" aria-label="Pipeline source filters">
+                            <button
+                              type="button"
+                              className={`${s.optionTile} ${sourceFilter === DEFAULT_PIPELINE_SOURCE_FILTER ? s.active : ''}`}
+                              onClick={() => setSourceFilter(DEFAULT_PIPELINE_SOURCE_FILTER)}
+                              aria-selected={sourceFilter === DEFAULT_PIPELINE_SOURCE_FILTER}
+                              role="option"
+                            >
+                              <span>All Sources</span>
+                              <strong>{pipelineScopedRows.length}</strong>
+                            </button>
+                            {sourceOptions.map((source) => (
+                              <button
+                                key={source}
+                                type="button"
+                                className={`${s.optionTile} ${sourceFilter === source ? s.active : ''}`}
+                                onClick={() => setSourceFilter(source)}
+                                aria-selected={sourceFilter === source}
+                                role="option"
+                              >
+                                <span>{source}</span>
+                                <strong>{pipelineScopedRows.filter((contact) => sourceValue(contact) === source).length}</strong>
+                              </button>
+                            ))}
+                          </div>
                         </section>
                       )}
 
                       {activeFilterSection === 'course' && (courseFilterOptions.length > 0 || courseFilter !== DEFAULT_PIPELINE_COURSE_FILTER) && (
                         <section className={s.filterBlock}>
                           <div className={s.filterHeading}>Course</div>
-                          <label className={s.filterField}>
-                            <select className="input select" value={courseFilter} onChange={(event) => setCourseFilter(event.target.value)}>
-                              <option value={DEFAULT_PIPELINE_COURSE_FILTER}>All Courses</option>
-                              {courseFilterOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label} ({option.count})
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                          <div className={s.optionList} role="listbox" aria-label="Pipeline course filters">
+                            <button
+                              type="button"
+                              className={`${s.optionTile} ${courseFilter === DEFAULT_PIPELINE_COURSE_FILTER ? s.active : ''}`}
+                              onClick={() => setCourseFilter(DEFAULT_PIPELINE_COURSE_FILTER)}
+                              aria-selected={courseFilter === DEFAULT_PIPELINE_COURSE_FILTER}
+                              role="option"
+                            >
+                              <span>All Courses</span>
+                              <strong>{pipelineScopedRows.length}</strong>
+                            </button>
+                            {courseFilterOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className={`${s.optionTile} ${courseFilter === option.value ? s.active : ''}`}
+                                onClick={() => setCourseFilter(option.value)}
+                                aria-selected={courseFilter === option.value}
+                                role="option"
+                              >
+                                <span>{option.label}</span>
+                                <strong>{option.count}</strong>
+                              </button>
+                            ))}
+                          </div>
                         </section>
                       )}
 
                       {activeFilterSection === 'activity' && (
                         <section className={s.filterBlock}>
                           <div className={s.filterHeading}>Activity</div>
-                          <label className={s.filterField}>
-                            <select className="input select" value={activityFilter} onChange={(event) => setActivityFilter(event.target.value)}>
-                              {PIPELINE_ACTIVITY_OPTIONS.map(([id, label]) => (
-                                <option key={id} value={id}>{label}</option>
-                              ))}
-                            </select>
-                          </label>
+                          <div className={s.optionList} role="listbox" aria-label="Pipeline activity filters">
+                            {PIPELINE_ACTIVITY_OPTIONS.map(([id, label]) => (
+                              <button
+                                key={id}
+                                type="button"
+                                className={`${s.optionTile} ${activityFilter === id ? s.active : ''}`}
+                                onClick={() => setActivityFilter(id)}
+                                aria-selected={activityFilter === id}
+                                role="option"
+                              >
+                                <span>{label}</span>
+                                <small>{id === DEFAULT_PIPELINE_ACTIVITY_FILTER ? 'No activity filter' : 'Activity-based view'}</small>
+                              </button>
+                            ))}
+                          </div>
                         </section>
                       )}
                     </div>

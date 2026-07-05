@@ -741,7 +741,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                       ))}
                     </div>
 
-                    <div className="contacts-filter-detail">
+                    <div className={`contacts-filter-detail ${['owner', 'status', 'source', 'course'].includes(activeFilterSection) ? 'contacts-filter-detail-compact' : ''}`}>
                       {activeFilterSection === 'timeframe' && (
                         <section className="contacts-filter-block">
                           <div className="contacts-filter-heading">Timeframe</div>
@@ -856,44 +856,93 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                       {activeFilterSection === 'status' && (
                         <section className="contacts-filter-block">
                           <div className="contacts-filter-heading">Status</div>
-                          <label className="contacts-filter-field">
-                            <select className="input select" value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
-                              <option value={DEFAULT_CONTACT_STATUS_FILTER}>All Statuses</option>
-                              {statusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
-                            </select>
-                          </label>
+                          <div className="contacts-option-list" role="listbox" aria-label="Contact status filters">
+                            <button
+                              type="button"
+                              className={`contacts-option-tile ${statusFilter === DEFAULT_CONTACT_STATUS_FILTER ? 'active' : ''}`}
+                              onClick={() => setStatusFilter(DEFAULT_CONTACT_STATUS_FILTER)}
+                              aria-selected={statusFilter === DEFAULT_CONTACT_STATUS_FILTER}
+                              role="option"
+                            >
+                              <span>All Statuses</span>
+                              <small>Do not narrow by stage</small>
+                            </button>
+                            {statusOptions.map((status) => (
+                              <button
+                                key={status}
+                                type="button"
+                                className={`contacts-option-tile ${statusFilter === status ? 'active' : ''}`}
+                                onClick={() => setStatusFilter(status)}
+                                aria-selected={statusFilter === status}
+                                role="option"
+                              >
+                                <span>{status}</span>
+                                <small>Only this stage</small>
+                              </button>
+                            ))}
+                          </div>
                         </section>
                       )}
 
                       {activeFilterSection === 'source' && (
                         <section className="contacts-filter-block">
                           <div className="contacts-filter-heading">Source</div>
-                          <label className="contacts-filter-field">
-                            <select className="input select" value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}>
-                              <option value={DEFAULT_CONTACT_SOURCE_FILTER}>All Sources</option>
-                              {sourceFilterOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label} ({option.count})
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                          <div className="contacts-option-list" role="listbox" aria-label="Contact source filters">
+                            <button
+                              type="button"
+                              className={`contacts-option-tile ${sourceFilter === DEFAULT_CONTACT_SOURCE_FILTER ? 'active' : ''}`}
+                              onClick={() => setSourceFilter(DEFAULT_CONTACT_SOURCE_FILTER)}
+                              aria-selected={sourceFilter === DEFAULT_CONTACT_SOURCE_FILTER}
+                              role="option"
+                            >
+                              <span>All Sources</span>
+                              <strong>{statusOwnerFilteredContacts.length}</strong>
+                            </button>
+                            {sourceFilterOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className={`contacts-option-tile ${sourceFilter === option.value ? 'active' : ''}`}
+                                onClick={() => setSourceFilter(option.value)}
+                                aria-selected={sourceFilter === option.value}
+                                role="option"
+                              >
+                                <span>{option.label}</span>
+                                <strong>{option.count}</strong>
+                              </button>
+                            ))}
+                          </div>
                         </section>
                       )}
 
                       {activeFilterSection === 'course' && (courseFilterOptions.length > 0 || courseFilter !== DEFAULT_CONTACT_COURSE_FILTER) && (
                         <section className="contacts-filter-block">
                           <div className="contacts-filter-heading">Course</div>
-                          <label className="contacts-filter-field">
-                            <select className="input select" value={courseFilter} onChange={(event) => setCourseFilter(event.target.value)}>
-                              <option value={DEFAULT_CONTACT_COURSE_FILTER}>All Courses</option>
-                              {courseFilterOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label} ({option.count})
-                                </option>
-                              ))}
-                            </select>
-                          </label>
+                          <div className="contacts-option-list" role="listbox" aria-label="Contact course filters">
+                            <button
+                              type="button"
+                              className={`contacts-option-tile ${courseFilter === DEFAULT_CONTACT_COURSE_FILTER ? 'active' : ''}`}
+                              onClick={() => setCourseFilter(DEFAULT_CONTACT_COURSE_FILTER)}
+                              aria-selected={courseFilter === DEFAULT_CONTACT_COURSE_FILTER}
+                              role="option"
+                            >
+                              <span>All Courses</span>
+                              <strong>{sourceFilteredContacts.length}</strong>
+                            </button>
+                            {courseFilterOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className={`contacts-option-tile ${courseFilter === option.value ? 'active' : ''}`}
+                                onClick={() => setCourseFilter(option.value)}
+                                aria-selected={courseFilter === option.value}
+                                role="option"
+                              >
+                                <span>{option.label}</span>
+                                <strong>{option.count}</strong>
+                              </button>
+                            ))}
+                          </div>
                         </section>
                       )}
 
