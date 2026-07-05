@@ -817,6 +817,24 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
 
               {filterMenuOpen && (
                 <div className="contacts-filter-menu" role="dialog" aria-label="Contact filters">
+                  <div className="contacts-filter-summary-strip" aria-label="Selected contact filters">
+                    {filterSummaryChips.length > 0 ? (
+                      <>
+                        {filterSummaryChips.map((chip) => (
+                          <span key={chip.key} className="contacts-filter-summary-item">
+                            <small>{CONTACT_FILTER_CHIP_LABELS[chip.key] || 'Filter'}</small>
+                            <strong>{chip.label}</strong>
+                          </span>
+                        ))}
+                        {activeFilterCount > filterSummaryChips.length && (
+                          <span className="contacts-filter-summary-more">+{activeFilterCount - filterSummaryChips.length}</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="contacts-filter-summary-empty">Default contact view</span>
+                    )}
+                  </div>
+
                   <div className="contacts-filter-shell">
                     <div className="contacts-filter-section-list" role="tablist" aria-label="Contact filter sections">
                       {filterSections.map((section) => (
@@ -1055,23 +1073,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                   </div>
 
                   <div className="contacts-filter-footer">
-                    <div className="contacts-filter-footer-summary contacts-filter-summary-strip" aria-label="Selected contact filters">
-                      {filterSummaryChips.length > 0 ? (
-                        <>
-                          {filterSummaryChips.map((chip) => (
-                            <span key={chip.key} className="contacts-filter-summary-item">
-                              <small>{CONTACT_FILTER_CHIP_LABELS[chip.key] || 'Filter'}</small>
-                              <strong>{chip.label}</strong>
-                            </span>
-                          ))}
-                          {activeFilterCount > filterSummaryChips.length && (
-                            <span className="contacts-filter-summary-more">+{activeFilterCount - filterSummaryChips.length}</span>
-                          )}
-                        </>
-                      ) : (
-                        <span className="contacts-filter-summary-empty">Default contact view</span>
-                      )}
-                    </div>
                     <div className="contacts-filter-footer-meta">
                       <span>{filteredContacts.length} shown</span>
                       {hasNonDefaultFilters && (

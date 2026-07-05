@@ -608,6 +608,24 @@ export default function PipelinePage() {
 
               {filterMenuOpen && (
                 <div className={s.filterMenu} role="dialog" aria-label="Pipeline filters">
+                  <div className={s.filterSummaryStrip} aria-label="Selected pipeline filters">
+                    {filterSummaryChips.length > 0 ? (
+                      <>
+                        {filterSummaryChips.map((chip) => (
+                          <span key={chip.key} className={s.filterSummaryItem}>
+                            <small>{PIPELINE_FILTER_CHIP_LABELS[chip.key] || 'Filter'}</small>
+                            <strong>{chip.label}</strong>
+                          </span>
+                        ))}
+                        {activeFilterCount > filterSummaryChips.length && (
+                          <span className={s.filterSummaryMore}>+{activeFilterCount - filterSummaryChips.length}</span>
+                        )}
+                      </>
+                    ) : (
+                      <span className={s.filterSummaryEmpty}>Default pipeline view</span>
+                    )}
+                  </div>
+
                   <div className={s.filterShell}>
                     <div className={s.filterSectionList} role="tablist" aria-label="Pipeline filter sections">
                       {filterSections.map((section) => (
@@ -840,23 +858,6 @@ export default function PipelinePage() {
                   </div>
 
                   <div className={s.filterFooter}>
-                    <div className={`${s.filterFooterSummary} ${s.filterSummaryStrip}`} aria-label="Selected pipeline filters">
-                      {filterSummaryChips.length > 0 ? (
-                        <>
-                          {filterSummaryChips.map((chip) => (
-                            <span key={chip.key} className={s.filterSummaryItem}>
-                              <small>{PIPELINE_FILTER_CHIP_LABELS[chip.key] || 'Filter'}</small>
-                              <strong>{chip.label}</strong>
-                            </span>
-                          ))}
-                          {activeFilterCount > filterSummaryChips.length && (
-                            <span className={s.filterSummaryMore}>+{activeFilterCount - filterSummaryChips.length}</span>
-                          )}
-                        </>
-                      ) : (
-                        <span className={s.filterSummaryEmpty}>Default pipeline view</span>
-                      )}
-                    </div>
                     <div className={s.filterFooterMeta}>
                       <span>{pipelineRows.length} shown of {pipelineScopedRows.length}</span>
                       <div className={s.filterFooterActions}>
