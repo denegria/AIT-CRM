@@ -541,32 +541,17 @@ export default function PipelinePage() {
 
       <section className={s.filterSurface} aria-label="Pipeline filters">
         <div className={s.filterTopline}>
-          <label className={s.toolbarSearchBox}>
-            <Search size={14} />
-            <input
-              className={`input ${s.toolbarSearchInput}`}
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Search pipeline..."
-              aria-label="Search pipeline"
-            />
-          </label>
-          <div className={s.filterToolbar}>
-            <div className={s.pipelineActions}>
-              <button className="btn" onClick={() => nextLead ? router.push(`/contacts/${nextLead.id}`) : toast('No lead matches the current filters.', 'error')}>
-                <ArrowRight size={14} /> Work Next Lead
-              </button>
-              {canWrite && currentUser?.id && coordinatorUiPolicy.canManageCoordinatorAssignments && (
-                <button className={`btn ${bulkAssignMode ? 'btn-primary' : ''}`} type="button" onClick={toggleBulkAssignMode}>
-                  <UserRoundCheck size={14} /> Bulk Assign
-                </button>
-              )}
-              {canWrite && (
-                <button className="btn btn-primary" onClick={() => router.push('/contacts')}>
-                  <UserPlus size={14} /> Add Contact
-                </button>
-              )}
-            </div>
+          <div className={s.pipelineFilterLead}>
+            <label className={s.toolbarSearchBox}>
+              <Search size={14} />
+              <input
+                className={`input ${s.toolbarSearchInput}`}
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search pipeline..."
+                aria-label="Search pipeline"
+              />
+            </label>
             <div className={s.filterPopoverAnchor}>
               <button
                 className={`${s.filterMenuButton} ${filterMenuOpen ? s.active : ''}`}
@@ -763,6 +748,21 @@ export default function PipelinePage() {
                 </div>
               )}
             </div>
+          </div>
+          <div className={s.pipelineActions}>
+            <button className="btn" onClick={() => nextLead ? router.push(`/contacts/${nextLead.id}`) : toast('No lead matches the current filters.', 'error')}>
+              <ArrowRight size={14} /> Work Next Lead
+            </button>
+            {canWrite && currentUser?.id && coordinatorUiPolicy.canManageCoordinatorAssignments && (
+              <button className={`btn ${bulkAssignMode ? 'btn-primary' : ''}`} type="button" onClick={toggleBulkAssignMode}>
+                <UserRoundCheck size={14} /> Bulk Assign
+              </button>
+            )}
+            {canWrite && (
+              <button className="btn btn-primary" onClick={() => router.push('/contacts')}>
+                <UserPlus size={14} /> Add Contact
+              </button>
+            )}
           </div>
         </div>
       </section>

@@ -61,14 +61,13 @@
 
 .filterTopline {
   display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
   min-width: 0;
 }
 
-.filterToolbar {
-  position: relative;
+.pipelineFilterLead {
   display: flex;
   align-items: center;
   justify-content: flex-start;
@@ -139,7 +138,6 @@
 .filterPopoverAnchor {
   position: relative;
   display: inline-flex;
-  order: -1;
   flex: 0 0 auto;
 }
 
@@ -846,11 +844,7 @@
     align-items: stretch;
   }
 
-  .filterToolbar {
-    justify-content: stretch;
-  }
-
-  .filterToolbar,
+  .pipelineFilterLead,
   .pipelineActions,
   .pipelineActions :global(.btn),
   .filterMenuButton {
