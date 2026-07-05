@@ -560,7 +560,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     updateFilterQuery,
   ]);
   const activeFilterCount = activeFilterChips.filter((chip) => chip.onRemove).length;
-  const filterSummaryCards = activeFilterChips.slice(0, 3);
+  const filterSummaryChips = activeFilterChips.filter((chip) => chip.onRemove).slice(0, 3);
   const hasNonDefaultLeadDateFilter = coordinatorUiPolicy.ownerScoped
     ? hasExplicitLeadDateFilter
     : leadDateScope !== DEFAULT_CONTACT_LEAD_DATE_SCOPE ||
@@ -645,7 +645,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           columns={columns}
           data={filteredContacts}
           searchPlaceholder={`Search ${pluralLabel.toLowerCase()}...`}
-          toolbarAfterColumns={(
+          toolbarBeforeColumns={(
             <div className="contacts-filter-popover-anchor">
               <button
                 className={`contacts-filter-menu-button ${filterMenuOpen ? 'active' : ''}`}
@@ -662,11 +662,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                 <div className="contacts-filter-menu" role="dialog" aria-label="Contact filters">
                   <div className="contacts-filter-menu-header">
                     <div className="contacts-filter-title">
-                      <span className="contacts-filter-title-icon"><ListFilter size={18} /></span>
-                      <div>
-                        <strong>Filters</strong>
-                        <span>Refine {pluralLabel.toLowerCase()}</span>
-                      </div>
+                      <span>Refine {pluralLabel.toLowerCase()}</span>
                       {activeFilterCount > 0 && <em>{activeFilterCount}</em>}
                     </div>
                     <div className="contacts-filter-menu-actions">
@@ -680,16 +676,16 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                   </div>
 
                   <div className="contacts-filter-summary-strip" aria-label="Selected contact filters">
-                    {filterSummaryCards.length > 0 ? (
+                    {filterSummaryChips.length > 0 ? (
                       <>
-                        {filterSummaryCards.map((chip) => (
+                        {filterSummaryChips.map((chip) => (
                           <span key={chip.key} className="contacts-filter-summary-item">
                             <small>{CONTACT_FILTER_CHIP_LABELS[chip.key] || 'Filter'}</small>
                             <strong>{chip.label}</strong>
                           </span>
                         ))}
-                        {activeFilterChips.length > filterSummaryCards.length && (
-                          <span className="contacts-filter-summary-more">+{activeFilterChips.length - filterSummaryCards.length}</span>
+                        {activeFilterCount > filterSummaryChips.length && (
+                          <span className="contacts-filter-summary-more">+{activeFilterCount - filterSummaryChips.length}</span>
                         )}
                       </>
                     ) : (

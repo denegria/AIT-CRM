@@ -139,6 +139,7 @@
 .filterPopoverAnchor {
   position: relative;
   display: inline-flex;
+  order: -1;
   flex: 0 0 auto;
 }
 
@@ -195,38 +196,18 @@
 .filterTitle {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   min-width: 0;
-}
-
-.filterTitleIcon {
-  width: 30px;
-  height: 30px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-lg);
-  background: var(--accent-muted);
-  color: var(--accent);
-  flex: 0 0 auto;
-}
-
-.filterTitle div {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.filterTitle strong {
-  color: var(--text-primary);
-  font-size: var(--text-md);
-  line-height: 1.1;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 750;
 }
 
 .filterTitle span {
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  font-weight: 650;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .filterTitle em,

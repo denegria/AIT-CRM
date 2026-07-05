@@ -417,7 +417,7 @@ export default function PipelinePage() {
     } : null,
   ].filter(Boolean);
   const activeFilterCount = activeFilterChips.filter((chip) => chip.onRemove).length;
-  const filterSummaryCards = activeFilterChips.slice(0, 3);
+  const filterSummaryChips = activeFilterChips.filter((chip) => chip.onRemove).slice(0, 3);
   const hasNonDefaultLeadDateFilter = coordinatorUiPolicy.ownerScoped
     ? hasExplicitLeadDateFilter
     : leadDateScope !== DEFAULT_CONTACT_LEAD_DATE_SCOPE ||
@@ -588,11 +588,7 @@ export default function PipelinePage() {
                 <div className={s.filterMenu} role="dialog" aria-label="Pipeline filters">
                   <div className={s.filterMenuHeader}>
                     <div className={s.filterTitle}>
-                      <span className={s.filterTitleIcon}><ListFilter size={18} /></span>
-                      <div>
-                        <strong>Filters</strong>
-                        <span>Refine pipeline cards</span>
-                      </div>
+                      <span>Refine pipeline cards</span>
                       {activeFilterCount > 0 && <em>{activeFilterCount}</em>}
                     </div>
                     <div className={s.filterMenuActions}>
@@ -606,16 +602,16 @@ export default function PipelinePage() {
                   </div>
 
                   <div className={s.filterSummaryStrip} aria-label="Selected pipeline filters">
-                    {filterSummaryCards.length > 0 ? (
+                    {filterSummaryChips.length > 0 ? (
                       <>
-                        {filterSummaryCards.map((chip) => (
+                        {filterSummaryChips.map((chip) => (
                           <span key={chip.key} className={s.filterSummaryItem}>
                             <small>{PIPELINE_FILTER_CHIP_LABELS[chip.key] || 'Filter'}</small>
                             <strong>{chip.label}</strong>
                           </span>
                         ))}
-                        {activeFilterChips.length > filterSummaryCards.length && (
-                          <span className={s.filterSummaryMore}>+{activeFilterChips.length - filterSummaryCards.length}</span>
+                        {activeFilterCount > filterSummaryChips.length && (
+                          <span className={s.filterSummaryMore}>+{activeFilterCount - filterSummaryChips.length}</span>
                         )}
                       </>
                     ) : (
