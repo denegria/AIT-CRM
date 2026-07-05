@@ -645,7 +645,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           columns={columns}
           data={filteredContacts}
           searchPlaceholder={`Search ${pluralLabel.toLowerCase()}...`}
-          toolbarBeforeColumns={(
+          toolbarAfterSearch={(
             <div className="contacts-filter-popover-anchor">
               <button
                 className={`contacts-filter-menu-button ${filterMenuOpen ? 'active' : ''}`}

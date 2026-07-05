@@ -18,6 +18,7 @@ export default function DataTable({
   actions,
   onEdit,
   searchPlaceholder,
+  toolbarAfterSearch,
   toolbarMeta,
   toolbarBeforeColumns,
   toolbarAfterColumns,
@@ -128,9 +129,12 @@ export default function DataTable({
   return (
     <div className={s.wrap}>
       <div className={s.toolbar}>
-        <div className={s.searchWrap}>
-          <Search className={s.searchIcon} size={16} />
-          <input className={s.search} placeholder={searchPlaceholder||'Search...'} value={search} onChange={e=>setSearch(e.target.value)} />
+        <div className={s.toolbarLead}>
+          <div className={s.searchWrap}>
+            <Search className={s.searchIcon} size={16} />
+            <input className={s.search} placeholder={searchPlaceholder||'Search...'} value={search} onChange={e=>setSearch(e.target.value)} />
+          </div>
+          {toolbarAfterSearch && <div className={s.toolbarAfterSearch}>{toolbarAfterSearch}</div>}
         </div>
         {toolbarMeta && <div className={s.toolbarMeta}>{toolbarMeta}</div>}
         <div className={s.toolbarActions}>

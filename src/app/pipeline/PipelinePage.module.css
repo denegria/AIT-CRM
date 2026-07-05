@@ -61,7 +61,7 @@
 
 .filterTopline {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) auto;
+  grid-template-columns: max-content minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   min-width: 0;
@@ -71,7 +71,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: flex-start;
   flex-wrap: wrap;
   gap: 8px;
   min-width: 0;
@@ -170,7 +170,8 @@
 .filterMenu {
   position: absolute;
   top: calc(100% + 8px);
-  right: 0;
+  left: 0;
+  right: auto;
   z-index: 60;
   width: min(640px, calc(100vw - 48px));
   max-height: min(72vh, 560px);

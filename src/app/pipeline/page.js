@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertCircle, ArrowRight, ListFilter, RotateCcw, Search, UserPlus, UserRoundCheck } from 'lucide-react';
+import { ArrowRight, ListFilter, RotateCcw, Search, UserPlus, UserRoundCheck } from 'lucide-react';
 import KanbanBoard from '@/components/KanbanBoard';
 import { useToast } from '@/components/Toast';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
@@ -556,11 +556,6 @@ export default function PipelinePage() {
               <button className="btn" onClick={() => nextLead ? router.push(`/contacts/${nextLead.id}`) : toast('No lead matches the current filters.', 'error')}>
                 <ArrowRight size={14} /> Work Next Lead
               </button>
-              {!coordinatorUiPolicy.ownerScoped && (
-                <button className="btn" onClick={() => setOwnerFilter('unassigned')}>
-                  <AlertCircle size={14} /> Unassigned
-                </button>
-              )}
               {canWrite && currentUser?.id && coordinatorUiPolicy.canManageCoordinatorAssignments && (
                 <button className={`btn ${bulkAssignMode ? 'btn-primary' : ''}`} type="button" onClick={toggleBulkAssignMode}>
                   <UserRoundCheck size={14} /> Bulk Assign
