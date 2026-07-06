@@ -450,7 +450,14 @@ export function CRMProvider({ children, initialData }) {
     if (isPostgres && access.canWriteCrm) {
       return callContactsApi('PATCH', { id, ...u })
         .then((contact) => {
-          if (contact) setContacts(p => p.map(c => c.id === id ? contact : c));
+          if (contact) {
+            setContacts(p => p.map(c => c.id === id ? {
+              ...c,
+              ...contact,
+              courseRecords: contact.courseRecords || c.courseRecords,
+              courseSummary: contact.courseSummary || c.courseSummary,
+            } : c));
+          }
           return contact;
         })
         .catch((error) => {

@@ -97,6 +97,32 @@ function isAitUsaCourseStatus(row = {}) {
     ['Enrolled', 'Course Completed', 'Dropped / Quit'].includes(status);
 }
 
+function courseRecordsForContact(contact = {}) {
+  return Array.isArray(contact.courseRecords)
+    ? contact.courseRecords.filter((record) => clean(record?.courseName))
+    : [];
+}
+
+function latestCourseRecord(records = [], predicate = () => true) {
+  return records.find(predicate) || null;
+}
+
+function primaryCourseRecordForDirectory(contact = {}) {
+  const records = courseRecordsForContact(contact);
+  if (!records.length) return null;
+  const status = canonicalStatus(contact);
+  if (status === 'Enrolled') {
+    return latestCourseRecord(records, (record) => record.status === 'active') || records[0];
+  }
+  if (status === 'Course Completed') {
+    return latestCourseRecord(records, (record) => record.status === 'completed') || records[0];
+  }
+  if (status === 'Dropped / Quit') {
+    return latestCourseRecord(records, (record) => ['dropped', 'cancelled', 'transferred'].includes(record.status)) || records[0];
+  }
+  return records[0];
+}
+
 export function statusFromContactParams(searchParams) {
   return clean(paramValue(searchParams, 'status')) || DEFAULT_CONTACT_STATUS_FILTER;
 }
@@ -214,12 +240,20 @@ export function contactMatchesLeadDateScope(contact = {}, {
 
 export function courseForContactDirectoryFilter(contact = {}) {
   if (contact.workflowKey !== WORKFLOW_KEYS.AIT_USA) return '';
+  const record = primaryCourseRecordForDirectory(contact);
+  if (record?.courseName) return clean(record.courseName);
   const status = canonicalStatus(contact);
   if (status === 'Enrolled') return currentAitUsaCourse(contact) || completedAitUsaCourse(contact) || endedAitUsaCourse(contact);
   if (status === 'Course Completed') return completedAitUsaCourse(contact) || endedAitUsaCourse(contact) || currentAitUsaCourse(contact);
   if (status === 'Dropped / Quit') return endedAitUsaCourse(contact) || currentAitUsaCourse(contact) || completedAitUsaCourse(contact);
   const course = aitUsaCourseMetadataForContact(contact);
   return clean(course.current) || clean(course.completed) || clean(course.ended);
+}
+
+function courseLabelsForContact(contact = {}) {
+  const recordLabels = [...new Set(courseRecordsForContact(contact).map((record) => clean(record.courseName)).filter(Boolean))];
+  if (recordLabels.length) return recordLabels;
+  return [courseForContactDirectoryFilter(contact)].filter(Boolean);
 }
 
 export function contactMatchesStatusOwnerCourse(contact = {}, {
@@ -238,19 +272,20 @@ export function contactMatchesStatusOwnerCourse(contact = {}, {
     contact.assignedTo === ownerFilter;
   const courseMatch =
     courseFilter === DEFAULT_CONTACT_COURSE_FILTER ||
-    normalized(courseForContactDirectoryFilter(contact)) === normalized(courseFilter);
+    courseLabelsForContact(contact).some((label) => normalized(label) === normalized(courseFilter));
   return statusMatch && ownerMatch && courseMatch;
 }
 
 export function buildCourseFilterOptions(contacts = []) {
   const byKey = new Map();
   for (const contact of contacts) {
-    const label = courseForContactDirectoryFilter(contact);
-    const key = normalized(label);
-    if (!key) continue;
-    const existing = byKey.get(key) || { value: label, label, count: 0 };
-    existing.count += 1;
-    byKey.set(key, existing);
+    for (const label of courseLabelsForContact(contact)) {
+      const key = normalized(label);
+      if (!key) continue;
+      const existing = byKey.get(key) || { value: label, label, count: 0 };
+      existing.count += 1;
+      byKey.set(key, existing);
+    }
   }
   return [...byKey.values()].sort((a, b) => a.label.localeCompare(b.label));
 }
@@ -282,7 +317,10 @@ export function buildSourceFilterOptions(contacts = []) {
 export function courseTagsForDirectoryRow(row = {}) {
   if (!isAitUsaCourseStatus(row)) return [];
   const course = courseForContactDirectoryFilter(row);
-  const outcome = aitUsaCourseOutcome(row);
+  const record = primaryCourseRecordForDirectory(row);
+  const outcome = record?.outcomeReason ||
+    (record && record.status !== 'completed' && record.status !== 'active' ? record.statusLabel || record.status : '') ||
+    aitUsaCourseOutcome(row);
   return [
     course,
     outcome && canonicalStatus(row) !== 'Course Completed' ? titleLabel(outcome) : '',

@@ -271,6 +271,36 @@ test('course options and tags use MIS-210 enrollment metadata selectors', () => 
   assert.deepEqual(courseTagsForDirectoryRow(rows[2]), ['Forklift']);
 });
 
+test('course filters prefer course records and match historical courses', () => {
+  const rows = [
+    {
+      id: 'repeat-student',
+      workflowKey: 'ait_usa',
+      status: 'Enrolled',
+      assignedTo: 'user-1',
+      courseRecords: [
+        { id: '3', courseName: 'Forklift', status: 'active', statusLabel: 'Current', startDate: '2026-07-01' },
+        { id: '2', courseName: 'OSHA 30', status: 'cancelled', statusLabel: 'Cancelled', endDate: '2026-06-15', outcomeReason: 'cancelled halfway' },
+        { id: '1', courseName: 'ESL Level 1', status: 'completed', statusLabel: 'Completed', endDate: '2026-05-01' },
+      ],
+      enrollmentSignals: { course: { current: 'Legacy Course' } },
+    },
+  ];
+
+  assert.equal(courseForContactDirectoryFilter(rows[0]), 'Forklift');
+  assert.deepEqual(courseTagsForDirectoryRow(rows[0]), ['Forklift']);
+  assert.deepEqual(
+    rows
+      .filter((contact) => contactMatchesStatusOwnerCourse(contact, { courseFilter: 'OSHA 30' }))
+      .map((contact) => contact.id),
+    ['repeat-student'],
+  );
+  assert.deepEqual(
+    buildCourseFilterOptions(rows).map((option) => [option.label, option.count]),
+    [['ESL Level 1', 1], ['Forklift', 1], ['OSHA 30', 1]],
+  );
+});
+
 test('course filter does not treat Wix form service or program interest as course metadata', () => {
   const rows = [
     {
