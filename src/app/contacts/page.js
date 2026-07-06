@@ -356,7 +356,11 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     searchParams.has('leadDateScope') ||
     searchParams.has('leadDateFrom') ||
     searchParams.has('leadDateTo');
-  const effectiveLeadDateScope = coordinatorUiPolicy.ownerScoped && !hasExplicitLeadDateFilter
+  const ownerFilterImpliesAllLeadDates =
+    !coordinatorUiPolicy.ownerScoped &&
+    effectiveOwnerFilter !== DEFAULT_CONTACT_OWNER_FILTER &&
+    !hasExplicitLeadDateFilter;
+  const effectiveLeadDateScope = (coordinatorUiPolicy.ownerScoped && !hasExplicitLeadDateFilter) || ownerFilterImpliesAllLeadDates
     ? CONTACT_LEAD_DATE_SCOPE_ALL
     : leadDateScope;
   const updateFilterQuery = useCallback((patch) => {
@@ -380,8 +384,15 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const setStatusFilter = useCallback((value) => updateFilterQuery({ statusFilter: value }), [updateFilterQuery]);
   const setOwnerFilter = useCallback((value) => {
     if (coordinatorUiPolicy.ownerScoped) return;
-    updateFilterQuery({ ownerFilter: value });
-  }, [coordinatorUiPolicy.ownerScoped, updateFilterQuery]);
+    updateFilterQuery({
+      ownerFilter: value,
+      ...(!hasExplicitLeadDateFilter && value !== DEFAULT_CONTACT_OWNER_FILTER ? {
+        leadDateScope: CONTACT_LEAD_DATE_SCOPE_ALL,
+        leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
+        leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
+      } : {}),
+    });
+  }, [coordinatorUiPolicy.ownerScoped, hasExplicitLeadDateFilter, updateFilterQuery]);
   const setDirectoryFacet = useCallback((value) => updateFilterQuery({ directoryFacet: value }), [updateFilterQuery]);
   const setLeadDateScope = useCallback((value) => updateFilterQuery({ leadDateScope: value }), [updateFilterQuery]);
   const setLeadDateRange = useCallback((from, to) => updateFilterQuery({
@@ -653,15 +664,15 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     () => dateScopeLabel(effectiveLeadDateScope, leadDateFrom, leadDateTo),
     [effectiveLeadDateScope, leadDateFrom, leadDateTo],
   );
-  const regularImplicitLeadDate = coordinatorUiPolicy.ownerScoped && !hasExplicitLeadDateFilter;
-  const dateFilterIsDefault = regularImplicitLeadDate ||
+  const implicitLeadDate = (coordinatorUiPolicy.ownerScoped && !hasExplicitLeadDateFilter) || ownerFilterImpliesAllLeadDates;
+  const dateFilterIsDefault = implicitLeadDate ||
     (
       leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE &&
       leadDateFrom === DEFAULT_CONTACT_LEAD_DATE_FROM &&
       leadDateTo === DEFAULT_CONTACT_LEAD_DATE_TO
     );
   const activeFilterChips = useMemo(() => [
-    regularImplicitLeadDate ? null : {
+    coordinatorUiPolicy.ownerScoped && implicitLeadDate ? null : {
       key: 'leadDateScope',
       label: selectedDateLabel,
       primary: !coordinatorUiPolicy.ownerScoped,
@@ -713,7 +724,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     setStatusFilter,
     setSourceFilter,
     statusFilter,
-    regularImplicitLeadDate,
+    implicitLeadDate,
     updateFilterQuery,
   ]);
   const activeFilterCount = activeFilterChips.filter((chip) => chip.onRemove).length;
@@ -733,7 +744,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     {
       id: 'timeframe',
       label: 'Timeframe',
-      summary: regularImplicitLeadDate ? 'All owned records' : selectedDateLabel,
+      summary: coordinatorUiPolicy.ownerScoped && implicitLeadDate ? 'All owned records' : selectedDateLabel,
     },
     {
       id: 'owner',

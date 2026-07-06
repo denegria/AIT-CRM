@@ -9,6 +9,7 @@ import {
   contactFilterStateFromParams,
   contactMatchesSource,
   contactMatchesStatusOwnerCourse,
+  DEFAULT_CONTACT_LEAD_DATE_SCOPE,
   CONTACT_LEAD_DATE_SCOPE_QUARTER,
   courseForContactDirectoryFilter,
   courseTagsForDirectoryRow,
@@ -40,6 +41,21 @@ test('contact filter query omits default filters', () => {
   assert.equal(
     contactFilterQuery({ statusFilter: 'Enrolled', sourceFilter: 'Website', courseFilter: 'OSHA' }),
     'status=Enrolled&source=Website&course=OSHA',
+  );
+});
+
+test('owner filters can preserve explicit current-year lead date scope', () => {
+  assert.equal(
+    contactFilterQuery({ ownerFilter: 'user-1', leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE }),
+    'leadDateScope=current&owner=user-1',
+  );
+  assert.equal(
+    pipelineFilterQuery({ ownerFilter: 'user-1', leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE }),
+    'leadDateScope=current&owner=user-1',
+  );
+  assert.equal(
+    contactFilterStateFromParams(new URLSearchParams('leadDateScope=current&owner=user-1')).leadDateScope,
+    DEFAULT_CONTACT_LEAD_DATE_SCOPE,
   );
 });
 
