@@ -264,6 +264,28 @@ export const leads = pgTable('leads', {
   updatedAt,
 });
 
+export const contactCourseRecords = pgTable('contact_course_records', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
+  contactId: uuid('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
+  leadId: uuid('lead_id').references(() => leads.id, { onDelete: 'set null' }),
+  courseName: text('course_name').notNull(),
+  status: text('status').notNull().default('active'),
+  startDate: date('start_date'),
+  endDate: date('end_date'),
+  outcomeReason: text('outcome_reason'),
+  notes: text('notes'),
+  metadataJson: jsonb('metadata_json').notNull().default({}),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  contactIdx: index('contact_course_records_contact_idx').on(table.organizationId, table.contactId),
+  contactStatusIdx: index('contact_course_records_contact_status_idx').on(table.contactId, table.status),
+  businessUnitStatusIdx: index('contact_course_records_business_unit_status_idx').on(table.businessUnitId, table.status),
+  leadIdx: index('contact_course_records_lead_idx').on(table.leadId),
+}));
+
 export const leadStatusHistory = pgTable('lead_status_history', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
@@ -879,6 +901,7 @@ export const allTables = {
   contactChannelConsentEvents,
   contactPeople,
   leads,
+  contactCourseRecords,
   leadStatusHistory,
   notifications,
   estimates,

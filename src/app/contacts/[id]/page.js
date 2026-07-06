@@ -19,6 +19,12 @@ import { PIPELINE_STATUSES, isWorkflowStatusClosed, workflowForBusinessUnit } fr
 import { buildContactDetailViewModel } from '@/lib/contact-detail-view-model';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
 import { schoolLocationOptions } from '@/lib/school-locations';
+import {
+  COURSE_RECORD_STATUS_OPTIONS,
+  courseRecordStatusLabel,
+  deriveCourseSummary,
+  isTerminalCourseRecordStatus,
+} from '@/lib/crm/course-records.js';
 
 const SNAPSHOT_ICONS = {
   estimate: BriefcaseBusiness,
@@ -62,13 +68,15 @@ const emptyPaymentForm = {
   note: '',
 };
 
-const COURSE_OUTCOME_OPTIONS = [
-  { value: '', label: 'No outcome' },
-  { value: 'completed', label: 'Completed' },
-  { value: 'dropped_quit', label: 'Dropped / Quit' },
-  { value: 'transferred', label: 'Transferred' },
-  { value: 'unknown', label: 'Unknown' },
-];
+const emptyCourseForm = {
+  id: '',
+  courseName: '',
+  status: 'active',
+  startDate: '',
+  endDate: '',
+  outcomeReason: '',
+  notes: '',
+};
 
 const FOLLOW_UP_OUTCOME_OPTIONS = [
   ['reached_interested', 'Reached - interested'],
@@ -286,17 +294,6 @@ function cleanText(value = '') {
   return String(value || '').trim();
 }
 
-function courseMetadataForEdit(contact = {}) {
-  const course = contact.courseMetadata || {};
-  const signalCourse = contact.enrollmentSignals?.course || {};
-  return {
-    currentCourse: cleanText(course.currentCourse || signalCourse.current || signalCourse.enrolled),
-    completedCourse: cleanText(course.completedCourse || signalCourse.completed),
-    endedCourse: cleanText(course.endedCourse || signalCourse.ended),
-    courseOutcome: cleanText(course.courseOutcome || signalCourse.outcome),
-  };
-}
-
 function phoneHref(value = '') {
   const digits = cleanText(value).replace(/[^\d+]/g, '');
   return digits ? `tel:${digits}` : '';
@@ -313,6 +310,10 @@ function moneyLabel(value) {
 
 function todayDate() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function dateForInput(value = '') {
+  return value ? String(value).slice(0, 10) : '';
 }
 
 function dateInputToIso(value) {
@@ -438,6 +439,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
   const [invoiceWorkOrderId, setInvoiceWorkOrderId] = useState('');
+  const [courseRecordsState, setCourseRecordsState] = useState({ contactId: '', items: [], loading: false, error: '' });
+  const [courseModal, setCourseModal] = useState(null);
+  const [courseForm, setCourseForm] = useState(emptyCourseForm);
+  const [courseBusy, setCourseBusy] = useState(false);
+  const [courseError, setCourseError] = useState('');
+  const [selectedCourseRecordId, setSelectedCourseRecordId] = useState('');
 
   const scopedContact = useMemo(() => contacts.find(c => c.id === params.id), [contacts, params.id]);
   const allAccessibleContacts = allContacts?.length ? allContacts : contacts;
@@ -523,6 +530,20 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const editSchoolLocationOptions = schoolLocationOptions(editForm?.address);
   const showWorkOrdersTab = detailView.tabs.showWorkOrders;
   const showFinancialsTab = detailView.tabs.showFinancials || (isAitUsaContact && access.canWriteFinancials);
+  const showCoursesTab = isAitUsaContact;
+  const currentCourseRecords = useMemo(() => (
+    showCoursesTab && courseRecordsState.contactId === contact?.id
+      ? courseRecordsState.items
+      : []
+  ), [contact?.id, courseRecordsState.contactId, courseRecordsState.items, showCoursesTab]);
+  const courseSummary = useMemo(() => deriveCourseSummary(currentCourseRecords), [currentCourseRecords]);
+  const activeCourseRecord = courseSummary.currentCourse;
+  const selectedCourseRecord = useMemo(() => (
+    currentCourseRecords.find((record) => record.id === selectedCourseRecordId) ||
+    activeCourseRecord ||
+    currentCourseRecords[0] ||
+    null
+  ), [activeCourseRecord, currentCourseRecords, selectedCourseRecordId]);
   const financialNotice = isAitUsaContact
     ? (canGenerateStudentReceipt
         ? { tone: 'ready', text: 'Ready to generate a student receipt.' }
@@ -535,7 +556,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const renderedActiveTab =
     (!showLinkedPeoplePanel && activeTab === 'contacts') ||
     (!showWorkOrdersTab && activeTab === 'workorders') ||
-    (!showFinancialsTab && activeTab === 'financials')
+    (!showFinancialsTab && activeTab === 'financials') ||
+    (!showCoursesTab && activeTab === 'courses')
       ? 'timeline'
       : activeTab;
   const assignedEmployee = null;
@@ -661,6 +683,48 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   }, [contact?.id, dataSource, showLinkedPeoplePanel]);
 
   useEffect(() => {
+    if (!showCoursesTab || !contact?.id || dataSource !== 'postgres') {
+      return undefined;
+    }
+    let cancelled = false;
+    const requestContactId = contact.id;
+    fetch(`/api/contacts/${contact.id}/courses`, { cache: 'no-store' })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Course history load failed.');
+        if (!cancelled) {
+          const items = Array.isArray(payload.courses) ? payload.courses : [];
+          setCourseRecordsState({
+            contactId: requestContactId,
+            items,
+            loading: false,
+            error: '',
+          });
+          setSelectedCourseRecordId((current) => (
+            current && items.some((item) => item.id === current)
+              ? current
+              : items[0]?.id || ''
+          ));
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+        if (!cancelled) {
+          setCourseRecordsState({
+            contactId: requestContactId,
+            items: [],
+            loading: false,
+            error: error.message || 'Course history load failed.',
+          });
+          setSelectedCourseRecordId('');
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [contact?.id, dataSource, showCoursesTab]);
+
+  useEffect(() => {
     if (!contact?.id || dataSource !== 'postgres') return undefined;
     let cancelled = false;
     const requestContactId = contact.id;
@@ -735,7 +799,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         profileDetails: contact?.profileDetails || '',
         sourceDetail: contact?.sourceDetail || '',
       },
-      courseMetadata: courseMetadataForEdit(contact),
     });
     setIsEditModalOpen(true);
   };
@@ -795,6 +858,78 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       .catch((error) => toast(error.message || 'Linked person delete failed.', 'error'));
   };
 
+  const openCourseModal = (mode = 'new', record = null) => {
+    if (!access.canWriteCrm || !showCoursesTab) return;
+    const isEdit = mode === 'edit' && record;
+    const isComplete = mode === 'complete' && record;
+    const isEnd = mode === 'end' && record;
+    setCourseForm(isEdit || isComplete || isEnd ? {
+      id: record.id,
+      courseName: record.courseName || '',
+      status: isComplete ? 'completed' : (isEnd ? 'cancelled' : record.status || 'active'),
+      startDate: dateForInput(record.startDate),
+      endDate: dateForInput(record.endDate) || (isComplete || isEnd ? todayDate() : ''),
+      outcomeReason: record.outcomeReason || '',
+      notes: record.notes || '',
+    } : {
+      ...emptyCourseForm,
+      status: mode === 'history' ? 'completed' : 'active',
+      endDate: mode === 'history' ? todayDate() : '',
+    });
+    setCourseModal(mode);
+    setCourseError('');
+  };
+
+  const closeCourseModal = () => {
+    if (courseBusy) return;
+    setCourseModal(null);
+    setCourseForm(emptyCourseForm);
+    setCourseError('');
+  };
+
+  const updateCourseForm = (patch) => {
+    setCourseForm((current) => ({
+      ...current,
+      ...patch,
+    }));
+  };
+
+  const saveCourseRecord = async () => {
+    if (!contact?.id || !access.canWriteCrm || courseBusy) return;
+    if (!cleanText(courseForm.courseName)) {
+      setCourseError('Course name is required.');
+      return;
+    }
+    setCourseBusy(true);
+    setCourseError('');
+    try {
+      const response = await fetch(`/api/contacts/${contact.id}/courses`, {
+        method: courseForm.id ? 'PATCH' : 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(courseForm),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Course save failed.');
+      const items = Array.isArray(payload.courses) ? payload.courses : [];
+      setCourseRecordsState({
+        contactId: contact.id,
+        items,
+        loading: false,
+        error: '',
+      });
+      setSelectedCourseRecordId(courseForm.id || items[0]?.id || '');
+      setCourseModal(null);
+      setCourseForm(emptyCourseForm);
+      toast(courseForm.id ? 'Course updated' : 'Course added');
+    } catch (error) {
+      const message = error.message || 'Course save failed.';
+      setCourseError(message);
+      toast(message, 'error');
+    } finally {
+      setCourseBusy(false);
+    }
+  };
+
   const handleEditSave = () => {
     if (isClosedStatusReopen && !editForm.statusChangeReason) {
       toast('Choose why this closed status is being reopened.', 'error');
@@ -805,7 +940,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       ...(coordinatorUiPolicy.lockedOwnerUserId ? { assignedTo: coordinatorUiPolicy.lockedOwnerUserId } : {}),
       statusChangeReason: isClosedStatusReopen ? editForm.statusChangeReason : '',
       ...(editForm.leadProfile ? { leadProfile: editForm.leadProfile } : {}),
-      ...(isAitUsaContact && editForm.courseMetadata ? { courseMetadata: editForm.courseMetadata } : {}),
     })
       .then(() => {
         toast('Profile updated');
@@ -839,16 +973,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       ...current,
       leadProfile: {
         ...(current?.leadProfile || {}),
-        [field]: value,
-      },
-    }));
-  };
-
-  const updateEditCourseMetadata = (field, value) => {
-    setEditForm((current) => ({
-      ...current,
-      courseMetadata: {
-        ...(current?.courseMetadata || {}),
         [field]: value,
       },
     }));
@@ -1392,6 +1516,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           <div className={s.contentTabs}>
             <button className={`${s.contentTab} ${renderedActiveTab === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')}>Timeline</button>
             <button className={`${s.contentTab} ${renderedActiveTab === 'conversations' ? s.active : ''}`} onClick={() => setActiveTab('conversations')}>Conversations ({conversationMessages.length})</button>
+            {showCoursesTab && (
+              <button className={`${s.contentTab} ${renderedActiveTab === 'courses' ? s.active : ''}`} onClick={() => setActiveTab('courses')}>Courses ({currentCourseRecords.length})</button>
+            )}
             {showLinkedPeoplePanel && (
               <button className={`${s.contentTab} ${renderedActiveTab === 'contacts' ? s.active : ''}`} onClick={() => setActiveTab('contacts')}>Contacts ({currentLinkedPeople.items.length})</button>
             )}
@@ -1568,6 +1695,157 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <div className={s.timelineEmpty}>{timelineEmptyText(renderedTimelineFilter, detailView.timelineFilters)}</div>
                   )}
                 </div>
+              </div>
+            )}
+
+            {renderedActiveTab === 'courses' && showCoursesTab && (
+              <div className={s.coursesPanel} aria-label="Courses">
+                <div className={s.courseHero}>
+                  <div className={s.courseHeroMain}>
+                    <div className={s.courseHeroIcon}><GraduationCap size={22} /></div>
+                    <div>
+                      <span className={s.courseEyebrow}>Current course</span>
+                      <h2>{activeCourseRecord?.courseName || 'No current course'}</h2>
+                      <p>
+                        {activeCourseRecord
+                          ? [
+                              activeCourseRecord.startDate ? `Started ${activeCourseRecord.startDate}` : '',
+                              activeCourseRecord.notes || '',
+                            ].filter(Boolean).join(' - ') || 'Active course record'
+                          : 'Start a new course when the student enrolls again. Older courses stay in history.'}
+                      </p>
+                    </div>
+                  </div>
+                  {access.canWriteCrm && (
+                    <div className={s.courseHeroActions}>
+                      {activeCourseRecord ? (
+                        <>
+                          <button className="btn btn-sm" type="button" onClick={() => openCourseModal('edit', activeCourseRecord)}>
+                            <Edit3 size={14} /> Edit
+                          </button>
+                          <button className="btn btn-sm" type="button" onClick={() => openCourseModal('complete', activeCourseRecord)}>
+                            <CheckCircle2 size={14} /> Mark Completed
+                          </button>
+                          <button className="btn btn-sm" type="button" onClick={() => openCourseModal('end', activeCourseRecord)}>
+                            <AlertCircle size={14} /> End Course
+                          </button>
+                        </>
+                      ) : (
+                        <button className="btn btn-primary btn-sm" type="button" onClick={() => openCourseModal('new')}>
+                          <Plus size={14} /> Start Course
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className={s.courseToolbar}>
+                  <div>
+                    <strong>Course history</strong>
+                    <span>{courseRecordsState.loading ? 'Loading' : `${currentCourseRecords.length} records`}</span>
+                  </div>
+                  {access.canWriteCrm && (
+                    <div className={s.courseToolbarActions}>
+                      <button className="btn btn-sm" type="button" onClick={() => openCourseModal('history')}>
+                        <Plus size={14} /> Add History
+                      </button>
+                      {!activeCourseRecord && (
+                        <button className="btn btn-primary btn-sm" type="button" onClick={() => openCourseModal('new')}>
+                          <Plus size={14} /> Start Course
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {courseRecordsState.error && <div className={s.courseError}>{courseRecordsState.error}</div>}
+                {!courseRecordsState.error && !courseRecordsState.loading && currentCourseRecords.length === 0 && (
+                  <div className={s.courseEmpty}>
+                    <div className="empty-state-title">No course history yet</div>
+                    <p className="empty-state-copy">Add the current course or backfill a completed course to start the timeline.</p>
+                    {access.canWriteCrm && (
+                      <button className="btn btn-primary" type="button" onClick={() => openCourseModal('new')}>
+                        <Plus size={16} /> Start Course
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {currentCourseRecords.length > 0 && (
+                  <div className={s.courseHistoryGrid}>
+                    <div className={s.courseRecordList}>
+                      {courseSummary.records.map((record) => (
+                        <button
+                          key={record.id}
+                          type="button"
+                          className={`${s.courseRecordRow} ${selectedCourseRecord?.id === record.id ? s.active : ''}`}
+                          onClick={() => setSelectedCourseRecordId(record.id)}
+                        >
+                          <span className={`${s.courseStatusDot} ${s[`courseStatus_${record.status}`] || ''}`} />
+                          <span className={s.courseRecordMain}>
+                            <strong>{record.courseName}</strong>
+                            <small>
+                              {courseRecordStatusLabel(record.status)}
+                              {record.startDate ? ` - ${record.startDate}` : ''}
+                              {record.endDate ? ` to ${record.endDate}` : ''}
+                            </small>
+                          </span>
+                          <span className={s.courseRecordStatus}>{courseRecordStatusLabel(record.status)}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    <aside className={s.courseInspector}>
+                      {selectedCourseRecord ? (
+                        <>
+                          <div className={s.courseInspectorHeader}>
+                            <span className={`${s.coursePill} ${s[`coursePill_${selectedCourseRecord.status}`] || ''}`}>
+                              {courseRecordStatusLabel(selectedCourseRecord.status)}
+                            </span>
+                            <strong>{selectedCourseRecord.courseName}</strong>
+                          </div>
+                          <div className={s.courseInspectorDetails}>
+                            <div>
+                              <span>Started</span>
+                              <strong>{selectedCourseRecord.startDate || 'Not set'}</strong>
+                            </div>
+                            <div>
+                              <span>Ended</span>
+                              <strong>{selectedCourseRecord.endDate || (selectedCourseRecord.status === 'active' ? 'Current' : 'Not set')}</strong>
+                            </div>
+                            <div className={s.courseInspectorWide}>
+                              <span>Outcome / reason</span>
+                              <strong>{selectedCourseRecord.outcomeReason || 'None recorded'}</strong>
+                            </div>
+                            <div className={s.courseInspectorWide}>
+                              <span>Notes</span>
+                              <strong>{selectedCourseRecord.notes || 'No notes'}</strong>
+                            </div>
+                          </div>
+                          {access.canWriteCrm && (
+                            <div className={s.courseInspectorActions}>
+                              <button className="btn btn-sm" type="button" onClick={() => openCourseModal('edit', selectedCourseRecord)}>
+                                <Edit3 size={14} /> Edit
+                              </button>
+                              {selectedCourseRecord.status === 'active' && (
+                                <>
+                                  <button className="btn btn-sm" type="button" onClick={() => openCourseModal('complete', selectedCourseRecord)}>
+                                    <CheckCircle2 size={14} /> Complete
+                                  </button>
+                                  <button className="btn btn-sm" type="button" onClick={() => openCourseModal('end', selectedCourseRecord)}>
+                                    <AlertCircle size={14} /> End
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className={s.courseEmpty}>Select a course record.</div>
+                      )}
+                    </aside>
+                  </div>
+                )}
               </div>
             )}
 
@@ -1937,6 +2215,104 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         </div>
       </div>
 
+      {courseModal && (
+        <Modal
+          open={Boolean(courseModal)}
+          onClose={closeCourseModal}
+          title={courseForm.id ? 'Edit Course' : (courseModal === 'history' ? 'Add Course History' : 'Start Course')}
+          footer={(
+            <>
+              <button className="btn" type="button" onClick={closeCourseModal} disabled={courseBusy}>Cancel</button>
+              <button
+                className="btn btn-primary"
+                type="button"
+                onClick={saveCourseRecord}
+                disabled={courseBusy || !cleanText(courseForm.courseName)}
+              >
+                <CheckCircle2 size={16} /> {courseBusy ? 'Saving...' : 'Save Course'}
+              </button>
+            </>
+          )}
+        >
+          <div className="form-group">
+            <label className="form-label">Course</label>
+            <input
+              className="input"
+              value={courseForm.courseName}
+              disabled={courseBusy}
+              placeholder="Forklift, OSHA 30, ESL Level 1..."
+              onChange={(event) => updateCourseForm({ courseName: event.target.value })}
+            />
+          </div>
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">Status</label>
+              <select
+                className="input select"
+                value={courseForm.status}
+                disabled={courseBusy}
+                onChange={(event) => updateCourseForm({
+                  status: event.target.value,
+                  endDate: isTerminalCourseRecordStatus(event.target.value) && !courseForm.endDate
+                    ? todayDate()
+                    : courseForm.endDate,
+                })}
+              >
+                {COURSE_RECORD_STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Start Date</label>
+              <input
+                className="input"
+                type="date"
+                value={courseForm.startDate || ''}
+                disabled={courseBusy}
+                onChange={(event) => updateCourseForm({ startDate: event.target.value })}
+              />
+            </div>
+          </div>
+          <div className="grid-2">
+            <div className="form-group">
+              <label className="form-label">End Date</label>
+              <input
+                className="input"
+                type="date"
+                value={courseForm.endDate || ''}
+                disabled={courseBusy}
+                onChange={(event) => updateCourseForm({ endDate: event.target.value })}
+              />
+            </div>
+            <div className="form-group">
+              <label className="form-label">Outcome / Reason</label>
+              <input
+                className="input"
+                value={courseForm.outcomeReason || ''}
+                disabled={courseBusy}
+                placeholder="Completed, cancelled halfway, transferred..."
+                onChange={(event) => updateCourseForm({ outcomeReason: event.target.value })}
+              />
+            </div>
+          </div>
+          <div className="form-group">
+            <label className="form-label">Notes</label>
+            <textarea
+              className="textarea"
+              rows={3}
+              value={courseForm.notes || ''}
+              disabled={courseBusy}
+              onChange={(event) => updateCourseForm({ notes: event.target.value })}
+            />
+          </div>
+          {courseForm.status === 'active' && activeCourseRecord && activeCourseRecord.id !== courseForm.id && (
+            <div className={s.courseError}>End the current course before starting another current course.</div>
+          )}
+          {courseError && <div className={s.courseError}>{courseError}</div>}
+        </Modal>
+      )}
+
       {followUpOpen && followUpDraft && (
         <Modal
           open={followUpOpen}
@@ -2197,33 +2573,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               <div className="form-group">
                 <label className="form-label">Profile Details</label>
                 <textarea className="textarea" rows={2} value={editForm.leadProfile?.profileDetails || ''} onChange={e => updateEditLeadProfile('profileDetails', e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label className="form-label">Course Metadata</label>
-                <div className="grid-2">
-                  <div className="form-group">
-                    <label className="form-label">Current Course</label>
-                    <input className="input" value={editForm.courseMetadata?.currentCourse || ''} onChange={e => updateEditCourseMetadata('currentCourse', e.target.value)} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Completed Course</label>
-                    <input className="input" value={editForm.courseMetadata?.completedCourse || ''} onChange={e => updateEditCourseMetadata('completedCourse', e.target.value)} />
-                  </div>
-                </div>
-                <div className="grid-2">
-                  <div className="form-group">
-                    <label className="form-label">Ended Course</label>
-                    <input className="input" value={editForm.courseMetadata?.endedCourse || ''} onChange={e => updateEditCourseMetadata('endedCourse', e.target.value)} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Course Outcome</label>
-                    <select className="input select" value={editForm.courseMetadata?.courseOutcome || ''} onChange={e => updateEditCourseMetadata('courseOutcome', e.target.value)}>
-                      {COURSE_OUTCOME_OPTIONS.map((option) => (
-                        <option key={option.value || 'none'} value={option.value}>{option.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
               </div>
             </>
           )}

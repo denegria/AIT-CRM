@@ -20,6 +20,7 @@ import {
   users as usersTable,
   userRoles as userRolesTable,
   businessUnitMemberships as businessUnitMembershipsTable,
+  contactCourseRecords as contactCourseRecordsTable,
   importBatches as importBatchesTable,
   importSourceRows as importSourceRowsTable,
   importNormalizedRecords as importNormalizedRecordsTable,
@@ -43,6 +44,7 @@ import { latestExcelDateFromText, summarizeContactTouch } from './contact-touch.
 import { buildAitUsaEnrollmentSignals } from './ait-usa-enrollment-signals.js';
 import { attachPaymentSnapshotContactLinks } from './financial-linkage.js';
 import { filterAssignableEmployees } from './crm/assignable-employees.js';
+import { courseRecordPayloadFromRow, deriveCourseSummary } from './crm/course-records.js';
 
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const toBootstrapBusinessUnitPayload = (row) => toBusinessUnitPayload(row, { emptyColor: null });
@@ -208,6 +210,7 @@ function mapContacts(
   const paymentSnapshotsByContactId = rowsByContactId(relatedRows.paymentSnapshots || []);
   const conversationMessagesByContactId = rowsByContactId(relatedRows.conversationMessages || []);
   const peopleByContactId = rowsByContactId(relatedRows.contactPeople || []);
+  const courseRecordsByContactId = rowsByContactId(relatedRows.courseRecords || []);
 
   return contactRows.map((contact, index) => {
     const lead = leadByContactId.get(contact.id);
@@ -218,6 +221,8 @@ function mapContacts(
     const contactPeople = (peopleByContactId.get(contact.id) || [])
       .slice()
       .sort((left, right) => Number(right.isPrimary) - Number(left.isPrimary) || clean(left.name).localeCompare(clean(right.name)));
+    const courseRecords = (courseRecordsByContactId.get(contact.id) || []).map(courseRecordPayloadFromRow);
+    const courseSummary = deriveCourseSummary(courseRecords);
     const workflow = workflowFromLead(lead, {
       businessUnit,
       workOrders: contactWorkOrders,
@@ -335,11 +340,13 @@ function mapContacts(
         workflowKey: workflow.workflowKey,
       }),
       courseMetadata: {
-        currentCourse: lead?.currentCourse || '',
-        completedCourse: lead?.completedCourse || '',
-        endedCourse: lead?.endedCourse || '',
-        courseOutcome: lead?.courseOutcome || '',
+        currentCourse: courseSummary.currentCourse?.courseName || lead?.currentCourse || '',
+        completedCourse: courseSummary.latestCompletedCourse?.courseName || lead?.completedCourse || '',
+        endedCourse: courseSummary.latestEndedCourse?.courseName || lead?.endedCourse || '',
+        courseOutcome: courseSummary.latestEndedCourse?.outcomeReason || lead?.courseOutcome || '',
       },
+      courseRecords: courseSummary.records,
+      courseSummary,
       sourceActivityDate,
       assignedTo: lead?.assignedUserId || '',
       submittedAt,
@@ -670,6 +677,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       eventRows,
       conversationMessageRows,
       contactPeopleRows,
+      contactCourseRecordRows,
       taskRows,
       userRows,
       membershipRows,
@@ -688,6 +696,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       db.select().from(activityEventsTable).where(scopedOrgWhere(activityEventsTable, session)).orderBy(desc(activityEventsTable.createdAt)),
       db.select().from(conversationMessagesTable).where(scopedOrgWhere(conversationMessagesTable, session)).orderBy(desc(conversationMessagesTable.occurredAt)),
       db.select().from(contactPeopleTable).where(scopedOrgWhere(contactPeopleTable, session)).orderBy(desc(contactPeopleTable.isPrimary), asc(contactPeopleTable.name)),
+      db.select().from(contactCourseRecordsTable).where(scopedBusinessUnitWhere(contactCourseRecordsTable, session)).orderBy(desc(contactCourseRecordsTable.createdAt)),
       db.select().from(tasksTable).where(scopedTaskWhere(tasksTable, session)).orderBy(asc(tasksTable.dueAt), desc(tasksTable.createdAt)),
       db.select().from(usersTable).where(and(
         eq(usersTable.organizationId, session.user.organizationId),
@@ -737,6 +746,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
         paymentSnapshots: paymentRowsWithContactLinks,
         conversationMessages: conversationMessageRows,
         contactPeople: contactPeopleRows,
+        courseRecords: contactCourseRecordRows,
       },
     );
     const contactLookup = new Map([

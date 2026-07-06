@@ -1355,6 +1355,248 @@
   overflow-wrap: anywhere;
 }
 
+.coursesPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.courseHero {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border-subtle));
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent-muted) 22%, var(--bg-secondary)), var(--bg-secondary));
+}
+.courseHeroMain {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+}
+.courseHeroIcon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-lg);
+  color: var(--accent);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+}
+.courseEyebrow {
+  display: block;
+  margin-bottom: 3px;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.courseHero h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-xl);
+  line-height: 1.2;
+}
+.courseHero p {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+.courseHeroActions,
+.courseToolbarActions,
+.courseInspectorActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.courseToolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 2px 0;
+}
+.courseToolbar > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.courseToolbar strong {
+  color: var(--text-primary);
+  font-size: var(--text-md);
+}
+.courseToolbar span {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.courseHistoryGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr);
+  gap: 14px;
+  align-items: start;
+}
+.courseRecordList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.courseRecordRow {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-secondary) 78%, var(--bg-tertiary));
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast), transform var(--transition-fast);
+}
+.courseRecordRow:hover,
+.courseRecordRow.active {
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--border-default));
+  background: var(--bg-secondary);
+}
+.courseRecordRow.active {
+  box-shadow: var(--shadow-sm);
+}
+.courseStatusDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--text-muted);
+}
+.courseStatus_active { background: var(--accent); }
+.courseStatus_completed { background: var(--success); }
+.courseStatus_dropped,
+.courseStatus_cancelled { background: var(--warning); }
+.courseStatus_transferred,
+.courseStatus_planned { background: var(--text-muted); }
+.courseRecordMain {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.courseRecordMain strong {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.courseRecordMain small {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}
+.courseRecordStatus,
+.coursePill {
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  white-space: nowrap;
+}
+.courseInspector {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-sm);
+}
+.courseInspectorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.courseInspectorHeader strong {
+  min-width: 0;
+  flex: 1;
+  color: var(--text-primary);
+  font-size: var(--text-md);
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+.coursePill_active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent-muted) 40%, var(--bg-tertiary));
+}
+.coursePill_completed {
+  color: var(--success);
+  background: color-mix(in srgb, var(--success-muted) 44%, var(--bg-tertiary));
+}
+.coursePill_dropped,
+.coursePill_cancelled {
+  color: var(--warning);
+  background: color-mix(in srgb, var(--warning-muted) 48%, var(--bg-tertiary));
+}
+.courseInspectorDetails {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.courseInspectorDetails div {
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-tertiary) 62%, var(--bg-secondary));
+}
+.courseInspectorDetails span {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+.courseInspectorDetails strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.courseInspectorWide {
+  grid-column: 1 / -1;
+}
+.courseInspectorActions {
+  margin-top: 12px;
+}
+.courseEmpty,
+.courseError {
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-tertiary) 78%, var(--bg-secondary));
+}
+.courseError {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 30%, var(--border-subtle));
+  background: color-mix(in srgb, var(--danger-muted) 44%, var(--bg-secondary));
+  font-size: var(--text-sm);
+  font-weight: 700;
+}
+
 .recordsList {
   display: flex;
   flex-direction: column;
@@ -1580,6 +1822,25 @@
   }
   .manualSendControls {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .courseHero,
+  .courseToolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .courseHeroActions,
+  .courseToolbarActions {
+    justify-content: flex-start;
+  }
+  .courseHistoryGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .courseRecordRow {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .courseRecordStatus {
+    grid-column: 2;
+    justify-self: start;
   }
   .conversationDate {
     text-align: left;
