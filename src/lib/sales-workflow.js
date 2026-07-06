@@ -299,6 +299,10 @@ export function workflowFromLead(lead, options = {}) {
     priority: priority || (needsFirstOutreach ? 'High' : 'Medium'),
     nextAction: nextAction || (needsFirstOutreach ? FIRST_OUTREACH_ACTION : ''),
     needsFirstOutreach,
+    currentCourse: lead?.currentCourse || '',
+    completedCourse: lead?.completedCourse || '',
+    endedCourse: lead?.endedCourse || '',
+    courseOutcome: lead?.courseOutcome || '',
   };
 }
 

@@ -62,6 +62,14 @@ const emptyPaymentForm = {
   note: '',
 };
 
+const COURSE_OUTCOME_OPTIONS = [
+  { value: '', label: 'No outcome' },
+  { value: 'completed', label: 'Completed' },
+  { value: 'dropped_quit', label: 'Dropped / Quit' },
+  { value: 'transferred', label: 'Transferred' },
+  { value: 'unknown', label: 'Unknown' },
+];
+
 const FOLLOW_UP_OUTCOME_OPTIONS = [
   ['reached_interested', 'Reached - interested'],
   ['left_voicemail', 'Left voicemail'],
@@ -276,6 +284,17 @@ function messageIdentityLabel(message) {
 
 function cleanText(value = '') {
   return String(value || '').trim();
+}
+
+function courseMetadataForEdit(contact = {}) {
+  const course = contact.courseMetadata || {};
+  const signalCourse = contact.enrollmentSignals?.course || {};
+  return {
+    currentCourse: cleanText(course.currentCourse || signalCourse.current || signalCourse.enrolled),
+    completedCourse: cleanText(course.completedCourse || signalCourse.completed),
+    endedCourse: cleanText(course.endedCourse || signalCourse.ended),
+    courseOutcome: cleanText(course.courseOutcome || signalCourse.outcome),
+  };
 }
 
 function phoneHref(value = '') {
@@ -716,6 +735,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         profileDetails: contact?.profileDetails || '',
         sourceDetail: contact?.sourceDetail || '',
       },
+      courseMetadata: courseMetadataForEdit(contact),
     });
     setIsEditModalOpen(true);
   };
@@ -785,6 +805,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       ...(coordinatorUiPolicy.lockedOwnerUserId ? { assignedTo: coordinatorUiPolicy.lockedOwnerUserId } : {}),
       statusChangeReason: isClosedStatusReopen ? editForm.statusChangeReason : '',
       ...(editForm.leadProfile ? { leadProfile: editForm.leadProfile } : {}),
+      ...(isAitUsaContact && editForm.courseMetadata ? { courseMetadata: editForm.courseMetadata } : {}),
     })
       .then(() => {
         toast('Profile updated');
@@ -818,6 +839,16 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       ...current,
       leadProfile: {
         ...(current?.leadProfile || {}),
+        [field]: value,
+      },
+    }));
+  };
+
+  const updateEditCourseMetadata = (field, value) => {
+    setEditForm((current) => ({
+      ...current,
+      courseMetadata: {
+        ...(current?.courseMetadata || {}),
         [field]: value,
       },
     }));
@@ -2166,6 +2197,33 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               <div className="form-group">
                 <label className="form-label">Profile Details</label>
                 <textarea className="textarea" rows={2} value={editForm.leadProfile?.profileDetails || ''} onChange={e => updateEditLeadProfile('profileDetails', e.target.value)} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Course Metadata</label>
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label">Current Course</label>
+                    <input className="input" value={editForm.courseMetadata?.currentCourse || ''} onChange={e => updateEditCourseMetadata('currentCourse', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Completed Course</label>
+                    <input className="input" value={editForm.courseMetadata?.completedCourse || ''} onChange={e => updateEditCourseMetadata('completedCourse', e.target.value)} />
+                  </div>
+                </div>
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label">Ended Course</label>
+                    <input className="input" value={editForm.courseMetadata?.endedCourse || ''} onChange={e => updateEditCourseMetadata('endedCourse', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Course Outcome</label>
+                    <select className="input select" value={editForm.courseMetadata?.courseOutcome || ''} onChange={e => updateEditCourseMetadata('courseOutcome', e.target.value)}>
+                      {COURSE_OUTCOME_OPTIONS.map((option) => (
+                        <option key={option.value || 'none'} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
               </div>
             </>
           )}

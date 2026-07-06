@@ -88,6 +88,30 @@ test('AIT USA course metadata normalizes aliases into current, completed, ended,
   });
 });
 
+test('AIT USA course metadata reads editable lead workflow fields', () => {
+  const signals = buildAitUsaEnrollmentSignals({
+    contact: { phone: '9085550101', email: 'student@example.com' },
+    lead: {
+      status: 'Course Completed',
+      originalNotes: 'website_form | service=Forklift',
+      completedCourse: 'Forklift Safety',
+      courseOutcome: 'completed',
+    },
+    workflow: {
+      workflowKey: 'ait_usa',
+      status: 'Course Completed',
+      completedCourse: 'Forklift Safety',
+      courseOutcome: 'completed',
+    },
+  });
+
+  assert.deepEqual(aitUsaCourseMetadataForContact({ enrollmentSignals: signals }), {
+    completed: 'Forklift Safety',
+    outcome: 'completed',
+  });
+  assert.equal(completedAitUsaCourse({ enrollmentSignals: signals }), 'Forklift Safety');
+});
+
 test('buildAitUsaEnrollmentSignals creates process pills for historical first outreach leads', () => {
   const signals = buildAitUsaEnrollmentSignals({
     contact: {

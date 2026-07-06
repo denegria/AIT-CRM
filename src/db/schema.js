@@ -256,6 +256,10 @@ export const leads = pgTable('leads', {
   locationPreference: text('location_preference'),
   profileDetails: text('profile_details'),
   sourceDetail: text('source_detail'),
+  currentCourse: text('current_course'),
+  completedCourse: text('completed_course'),
+  endedCourse: text('ended_course'),
+  courseOutcome: text('course_outcome'),
   createdAt,
   updatedAt,
 });
