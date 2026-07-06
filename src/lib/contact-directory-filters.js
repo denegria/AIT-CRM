@@ -142,6 +142,7 @@ export function facetFromContactParams(searchParams) {
 export function leadDateScopeFromContactParams(searchParams) {
   const value = paramValue(searchParams, 'leadDateScope');
   if (
+    value === DEFAULT_CONTACT_LEAD_DATE_SCOPE ||
     value === CONTACT_LEAD_DATE_SCOPE_QUARTER ||
     value === CONTACT_LEAD_DATE_SCOPE_ALL ||
     value === CONTACT_LEAD_DATE_SCOPE_CUSTOM
@@ -191,6 +192,9 @@ export function contactFilterQuery({
   const params = new URLSearchParams();
   if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_ALL);
   if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_QUARTER) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_QUARTER);
+  if (leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE && ownerFilter && ownerFilter !== DEFAULT_CONTACT_OWNER_FILTER) {
+    params.set('leadDateScope', DEFAULT_CONTACT_LEAD_DATE_SCOPE);
+  }
   if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
     params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_CUSTOM);
     if (leadDateFrom) params.set('leadDateFrom', leadDateFrom);
@@ -354,6 +358,9 @@ export function pipelineFilterQuery({
   const params = new URLSearchParams();
   if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_ALL);
   if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_QUARTER) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_QUARTER);
+  if (leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE && ownerFilter && ownerFilter !== DEFAULT_PIPELINE_OWNER_FILTER) {
+    params.set('leadDateScope', DEFAULT_CONTACT_LEAD_DATE_SCOPE);
+  }
   if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
     params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_CUSTOM);
     if (leadDateFrom) params.set('leadDateFrom', leadDateFrom);

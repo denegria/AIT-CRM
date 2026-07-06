@@ -220,7 +220,11 @@ export default function PipelinePage() {
     searchParams.has('leadDateScope') ||
     searchParams.has('leadDateFrom') ||
     searchParams.has('leadDateTo');
-  const effectiveLeadDateScope = coordinatorUiPolicy.ownerScoped && !hasExplicitLeadDateFilter
+  const ownerFilterImpliesAllLeadDates =
+    !coordinatorUiPolicy.ownerScoped &&
+    ownerFilter !== DEFAULT_PIPELINE_OWNER_FILTER &&
+    !hasExplicitLeadDateFilter;
+  const effectiveLeadDateScope = (coordinatorUiPolicy.ownerScoped && !hasExplicitLeadDateFilter) || ownerFilterImpliesAllLeadDates
     ? CONTACT_LEAD_DATE_SCOPE_ALL
     : leadDateScope;
   const updatePipelineFilterQuery = useCallback((patch) => {
@@ -242,7 +246,14 @@ export default function PipelinePage() {
   const setStatusFilter = (value) => updatePipelineFilterQuery({ statusFilter: value });
   const setOwnerFilter = (value) => {
     if (coordinatorUiPolicy.ownerScoped) return;
-    updatePipelineFilterQuery({ ownerFilter: value });
+    updatePipelineFilterQuery({
+      ownerFilter: value,
+      ...(!hasExplicitLeadDateFilter && value !== DEFAULT_PIPELINE_OWNER_FILTER ? {
+        leadDateScope: CONTACT_LEAD_DATE_SCOPE_ALL,
+        leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
+        leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
+      } : {}),
+    });
   };
   const setSourceFilter = (value) => updatePipelineFilterQuery({ sourceFilter: value });
   const setCourseFilter = (value) => updatePipelineFilterQuery({ courseFilter: value });
@@ -401,15 +412,15 @@ export default function PipelinePage() {
   const selectedCourseLabel = courseFilter === DEFAULT_PIPELINE_COURSE_FILTER ? '' :
     courseFilterOptions.find((option) => option.value === courseFilter)?.label || courseFilter;
   const selectedDateLabel = dateScopeLabel(effectiveLeadDateScope, leadDateFrom, leadDateTo);
-  const regularImplicitLeadDate = coordinatorUiPolicy.ownerScoped && !hasExplicitLeadDateFilter;
-  const dateFilterIsDefault = regularImplicitLeadDate ||
+  const implicitLeadDate = (coordinatorUiPolicy.ownerScoped && !hasExplicitLeadDateFilter) || ownerFilterImpliesAllLeadDates;
+  const dateFilterIsDefault = implicitLeadDate ||
     (
       leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE &&
       leadDateFrom === DEFAULT_CONTACT_LEAD_DATE_FROM &&
       leadDateTo === DEFAULT_CONTACT_LEAD_DATE_TO
     );
   const activeFilterChips = [
-    regularImplicitLeadDate ? null : {
+    coordinatorUiPolicy.ownerScoped && implicitLeadDate ? null : {
       key: 'date',
       label: selectedDateLabel,
       primary: !coordinatorUiPolicy.ownerScoped,
@@ -477,7 +488,7 @@ export default function PipelinePage() {
     {
       id: 'timeframe',
       label: 'Timeframe',
-      summary: regularImplicitLeadDate ? 'All owned cards' : selectedDateLabel,
+      summary: coordinatorUiPolicy.ownerScoped && implicitLeadDate ? 'All owned cards' : selectedDateLabel,
     },
     {
       id: 'owner',
