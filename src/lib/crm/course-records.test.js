@@ -36,14 +36,22 @@ test('course record input trims text and supports clearable dates', () => {
 test('course record validation enforces one current course for v1', () => {
   assert.throws(
     () => validateCourseRecordInput(
-      { courseName: 'Forklift', status: 'active' },
+      { courseName: 'Forklift', status: 'active', startDate: '2026-07-01' },
       { existingRecords: [{ id: 'old', status: 'active' }] },
     ),
     /already has a current course/,
   );
 
+  assert.throws(
+    () => validateCourseRecordInput(
+      { courseName: 'Forklift', status: 'active' },
+      { existingRecords: [{ id: 'old', status: 'completed' }] },
+    ),
+    /Start date is required/,
+  );
+
   assert.doesNotThrow(() => validateCourseRecordInput(
-    { courseName: 'Forklift', status: 'active' },
+    { courseName: 'Forklift', status: 'active', startDate: '2026-07-01' },
     { existingRecords: [{ id: 'old', status: 'completed' }] },
   ));
 });

@@ -132,6 +132,9 @@ export function validateCourseRecordInput(input = {}, {
     throw new Error('Course name is required.');
   }
   if (status === 'active') {
+    if (!input.startDate) {
+      throw new Error('Start date is required for the current course.');
+    }
     const hasOtherActive = existingRecords.some((record) => (
       record.id !== currentRecordId && normalizeCourseRecordStatus(record.status) === 'active'
     ));
