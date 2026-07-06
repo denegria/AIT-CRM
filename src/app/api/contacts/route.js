@@ -19,6 +19,12 @@ import {
   leadProfilePatchFromPayload,
   leadProfilePatchToDrizzleValues,
 } from '@/lib/crm/lead-profile.js';
+import {
+  courseMetadataForPayload,
+  courseMetadataPatchFromPayload,
+  courseMetadataPatchToDrizzleValues,
+  validateCourseMetadataForStatus,
+} from '@/lib/crm/course-metadata.js';
 import { evaluateLifecycleTransition, requireLifecycleStatus } from '@/lib/crm/lifecycle.js';
 import { isUuid } from '@/lib/crm/validation.js';
 import {
@@ -30,6 +36,7 @@ import { createOrReuseArchiveApprovalTask } from '@/lib/tasks/archive-approvals.
 import { toTaskPayload } from '@/lib/tasks/service.js';
 import { workflowFromLead } from '@/lib/sales-workflow';
 import { summarizeContactTouch } from '@/lib/contact-touch.js';
+import { buildAitUsaEnrollmentSignals } from '@/lib/ait-usa-enrollment-signals.js';
 
 async function loadBusinessUnitForWorkflow(db, session, businessUnitId) {
   if (!businessUnitId) return null;
@@ -46,6 +53,11 @@ async function loadBusinessUnitForWorkflow(db, session, businessUnitId) {
 
 function toContactPayload(row, lead = null, noteRows = [], businessUnit = null, activityEventRows = []) {
   const workflow = workflowFromLead(lead, { businessUnit });
+  const enrollmentSignals = buildAitUsaEnrollmentSignals({
+    contact: row,
+    lead,
+    workflow,
+  });
   const touchSummary = summarizeContactTouch({
     contact: row,
     businessUnit,
@@ -79,6 +91,8 @@ function toContactPayload(row, lead = null, noteRows = [], businessUnit = null, 
     needsFirstOutreach: workflow.needsFirstOutreach,
     source: lead?.sourceName || row.sourceLabel || '',
     leadProfile: leadProfileForPayload(lead),
+    courseMetadata: courseMetadataForPayload(lead),
+    enrollmentSignals,
     programInterest: lead?.programInterest || '',
     preferredDay: lead?.preferredDay || '',
     preferredSchedule: lead?.preferredSchedule || '',
@@ -304,7 +318,11 @@ export async function PATCH(request) {
   const leadProfilePatch = leadProfilePatchFromPayload(body, { allowClear: true });
   const hasLeadProfilePatch = Object.keys(leadProfilePatch).length > 0 ||
     (body.leadProfile && typeof body.leadProfile === 'object');
-  const hasLeadPatch = 'status' in body || 'source' in body || 'assignedTo' in body || hasBusinessUnitPatch || hasLeadProfilePatch;
+  const courseMetadataPatch = courseMetadataPatchFromPayload(body, { allowClear: true });
+  const hasCourseMetadataPatch = Object.keys(courseMetadataPatch).length > 0 ||
+    (body.courseMetadata && typeof body.courseMetadata === 'object');
+  const hasLeadPatch = 'status' in body || 'source' in body || 'assignedTo' in body ||
+    hasBusinessUnitPatch || hasLeadProfilePatch || hasCourseMetadataPatch;
   let leadPatch = null;
   let leadStatusChange = null;
   if (lead && hasLeadPatch) {
@@ -342,6 +360,32 @@ export async function PATCH(request) {
     }
     if (hasLeadProfilePatch) {
       Object.assign(leadPatch, leadProfilePatchToDrizzleValues(leadProfilePatch));
+    }
+    if (hasCourseMetadataPatch) {
+      try {
+        validateCourseMetadataForStatus({
+          courseMetadata: {
+            currentCourse: Object.prototype.hasOwnProperty.call(courseMetadataPatch, 'currentCourse')
+              ? courseMetadataPatch.currentCourse
+              : lead.currentCourse,
+            completedCourse: Object.prototype.hasOwnProperty.call(courseMetadataPatch, 'completedCourse')
+              ? courseMetadataPatch.completedCourse
+              : lead.completedCourse,
+            endedCourse: Object.prototype.hasOwnProperty.call(courseMetadataPatch, 'endedCourse')
+              ? courseMetadataPatch.endedCourse
+              : lead.endedCourse,
+            courseOutcome: Object.prototype.hasOwnProperty.call(courseMetadataPatch, 'courseOutcome')
+              ? courseMetadataPatch.courseOutcome
+              : lead.courseOutcome,
+          },
+          status: leadPatch.status || lead.status,
+          businessUnit: statusBusinessUnit,
+          workflowKey: workflowFromLead({ ...lead, ...leadPatch }, { businessUnit: statusBusinessUnit }).workflowKey,
+        });
+      } catch (error) {
+        return NextResponse.json({ error: error.message }, { status: 400 });
+      }
+      Object.assign(leadPatch, courseMetadataPatchToDrizzleValues(courseMetadataPatch));
     }
   }
 

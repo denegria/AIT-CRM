@@ -333,6 +333,12 @@ function mapContacts(
         sourceLabel: contact.sourceLabel,
         workflowKey: workflow.workflowKey,
       }),
+      courseMetadata: {
+        currentCourse: lead?.currentCourse || '',
+        completedCourse: lead?.completedCourse || '',
+        endedCourse: lead?.endedCourse || '',
+        courseOutcome: lead?.courseOutcome || '',
+      },
       sourceActivityDate,
       assignedTo: lead?.assignedUserId || '',
       submittedAt,
