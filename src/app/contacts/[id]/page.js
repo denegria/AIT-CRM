@@ -247,6 +247,10 @@ function isEnrolledStudent(contact = {}) {
   return String(contact?.currentStage || contact?.status || '').trim().toLowerCase() === 'enrolled';
 }
 
+function isEnrolledWorkflowStatus(status = '') {
+  return String(status || '').trim().toLowerCase() === 'enrolled';
+}
+
 function timelineEmptyText(filterValue, filters) {
   return filters.find((filter) => filter.value === filterValue)?.empty || 'No activity recorded yet.';
 }
@@ -544,6 +548,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     currentCourseRecords[0] ||
     null
   ), [activeCourseRecord, currentCourseRecords, selectedCourseRecordId]);
+  const courseStartDateRequired = courseForm.status === 'active';
+  const canSaveCourseForm = Boolean(cleanText(courseForm.courseName)) &&
+    (!courseStartDateRequired || Boolean(courseForm.startDate));
   const financialNotice = isAitUsaContact
     ? (canGenerateStudentReceipt
         ? { tone: 'ready', text: 'Ready to generate a student receipt.' }
@@ -874,10 +881,17 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     } : {
       ...emptyCourseForm,
       status: mode === 'history' ? 'completed' : 'active',
+      startDate: mode === 'enrollment' ? todayDate() : '',
       endDate: mode === 'history' ? todayDate() : '',
     });
     setCourseModal(mode);
     setCourseError('');
+  };
+
+  const openEnrollmentCoursePrompt = () => {
+    if (!access.canWriteCrm || !showCoursesTab || activeCourseRecord) return;
+    setActiveTab('courses');
+    openCourseModal('enrollment');
   };
 
   const closeCourseModal = () => {
@@ -898,6 +912,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     if (!contact?.id || !access.canWriteCrm || courseBusy) return;
     if (!cleanText(courseForm.courseName)) {
       setCourseError('Course name is required.');
+      return;
+    }
+    if (courseForm.status === 'active' && !courseForm.startDate) {
+      setCourseError('Start date is required for the current course.');
       return;
     }
     setCourseBusy(true);
@@ -935,6 +953,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       toast('Choose why this closed status is being reopened.', 'error');
       return;
     }
+    const shouldPromptForCourse = isAitUsaContact &&
+      editForm.status !== contact.status &&
+      isEnrolledWorkflowStatus(editForm.status) &&
+      !activeCourseRecord;
     updateContact(contact.id, {
       ...editForm,
       ...(coordinatorUiPolicy.lockedOwnerUserId ? { assignedTo: coordinatorUiPolicy.lockedOwnerUserId } : {}),
@@ -945,6 +967,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         toast('Profile updated');
         setTimelineReloadKey((key) => key + 1);
         setIsEditModalOpen(false);
+        if (shouldPromptForCourse) {
+          openEnrollmentCoursePrompt();
+        }
       })
       .catch((error) => {
         toast(error.message || 'Profile update failed', 'error');
@@ -1286,11 +1311,15 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     if (!contact?.id || !nextStatus || statusUpdating || !access.canWriteCrm) return;
     const confirmed = window.confirm(`Move ${contact.name} from ${contact.status} to ${nextStatus}?`);
     if (!confirmed) return;
+    const shouldPromptForCourse = isAitUsaContact && isEnrolledWorkflowStatus(nextStatus) && !activeCourseRecord;
     setStatusUpdating(true);
     updateContact(contact.id, { status: nextStatus })
       .then(() => {
         toast(`Status moved to ${nextStatus}`);
         setTimelineReloadKey((key) => key + 1);
+        if (shouldPromptForCourse) {
+          openEnrollmentCoursePrompt();
+        }
       })
       .catch((error) => {
         toast(error.message || 'Status update failed', 'error');
@@ -2227,7 +2256,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 className="btn btn-primary"
                 type="button"
                 onClick={saveCourseRecord}
-                disabled={courseBusy || !cleanText(courseForm.courseName)}
+                disabled={courseBusy || !canSaveCourseForm}
               >
                 <CheckCircle2 size={16} /> {courseBusy ? 'Saving...' : 'Save Course'}
               </button>
@@ -2268,6 +2297,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               <input
                 className="input"
                 type="date"
+                required={courseStartDateRequired}
                 value={courseForm.startDate || ''}
                 disabled={courseBusy}
                 onChange={(event) => updateCourseForm({ startDate: event.target.value })}

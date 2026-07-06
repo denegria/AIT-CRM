@@ -133,6 +133,7 @@ export async function PATCH(request, { params }) {
     validateCourseRecordInput({
       courseName: Object.prototype.hasOwnProperty.call(input, 'courseName') ? input.courseName : existing.courseName,
       status: Object.prototype.hasOwnProperty.call(input, 'status') ? input.status : existing.status,
+      startDate: Object.prototype.hasOwnProperty.call(input, 'startDate') ? input.startDate : existing.startDate,
     }, {
       existingRecords,
       currentRecordId: existing.id,
