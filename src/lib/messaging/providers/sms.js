@@ -494,6 +494,7 @@ function telnyxProviderStatus(body = {}) {
 function redactTelnyxProviderResponse(body = {}) {
   const data = body?.data || null;
   const firstRecipient = firstValue(data?.to);
+  const from = data?.from && typeof data.from === 'object' ? data.from : {};
   const errors = Array.isArray(body?.errors)
     ? body.errors.map((error) => ({
       code: cleanNullableText(error?.code),
@@ -507,9 +508,20 @@ function redactTelnyxProviderResponse(body = {}) {
         id: cleanNullableText(data.id),
         record_type: cleanNullableText(data.record_type),
         direction: cleanNullableText(data.direction),
+        type: cleanNullableText(data.type),
+        messaging_profile_id: cleanNullableText(data.messaging_profile_id),
         status: cleanNullableText(data.status),
+        from: {
+          carrier: cleanNullableText(from.carrier),
+          line_type: cleanNullableText(from.line_type),
+        },
         to: firstRecipient ? [{
           status: cleanNullableText(firstRecipient.status),
+          carrier: cleanNullableText(firstRecipient.carrier),
+          line_type: cleanNullableText(firstRecipient.line_type),
+          error_code: cleanNullableText(firstRecipient.error_code || firstRecipient.errorCode),
+          error_message: cleanNullableText(firstRecipient.error_message || firstRecipient.errorMessage),
+          error_detail: cleanNullableText(firstRecipient.error_detail || firstRecipient.errorDetail),
         }] : [],
       },
     } : {}),

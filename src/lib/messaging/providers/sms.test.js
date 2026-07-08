@@ -158,8 +158,10 @@ test('redacts Telnyx success payload while preserving provider identifiers and s
             id: 'telnyx-message-1',
             record_type: 'message',
             direction: 'outbound',
-            from: { phone_number: '+15552223333' },
-            to: [{ phone_number: '+15550001111', status: 'sent' }],
+            type: 'SMS',
+            messaging_profile_id: 'profile-1',
+            from: { phone_number: '+15552223333', carrier: 'TELNYX LLC', line_type: 'VoIP' },
+            to: [{ phone_number: '+15550001111', status: 'sent', carrier: 'T-MOBILE USA, INC.', line_type: 'Wireless' }],
             text: 'Hello',
             webhook_url: 'https://example.invalid/webhook',
           },
@@ -177,8 +179,21 @@ test('redacts Telnyx success payload while preserving provider identifiers and s
       id: 'telnyx-message-1',
       record_type: 'message',
       direction: 'outbound',
+      type: 'SMS',
+      messaging_profile_id: 'profile-1',
       status: null,
-      to: [{ status: 'sent' }],
+      from: {
+        carrier: 'TELNYX LLC',
+        line_type: 'VoIP',
+      },
+      to: [{
+        status: 'sent',
+        carrier: 'T-MOBILE USA, INC.',
+        line_type: 'Wireless',
+        error_code: null,
+        error_message: null,
+        error_detail: null,
+      }],
     },
   });
   assert.equal(JSON.stringify(result.providerResponse).includes('+15550001111'), false);
@@ -198,14 +213,22 @@ test('retrieves Telnyx SMS delivery status by provider message id', async () => 
           return {
             data: {
               id: 'telnyx-message-1',
-              record_type: 'message',
-              direction: 'outbound',
-              status: 'sent',
-              from: { phone_number: '+15552223333' },
-              to: [{ phone_number: '+15550001111', status: 'delivered' }],
-              text: 'Hello',
-            },
-          };
+            record_type: 'message',
+            direction: 'outbound',
+            status: 'sent',
+            type: 'SMS',
+            messaging_profile_id: 'profile-1',
+            from: { phone_number: '+15552223333', carrier: 'TELNYX LLC', line_type: 'VoIP' },
+            to: [{
+              phone_number: '+15550001111',
+              status: 'delivered',
+              carrier: 'T-MOBILE USA, INC.',
+              line_type: 'Wireless',
+              error_code: null,
+            }],
+            text: 'Hello',
+          },
+        };
         },
       };
     },
