@@ -670,6 +670,7 @@ export function manualOutboundConversationMessageInput({
   contactId = null,
   leadId = null,
   channelId = null,
+  provider = CONVERSATION_PROVIDERS.META,
   channel,
   providerAccountId,
   providerThreadId,
@@ -682,8 +683,9 @@ export function manualOutboundConversationMessageInput({
   occurredAt = new Date(),
 }) {
   const normalizedChannel = cleanText(channel).toLowerCase();
+  const normalizedProvider = cleanText(provider).toLowerCase() || CONVERSATION_PROVIDERS.META;
   const idempotencyKey = [
-    normalizeKeyPart(CONVERSATION_PROVIDERS.META),
+    normalizeKeyPart(normalizedProvider),
     normalizeKeyPart(normalizedChannel),
     normalizeKeyPart(providerAccountId),
     'manual',
@@ -696,7 +698,7 @@ export function manualOutboundConversationMessageInput({
     contactId,
     leadId,
     channelId,
-    provider: CONVERSATION_PROVIDERS.META,
+    provider: normalizedProvider,
     channel: normalizedChannel,
     direction: MESSAGE_DIRECTIONS.OUTBOUND,
     deliveryStatus: MESSAGE_DELIVERY_STATUSES.PENDING,

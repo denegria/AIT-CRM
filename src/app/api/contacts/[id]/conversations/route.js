@@ -22,6 +22,7 @@ import {
   META_WHATSAPP_ACCESS_TOKEN_MAP_ENV,
   createMetaProviderConfig,
 } from '@/lib/messaging/providers/meta.js';
+import { createSmsCampaignSendConfigFromEnv } from '@/lib/messaging/providers/sms.js';
 
 function getManualOutboundMetaConfig() {
   return createMetaProviderConfig({
@@ -89,6 +90,7 @@ export async function POST(request, { params }) {
   const body = await request.json().catch(() => ({}));
   const manualRequest = normalizeManualOutboundRequest(body);
   const metaConfig = getManualOutboundMetaConfig();
+  const smsConfig = createSmsCampaignSendConfigFromEnv(process.env);
 
   try {
     const contact = await resolveContactById({
@@ -115,6 +117,7 @@ export async function POST(request, { params }) {
         channelSetting: context.channelSetting,
         template: context.template,
         metaConfig,
+        smsConfig,
       });
 
       if (!guardrails.ok) {
@@ -132,6 +135,7 @@ export async function POST(request, { params }) {
         request: manualRequest,
         context,
         metaConfig,
+        smsConfig,
       });
 
       return NextResponse.json(result, { status: result.ok ? 201 : 502 });

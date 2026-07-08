@@ -1,6 +1,7 @@
 import { randomUUID } from 'crypto';
 import {
   CONVERSATION_CHANNELS,
+  CONVERSATION_PROVIDERS,
   MESSAGE_DELIVERY_STATUSES,
 } from './constants.js';
 import {
@@ -21,6 +22,7 @@ import {
   sendMetaWhatsAppTemplateMessage,
   sendMetaWhatsAppTextMessage,
 } from '../messaging/providers/meta.js';
+import { normalizeSmsPhone, sendTelnyxSmsMessage } from '../messaging/providers/sms.js';
 
 export const MANUAL_OUTBOUND_BLOCK_CODES = Object.freeze({
   CHANNEL_UNSUPPORTED: 'channel_unsupported',
@@ -39,10 +41,13 @@ export const MANUAL_OUTBOUND_BLOCK_CODES = Object.freeze({
   TEMPLATE_NOT_ENABLED: 'template_not_enabled',
   TEMPLATE_NOT_APPROVED: 'template_not_approved',
   TEMPLATE_PROVIDER_NAME_MISSING: 'template_provider_name_missing',
+  SMS_SEND_DISABLED: 'sms_send_disabled',
+  SMS_RECIPIENT_NOT_ALLOWLISTED: 'sms_recipient_not_allowlisted',
 });
 
 const SUPPORTED_CHANNELS = new Set([
   CONVERSATION_CHANNELS.MESSENGER,
+  CONVERSATION_CHANNELS.SMS,
   CONVERSATION_CHANNELS.WHATSAPP,
 ]);
 
@@ -136,6 +141,24 @@ function hasPriorInboundMessage(conversation) {
   return Boolean(normalizeDate(conversation?.last_inbound_at || conversation?.lastInboundAt));
 }
 
+function hasConversationRecipient({ conversation, channel, smsConfig = {} } = {}) {
+  if (!conversation?.external_participant_id || !conversation?.provider_thread_id || !hasPriorInboundMessage(conversation)) {
+    return false;
+  }
+  if (channel === CONVERSATION_CHANNELS.SMS) {
+    return Boolean(conversation.provider_account_id || smsConfig.telnyxFromNumber);
+  }
+  return Boolean(conversation.provider_account_id);
+}
+
+function isSmsRecipientAllowlisted(conversation = {}, smsConfig = {}) {
+  const allowlist = Array.isArray(smsConfig.recipientAllowlist)
+    ? smsConfig.recipientAllowlist.map(normalizeSmsPhone).filter(Boolean)
+    : [];
+  if (!allowlist.length) return true;
+  return allowlist.includes(normalizeSmsPhone(conversation.external_participant_id));
+}
+
 function templateMatchesChannel(template, channel) {
   return template.channel === channel || template.channel === MESSAGE_TEMPLATE_CHANNELS.ALL;
 }
@@ -177,13 +200,14 @@ export function evaluateManualOutboundGuardrails({
   template = null,
   request,
   metaConfig = {},
+  smsConfig = {},
   now = new Date(),
 } = {}) {
   const reasons = [];
   const channel = request?.channel;
 
   if (!SUPPORTED_CHANNELS.has(channel)) {
-    reasons.push(block(MANUAL_OUTBOUND_BLOCK_CODES.CHANNEL_UNSUPPORTED, 'Manual sending supports Messenger and WhatsApp only.'));
+    reasons.push(block(MANUAL_OUTBOUND_BLOCK_CODES.CHANNEL_UNSUPPORTED, 'Manual sending supports Messenger, SMS, and WhatsApp only.'));
   }
   if (contact?.is_do_not_call || contact?.isDoNotCall || contact?.is_wrong_number || contact?.isWrongNumber) {
     reasons.push(block(MANUAL_OUTBOUND_BLOCK_CODES.CONTACT_BLOCKED, 'Contact is marked do-not-call or wrong number.'));
@@ -204,12 +228,7 @@ export function evaluateManualOutboundGuardrails({
   if (channelSetting && isWithinQuietHours({ now, settingsJson: metadataJson(channelSetting) })) {
     reasons.push(block(MANUAL_OUTBOUND_BLOCK_CODES.QUIET_HOURS, 'Manual sends are blocked during configured quiet hours.'));
   }
-  if (
-    !conversation?.provider_account_id
-    || !conversation?.external_participant_id
-    || !conversation?.provider_thread_id
-    || !hasPriorInboundMessage(conversation)
-  ) {
+  if (!hasConversationRecipient({ conversation, channel, smsConfig })) {
     reasons.push(block(MANUAL_OUTBOUND_BLOCK_CODES.RECIPIENT_MISSING, 'A prior inbound conversation is required to identify the recipient safely.'));
   } else if (channel === CONVERSATION_CHANNELS.MESSENGER) {
     const token = resolveMetaPageAccessToken(conversation.provider_account_id, metaConfig);
@@ -220,6 +239,22 @@ export function evaluateManualOutboundGuardrails({
     const token = resolveMetaWhatsAppAccessToken(conversation.provider_account_id, metaConfig);
     if (!token.ok) {
       reasons.push(block(MANUAL_OUTBOUND_BLOCK_CODES.PROVIDER_CONFIG_MISSING, token.reason || 'WhatsApp provider token is missing.'));
+    }
+  } else if (channel === CONVERSATION_CHANNELS.SMS) {
+    if (conversation.provider !== CONVERSATION_PROVIDERS.TELNYX) {
+      reasons.push(block(MANUAL_OUTBOUND_BLOCK_CODES.CHANNEL_CONFIG_MISSING, 'SMS manual sends require a Telnyx conversation.'));
+    }
+    if (!smsConfig.telnyxApiKey) {
+      reasons.push(block(MANUAL_OUTBOUND_BLOCK_CODES.PROVIDER_CONFIG_MISSING, 'TELNYX_API_KEY is required before SMS manual sends.'));
+    }
+    if (!conversation.provider_account_id && !smsConfig.telnyxFromNumber) {
+      reasons.push(block(MANUAL_OUTBOUND_BLOCK_CODES.PROVIDER_CONFIG_MISSING, 'A Telnyx sender number is required before SMS manual sends.'));
+    }
+    if (!smsConfig.liveSendEnabled && !smsConfig.testSendMode) {
+      reasons.push(block(MANUAL_OUTBOUND_BLOCK_CODES.SMS_SEND_DISABLED, 'Live SMS sending is disabled for this slice.'));
+    }
+    if (!isSmsRecipientAllowlisted(conversation, smsConfig)) {
+      reasons.push(block(MANUAL_OUTBOUND_BLOCK_CODES.SMS_RECIPIENT_NOT_ALLOWLISTED, 'SMS recipient is not in the staging send allowlist.'));
     }
   }
 
@@ -291,13 +326,19 @@ async function findLatestConversation(client, { organizationId, contactId, chann
       where conv.organization_id = $1
         and conv.contact_id = $2
         and conv.channel = $3
-        and conv.provider = 'meta'
+        and conv.provider = $5
         and ($4::text[] is null or conv.business_unit_id is null or conv.business_unit_id::text = any($4::text[]))
       group by conv.id, cc.is_active
       order by max(cm.occurred_at) filter (where cm.direction = 'inbound') desc nulls last, conv.last_message_at desc nulls last
       limit 1
     `,
-    [organizationId, contactId, channel, Array.isArray(businessUnitIds) ? businessUnitIds : null],
+    [
+      organizationId,
+      contactId,
+      channel,
+      Array.isArray(businessUnitIds) ? businessUnitIds : null,
+      channel === CONVERSATION_CHANNELS.SMS ? CONVERSATION_PROVIDERS.TELNYX : CONVERSATION_PROVIDERS.META,
+    ],
   );
   return result.rows[0] || null;
 }
@@ -385,6 +426,7 @@ async function dispatchProviderSend({
   template,
   text,
   metaConfig,
+  smsConfig,
   fetchImpl,
 }) {
   if (request.channel === CONVERSATION_CHANNELS.MESSENGER) {
@@ -393,6 +435,18 @@ async function dispatchProviderSend({
       recipientId: conversation.external_participant_id,
       text,
       config: metaConfig,
+      fetchImpl,
+    });
+  }
+
+  if (request.channel === CONVERSATION_CHANNELS.SMS) {
+    return sendTelnyxSmsMessage({
+      apiKey: smsConfig.telnyxApiKey,
+      messagingProfileId: smsConfig.telnyxMessagingProfileId,
+      from: conversation.provider_account_id || smsConfig.telnyxFromNumber,
+      to: conversation.external_participant_id,
+      text,
+      requestId: request.requestId,
       fetchImpl,
     });
   }
@@ -441,6 +495,7 @@ export async function sendManualOutboundMessage(client, {
   request,
   context,
   metaConfig,
+  smsConfig = {},
   fetchImpl = globalThis.fetch,
   now = new Date(),
 }) {
@@ -451,6 +506,11 @@ export async function sendManualOutboundMessage(client, {
     contactId: contact.id,
     leadId: context.conversation.lead_id || null,
     channelId: context.conversation.channel_id || null,
+    provider: context.conversation.provider || (
+      request.channel === CONVERSATION_CHANNELS.SMS
+        ? CONVERSATION_PROVIDERS.TELNYX
+        : CONVERSATION_PROVIDERS.META
+    ),
     channel: request.channel,
     providerAccountId: context.conversation.provider_account_id,
     providerThreadId: context.conversation.provider_thread_id,
@@ -482,6 +542,7 @@ export async function sendManualOutboundMessage(client, {
     template: context.template,
     text,
     metaConfig,
+    smsConfig,
     fetchImpl,
   });
 
