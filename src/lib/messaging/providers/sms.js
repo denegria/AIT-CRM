@@ -1,4 +1,4 @@
-import { timingSafeEqual } from 'crypto';
+import { createPublicKey, timingSafeEqual, verify as verifySignature } from 'crypto';
 import {
   CONVERSATION_PROVIDERS,
   MESSAGE_DELIVERY_STATUSES,
@@ -11,6 +11,8 @@ export const TELNYX_PUBLIC_KEY_ENV = 'TELNYX_PUBLIC_KEY';
 export const TELNYX_API_KEY_ENV = 'TELNYX_API_KEY';
 export const TELNYX_MESSAGING_PROFILE_ID_ENV = 'TELNYX_MESSAGING_PROFILE_ID';
 export const TELNYX_FROM_NUMBER_ENV = 'TELNYX_FROM_NUMBER';
+export const TELNYX_SIGNATURE_HEADER = 'telnyx-signature-ed25519';
+export const TELNYX_TIMESTAMP_HEADER = 'telnyx-timestamp';
 export const TWILIO_AUTH_TOKEN_ENV = 'TWILIO_AUTH_TOKEN';
 export const SMS_CAMPAIGN_LIVE_SEND_ENABLED_ENV = 'SMS_CAMPAIGN_LIVE_SEND_ENABLED';
 export const SMS_CAMPAIGN_LIVE_SEND_TEST_MODE_ENV = 'SMS_CAMPAIGN_LIVE_SEND_TEST_MODE';
@@ -36,6 +38,10 @@ const TELNYX_DELIVERY_EVENT_STATUS = Object.freeze({
   'message.finalized': MESSAGE_DELIVERY_STATUSES.DELIVERED,
   'message.failed': MESSAGE_DELIVERY_STATUSES.FAILED,
 });
+const TELNYX_SUPPORTED_EVENT_TYPES = new Set([
+  'message.received',
+  ...Object.keys(TELNYX_DELIVERY_EVENT_STATUS),
+]);
 
 const TWILIO_DELIVERY_STATUS = Object.freeze({
   accepted: MESSAGE_DELIVERY_STATUSES.PENDING,
@@ -170,6 +176,78 @@ function safeEqual(left, right) {
   return timingSafeEqual(leftBuffer, rightBuffer);
 }
 
+function telnyxPublicKeyObject(publicKey = '') {
+  const cleanKey = cleanText(publicKey);
+  if (!cleanKey) return null;
+  if (cleanKey.includes('BEGIN PUBLIC KEY')) return createPublicKey(cleanKey);
+
+  const compact = cleanKey.replace(/\s+/g, '');
+  const raw = /^[0-9a-f]{64}$/i.test(compact)
+    ? Buffer.from(compact, 'hex')
+    : Buffer.from(compact, 'base64');
+  if (raw.length !== 32) return null;
+
+  const spkiPrefix = Buffer.from('302a300506032b6570032100', 'hex');
+  return createPublicKey({
+    key: Buffer.concat([spkiPrefix, raw]),
+    format: 'der',
+    type: 'spki',
+  });
+}
+
+export function validateTelnyxWebhookSignature({
+  bodyText = '',
+  signatureHeader = '',
+  timestampHeader = '',
+  config = {},
+  now = new Date(),
+  toleranceSeconds = 300,
+} = {}) {
+  if (!config.telnyxPublicKey) {
+    return { ok: false, code: 'TELNYX_PUBLIC_KEY_MISSING', reason: `${TELNYX_PUBLIC_KEY_ENV} is not configured.` };
+  }
+  if (!signatureHeader || !timestampHeader) {
+    return { ok: false, code: 'TELNYX_SIGNATURE_MISSING', reason: 'Telnyx webhook signature or timestamp is missing.' };
+  }
+
+  const timestamp = Number(timestampHeader);
+  if (!Number.isFinite(timestamp)) {
+    return { ok: false, code: 'TELNYX_TIMESTAMP_INVALID', reason: 'Telnyx webhook timestamp is invalid.' };
+  }
+  const ageSeconds = Math.abs((now.getTime() / 1000) - timestamp);
+  if (ageSeconds > toleranceSeconds) {
+    return { ok: false, code: 'TELNYX_TIMESTAMP_OUT_OF_RANGE', reason: 'Telnyx webhook timestamp is outside the accepted replay window.' };
+  }
+
+  try {
+    const key = telnyxPublicKeyObject(config.telnyxPublicKey);
+    if (!key) {
+      return { ok: false, code: 'TELNYX_PUBLIC_KEY_INVALID', reason: `${TELNYX_PUBLIC_KEY_ENV} must be a valid Ed25519 public key.` };
+    }
+    const payload = Buffer.from(`${timestampHeader}|${bodyText}`);
+    const signature = Buffer.from(signatureHeader, 'base64');
+    if (signature.length === 0 || !verifySignature(null, payload, key, signature)) {
+      return { ok: false, code: 'TELNYX_SIGNATURE_MISMATCH', reason: 'Telnyx webhook signature mismatch.' };
+    }
+  } catch {
+    return { ok: false, code: 'TELNYX_SIGNATURE_MISMATCH', reason: 'Telnyx webhook signature mismatch.' };
+  }
+
+  return { ok: true };
+}
+
+export function parseTelnyxWebhookPayloadText(bodyText = '') {
+  try {
+    const payload = JSON.parse(bodyText || '{}');
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return { ok: false, code: 'TELNYX_WEBHOOK_PAYLOAD_INVALID', reason: 'Telnyx webhook payload must be a JSON object.' };
+    }
+    return { ok: true, payload };
+  } catch {
+    return { ok: false, code: 'TELNYX_WEBHOOK_PAYLOAD_INVALID', reason: 'Invalid Telnyx webhook JSON payload.' };
+  }
+}
+
 export function validateSmsWebhookSharedSecret({ secretHeader = '', config = {} } = {}) {
   const expected = config.webhookSharedSecret || '';
   if (!expected) {
@@ -191,6 +269,7 @@ function textOrAttachment(text, fallback = '[SMS message]') {
 }
 
 function telnyxPhone(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value) && !value.phone_number) return '';
   return normalizeSmsPhone(value?.phone_number || value);
 }
 
@@ -244,6 +323,15 @@ function telnyxEvent(payload = {}) {
     occurredAt,
     raw: payload,
   };
+}
+
+function isValidTelnyxEvent(event = {}) {
+  if (!TELNYX_SUPPORTED_EVENT_TYPES.has(event.eventType)) return false;
+  if (!event.messageId) return false;
+  if (event.kind === SMS_EVENT_KINDS.INBOUND_MESSAGE) {
+    return Boolean(event.providerAccountId && event.participantPhone);
+  }
+  return Boolean(event.providerAccountId);
 }
 
 function twilioEvent(payload = {}) {
@@ -349,7 +437,7 @@ export function flattenSmsProviderEvents(provider, payload = {}) {
 
   if (normalizedProvider === CONVERSATION_PROVIDERS.TELNYX) {
     const events = Array.isArray(payload?.data) ? payload.data.map((data) => ({ data })) : [payload];
-    return events.map(telnyxEvent);
+    return events.map(telnyxEvent).filter(isValidTelnyxEvent);
   }
 
   if (normalizedProvider === CONVERSATION_PROVIDERS.TWILIO) {

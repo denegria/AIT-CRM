@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
+import { generateKeyPairSync, sign } from 'node:crypto';
 import test from 'node:test';
 import {
   createSmsCampaignSendConfigFromEnv,
+  flattenSmsProviderEvents,
+  parseTelnyxWebhookPayloadText,
   sendTelnyxSmsMessage,
+  validateTelnyxWebhookSignature,
 } from './sms.js';
 
 test('creates staging SMS send config with recipient allowlist and production block', () => {
@@ -178,4 +182,115 @@ test('redacts Telnyx success payload while preserving provider identifiers and s
   });
   assert.equal(JSON.stringify(result.providerResponse).includes('+15550001111'), false);
   assert.equal(JSON.stringify(result.providerResponse).includes('Hello'), false);
+});
+
+function signedTelnyxFixture() {
+  const { privateKey, publicKey } = generateKeyPairSync('ed25519');
+  const publicKeyDer = publicKey.export({ format: 'der', type: 'spki' });
+  const publicKeyHex = publicKeyDer.subarray(-32).toString('hex');
+  const bodyText = JSON.stringify({
+    data: {
+      id: 'telnyx-event-1',
+      event_type: 'message.received',
+      payload: {
+        id: 'telnyx-message-1',
+        from: { phone_number: '+15550001111' },
+        to: [{ phone_number: '+15552223333' }],
+        text: 'STOP',
+      },
+    },
+  });
+  const timestamp = '1800000000';
+  const signature = sign(null, Buffer.from(`${timestamp}|${bodyText}`), privateKey).toString('base64');
+  return { bodyText, publicKeyHex, signature, timestamp };
+}
+
+test('validates Telnyx Ed25519 webhook signatures over raw timestamp and payload', () => {
+  const fixture = signedTelnyxFixture();
+  const result = validateTelnyxWebhookSignature({
+    bodyText: fixture.bodyText,
+    signatureHeader: fixture.signature,
+    timestampHeader: fixture.timestamp,
+    config: { telnyxPublicKey: fixture.publicKeyHex },
+    now: new Date(Number(fixture.timestamp) * 1000),
+  });
+
+  assert.deepEqual(result, { ok: true });
+});
+
+test('fails Telnyx webhook verification closed for missing, stale, or bad signatures', () => {
+  const fixture = signedTelnyxFixture();
+  const now = new Date(Number(fixture.timestamp) * 1000);
+
+  assert.deepEqual(
+    validateTelnyxWebhookSignature({
+      bodyText: fixture.bodyText,
+      signatureHeader: fixture.signature,
+      timestampHeader: fixture.timestamp,
+      config: {},
+      now,
+    }),
+    {
+      ok: false,
+      code: 'TELNYX_PUBLIC_KEY_MISSING',
+      reason: 'TELNYX_PUBLIC_KEY is not configured.',
+    },
+  );
+  assert.equal(validateTelnyxWebhookSignature({
+    bodyText: fixture.bodyText,
+    signatureHeader: '',
+    timestampHeader: fixture.timestamp,
+    config: { telnyxPublicKey: fixture.publicKeyHex },
+    now,
+  }).code, 'TELNYX_SIGNATURE_MISSING');
+  assert.equal(validateTelnyxWebhookSignature({
+    bodyText: fixture.bodyText,
+    signatureHeader: fixture.signature,
+    timestampHeader: fixture.timestamp,
+    config: { telnyxPublicKey: fixture.publicKeyHex },
+    now: new Date((Number(fixture.timestamp) + 600) * 1000),
+  }).code, 'TELNYX_TIMESTAMP_OUT_OF_RANGE');
+  assert.equal(validateTelnyxWebhookSignature({
+    bodyText: fixture.bodyText.replace('STOP', 'START'),
+    signatureHeader: fixture.signature,
+    timestampHeader: fixture.timestamp,
+    config: { telnyxPublicKey: fixture.publicKeyHex },
+    now,
+  }).code, 'TELNYX_SIGNATURE_MISMATCH');
+});
+
+test('parses Telnyx webhook JSON payloads without accepting malformed bodies', () => {
+  const fixture = signedTelnyxFixture();
+  const parsed = parseTelnyxWebhookPayloadText(fixture.bodyText);
+
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.payload.data.id, 'telnyx-event-1');
+  assert.deepEqual(parseTelnyxWebhookPayloadText('{bad json'), {
+    ok: false,
+    code: 'TELNYX_WEBHOOK_PAYLOAD_INVALID',
+    reason: 'Invalid Telnyx webhook JSON payload.',
+  });
+  assert.deepEqual(parseTelnyxWebhookPayloadText('[]'), {
+    ok: false,
+    code: 'TELNYX_WEBHOOK_PAYLOAD_INVALID',
+    reason: 'Telnyx webhook payload must be a JSON object.',
+  });
+});
+
+test('ignores malformed or unsupported Telnyx webhook event objects', () => {
+  assert.deepEqual(flattenSmsProviderEvents('telnyx', {}), []);
+  assert.deepEqual(flattenSmsProviderEvents('telnyx', {
+    data: {
+      id: 'event-1',
+      event_type: 'message.unknown',
+      payload: { id: 'message-1' },
+    },
+  }), []);
+  assert.deepEqual(flattenSmsProviderEvents('telnyx', {
+    data: {
+      id: 'event-2',
+      event_type: 'message.received',
+      payload: { id: 'message-2', from: {}, to: [] },
+    },
+  }), []);
 });
