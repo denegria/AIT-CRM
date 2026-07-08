@@ -14,12 +14,14 @@ test('creates staging SMS send config with recipient allowlist and production bl
     SMS_CAMPAIGN_LIVE_SEND_RECIPIENT_ALLOWLIST: '+1 (555) 000-1111, 5550002222',
     TELNYX_API_KEY: 'redacted',
     TELNYX_MESSAGING_PROFILE_ID: 'profile-1',
+    TELNYX_FROM_NUMBER: '(555) 222-3333',
   });
 
   assert.equal(staging.liveSendEnabled, true);
   assert.equal(staging.testSendMode, true);
   assert.equal(staging.maxRecipients, 1);
   assert.deepEqual(staging.recipientAllowlist, ['+15550001111', '+15550002222']);
+  assert.equal(staging.telnyxFromNumber, '+15552223333');
 
   const production = createSmsCampaignSendConfigFromEnv({
     VERCEL_ENV: 'production',
@@ -39,6 +41,7 @@ test('sends Telnyx SMS through v2 messages endpoint', async () => {
     from: '+15552223333',
     to: '(555) 000-1111',
     text: 'Hello',
+    requestId: 'sms-request-1',
     fetchImpl: async (url, options) => {
       requests.push({ url, options });
       return {
@@ -58,8 +61,10 @@ test('sends Telnyx SMS through v2 messages endpoint', async () => {
   assert.equal(result.ok, true);
   assert.equal(result.providerMessageId, 'telnyx-message-1');
   assert.equal(result.providerStatus, 'queued');
+  assert.equal(result.deliveryStatus, 'pending');
   assert.equal(requests[0].url, 'https://api.telnyx.com/v2/messages');
   assert.equal(requests[0].options.headers.Authorization, 'Bearer redacted');
+  assert.equal(requests[0].options.headers['Idempotency-Key'], 'sms-request-1');
   assert.deepEqual(JSON.parse(requests[0].options.body), {
     from: '+15552223333',
     to: '+15550001111',
@@ -87,4 +92,90 @@ test('returns structured Telnyx SMS errors', async () => {
   assert.equal(result.code, '40301');
   assert.equal(result.reason, 'Sender registration required.');
   assert.equal(result.providerStatus, 403);
+  assert.equal(result.deliveryStatus, 'failed');
+  assert.deepEqual(result.providerResponse, {
+    errors: [{ code: '40301', title: null }],
+  });
+});
+
+test('fails closed before Telnyx fetch when send config is missing', async () => {
+  let called = false;
+  const result = await sendTelnyxSmsMessage({
+    apiKey: '',
+    from: '+15552223333',
+    to: '+15550001111',
+    text: 'Hello',
+    fetchImpl: async () => {
+      called = true;
+      throw new Error('should not send without required config');
+    },
+  });
+
+  assert.equal(called, false);
+  assert.deepEqual(result, {
+    ok: false,
+    code: 'TELNYX_SMS_INPUT_MISSING',
+    reason: 'Telnyx API key, sender number, recipient number, and message text are required.',
+    deliveryStatus: 'failed',
+    providerResponse: {},
+  });
+});
+
+test('returns structured Telnyx network errors without provider payload', async () => {
+  const result = await sendTelnyxSmsMessage({
+    apiKey: 'redacted',
+    from: '+15552223333',
+    to: '+15550001111',
+    text: 'Hello',
+    fetchImpl: async () => {
+      throw new Error('socket timeout');
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'TELNYX_SMS_NETWORK_ERROR');
+  assert.equal(result.reason, 'socket timeout');
+  assert.equal(result.deliveryStatus, 'failed');
+  assert.deepEqual(result.providerResponse, {});
+});
+
+test('redacts Telnyx success payload while preserving provider identifiers and status', async () => {
+  const result = await sendTelnyxSmsMessage({
+    apiKey: 'redacted',
+    from: '+15552223333',
+    to: '+15550001111',
+    text: 'Hello',
+    fetchImpl: async () => ({
+      ok: true,
+      async json() {
+        return {
+          data: {
+            id: 'telnyx-message-1',
+            record_type: 'message',
+            direction: 'outbound',
+            from: { phone_number: '+15552223333' },
+            to: [{ phone_number: '+15550001111', status: 'sent' }],
+            text: 'Hello',
+            webhook_url: 'https://example.invalid/webhook',
+          },
+        };
+      },
+    }),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.providerMessageId, 'telnyx-message-1');
+  assert.equal(result.providerStatus, 'sent');
+  assert.equal(result.deliveryStatus, 'sent');
+  assert.deepEqual(result.providerResponse, {
+    data: {
+      id: 'telnyx-message-1',
+      record_type: 'message',
+      direction: 'outbound',
+      status: null,
+      to: [{ status: 'sent' }],
+    },
+  });
+  assert.equal(JSON.stringify(result.providerResponse).includes('+15550001111'), false);
+  assert.equal(JSON.stringify(result.providerResponse).includes('Hello'), false);
 });

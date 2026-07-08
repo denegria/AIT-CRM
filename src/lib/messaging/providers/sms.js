@@ -10,6 +10,7 @@ export const SMS_BUSINESS_UNIT_MAP_ENV = 'SMS_BUSINESS_UNIT_MAP';
 export const TELNYX_PUBLIC_KEY_ENV = 'TELNYX_PUBLIC_KEY';
 export const TELNYX_API_KEY_ENV = 'TELNYX_API_KEY';
 export const TELNYX_MESSAGING_PROFILE_ID_ENV = 'TELNYX_MESSAGING_PROFILE_ID';
+export const TELNYX_FROM_NUMBER_ENV = 'TELNYX_FROM_NUMBER';
 export const TWILIO_AUTH_TOKEN_ENV = 'TWILIO_AUTH_TOKEN';
 export const SMS_CAMPAIGN_LIVE_SEND_ENABLED_ENV = 'SMS_CAMPAIGN_LIVE_SEND_ENABLED';
 export const SMS_CAMPAIGN_LIVE_SEND_TEST_MODE_ENV = 'SMS_CAMPAIGN_LIVE_SEND_TEST_MODE';
@@ -157,6 +158,7 @@ export function createSmsCampaignSendConfigFromEnv(env = process.env) {
     recipientAllowlist: parseSmsPhoneList(env[SMS_CAMPAIGN_LIVE_SEND_RECIPIENT_ALLOWLIST_ENV]),
     telnyxApiKey: cleanText(env[TELNYX_API_KEY_ENV]),
     telnyxMessagingProfileId: cleanText(env[TELNYX_MESSAGING_PROFILE_ID_ENV]),
+    telnyxFromNumber: normalizeSmsPhone(env[TELNYX_FROM_NUMBER_ENV]),
     productionBlocked,
   };
 }
@@ -382,7 +384,43 @@ function telnyxError(response, body = {}) {
     code: cleanText(firstError?.code) || `TELNYX_HTTP_${response?.status || 'ERROR'}`,
     reason: cleanText(firstError?.detail || firstError?.title || body?.message) || 'Telnyx SMS send failed.',
     providerStatus: response?.status || null,
-    providerResponse: body || {},
+    deliveryStatus: MESSAGE_DELIVERY_STATUSES.FAILED,
+    providerResponse: redactTelnyxProviderResponse(body),
+  };
+}
+
+function telnyxDeliveryStatus(value) {
+  const status = cleanLower(value);
+  if (['queued', 'sending', 'scheduled'].includes(status)) return MESSAGE_DELIVERY_STATUSES.PENDING;
+  if (status === 'sent') return MESSAGE_DELIVERY_STATUSES.SENT;
+  if (status === 'delivered' || status === 'finalized') return MESSAGE_DELIVERY_STATUSES.DELIVERED;
+  if (['failed', 'delivery_failed', 'undelivered'].includes(status)) return MESSAGE_DELIVERY_STATUSES.FAILED;
+  return MESSAGE_DELIVERY_STATUSES.PENDING;
+}
+
+function redactTelnyxProviderResponse(body = {}) {
+  const data = body?.data || null;
+  const firstRecipient = firstValue(data?.to);
+  const errors = Array.isArray(body?.errors)
+    ? body.errors.map((error) => ({
+      code: cleanNullableText(error?.code),
+      title: cleanNullableText(error?.title),
+    }))
+    : undefined;
+
+  return {
+    ...(data ? {
+      data: {
+        id: cleanNullableText(data.id),
+        record_type: cleanNullableText(data.record_type),
+        direction: cleanNullableText(data.direction),
+        status: cleanNullableText(data.status),
+        to: firstRecipient ? [{
+          status: cleanNullableText(firstRecipient.status),
+        }] : [],
+      },
+    } : {}),
+    ...(errors ? { errors } : {}),
   };
 }
 
@@ -392,29 +430,36 @@ export async function sendTelnyxSmsMessage({
   from = '',
   to = '',
   text = '',
+  requestId = '',
   fetchImpl = globalThis.fetch,
 } = {}) {
   const cleanApiKey = cleanText(apiKey);
   const cleanFrom = normalizeSmsPhone(from);
   const cleanTo = normalizeSmsPhone(to);
   const cleanBody = cleanText(text);
-  if (!cleanApiKey || !cleanFrom || !cleanTo || !cleanBody) {
+  const cleanRequestId = cleanText(requestId);
+  if (!cleanApiKey || !cleanFrom || !cleanTo || !cleanBody || typeof fetchImpl !== 'function') {
     return {
       ok: false,
       code: 'TELNYX_SMS_INPUT_MISSING',
       reason: 'Telnyx API key, sender number, recipient number, and message text are required.',
+      deliveryStatus: MESSAGE_DELIVERY_STATUSES.FAILED,
+      providerResponse: {},
     };
   }
 
   let response;
   let body = {};
   try {
+    const headers = {
+      Authorization: `Bearer ${cleanApiKey}`,
+      'Content-Type': 'application/json',
+    };
+    if (cleanRequestId) headers['Idempotency-Key'] = cleanRequestId;
+
     response = await fetchImpl('https://api.telnyx.com/v2/messages', {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${cleanApiKey}`,
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         from: cleanFrom,
         to: cleanTo,
@@ -428,6 +473,7 @@ export async function sendTelnyxSmsMessage({
       ok: false,
       code: 'TELNYX_SMS_NETWORK_ERROR',
       reason: error?.message || 'Telnyx SMS network request failed.',
+      deliveryStatus: MESSAGE_DELIVERY_STATUSES.FAILED,
       providerResponse: {},
     };
   }
@@ -435,11 +481,13 @@ export async function sendTelnyxSmsMessage({
   if (!response.ok) return telnyxError(response, body);
 
   const data = body?.data || {};
+  const providerStatus = cleanText(firstValue(data.to)?.status || data.status || 'queued');
   return {
     ok: true,
     providerMessageId: cleanText(data.id),
-    providerStatus: cleanText(firstValue(data.to)?.status || data.status || 'queued'),
-    providerResponse: body,
+    providerStatus,
+    deliveryStatus: telnyxDeliveryStatus(providerStatus),
+    providerResponse: redactTelnyxProviderResponse(body),
   };
 }
 

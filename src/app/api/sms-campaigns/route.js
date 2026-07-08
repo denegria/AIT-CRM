@@ -231,15 +231,17 @@ export async function POST(request) {
           testSendMode: sendConfig.testSendMode,
           providerSendReady: sendConfig.provider === 'telnyx'
             && Boolean(sendConfig.telnyxApiKey)
+            && Boolean(campaign.senderAccountId || sendConfig.telnyxFromNumber)
             && sendConfig.recipientAllowlist.length > 0,
           maxLiveRecipients: sendConfig.maxRecipients,
           allowedRecipientPhones: sendConfig.recipientAllowlist,
           sendSmsMessage: async ({ campaign: launchCampaign, recipient, text }) => sendTelnyxSmsMessage({
             apiKey: sendConfig.telnyxApiKey,
             messagingProfileId: sendConfig.telnyxMessagingProfileId,
-            from: launchCampaign.senderAccountId,
+            from: launchCampaign.senderAccountId || sendConfig.telnyxFromNumber,
             to: recipient.normalizedPhone || recipient.phone,
             text,
+            requestId: `${launchCampaign.id}:${recipient.contactId || recipient.leadId || recipient.normalizedPhone || recipient.phone}`,
           }),
         });
         return NextResponse.json(result, { status: result.policy?.blocked ? 409 : 200 });
