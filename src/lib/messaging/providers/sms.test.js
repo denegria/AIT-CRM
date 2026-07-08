@@ -5,6 +5,7 @@ import {
   createSmsCampaignSendConfigFromEnv,
   flattenSmsProviderEvents,
   parseTelnyxWebhookPayloadText,
+  retrieveTelnyxSmsMessage,
   sendTelnyxSmsMessage,
   validateTelnyxWebhookSignature,
 } from './sms.js';
@@ -182,6 +183,65 @@ test('redacts Telnyx success payload while preserving provider identifiers and s
   });
   assert.equal(JSON.stringify(result.providerResponse).includes('+15550001111'), false);
   assert.equal(JSON.stringify(result.providerResponse).includes('Hello'), false);
+});
+
+test('retrieves Telnyx SMS delivery status by provider message id', async () => {
+  const requests = [];
+  const result = await retrieveTelnyxSmsMessage({
+    apiKey: 'redacted',
+    messageId: 'telnyx-message-1',
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return {
+        ok: true,
+        async json() {
+          return {
+            data: {
+              id: 'telnyx-message-1',
+              record_type: 'message',
+              direction: 'outbound',
+              status: 'sent',
+              from: { phone_number: '+15552223333' },
+              to: [{ phone_number: '+15550001111', status: 'delivered' }],
+              text: 'Hello',
+            },
+          };
+        },
+      };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.providerMessageId, 'telnyx-message-1');
+  assert.equal(result.providerStatus, 'delivered');
+  assert.equal(result.deliveryStatus, 'delivered');
+  assert.equal(requests[0].url, 'https://api.telnyx.com/v2/messages/telnyx-message-1');
+  assert.equal(requests[0].options.method, 'GET');
+  assert.equal(requests[0].options.headers.Authorization, 'Bearer redacted');
+  assert.equal(JSON.stringify(result.providerResponse).includes('+15550001111'), false);
+  assert.equal(JSON.stringify(result.providerResponse).includes('Hello'), false);
+});
+
+test('returns structured Telnyx SMS retrieve errors', async () => {
+  const result = await retrieveTelnyxSmsMessage({
+    apiKey: 'redacted',
+    messageId: 'telnyx-message-1',
+    fetchImpl: async () => ({
+      ok: false,
+      status: 404,
+      async json() {
+        return { errors: [{ code: '10010', title: 'Not found', detail: 'Message not found.' }] };
+      },
+    }),
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, '10010');
+  assert.equal(result.reason, 'Message not found.');
+  assert.equal(result.deliveryStatus, 'failed');
+  assert.deepEqual(result.providerResponse, {
+    errors: [{ code: '10010', title: 'Not found' }],
+  });
 });
 
 function signedTelnyxFixture() {

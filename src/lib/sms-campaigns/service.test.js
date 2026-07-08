@@ -8,6 +8,7 @@ import {
   createSmsCampaign,
   evaluateSmsCampaignLaunchPolicy,
   loadSmsCampaignAudienceCandidates,
+  refreshSmsCampaignDeliveryStatuses,
   requestSmsCampaignLaunch,
 } from './service.js';
 import { SMS_CONSENT_STATUSES } from '../communication-consent/sms-consent.js';
@@ -129,6 +130,17 @@ function createServiceClient({ campaign = campaignRow(), candidates = audienceRo
         }
         if (normalized.startsWith('select c.*, bu.name as business_unit_name')) {
           return { rows: [campaign] };
+        }
+        if (normalized.startsWith('select id::text, normalized_phone, phone, delivery_status, provider_message_id')) {
+          return {
+            rows: [{
+              id: 'recipient-1',
+              normalized_phone: '+15550001111',
+              phone: '+15550001111',
+              delivery_status: 'pending',
+              provider_message_id: 'telnyx-message-1',
+            }],
+          };
         }
         if (normalized.startsWith('select c.id::text as contact_id')) {
           return { rows: candidates };
@@ -417,4 +429,49 @@ test('test send mode skips full provider and compliance readiness checks', () =>
   });
 
   assert.deepEqual(policy.blockers, []);
+});
+
+test('refreshes campaign delivery statuses from Telnyx message details', async () => {
+  const { client, calls } = createServiceClient({
+    campaign: campaignRow({
+      status: SMS_CAMPAIGN_STATUSES.COMPLETED,
+      sender_account_id: '+15552223333',
+    }),
+  });
+  const retrieved = [];
+
+  const result = await refreshSmsCampaignDeliveryStatuses(client, {
+    organizationId: 'org-1',
+    campaignId: 'campaign-1',
+    actorUserId: 'user-1',
+    retrieveSmsMessage: async ({ messageId }) => {
+      retrieved.push(messageId);
+      return {
+        ok: true,
+        providerMessageId: messageId,
+        providerStatus: 'delivered',
+        deliveryStatus: 'delivered',
+        providerResponse: {
+          data: {
+            id: messageId,
+            to: [{ status: 'delivered' }],
+          },
+        },
+      };
+    },
+  });
+
+  assert.deepEqual(retrieved, ['telnyx-message-1']);
+  assert.equal(result.refreshResults.length, 1);
+  assert.equal(result.refreshResults[0].deliveryStatus, 'delivered');
+
+  const recipientUpdate = calls.find((call) => call.sql.startsWith('update sms_campaign_recipients'));
+  assert.equal(recipientUpdate.params[0], 'delivered');
+  assert.equal(recipientUpdate.params[2], 'org-1');
+  assert.equal(recipientUpdate.params[4], 'recipient-1');
+
+  const event = calls.filter((call) => call.sql.startsWith('insert into sms_campaign_events')).at(-1);
+  assert.equal(event.params[2], 'updated');
+  assert.equal(event.params[3], SMS_CAMPAIGN_STATUSES.COMPLETED);
+  assert.equal(event.params[4], SMS_CAMPAIGN_STATUSES.COMPLETED);
 });

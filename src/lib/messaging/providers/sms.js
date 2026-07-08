@@ -486,6 +486,11 @@ function telnyxDeliveryStatus(value) {
   return MESSAGE_DELIVERY_STATUSES.PENDING;
 }
 
+function telnyxProviderStatus(body = {}) {
+  const data = body?.data || {};
+  return cleanText(firstValue(data.to)?.status || data.status || 'queued');
+}
+
 function redactTelnyxProviderResponse(body = {}) {
   const data = body?.data || null;
   const firstRecipient = firstValue(data?.to);
@@ -568,11 +573,60 @@ export async function sendTelnyxSmsMessage({
 
   if (!response.ok) return telnyxError(response, body);
 
-  const data = body?.data || {};
-  const providerStatus = cleanText(firstValue(data.to)?.status || data.status || 'queued');
+  const providerStatus = telnyxProviderStatus(body);
   return {
     ok: true,
-    providerMessageId: cleanText(data.id),
+    providerMessageId: cleanText(body?.data?.id),
+    providerStatus,
+    deliveryStatus: telnyxDeliveryStatus(providerStatus),
+    providerResponse: redactTelnyxProviderResponse(body),
+  };
+}
+
+export async function retrieveTelnyxSmsMessage({
+  apiKey = '',
+  messageId = '',
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const cleanApiKey = cleanText(apiKey);
+  const cleanMessageId = cleanText(messageId);
+  if (!cleanApiKey || !cleanMessageId || typeof fetchImpl !== 'function') {
+    return {
+      ok: false,
+      code: 'TELNYX_SMS_RETRIEVE_INPUT_MISSING',
+      reason: 'Telnyx API key and provider message id are required.',
+      deliveryStatus: MESSAGE_DELIVERY_STATUSES.FAILED,
+      providerResponse: {},
+    };
+  }
+
+  let response;
+  let body = {};
+  try {
+    response = await fetchImpl(`https://api.telnyx.com/v2/messages/${encodeURIComponent(cleanMessageId)}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${cleanApiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    body = await response.json().catch(() => ({}));
+  } catch (error) {
+    return {
+      ok: false,
+      code: 'TELNYX_SMS_RETRIEVE_NETWORK_ERROR',
+      reason: error?.message || 'Telnyx SMS retrieve request failed.',
+      deliveryStatus: MESSAGE_DELIVERY_STATUSES.FAILED,
+      providerResponse: {},
+    };
+  }
+
+  if (!response.ok) return telnyxError(response, body);
+
+  const providerStatus = telnyxProviderStatus(body);
+  return {
+    ok: true,
+    providerMessageId: cleanText(body?.data?.id) || cleanMessageId,
     providerStatus,
     deliveryStatus: telnyxDeliveryStatus(providerStatus),
     providerResponse: redactTelnyxProviderResponse(body),

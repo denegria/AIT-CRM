@@ -5,6 +5,7 @@ import { sessionHasAdminRole } from '@/lib/auth/admin-policy.js';
 import { isUuid } from '@/lib/crm/validation.js';
 import {
   createSmsCampaignSendConfigFromEnv,
+  retrieveTelnyxSmsMessage,
   sendTelnyxSmsMessage,
 } from '@/lib/messaging/providers/sms.js';
 import {
@@ -15,6 +16,7 @@ import {
   loadSmsCampaign,
   previewAndSnapshotSmsCampaign,
   previewSmsCampaignAudience,
+  refreshSmsCampaignDeliveryStatuses,
   requestSmsCampaignLaunch,
   scheduleSmsCampaign,
 } from '@/lib/sms-campaigns/service.js';
@@ -245,6 +247,26 @@ export async function POST(request) {
           }),
         });
         return NextResponse.json(result, { status: result.policy?.blocked ? 409 : 200 });
+      }
+
+      if (action === 'refresh_delivery') {
+        const sendConfig = createSmsCampaignSendConfigFromEnv(process.env);
+        if (sendConfig.provider !== 'telnyx' || !sendConfig.telnyxApiKey) {
+          return NextResponse.json(
+            { error: 'Telnyx credentials are required before refreshing SMS delivery status.' },
+            { status: 503 },
+          );
+        }
+        const result = await refreshSmsCampaignDeliveryStatuses(client, {
+          organizationId: session.user.organizationId,
+          campaignId: campaign.id,
+          actorUserId: session.user.id,
+          retrieveSmsMessage: async ({ messageId }) => retrieveTelnyxSmsMessage({
+            apiKey: sendConfig.telnyxApiKey,
+            messageId,
+          }),
+        });
+        return NextResponse.json(result);
       }
 
       return NextResponse.json({ error: 'Unsupported SMS campaign action.' }, { status: 400 });

@@ -985,3 +985,114 @@ export async function requestSmsCampaignLaunch(client, {
     throw error;
   }
 }
+
+export async function refreshSmsCampaignDeliveryStatuses(client, {
+  organizationId,
+  campaignId,
+  actorUserId = null,
+  retrieveSmsMessage = null,
+} = {}) {
+  if (typeof retrieveSmsMessage !== 'function') {
+    throw new Error('SMS retrieve function is required before refreshing delivery status.');
+  }
+
+  const campaign = await loadSmsCampaign(client, { organizationId, campaignId });
+  if (!campaign) throw new Error('SMS campaign not found.');
+
+  const recipientResult = await client.query(
+    `
+      select id::text, normalized_phone, phone, delivery_status, provider_message_id
+      from sms_campaign_recipients
+      where organization_id = $1
+        and campaign_id = $2
+        and eligibility_status = 'included'
+        and provider = 'telnyx'
+        and provider_message_id is not null
+      order by created_at asc
+    `,
+    [organizationId, campaign.id],
+  );
+
+  const refreshResults = [];
+  for (const recipient of recipientResult.rows) {
+    const providerResult = await retrieveSmsMessage({ messageId: recipient.provider_message_id });
+    refreshResults.push({
+      recipientId: recipient.id,
+      phone: recipient.normalized_phone || recipient.phone || null,
+      ok: Boolean(providerResult?.ok),
+      providerMessageId: recipient.provider_message_id,
+      providerStatus: providerResult?.providerStatus || null,
+      deliveryStatus: providerResult?.deliveryStatus || (providerResult?.ok ? MESSAGE_DELIVERY_STATUSES.PENDING : MESSAGE_DELIVERY_STATUSES.FAILED),
+      error: providerResult?.ok ? null : {
+        code: providerResult?.code || 'sms_status_refresh_failed',
+        message: providerResult?.reason || 'SMS provider status refresh failed.',
+      },
+      providerResponse: providerResult?.providerResponse || {},
+    });
+  }
+
+  await client.query('begin');
+  try {
+    for (const result of refreshResults) {
+      await client.query(
+        `
+          update sms_campaign_recipients
+          set
+            delivery_status = $1,
+            metadata_json = metadata_json || $2::jsonb,
+            updated_at = now()
+          where organization_id = $3
+            and campaign_id = $4
+            and id = $5
+        `,
+        [
+          result.deliveryStatus,
+          JSON.stringify({
+            providerStatus: result.providerStatus,
+            statusRefresh: {
+              ok: result.ok,
+              error: result.error,
+              providerResponse: result.providerResponse,
+            },
+          }),
+          organizationId,
+          campaign.id,
+          result.recipientId,
+        ],
+      );
+    }
+
+    await recordSmsCampaignEvent(client, {
+      organizationId,
+      campaignId: campaign.id,
+      eventType: SMS_CAMPAIGN_EVENT_TYPES.UPDATED,
+      fromStatus: campaign.status,
+      toStatus: campaign.status,
+      actorUserId,
+      message: 'SMS campaign delivery status refreshed from provider.',
+      metadataJson: {
+        refreshedCount: refreshResults.length,
+        statusCounts: refreshResults.reduce((counts, result) => {
+          counts[result.deliveryStatus] = (counts[result.deliveryStatus] || 0) + 1;
+          return counts;
+        }, {}),
+        providerMessages: refreshResults.map((result) => ({
+          ok: result.ok,
+          phone: result.phone,
+          providerMessageId: result.providerMessageId,
+          providerStatus: result.providerStatus,
+          deliveryStatus: result.deliveryStatus,
+          error: result.error,
+        })),
+      },
+    });
+    await client.query('commit');
+  } catch (error) {
+    try {
+      await client.query('rollback');
+    } catch {}
+    throw error;
+  }
+
+  return { campaign, refreshResults };
+}
