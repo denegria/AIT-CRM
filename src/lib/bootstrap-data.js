@@ -487,14 +487,20 @@ function mapTasks(rows, contactLookup) {
     leadId: row.leadId || '',
     workOrderId: row.workOrderId || '',
     client: contactLookup.get(row.contactId)?.name || '',
+    ownerUserId: row.ownerUserId || '',
     assignedTo: row.ownerUserId || '',
+    dueAt: row.dueAt?.toISOString?.() || row.dueAt || '',
     dueDate: toIsoDate(row.dueAt),
     completed: Boolean(row.completedAt || row.status === TASK_STATUSES.COMPLETED),
+    completedAt: row.completedAt?.toISOString?.() || row.completedAt || '',
     priority: toDisplayPriority(row.priority),
     taskType: row.taskType,
+    status: row.status,
     taskStatus: row.status,
     sourceType: row.sourceType || '',
     sourceLabel: row.sourceLabel || '',
+    createdAt: row.createdAt?.toISOString?.() || row.createdAt || '',
+    updatedAt: row.updatedAt?.toISOString?.() || row.updatedAt || '',
   }));
 }
 

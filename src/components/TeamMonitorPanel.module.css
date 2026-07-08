@@ -1,0 +1,510 @@
+.kpiGrid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  margin-bottom: 18px;
+}
+
+.kpiCard,
+.previewCard,
+.tasksPanel,
+.rosterCard,
+.detailPanel,
+.railCard {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.kpiCard {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  min-height: 82px;
+  padding: 16px;
+}
+
+.kpiIcon {
+  align-items: center;
+  border-radius: 999px;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 44px;
+  justify-content: center;
+  width: 44px;
+}
+
+.tone_success { background: var(--success-muted); color: var(--success); }
+.tone_accent { background: var(--accent-muted); color: var(--accent); }
+.tone_danger { background: var(--danger-muted); color: var(--danger); }
+.tone_warning { background: var(--warning-muted); color: var(--warning); }
+
+.kpiLabel {
+  color: var(--text-secondary);
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+.kpiValue {
+  color: var(--text-primary);
+  display: block;
+  font-size: var(--text-2xl);
+  line-height: 1.1;
+  margin-top: 4px;
+}
+
+.sectionHeader {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 16px 18px 14px;
+}
+
+.sectionHeader h2 {
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+  line-height: 1.2;
+  margin: 0;
+}
+
+.sectionHeader p {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  margin: 4px 0 0;
+}
+
+.previewCard {
+  min-width: 0;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.rosterTable,
+.taskTable {
+  border-collapse: collapse;
+  min-width: 760px;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.rosterTable th,
+.rosterTable td,
+.taskTable th,
+.taskTable td {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 12px 14px;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.rosterTable th,
+.taskTable th {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 750;
+}
+
+.rosterTable td,
+.taskTable td {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.rosterTable tbody tr {
+  cursor: pointer;
+  transition: background var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.rosterTable tbody tr:hover,
+.selectedRow {
+  background: var(--bg-hover);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.employeeCell,
+.statusCell,
+.progressCell,
+.signal,
+.detailHeader,
+.detailTask {
+  align-items: center;
+  display: flex;
+}
+
+.employeeCell {
+  gap: 10px;
+  min-width: 0;
+}
+
+.employeeCell strong,
+.detailHeader strong {
+  color: var(--text-primary);
+  display: block;
+  font-size: var(--text-sm);
+  line-height: 1.2;
+}
+
+.employeeCell small,
+.detailHeader small,
+.statusCell small,
+.detailTask small {
+  color: var(--text-muted);
+  display: block;
+  font-size: var(--text-xs);
+  margin-top: 3px;
+}
+
+.avatar {
+  align-items: center;
+  background: var(--accent-muted);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--accent);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: var(--text-xs);
+  font-weight: 800;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.statusCell {
+  gap: 8px;
+}
+
+.dot {
+  border-radius: 999px;
+  display: inline-block;
+  flex: 0 0 auto;
+  height: 8px;
+  width: 8px;
+}
+
+.dotSuccess { background: var(--success); }
+.dotWarning { background: var(--warning); }
+.dotDanger { background: var(--danger); }
+.dotMuted { background: var(--border-default); }
+
+.progressCell {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.progressTrack {
+  background: var(--bg-tertiary);
+  border-radius: 999px;
+  height: 7px;
+  overflow: hidden;
+  width: 112px;
+}
+
+.progressTrack span {
+  background: var(--accent);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.softCount,
+.dangerCount,
+.zeroCount {
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  font-weight: 750;
+  justify-content: center;
+  min-width: 28px;
+  padding: 3px 8px;
+}
+
+.softCount {
+  background: var(--warning-muted);
+  color: var(--warning);
+}
+
+.dangerCount {
+  background: var(--danger-muted);
+  color: var(--danger);
+}
+
+.zeroCount {
+  color: var(--text-secondary);
+}
+
+.signal {
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.lowData {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  padding: 10px 18px 14px;
+}
+
+.monitorSurface {
+  display: grid;
+  gap: 18px;
+}
+
+.fullLayout {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 330px);
+}
+
+.filterRow {
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  gap: 10px;
+  padding: 14px 16px;
+}
+
+.pill,
+.activePill {
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  padding: 7px 14px;
+}
+
+.activePill {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.divider {
+  background: var(--border-default);
+  height: 24px;
+  width: 1px;
+}
+
+.tableFooter {
+  color: var(--text-muted);
+  display: flex;
+  flex-wrap: wrap;
+  font-size: var(--text-xs);
+  gap: 12px;
+  padding: 12px 16px 0;
+}
+
+.detailPanel {
+  align-self: start;
+  padding: 18px;
+}
+
+.detailHeader {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--border-subtle);
+  gap: 12px;
+  padding-bottom: 16px;
+}
+
+.detailSection {
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 16px 0;
+}
+
+.detailTitle {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.detailTask {
+  gap: 8px;
+  justify-content: space-between;
+  min-height: 32px;
+}
+
+.detailTask span {
+  color: var(--text-secondary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emptyDetail,
+.emptyCell {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.emptyCell {
+  padding: 18px !important;
+  text-align: center !important;
+}
+
+.detailActions {
+  display: flex;
+  gap: 10px;
+  padding-top: 16px;
+}
+
+.tasksPanel {
+  margin-top: 18px;
+}
+
+.controlRow {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 12px 18px;
+}
+
+.segmented {
+  align-items: center;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  overflow: hidden;
+}
+
+.segmented button {
+  background: transparent;
+  border: 0;
+  border-right: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 750;
+  min-height: 34px;
+  padding: 0 14px;
+}
+
+.segmented button:last-child {
+  border-right: 0;
+}
+
+.segmented .activeSegment {
+  background: var(--accent);
+  color: #fff;
+}
+
+.taskTableWrap {
+  overflow-x: auto;
+}
+
+.taskTable {
+  min-width: 680px;
+}
+
+.taskTable a {
+  color: var(--accent);
+  font-weight: 750;
+}
+
+.dashboardLayout {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
+}
+
+.rightRail {
+  display: grid;
+  gap: 18px;
+}
+
+.railCard {
+  padding: 16px;
+}
+
+.railTitle {
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+  font-weight: 800;
+  margin-bottom: 12px;
+}
+
+.sourceList,
+.calendarList {
+  display: grid;
+  gap: 10px;
+}
+
+.sourceItem,
+.calendarItem {
+  align-items: center;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  padding-bottom: 10px;
+}
+
+.sourceItem:last-child,
+.calendarItem:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.sourceItem span,
+.calendarItem span {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.sourceItem strong,
+.calendarItem strong {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 1120px) {
+  .kpiGrid {
+    grid-template-columns: repeat(2, minmax(160px, 1fr));
+  }
+
+  .dashboardLayout,
+  .fullLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 680px) {
+  .kpiGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .sectionHeader,
+  .controlRow,
+  .filterRow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .segmented {
+    display: grid;
+    width: 100%;
+  }
+
+  .segmented button {
+    border-bottom: 1px solid var(--border-subtle);
+    border-right: 0;
+  }
+
+  .segmented button:last-child {
+    border-bottom: 0;
+  }
+
+  .detailActions {
+    flex-direction: column;
+  }
+}

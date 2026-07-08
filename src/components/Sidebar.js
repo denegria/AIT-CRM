@@ -9,13 +9,15 @@ import { canUseWorkOrdersForBusinessUnit, coordinatorUiPolicyForUser } from '@/l
 import { isClientAccountBusinessUnit } from '@/lib/crm/lifecycle';
 import s from './Sidebar.module.css';
 
-import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, CloudSun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal, Inbox, Megaphone } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, CloudSun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal, Inbox, Megaphone, UsersRound } from 'lucide-react';
+import { canUseTeamMonitor } from '@/lib/team-monitor.js';
 
 const nav = [
   { href: '/', label: 'Dashboard', Icon: LayoutDashboard },
   { href: '/contacts', label: 'Contacts', Icon: Users },
   { href: '/pipeline', label: 'Pipeline', Icon: Columns3 },
   { href: '/tasks', label: 'Tasks', Icon: ListTodo },
+  { href: '/team-monitor', label: 'Team Monitor', Icon: UsersRound },
   { href: '/inbox', label: 'Inbox', Icon: Inbox },
   { href: '/sms-campaigns', label: 'SMS Campaigns', Icon: Megaphone },
   { href: '/import-review', label: 'Import Review', Icon: Database },
@@ -114,6 +116,7 @@ export default function Sidebar() {
   const canManageSmsCampaigns = Boolean(access.canManageSmsCampaigns);
   const hasBusinessUnitScope = accessibleBusinessUnits?.length > 0;
   const divisionBrand = useMemo(() => divisionBrandFor(currentBusinessUnit), [currentBusinessUnit]);
+  const monitorCurrentUser = useMemo(() => currentUser || { id: 'emp-1', primaryRoleKey: role }, [currentUser, role]);
   const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
   const canUseWorkOrders = useMemo(
     () => canUseWorkOrdersForBusinessUnit(currentUser, currentBusinessUnit),
@@ -134,6 +137,7 @@ export default function Sidebar() {
   const visibleNav = useMemo(() => scopedNav.filter(({ href }) => {
     if (coordinatorUiPolicy.isRegularCoordinator && !regularCoordinatorNav.has(href)) return false;
     if (href === '/work-orders' && !canUseWorkOrders) return false;
+    if (href === '/team-monitor' && !canUseTeamMonitor(monitorCurrentUser)) return false;
     if (href === '/settings' && !access.canReadSettings) return false;
     if (href === '/comms-ops' && !access.canReadSettings) return false;
     if (href === '/import-review' && !access.canReadImportReview) return false;
@@ -141,7 +145,7 @@ export default function Sidebar() {
     if (href === '/financials' && (!access.canReadFinancials || !canUseFinancialsWorkspace)) return false;
     if (href === '/sms-campaigns' && !canManageSmsCampaigns) return false;
     return true;
-  }), [access.canReadFinancials, access.canReadImportReview, access.canReadReports, access.canReadSettings, canManageSmsCampaigns, canUseFinancialsWorkspace, canUseWorkOrders, coordinatorUiPolicy.isRegularCoordinator, scopedNav]);
+  }), [access.canReadFinancials, access.canReadImportReview, access.canReadReports, access.canReadSettings, canManageSmsCampaigns, canUseFinancialsWorkspace, canUseWorkOrders, coordinatorUiPolicy.isRegularCoordinator, monitorCurrentUser, scopedNav]);
 
   const mobileNav = useMemo(() => {
     if (visibleNav.length <= 5) {
