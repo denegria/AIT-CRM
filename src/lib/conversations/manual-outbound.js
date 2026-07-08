@@ -23,6 +23,10 @@ import {
   sendMetaWhatsAppTextMessage,
 } from '../messaging/providers/meta.js';
 import { normalizeSmsPhone, sendTelnyxSmsMessage } from '../messaging/providers/sms.js';
+import {
+  SMS_CONSENT_STATUSES,
+  loadSmsConsentForContact,
+} from '../communication-consent/sms-consent.js';
 
 export const MANUAL_OUTBOUND_BLOCK_CODES = Object.freeze({
   CHANNEL_UNSUPPORTED: 'channel_unsupported',
@@ -43,6 +47,7 @@ export const MANUAL_OUTBOUND_BLOCK_CODES = Object.freeze({
   TEMPLATE_PROVIDER_NAME_MISSING: 'template_provider_name_missing',
   SMS_SEND_DISABLED: 'sms_send_disabled',
   SMS_RECIPIENT_NOT_ALLOWLISTED: 'sms_recipient_not_allowlisted',
+  SMS_OPTED_OUT: 'sms_opted_out',
 });
 
 const SUPPORTED_CHANNELS = new Set([
@@ -198,6 +203,8 @@ export function evaluateManualOutboundGuardrails({
   conversation,
   channelSetting,
   template = null,
+  context = {},
+  smsConsent = null,
   request,
   metaConfig = {},
   smsConfig = {},
@@ -241,13 +248,18 @@ export function evaluateManualOutboundGuardrails({
       reasons.push(block(MANUAL_OUTBOUND_BLOCK_CODES.PROVIDER_CONFIG_MISSING, token.reason || 'WhatsApp provider token is missing.'));
     }
   } else if (channel === CONVERSATION_CHANNELS.SMS) {
-    if (conversation.provider !== CONVERSATION_PROVIDERS.TELNYX) {
+    const resolvedSmsConsent = smsConsent || context.smsConsent || null;
+    const smsConsentStatus = cleanLower(resolvedSmsConsent?.consent_status || resolvedSmsConsent?.consentStatus);
+    if (smsConsentStatus === SMS_CONSENT_STATUSES.OPTED_OUT) {
+      reasons.push(block(MANUAL_OUTBOUND_BLOCK_CODES.SMS_OPTED_OUT, 'Contact has opted out of SMS.'));
+    }
+    if (conversation?.provider !== CONVERSATION_PROVIDERS.TELNYX) {
       reasons.push(block(MANUAL_OUTBOUND_BLOCK_CODES.CHANNEL_CONFIG_MISSING, 'SMS manual sends require a Telnyx conversation.'));
     }
     if (!smsConfig.telnyxApiKey) {
       reasons.push(block(MANUAL_OUTBOUND_BLOCK_CODES.PROVIDER_CONFIG_MISSING, 'TELNYX_API_KEY is required before SMS manual sends.'));
     }
-    if (!conversation.provider_account_id && !smsConfig.telnyxFromNumber) {
+    if (!conversation?.provider_account_id && !smsConfig.telnyxFromNumber) {
       reasons.push(block(MANUAL_OUTBOUND_BLOCK_CODES.PROVIDER_CONFIG_MISSING, 'A Telnyx sender number is required before SMS manual sends.'));
     }
     if (!smsConfig.liveSendEnabled && !smsConfig.testSendMode) {
@@ -387,7 +399,7 @@ export async function loadManualOutboundContext(client, {
   businessUnitIds = null,
 }) {
   const businessUnitId = contact.primaryBusinessUnitId || contact.primary_business_unit_id || null;
-  const [conversation, channelSetting, template] = await Promise.all([
+  const [conversation, channelSetting, template, smsConsent] = await Promise.all([
     findLatestConversation(client, {
       organizationId,
       contactId: contact.id,
@@ -402,9 +414,16 @@ export async function loadManualOutboundContext(client, {
       businessUnitId,
       businessUnitIds,
     }),
+    channel === CONVERSATION_CHANNELS.SMS
+      ? loadSmsConsentForContact(client, {
+        organizationId,
+        contactId: contact.id,
+        businessUnitId,
+      })
+      : Promise.resolve(null),
   ]);
 
-  return { conversation, channelSetting, template };
+  return { conversation, channelSetting, template, smsConsent };
 }
 
 function manualTemplateVariables(contact = {}) {

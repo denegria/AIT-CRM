@@ -13,6 +13,9 @@ import {
   renderManualTemplateBody,
   sendManualOutboundMessage,
 } from './manual-outbound.js';
+import {
+  SMS_CONSENT_STATUSES,
+} from '../communication-consent/sms-consent.js';
 
 const NOW = new Date('2026-05-26T15:00:00.000Z');
 const META_CONFIG = {
@@ -285,6 +288,34 @@ test('blocks SMS sends when the recipient is outside the staging allowlist', () 
   );
 });
 
+test('blocks SMS manual sends after provider STOP opt-out is recorded', () => {
+  const result = evaluateManualOutboundGuardrails({
+    contact: baseContact(),
+    conversation: baseSmsConversation(),
+    channelSetting: baseSetting(),
+    context: {
+      smsConsent: {
+        consent_status: SMS_CONSENT_STATUSES.OPTED_OUT,
+        opt_out_source: 'provider_webhook',
+        opt_out_reference: 'telnyx-message-1',
+      },
+    },
+    smsConfig: SMS_CONFIG,
+    request: normalizeManualOutboundRequest({
+      channel: CONVERSATION_CHANNELS.SMS,
+      text: 'Thanks for reaching out',
+      requestId: 'request-1',
+    }),
+    now: NOW,
+  });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.reasons.filter((reason) => reason.code === MANUAL_OUTBOUND_BLOCK_CODES.SMS_OPTED_OUT), [{
+    code: MANUAL_OUTBOUND_BLOCK_CODES.SMS_OPTED_OUT,
+    message: 'Contact has opted out of SMS.',
+  }]);
+});
+
 test('blocks SMS sends without recipient identity', () => {
   const result = evaluateManualOutboundGuardrails({
     contact: baseContact(),
@@ -307,6 +338,25 @@ test('blocks SMS sends without recipient identity', () => {
     result.reasons.some((reason) => reason.code === MANUAL_OUTBOUND_BLOCK_CODES.RECIPIENT_MISSING),
     true,
   );
+});
+
+test('blocks SMS sends without throwing when no conversation is available', () => {
+  const result = evaluateManualOutboundGuardrails({
+    contact: baseContact(),
+    conversation: null,
+    channelSetting: baseSetting(),
+    smsConfig: SMS_CONFIG,
+    request: normalizeManualOutboundRequest({
+      channel: CONVERSATION_CHANNELS.SMS,
+      text: 'Thanks for reaching out',
+      requestId: 'request-1',
+    }),
+    now: NOW,
+  });
+  const codes = result.reasons.map((reason) => reason.code);
+
+  assert.equal(result.ok, false);
+  assert.equal(codes.includes(MANUAL_OUTBOUND_BLOCK_CODES.RECIPIENT_MISSING), true);
 });
 
 test('blocks by default when channel config, recipient identity, or consent posture is unsafe', () => {
