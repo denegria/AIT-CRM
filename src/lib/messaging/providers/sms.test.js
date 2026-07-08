@@ -5,8 +5,11 @@ import {
   createSmsCampaignSendConfigFromEnv,
   flattenSmsProviderEvents,
   parseTelnyxWebhookPayloadText,
+  retrieveTelnyx10dlcPhoneNumberCampaign,
+  retrieveTelnyxPhoneNumberMessagingSettings,
   retrieveTelnyxSmsMessage,
   sendTelnyxSmsMessage,
+  smsPhoneDiagnostic,
   validateTelnyxWebhookSignature,
 } from './sms.js';
 
@@ -264,6 +267,128 @@ test('returns structured Telnyx SMS retrieve errors', async () => {
   assert.equal(result.deliveryStatus, 'failed');
   assert.deepEqual(result.providerResponse, {
     errors: [{ code: '10010', title: 'Not found' }],
+  });
+});
+
+test('redacts phone numbers in Telnyx sender messaging diagnostics', async () => {
+  const requests = [];
+  const result = await retrieveTelnyxPhoneNumberMessagingSettings({
+    apiKey: 'redacted',
+    phoneNumber: '(555) 222-3333',
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return {
+            data: {
+              record_type: 'messaging_settings',
+              id: '1293384261075731499',
+              phone_number: '+15552223333',
+              messaging_profile_id: 'profile-1',
+              country_code: 'US',
+              type: 'local',
+              traffic_type: 'A2P',
+              messaging_product: 'A2P',
+              eligible_messaging_products: ['A2P'],
+              health: {
+                message_count: 3,
+                inbound_outbound_ratio: 0.5,
+                success_ratio: 0.25,
+                spam_ratio: 0,
+              },
+              features: {
+                sms: {
+                  domestic_two_way: true,
+                  international_inbound: false,
+                  international_outbound: false,
+                },
+                mms: null,
+              },
+              created_at: '2026-07-01T00:00:00Z',
+              updated_at: '2026-07-02T00:00:00Z',
+            },
+          };
+        },
+      };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(requests[0].url, 'https://api.telnyx.com/v2/phone_numbers/%2B15552223333/messaging');
+  assert.equal(requests[0].options.method, 'GET');
+  assert.deepEqual(result.providerResponse.data.phone_number, {
+    present: true,
+    last4: '3333',
+    digitCount: 11,
+    countryCode: '+1',
+    e164Like: true,
+  });
+  assert.equal(result.providerResponse.data.messaging_profile_id, 'profile-1');
+  assert.equal(result.providerResponse.data.features.sms.domestic_two_way, true);
+  assert.equal(JSON.stringify(result.providerResponse).includes('+15552223333'), false);
+});
+
+test('retrieves 10DLC phone number campaign assignment without leaking full number', async () => {
+  const requests = [];
+  const result = await retrieveTelnyx10dlcPhoneNumberCampaign({
+    apiKey: 'redacted',
+    phoneNumber: '+15552223333',
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return {
+            phoneNumber: '+15552223333',
+            campaignId: 'campaign-1',
+            assignmentStatus: 'ASSIGNED',
+            failureReasons: null,
+          };
+        },
+      };
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(requests[0].url, 'https://api.telnyx.com/v2/10dlc/phone_number_campaigns/%2B15552223333');
+  assert.equal(result.providerResponse.data.phoneNumber.last4, '3333');
+  assert.equal(result.providerResponse.data.campaignId, 'campaign-1');
+  assert.equal(result.providerResponse.data.assignmentStatus, 'ASSIGNED');
+  assert.equal(JSON.stringify(result.providerResponse).includes('+15552223333'), false);
+});
+
+test('returns safe Telnyx diagnostic errors', async () => {
+  const result = await retrieveTelnyx10dlcPhoneNumberCampaign({
+    apiKey: 'redacted',
+    phoneNumber: '+15552223333',
+    fetchImpl: async () => ({
+      ok: false,
+      status: 404,
+      async json() {
+        return { errors: [{ code: '10010', title: 'Not found', detail: 'No assignment for +15552223333.' }] };
+      },
+    }),
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.code, '10010');
+  assert.equal(result.reason, 'Not found');
+  assert.deepEqual(result.providerResponse, {
+    errors: [{ code: '10010', title: 'Not found' }],
+  });
+  assert.equal(JSON.stringify(result).includes('+15552223333'), false);
+});
+
+test('describes SMS phone diagnostics without storing full phone value', () => {
+  assert.deepEqual(smsPhoneDiagnostic('732-354-7648'), {
+    present: true,
+    last4: '7648',
+    digitCount: 11,
+    countryCode: '+1',
+    e164Like: true,
   });
 });
 

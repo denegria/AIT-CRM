@@ -5,8 +5,11 @@ import { sessionHasAdminRole } from '@/lib/auth/admin-policy.js';
 import { isUuid } from '@/lib/crm/validation.js';
 import {
   createSmsCampaignSendConfigFromEnv,
+  retrieveTelnyx10dlcPhoneNumberCampaign,
+  retrieveTelnyxPhoneNumberMessagingSettings,
   retrieveTelnyxSmsMessage,
   sendTelnyxSmsMessage,
+  smsPhoneDiagnostic,
 } from '@/lib/messaging/providers/sms.js';
 import {
   approveSmsCampaign,
@@ -102,6 +105,111 @@ async function assertCampaignAccess(client, session, campaignId) {
     throw error;
   }
   return campaign;
+}
+
+function cleanJsonObject(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+async function loadLatestTelnyxRecipientDiagnostic(client, { organizationId, campaignId }) {
+  const result = await client.query(
+    `
+      select
+        id::text,
+        delivery_status,
+        provider_message_id,
+        metadata_json,
+        updated_at
+      from sms_campaign_recipients
+      where organization_id = $1
+        and campaign_id = $2
+        and eligibility_status = 'included'
+        and provider = 'telnyx'
+        and provider_message_id is not null
+      order by updated_at desc, created_at desc
+      limit 1
+    `,
+    [organizationId, campaignId],
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+
+  const metadata = cleanJsonObject(row.metadata_json);
+  const statusRefresh = cleanJsonObject(metadata.statusRefresh);
+  const providerResponse = cleanJsonObject(statusRefresh.providerResponse);
+  const mdrData = cleanJsonObject(providerResponse.data);
+  const recipient = Array.isArray(mdrData.to) ? mdrData.to[0] || {} : {};
+  return {
+    recipientId: row.id,
+    deliveryStatus: cleanText(row.delivery_status),
+    providerMessageId: cleanText(row.provider_message_id),
+    providerStatus: cleanText(metadata.providerStatus || mdrData.status || recipient.status),
+    mdrMessagingProfileId: cleanText(mdrData.messaging_profile_id),
+    mdrRecipientStatus: cleanText(recipient.status),
+    mdrRecipientErrorCode: cleanText(recipient.error_code),
+    mdrRecipientErrorMessage: cleanText(recipient.error_message),
+    mdrRecipientErrorDetail: cleanText(recipient.error_detail),
+    updatedAt: row.updated_at instanceof Date ? row.updated_at.toISOString() : cleanText(row.updated_at),
+  };
+}
+
+function telnyxSenderDiagnosticResponse({
+  campaign,
+  sendConfig,
+  sender,
+  recipientDiagnostic,
+  senderSettings,
+  phoneNumberCampaign,
+}) {
+  const settings = cleanJsonObject(senderSettings.providerResponse?.data);
+  const tenDlc = cleanJsonObject(phoneNumberCampaign.providerResponse?.data);
+  const smsFeatures = cleanJsonObject(settings.features?.sms);
+  const senderProfileId = cleanText(settings.messaging_profile_id);
+  const mdrProfileId = cleanText(recipientDiagnostic?.mdrMessagingProfileId);
+  const configuredProfileId = cleanText(sendConfig.telnyxMessagingProfileId);
+  const assignmentStatus = cleanText(tenDlc.assignmentStatus).toUpperCase();
+  const profileMatchesConfigured = Boolean(configuredProfileId && senderProfileId && configuredProfileId === senderProfileId);
+  const profileMatchesMdr = Boolean(senderProfileId && mdrProfileId && senderProfileId === mdrProfileId);
+  const tenDlcAssigned = phoneNumberCampaign.ok && assignmentStatus === 'ASSIGNED';
+
+  return {
+    provider: 'telnyx',
+    campaignId: campaign.id,
+    sender: smsPhoneDiagnostic(sender),
+    configuredMessagingProfileId: configuredProfileId || null,
+    recipientDiagnostic,
+    senderMessagingSettings: {
+      ok: senderSettings.ok,
+      code: senderSettings.code || null,
+      reason: senderSettings.reason || null,
+      ...senderSettings.providerResponse,
+    },
+    tenDlcPhoneNumberCampaign: {
+      ok: phoneNumberCampaign.ok,
+      code: phoneNumberCampaign.code || null,
+      reason: phoneNumberCampaign.reason || null,
+      ...phoneNumberCampaign.providerResponse,
+    },
+    checks: {
+      apiKeyConfigured: Boolean(sendConfig.telnyxApiKey),
+      senderConfigured: Boolean(sender),
+      senderMessagingSettingsFound: Boolean(senderSettings.ok),
+      domesticSmsTwoWayEnabled: smsFeatures.domestic_two_way === true,
+      senderProfileId: senderProfileId || null,
+      profileMatchesConfigured,
+      mdrMessagingProfileId: mdrProfileId || null,
+      profileMatchesMdr,
+      messagingProduct: settings.messaging_product || null,
+      trafficType: settings.traffic_type || null,
+      tenDlcAssigned,
+      tenDlcAssignmentStatus: assignmentStatus || null,
+      tenDlcFailureReasons: tenDlc.failureReasons || null,
+    },
+    fixability: {
+      canAttemptApiProfileRepair: Boolean(senderSettings.ok && configuredProfileId && senderProfileId && senderProfileId !== configuredProfileId),
+      likelyRequiresTelnyxRegistrationOrPortal: Boolean(senderSettings.ok && (!phoneNumberCampaign.ok || !tenDlcAssigned)),
+    },
+  };
 }
 
 export async function GET(request) {
@@ -267,6 +375,43 @@ export async function POST(request) {
           }),
         });
         return NextResponse.json(result);
+      }
+
+      if (action === 'diagnose_telnyx_sender') {
+        const sendConfig = createSmsCampaignSendConfigFromEnv(process.env);
+        const sender = campaign.senderAccountId || sendConfig.telnyxFromNumber;
+        if (sendConfig.provider !== 'telnyx' || !sendConfig.telnyxApiKey || !sender) {
+          return NextResponse.json(
+            { error: 'Telnyx API key and sender number are required before diagnosing sender delivery configuration.' },
+            { status: 503 },
+          );
+        }
+
+        const [recipientDiagnostic, senderSettings, phoneNumberCampaign] = await Promise.all([
+          loadLatestTelnyxRecipientDiagnostic(client, {
+            organizationId: session.user.organizationId,
+            campaignId: campaign.id,
+          }),
+          retrieveTelnyxPhoneNumberMessagingSettings({
+            apiKey: sendConfig.telnyxApiKey,
+            phoneNumber: sender,
+          }),
+          retrieveTelnyx10dlcPhoneNumberCampaign({
+            apiKey: sendConfig.telnyxApiKey,
+            phoneNumber: sender,
+          }),
+        ]);
+
+        return NextResponse.json({
+          diagnostic: telnyxSenderDiagnosticResponse({
+            campaign,
+            sendConfig,
+            sender,
+            recipientDiagnostic,
+            senderSettings,
+            phoneNumberCampaign,
+          }),
+        });
       }
 
       return NextResponse.json({ error: 'Unsupported SMS campaign action.' }, { status: 400 });

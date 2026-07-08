@@ -491,6 +491,18 @@ function telnyxProviderStatus(body = {}) {
   return cleanText(firstValue(data.to)?.status || data.status || 'queued');
 }
 
+export function smsPhoneDiagnostic(value) {
+  const normalized = normalizeSmsPhone(value);
+  const digits = normalized.replace(/\D+/g, '');
+  return {
+    present: Boolean(normalized),
+    last4: digits ? digits.slice(-4) : null,
+    digitCount: digits.length || 0,
+    countryCode: normalized.startsWith('+1') ? '+1' : null,
+    e164Like: /^\+\d{10,15}$/.test(normalized),
+  };
+}
+
 function redactTelnyxProviderResponse(body = {}) {
   const data = body?.data || null;
   const firstRecipient = firstValue(data?.to);
@@ -526,6 +538,83 @@ function redactTelnyxProviderResponse(body = {}) {
       },
     } : {}),
     ...(errors ? { errors } : {}),
+  };
+}
+
+function telnyxDiagnosticsError(response, body = {}, fallbackReason = 'Telnyx diagnostic request failed.') {
+  const firstError = Array.isArray(body?.errors) ? body.errors[0] : null;
+  return {
+    ok: false,
+    code: cleanText(firstError?.code) || `TELNYX_HTTP_${response?.status || 'ERROR'}`,
+    reason: cleanText(firstError?.title || body?.message) || fallbackReason,
+    providerStatus: response?.status || null,
+    providerResponse: {
+      ...(firstError ? {
+        errors: [{
+          code: cleanNullableText(firstError.code),
+          title: cleanNullableText(firstError.title),
+        }],
+      } : {}),
+    },
+  };
+}
+
+function redactTelnyxPhoneMessagingSettings(body = {}) {
+  const data = body?.data || null;
+  const sms = data?.features?.sms || {};
+  const mms = data?.features?.mms || null;
+  const health = data?.health || null;
+
+  return {
+    ...(data ? {
+      data: {
+        record_type: cleanNullableText(data.record_type),
+        id: cleanNullableText(data.id),
+        phone_number: smsPhoneDiagnostic(data.phone_number),
+        messaging_profile_id: cleanNullableText(data.messaging_profile_id),
+        country_code: cleanNullableText(data.country_code),
+        type: cleanNullableText(data.type),
+        traffic_type: cleanNullableText(data.traffic_type),
+        messaging_product: cleanNullableText(data.messaging_product),
+        eligible_messaging_products: Array.isArray(data.eligible_messaging_products)
+          ? data.eligible_messaging_products.map(cleanText).filter(Boolean)
+          : [],
+        features: {
+          sms: {
+            domestic_two_way: sms.domestic_two_way ?? null,
+            international_inbound: sms.international_inbound ?? null,
+            international_outbound: sms.international_outbound ?? null,
+          },
+          mms: mms ? {
+            domestic_two_way: mms.domestic_two_way ?? null,
+            international_inbound: mms.international_inbound ?? null,
+            international_outbound: mms.international_outbound ?? null,
+          } : null,
+        },
+        health: health ? {
+          message_count: Number.isFinite(Number(health.message_count)) ? Number(health.message_count) : null,
+          inbound_outbound_ratio: Number.isFinite(Number(health.inbound_outbound_ratio)) ? Number(health.inbound_outbound_ratio) : null,
+          success_ratio: Number.isFinite(Number(health.success_ratio)) ? Number(health.success_ratio) : null,
+          spam_ratio: Number.isFinite(Number(health.spam_ratio)) ? Number(health.spam_ratio) : null,
+        } : null,
+        created_at: cleanNullableText(data.created_at),
+        updated_at: cleanNullableText(data.updated_at),
+      },
+    } : {}),
+  };
+}
+
+function redactTelnyx10dlcPhoneNumberCampaign(body = {}) {
+  const data = body?.data || body || {};
+  return {
+    data: {
+      phoneNumber: smsPhoneDiagnostic(data.phoneNumber || data.phone_number),
+      campaignId: cleanNullableText(data.campaignId || data.campaign_id),
+      assignmentStatus: cleanNullableText(data.assignmentStatus || data.assignment_status),
+      failureReasons: cleanNullableText(data.failureReasons || data.failure_reasons),
+      createdAt: cleanNullableText(data.createdAt || data.created_at),
+      updatedAt: cleanNullableText(data.updatedAt || data.updated_at),
+    },
   };
 }
 
@@ -642,6 +731,96 @@ export async function retrieveTelnyxSmsMessage({
     providerStatus,
     deliveryStatus: telnyxDeliveryStatus(providerStatus),
     providerResponse: redactTelnyxProviderResponse(body),
+  };
+}
+
+export async function retrieveTelnyxPhoneNumberMessagingSettings({
+  apiKey = '',
+  phoneNumber = '',
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const cleanApiKey = cleanText(apiKey);
+  const cleanPhoneNumber = normalizeSmsPhone(phoneNumber);
+  if (!cleanApiKey || !cleanPhoneNumber || typeof fetchImpl !== 'function') {
+    return {
+      ok: false,
+      code: 'TELNYX_PHONE_MESSAGING_INPUT_MISSING',
+      reason: 'Telnyx API key and sender number are required.',
+      providerResponse: {},
+    };
+  }
+
+  let response;
+  let body = {};
+  try {
+    response = await fetchImpl(`https://api.telnyx.com/v2/phone_numbers/${encodeURIComponent(cleanPhoneNumber)}/messaging`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${cleanApiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    body = await response.json().catch(() => ({}));
+  } catch (error) {
+    return {
+      ok: false,
+      code: 'TELNYX_PHONE_MESSAGING_NETWORK_ERROR',
+      reason: error?.message || 'Telnyx phone messaging settings request failed.',
+      providerResponse: {},
+    };
+  }
+
+  if (!response.ok) return telnyxDiagnosticsError(response, body, 'Telnyx phone messaging settings request failed.');
+
+  return {
+    ok: true,
+    providerStatus: response.status,
+    providerResponse: redactTelnyxPhoneMessagingSettings(body),
+  };
+}
+
+export async function retrieveTelnyx10dlcPhoneNumberCampaign({
+  apiKey = '',
+  phoneNumber = '',
+  fetchImpl = globalThis.fetch,
+} = {}) {
+  const cleanApiKey = cleanText(apiKey);
+  const cleanPhoneNumber = normalizeSmsPhone(phoneNumber);
+  if (!cleanApiKey || !cleanPhoneNumber || typeof fetchImpl !== 'function') {
+    return {
+      ok: false,
+      code: 'TELNYX_10DLC_PHONE_CAMPAIGN_INPUT_MISSING',
+      reason: 'Telnyx API key and sender number are required.',
+      providerResponse: {},
+    };
+  }
+
+  let response;
+  let body = {};
+  try {
+    response = await fetchImpl(`https://api.telnyx.com/v2/10dlc/phone_number_campaigns/${encodeURIComponent(cleanPhoneNumber)}`, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${cleanApiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
+    body = await response.json().catch(() => ({}));
+  } catch (error) {
+    return {
+      ok: false,
+      code: 'TELNYX_10DLC_PHONE_CAMPAIGN_NETWORK_ERROR',
+      reason: error?.message || 'Telnyx 10DLC phone-number campaign request failed.',
+      providerResponse: {},
+    };
+  }
+
+  if (!response.ok) return telnyxDiagnosticsError(response, body, 'Telnyx 10DLC phone-number campaign request failed.');
+
+  return {
+    ok: true,
+    providerStatus: response.status,
+    providerResponse: redactTelnyx10dlcPhoneNumberCampaign(body),
   };
 }
 
