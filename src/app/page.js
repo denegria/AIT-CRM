@@ -1,34 +1,25 @@
 'use client';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ListTodo, UserPlus } from 'lucide-react';
 import { useCRM } from '@/lib/store';
 import KPICard from '@/components/KPICard';
-import TaskList from '@/components/TaskList';
 import Calendar from '@/components/Calendar';
-import { BarChart, PieChart, ChartLegend } from '@/components/Charts';
-import { useToast } from '@/components/Toast';
-import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from '@/lib/crm/lifecycle';
 import {
-  buildTaskCalendarEvents,
-  isOpenTask,
-  taskDueKey,
-} from '@/lib/dashboard/task-calendar';
+  DashboardTasksPanel,
+  TeamMonitorPreview,
+} from '@/components/TeamMonitorPanel';
+import monitorStyles from '@/components/TeamMonitorPanel.module.css';
+import { canUseTeamMonitor } from '@/lib/team-monitor.js';
+import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from '@/lib/crm/lifecycle';
+import { isOpenTask } from '@/lib/dashboard/task-calendar';
 import { isCurrentLeadDateScope } from '@/lib/contact-directory-view';
 import { filterContactsByDirectoryFacet } from '@/lib/contact-directory-facets';
 import {
-  isTaskCompletedToday,
   isTaskCurrentWork,
   isTaskDueToday,
   isTaskOverdue,
 } from '@/lib/tasks/visibility.js';
-
-function dateInputToIso(value) {
-  if (!value) return null;
-  const date = new Date(`${value}T09:00:00`);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString();
-}
 
 function moneyLabel(value) {
   return `$${Math.round(Number(value || 0)).toLocaleString()}`;
@@ -74,8 +65,6 @@ export default function Dashboard() {
     tasks,
     calendarEvents,
     employees,
-    updateTask,
-    addTask,
     loaded,
     dataSource,
     importStaging,
@@ -84,10 +73,11 @@ export default function Dashboard() {
     currentBusinessUnit,
     scopeLabel,
   } = useCRM();
-  const { toast } = useToast();
   const [dashboardNow] = useState(() => Date.now());
   const currentUserId = currentUser?.id || 'emp-1';
   const isAdminView = role === 'admin' || Boolean(currentUser?.canAccessAllBusinessUnits);
+  const monitorCurrentUser = currentUser || { id: currentUserId, primaryRoleKey: role };
+  const canUseTeamMonitorView = canUseTeamMonitor(monitorCurrentUser);
   const canReadFinancials = Boolean(access?.canReadFinancials);
 
   const kpis = useMemo(() => {
@@ -155,29 +145,6 @@ export default function Dashboard() {
     };
   }, [contacts, currentUserId, dashboardNow, financials, isAdminView, tasks, workOrders]);
 
-  const statusData = useMemo(() => {
-    const counts = {};
-    financials.filter(f => f.type === 'Invoice').forEach(f => { counts[f.status] = (counts[f.status] || 0) + 1; });
-    return [
-      { label: 'Paid', value: counts['Paid'] || 0, color: '#22c55e' },
-      { label: 'Pending', value: counts['Pending'] || 0, color: '#eab308' },
-      { label: 'Overdue', value: counts['Overdue'] || 0, color: '#ef4444' },
-    ];
-  }, [financials]);
-
-  const revenueByMonth = useMemo(() => {
-    const months = ['Jan','Feb','Mar','Apr','May','Jun'];
-    return months.map((m, i) => {
-      // Deterministic "mock" growth: base 4k + (i * 1.5k) + minor variation based on month index
-      const seedVal = 4000 + (i * 1200) + ((i * 313) % 800);
-      return {
-        label: m, 
-        value: seedVal + (i === new Date().getMonth() ? kpis.totalRevenue : 0), 
-        color: '#4a7aff'
-      };
-    });
-  }, [kpis.totalRevenue]);
-
   const myTasks = useMemo(() => {
     if (isAdminView) return tasks;
     return tasks.filter(t => (t.ownerUserId || t.assignedTo) === currentUserId);
@@ -241,74 +208,16 @@ export default function Dashboard() {
     [unassignedLeadFollowUps],
   );
 
-  const dashboardDueTodayTasks = useMemo(() => {
-    const todayKey = new Date().toISOString().slice(0, 10);
-    return myTasks
-      .filter((task) => isOpenTask(task) && taskDueKey(task) === todayKey)
-      .sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
-  }, [myTasks]);
-
-  const dashboardCompletedTodayTasks = useMemo(() => {
-    const todayKey = new Date().toISOString().slice(0, 10);
-    return myTasks
-      .filter((task) => isTaskCompletedToday(task, todayKey))
-      .sort((a, b) => String(b.completedAt || '').localeCompare(String(a.completedAt || '')))
-      .slice(0, 5);
-  }, [myTasks]);
-
-  const dashboardCalendarEvents = useMemo(() => {
-    const taskEvents = buildTaskCalendarEvents(myTasks);
-    return [...calendarEvents, ...taskEvents];
-  }, [calendarEvents, myTasks]);
-
-  const empProgress = useMemo(() => {
-    return employees.map(emp => {
-      const t = tasks.filter(tk => tk.assignedTo === emp.id);
-      const done = t.filter(tk => tk.completed).length;
-      return { ...emp, total: t.length, done, leads: contacts.filter(c => c.assignedTo === emp.id).length };
-    });
-  }, [employees, tasks, contacts]);
-
-  const createDashboardTask = useCallback(async (draft) => {
-    if (!access.canWriteCrm) throw new Error('CRM write access is required.');
-    const ownerUserId = currentUser?.id || '';
-    if (!ownerUserId) throw new Error('Sign in again before creating a task.');
-    if (dataSource !== 'postgres') {
-      addTask({ ...draft, assignedTo: ownerUserId, ownerUserId });
-      toast('Task created');
-      return;
-    }
-
-    const taskBusinessUnitId = currentBusinessUnit?.id;
-    if (!taskBusinessUnitId || taskBusinessUnitId === 'all' || taskBusinessUnitId === 'unassigned') {
-      throw new Error('Select a division before creating a task.');
-    }
-
-    const response = await fetch('/api/tasks', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        title: draft.title,
-        businessUnitId: taskBusinessUnitId,
-        dueAt: dateInputToIso(draft.dueDate),
-        ownerUserId,
-        taskType: 'manual_reminder',
-        priority: 'medium',
-        sourceType: 'manual',
-      }),
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || 'Task could not be created.');
-    addTask({
-      ...payload.task,
-      assignedTo: payload.task.ownerUserId || '',
-      dueDate: (payload.task.dueAt || '').slice(0, 10),
-      completed: payload.task.status === 'completed',
-      priority: 'Medium',
-      taskStatus: payload.task.status,
-    });
-    toast('Task created');
-  }, [access.canWriteCrm, addTask, currentBusinessUnit?.id, currentUser?.id, dataSource, toast]);
+  const sourceHealth = useMemo(() => {
+    const websiteLeads = contacts.filter((contact) => /website|web|wix/i.test(`${contact.source || ''} ${contact.sourceLabel || ''}`)).length;
+    const facebookTasks = tasks.filter(isFacebookLeadFollowUp).length;
+    return [
+      { label: 'Website leads', status: websiteLeads ? `${websiteLeads} active` : 'Low data', tone: websiteLeads ? 'success' : 'muted' },
+      { label: 'Facebook Lead Ads', status: facebookTasks ? 'Needs routing' : 'Attribution review', tone: facebookTasks ? 'warning' : 'muted' },
+      { label: 'Messenger', status: 'Connected where configured', tone: 'success' },
+      { label: 'SMS / 10DLC', status: 'Pending', tone: 'warning' },
+    ];
+  }, [contacts, tasks]);
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
@@ -400,108 +309,51 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="dashboard-panel-grid" style={{marginBottom:20}}>
-        <div className="card">
-          <div className="flex-between" style={{marginBottom:12, gap:12}}>
-            <div className="card-title" style={{marginBottom:0}}>Tasks</div>
-            <Link className="btn btn-sm" href="/tasks">Open tasks</Link>
-          </div>
-          <TaskList
-            tasks={dashboardDueTodayTasks}
-            onToggle={(id, u) => updateTask(id, u)}
-            onAdd={createDashboardTask}
-            employees={employees}
-            canAdd={Boolean(access.canWriteCrm)}
-            fixedOwnerId={currentUser?.id || ''}
-            ownerRequired
-            showOwnerSelect={false}
-            emptyText="No tasks due today."
-          />
-          {dashboardCompletedTodayTasks.length > 0 && (
-            <div style={{marginTop:14, paddingTop:12, borderTop:'1px solid var(--border-subtle)'}}>
-              <div className="flex-between" style={{marginBottom:8, gap:8}}>
-                <div style={{fontSize:'var(--text-xs)', color:'var(--text-secondary)', fontWeight:700, textTransform:'uppercase', letterSpacing:0}}>
-                  Done today
+      {canUseTeamMonitorView ? (
+        <>
+          <div className={monitorStyles.dashboardLayout}>
+            <TeamMonitorPreview
+              employees={employees}
+              tasks={tasks}
+              currentUser={monitorCurrentUser}
+            />
+            <aside className={monitorStyles.rightRail}>
+              <section className={monitorStyles.railCard}>
+                <div className={monitorStyles.railTitle}>Calendar</div>
+                <Calendar events={calendarEvents} />
+              </section>
+              <section className={monitorStyles.railCard}>
+                <div className={monitorStyles.railTitle}>Source Health</div>
+                <div className={monitorStyles.sourceList}>
+                  {sourceHealth.map((item) => (
+                    <div key={item.label} className={monitorStyles.sourceItem}>
+                      <strong>{item.label}</strong>
+                      <span className={item.tone === 'success' ? 'badge badge-completed' : item.tone === 'warning' ? 'badge badge-pending' : 'badge'}>
+                        {item.status}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-                <span className="badge badge-completed">{dashboardCompletedTodayTasks.length}</span>
-              </div>
-              <div style={{display:'grid', gap:8}}>
-                {dashboardCompletedTodayTasks.map((task) => (
-                  <div
-                    key={`dashboard-completed-${task.id}`}
-                    style={{
-                      display:'flex',
-                      alignItems:'center',
-                      justifyContent:'space-between',
-                      gap:10,
-                      padding:'8px 10px',
-                      border:'1px solid var(--border-subtle)',
-                      borderRadius:'var(--radius-md)',
-                      background:'var(--bg-secondary)',
-                    }}
-                  >
-                    <span style={{fontSize:'var(--text-sm)', color:'var(--text-primary)', fontWeight:650, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
-                      {task.title || 'Untitled task'}
-                    </span>
-                    <span className="badge badge-completed">Done</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="card">
-          <div className="card-title">Calendar</div>
-          <Calendar events={dashboardCalendarEvents} />
-        </div>
-      </div>
-
-      {isAdminView && (
+              </section>
+            </aside>
+          </div>
+          <DashboardTasksPanel
+            tasks={tasks}
+            employees={employees}
+            currentUser={monitorCurrentUser}
+          />
+        </>
+      ) : (
         <div className="dashboard-panel-grid" style={{marginBottom:20}}>
+          <DashboardTasksPanel
+            tasks={myTasks}
+            employees={employees}
+            currentUser={monitorCurrentUser}
+            showScopeControls={false}
+          />
           <div className="card">
-            <div className="card-title">Revenue Trend</div>
-            <BarChart data={revenueByMonth} width={400} height={200} />
-          </div>
-          <div className="card">
-            <div className="flex-between" style={{marginBottom:12}}>
-              <div className="card-title" style={{marginBottom:0}}>Invoice Status</div>
-            </div>
-            <div style={{display:'flex',alignItems:'center',gap:24,flexWrap:'wrap',justifyContent:'center'}}>
-              <PieChart data={statusData} size={140} />
-              <ChartLegend data={statusData} />
-            </div>
-          </div>
-        </div>
-      )}
-
-      {isAdminView && (
-        <div className="card">
-          <div className="card-title">Employee Progress</div>
-          <div className="responsive-table">
-            <table style={{width:'100%',borderCollapse:'collapse'}}>
-              <thead><tr>
-                <th style={{textAlign:'left',padding:'6px 12px',fontSize:'var(--text-xs)',color:'var(--text-muted)',borderBottom:'1px solid var(--border-subtle)',fontWeight:600}}>Employee</th>
-                <th style={{textAlign:'left',padding:'6px 12px',fontSize:'var(--text-xs)',color:'var(--text-muted)',borderBottom:'1px solid var(--border-subtle)',fontWeight:600}}>Tasks</th>
-                <th style={{textAlign:'left',padding:'6px 12px',fontSize:'var(--text-xs)',color:'var(--text-muted)',borderBottom:'1px solid var(--border-subtle)',fontWeight:600}}>Completed</th>
-                <th style={{textAlign:'left',padding:'6px 12px',fontSize:'var(--text-xs)',color:'var(--text-muted)',borderBottom:'1px solid var(--border-subtle)',fontWeight:600}}>Leads</th>
-                <th style={{textAlign:'left',padding:'6px 12px',fontSize:'var(--text-xs)',color:'var(--text-muted)',borderBottom:'1px solid var(--border-subtle)',fontWeight:600}}>Progress</th>
-              </tr></thead>
-              <tbody>
-                {empProgress.map(emp => (
-                  <tr key={emp.id}>
-                    <td style={{padding:'8px 12px',fontSize:'var(--text-sm)',borderBottom:'1px solid var(--border-subtle)'}}>{emp.name}</td>
-                    <td style={{padding:'8px 12px',fontSize:'var(--text-sm)',color:'var(--text-secondary)',borderBottom:'1px solid var(--border-subtle)'}}>{emp.total}</td>
-                    <td style={{padding:'8px 12px',fontSize:'var(--text-sm)',color:'var(--text-secondary)',borderBottom:'1px solid var(--border-subtle)'}}>{emp.done}</td>
-                    <td style={{padding:'8px 12px',fontSize:'var(--text-sm)',color:'var(--text-secondary)',borderBottom:'1px solid var(--border-subtle)'}}>{emp.leads}</td>
-                    <td style={{padding:'8px 12px',borderBottom:'1px solid var(--border-subtle)'}}>
-                      <div style={{width:100,height:6,background:'var(--bg-hover)',borderRadius:3,overflow:'hidden'}}>
-                        <div style={{width:`${emp.total?Math.round(emp.done/emp.total*100):0}%`,height:'100%',background:'var(--accent)',borderRadius:3,transition:'width 0.3s ease'}} />
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="card-title">Calendar</div>
+            <Calendar events={calendarEvents} />
           </div>
         </div>
       )}
