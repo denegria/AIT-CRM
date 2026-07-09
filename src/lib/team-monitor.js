@@ -97,6 +97,7 @@ function enrollmentDateForContact(contact = {}) {
     .filter((record) => ['active', 'planned'].includes(clean(record.status)))
     .sort((left, right) => dateTime(right.startDate || right.createdAt) - dateTime(left.startDate || left.createdAt))[0];
   return dateOnly(
+    contact.enrollmentStatusChangedAt ||
     contact.enrolledAt ||
     contact.enrollmentDate ||
     activeCourse?.startDate,
@@ -108,6 +109,7 @@ function cancellationDateForContact(contact = {}) {
     .filter((record) => ['cancelled', 'dropped', 'transferred'].includes(clean(record.status)))
     .sort((left, right) => dateTime(right.endDate || right.updatedAt || right.createdAt) - dateTime(left.endDate || left.updatedAt || left.createdAt))[0];
   return dateOnly(
+    contact.droppedStatusChangedAt ||
     contact.cancelledAt ||
     contact.canceledAt ||
     contact.droppedAt ||
@@ -115,10 +117,9 @@ function cancellationDateForContact(contact = {}) {
   );
 }
 
-function isSignupContact(contact = {}) {
+function isEnrolledContact(contact = {}) {
   if (!isAitUsaContact(contact)) return false;
-  return contactStatus(contact) === 'Enrolled' ||
-    courseRecords(contact).some((record) => ['active', 'planned'].includes(clean(record.status)));
+  return contactStatus(contact) === 'Enrolled';
 }
 
 function isCancellationContact(contact = {}) {
@@ -127,10 +128,9 @@ function isCancellationContact(contact = {}) {
     courseRecords(contact).some((record) => ['cancelled', 'dropped', 'transferred'].includes(clean(record.status)));
 }
 
-function isActiveEnrollmentLead(contact = {}) {
+function isAssignedContact(contact = {}) {
   if (!isAitUsaContact(contact)) return false;
-  const status = contactStatus(contact);
-  return ['New Lead', 'Follow Up'].includes(status);
+  return Boolean(contactOwnerId(contact));
 }
 
 function trendLabel(current = 0, previous = 0) {
@@ -148,19 +148,19 @@ function buildBusinessMovement({ contacts = [], employeeIds = [], now = Date.now
   const previousWeekStart = weekStart - 7 * 24 * 60 * 60 * 1000;
   const employeeSet = new Set(employeeIds);
   const byEmployee = new Map(employeeIds.map((id) => [id, {
-    activeLeads: 0,
-    signupsToday: 0,
-    signupsThisWeek: 0,
-    signupsPreviousWeek: 0,
+    assignedContacts: 0,
+    enrollmentsToday: 0,
+    enrollmentsThisWeek: 0,
+    enrollmentsPreviousWeek: 0,
     cancellationsThisWeek: 0,
     cancellationsPreviousWeek: 0,
     enrolledTotal: 0,
   }]));
   const totals = {
-    activeLeads: 0,
-    signupsToday: 0,
-    signupsThisWeek: 0,
-    signupsPreviousWeek: 0,
+    assignedContacts: 0,
+    enrollmentsToday: 0,
+    enrollmentsThisWeek: 0,
+    enrollmentsPreviousWeek: 0,
     cancellationsThisWeek: 0,
     cancellationsPreviousWeek: 0,
     enrolledTotal: 0,
@@ -172,21 +172,21 @@ function buildBusinessMovement({ contacts = [], employeeIds = [], now = Date.now
     const employeeMetrics = employeeSet.has(ownerId) ? byEmployee.get(ownerId) : null;
     const targets = [totals, employeeMetrics].filter(Boolean);
 
-    if (isActiveEnrollmentLead(contact)) {
-      for (const target of targets) target.activeLeads += 1;
+    if (isAssignedContact(contact)) {
+      for (const target of targets) target.assignedContacts += 1;
     }
 
-    if (isSignupContact(contact)) {
-      const signupTime = dateTime(enrollmentDateForContact(contact));
+    if (isEnrolledContact(contact)) {
+      const enrollmentTime = dateTime(enrollmentDateForContact(contact));
       for (const target of targets) target.enrolledTotal += 1;
-      if (inRange(signupTime, todayStart, tomorrowStart)) {
-        for (const target of targets) target.signupsToday += 1;
+      if (inRange(enrollmentTime, todayStart, tomorrowStart)) {
+        for (const target of targets) target.enrollmentsToday += 1;
       }
-      if (inRange(signupTime, weekStart, nextWeekStart)) {
-        for (const target of targets) target.signupsThisWeek += 1;
+      if (inRange(enrollmentTime, weekStart, nextWeekStart)) {
+        for (const target of targets) target.enrollmentsThisWeek += 1;
       }
-      if (inRange(signupTime, previousWeekStart, weekStart)) {
-        for (const target of targets) target.signupsPreviousWeek += 1;
+      if (inRange(enrollmentTime, previousWeekStart, weekStart)) {
+        for (const target of targets) target.enrollmentsPreviousWeek += 1;
       }
     }
 
@@ -205,8 +205,8 @@ function buildBusinessMovement({ contacts = [], employeeIds = [], now = Date.now
     byEmployee,
     totals: {
       ...totals,
-      netSignupsThisWeek: totals.signupsThisWeek - totals.cancellationsThisWeek,
-      signupTrendLabel: trendLabel(totals.signupsThisWeek, totals.signupsPreviousWeek),
+      netEnrollmentsThisWeek: totals.enrollmentsThisWeek - totals.cancellationsThisWeek,
+      enrollmentTrendLabel: trendLabel(totals.enrollmentsThisWeek, totals.enrollmentsPreviousWeek),
       cancellationTrendLabel: trendLabel(totals.cancellationsThisWeek, totals.cancellationsPreviousWeek),
     },
   };
@@ -325,9 +325,9 @@ export function buildTeamMonitorViewModel({
       overdueCount: overdue.length,
       dueTodayCount: dueToday.length,
       needsFollowUpCount: attentionCount,
-      activeLeadCount: businessMetrics.activeLeads || 0,
-      signupsTodayCount: businessMetrics.signupsToday || 0,
-      signupsThisWeekCount: businessMetrics.signupsThisWeek || 0,
+      assignedContactCount: businessMetrics.assignedContacts || 0,
+      enrollmentsTodayCount: businessMetrics.enrollmentsToday || 0,
+      enrollmentsThisWeekCount: businessMetrics.enrollmentsThisWeek || 0,
       cancellationsThisWeekCount: businessMetrics.cancellationsThisWeek || 0,
       enrolledTotalCount: businessMetrics.enrolledTotal || 0,
       signal,
@@ -346,12 +346,12 @@ export function buildTeamMonitorViewModel({
     dueToday: normalizedTasks.filter((task) => isTaskDueToday(task, today)).length,
     overdue: normalizedTasks.filter((task) => isTaskOverdue(task, today)).length,
     needsFollowUp: roster.reduce((sum, employee) => sum + employee.needsFollowUpCount, 0),
-    signupsToday: businessMovement.totals.signupsToday,
-    signupsThisWeek: businessMovement.totals.signupsThisWeek,
+    enrollmentsToday: businessMovement.totals.enrollmentsToday,
+    enrollmentsThisWeek: businessMovement.totals.enrollmentsThisWeek,
     cancellationsThisWeek: businessMovement.totals.cancellationsThisWeek,
-    activeEnrollmentLeads: businessMovement.totals.activeLeads,
-    netSignupsThisWeek: businessMovement.totals.netSignupsThisWeek,
-    signupTrendLabel: businessMovement.totals.signupTrendLabel,
+    assignedContacts: businessMovement.totals.assignedContacts,
+    netEnrollmentsThisWeek: businessMovement.totals.netEnrollmentsThisWeek,
+    enrollmentTrendLabel: businessMovement.totals.enrollmentTrendLabel,
     cancellationTrendLabel: businessMovement.totals.cancellationTrendLabel,
   };
 
@@ -359,7 +359,7 @@ export function buildTeamMonitorViewModel({
     canUseTeamMonitor: canUseTeamMonitor(currentUser),
     summary,
     roster,
-    lowDataNotice: 'Online/last-online use current session plus task activity. Signup and cancellation counts use assigned lead/course dates until transition audit attribution exists.',
+    lowDataNotice: 'Online/last-online use current session plus task activity. Enrollment counts use assigned contacts with Enrolled status-change dates where available.',
     updatedLabel: 'Local CRM data',
   };
 }

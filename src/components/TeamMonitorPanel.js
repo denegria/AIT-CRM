@@ -19,16 +19,16 @@ import s from './TeamMonitorPanel.module.css';
 
 const KPI_META = [
   { key: 'onlineNow', label: 'Online now', Icon: UsersRound, tone: 'success' },
-  { key: 'signupsThisWeek', label: 'Signups this week', Icon: UserCheck, tone: 'accent', captionKey: 'signupTrendLabel' },
+  { key: 'enrollmentsThisWeek', label: 'Enrollments this week', Icon: UserCheck, tone: 'accent', captionKey: 'enrollmentTrendLabel' },
   { key: 'cancellationsThisWeek', label: 'Cancellations this week', Icon: TrendingDown, tone: 'warning', captionKey: 'cancellationTrendLabel' },
   { key: 'overdue', label: 'Overdue tasks', Icon: Clock3, tone: 'danger' },
 ];
 
 const SNAPSHOT_META = [
-  { key: 'signupsToday', label: 'Signups today' },
-  { key: 'signupsThisWeek', label: 'Signups week' },
+  { key: 'enrollmentsToday', label: 'Enrollments today' },
+  { key: 'enrollmentsThisWeek', label: 'Enrollments week' },
   { key: 'cancellationsThisWeek', label: 'Cancellations week' },
-  { key: 'activeEnrollmentLeads', label: 'Active leads' },
+  { key: 'assignedContacts', label: 'Assigned contacts' },
 ];
 
 function taskDateLabel(value) {
@@ -115,8 +115,8 @@ function PreviewEmployeeList({ roster }) {
             </div>
           </div>
           <div className={s.previewOutcome}>
-            <strong>{employee.signupsThisWeekCount}</strong>
-            <span>signups wk</span>
+            <strong>{employee.enrollmentsThisWeekCount}</strong>
+            <span>enrolled wk</span>
           </div>
           <span className={employee.overdueCount ? s.previewRiskDanger : s.previewRisk}>
             {employee.overdueCount ? `${employee.overdueCount} overdue` : employee.signal}
@@ -140,8 +140,8 @@ function RosterTable({ roster, selectedEmployeeId, onSelectEmployee, compact = f
             <th>Employee</th>
             <th>Status / last online</th>
             <th>Today progress</th>
-            <th>Active leads</th>
-            <th>Signups wk</th>
+            <th>Assigned contacts</th>
+            <th>Enrollments wk</th>
             <th>Cancels wk</th>
             <th>Overdue</th>
             <th>Signal</th>
@@ -178,8 +178,8 @@ function RosterTable({ roster, selectedEmployeeId, onSelectEmployee, compact = f
                   </div>
                 </div>
               </td>
-              <td>{employee.activeLeadCount}</td>
-              <td><span className={s.successCount}>{employee.signupsThisWeekCount}</span></td>
+              <td>{employee.assignedContactCount}</td>
+              <td><span className={s.successCount}>{employee.enrollmentsThisWeekCount}</span></td>
               <td><span className={employee.cancellationsThisWeekCount ? s.softCount : s.zeroCount}>{employee.cancellationsThisWeekCount}</span></td>
               <td><span className={employee.overdueCount ? s.dangerCount : s.zeroCount}>{employee.overdueCount}</span></td>
               <td>
@@ -223,9 +223,9 @@ function EmployeeDetail({ employee }) {
       <div className={s.detailSection}>
         <div className={s.detailTitle}>Enrollment movement</div>
         <div className={s.detailStats}>
-          <span><strong>{employee.activeLeadCount}</strong><small>active leads</small></span>
-          <span><strong>{employee.signupsTodayCount}</strong><small>today</small></span>
-          <span><strong>{employee.signupsThisWeekCount}</strong><small>signups wk</small></span>
+          <span><strong>{employee.assignedContactCount}</strong><small>assigned contacts</small></span>
+          <span><strong>{employee.enrollmentsTodayCount}</strong><small>today</small></span>
+          <span><strong>{employee.enrollmentsThisWeekCount}</strong><small>enrolled wk</small></span>
           <span><strong>{employee.cancellationsThisWeekCount}</strong><small>cancels wk</small></span>
         </div>
       </div>
@@ -375,7 +375,7 @@ export function TeamMonitorPageSurface({ employees, tasks, contacts, currentUser
       <div className="page-header">
         <div>
           <h1 className="page-title">Team Monitor</h1>
-          <p className="page-subtitle">Employee activity, task progress, signups, and cancellation movement.</p>
+          <p className="page-subtitle">Employee activity, task progress, enrollments, and cancellation movement.</p>
         </div>
       </div>
       <MetricCards summary={viewModel.summary} />

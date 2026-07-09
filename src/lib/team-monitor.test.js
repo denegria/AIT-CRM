@@ -57,6 +57,7 @@ test('team monitor view model summarizes existing CRM tasks without new entities
         workflowKey: 'ait_usa',
         status: 'Enrolled',
         assignedTo: 'u-one',
+        enrollmentStatusChangedAt: '2026-07-08T12:00:00Z',
         courseRecords: [{ id: 'cr-1', status: 'active', startDate: '2026-07-08' }],
       },
       {
@@ -79,15 +80,15 @@ test('team monitor view model summarizes existing CRM tasks without new entities
   assert.equal(viewModel.summary.onlineNow, 1);
   assert.equal(viewModel.summary.dueToday, 1);
   assert.equal(viewModel.summary.overdue, 1);
-  assert.equal(viewModel.summary.signupsToday, 1);
-  assert.equal(viewModel.summary.signupsThisWeek, 1);
+  assert.equal(viewModel.summary.enrollmentsToday, 1);
+  assert.equal(viewModel.summary.enrollmentsThisWeek, 1);
   assert.equal(viewModel.summary.cancellationsThisWeek, 1);
-  assert.equal(viewModel.summary.activeEnrollmentLeads, 1);
+  assert.equal(viewModel.summary.assignedContacts, 3);
   assert.equal(viewModel.canUseTeamMonitor, true);
   assert.equal(viewModel.roster.find((employee) => employee.id === 'u-two').signal, 'Behind');
   assert.equal(viewModel.roster.find((employee) => employee.id === 'u-one').progressDone, 1);
-  assert.equal(viewModel.roster.find((employee) => employee.id === 'u-one').signupsThisWeekCount, 1);
-  assert.equal(viewModel.roster.find((employee) => employee.id === 'u-one').activeLeadCount, 1);
+  assert.equal(viewModel.roster.find((employee) => employee.id === 'u-one').enrollmentsThisWeekCount, 1);
+  assert.equal(viewModel.roster.find((employee) => employee.id === 'u-one').assignedContactCount, 2);
   assert.equal(viewModel.roster.find((employee) => employee.id === 'u-two').cancellationsThisWeekCount, 1);
 });
 
@@ -112,7 +113,7 @@ test('dashboard task preview scopes my, team, and all employee tasks', () => {
   );
 });
 
-test('weekly owner metrics require explicit enrollment and cancellation dates', () => {
+test('weekly owner metrics require enrolled contact status and explicit movement dates', () => {
   const viewModel = buildTeamMonitorViewModel({
     employees,
     currentUser: { id: 'u-admin', primaryRoleKey: 'admin' },
@@ -136,11 +137,20 @@ test('weekly owner metrics require explicit enrollment and cancellation dates', 
         leadCreatedAt: '2026-07-08T12:00:00Z',
         courseRecords: [{ id: 'no-end-date', status: 'cancelled', updatedAt: '2026-07-08T12:00:00Z' }],
       },
+      {
+        id: 'course-only',
+        workflowKey: 'ait_usa',
+        status: 'Follow Up',
+        assignedTo: 'u-one',
+        enrollmentStatusChangedAt: '2026-07-08T12:00:00Z',
+        courseRecords: [{ id: 'active-course', status: 'active', startDate: '2026-07-08' }],
+      },
     ],
   });
 
-  assert.equal(viewModel.summary.signupsThisWeek, 0);
+  assert.equal(viewModel.summary.enrollmentsThisWeek, 0);
   assert.equal(viewModel.summary.cancellationsThisWeek, 0);
   assert.equal(viewModel.roster.find((employee) => employee.id === 'u-one').enrolledTotalCount, 1);
+  assert.equal(viewModel.roster.find((employee) => employee.id === 'u-one').enrollmentsThisWeekCount, 0);
   assert.equal(viewModel.roster.find((employee) => employee.id === 'u-two').cancellationsThisWeekCount, 0);
 });
