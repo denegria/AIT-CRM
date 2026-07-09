@@ -10,7 +10,6 @@ import { WORKFLOW_KEYS, normalizeLifecycleStatus } from './crm/lifecycle.js';
 
 const TEAM_MONITOR_ROLE_KEYS = new Set([
   ROLE_KEYS.ADMIN,
-  ROLE_KEYS.SENIOR_COORDINATOR,
 ]);
 
 function taskOwnerId(task = {}) {

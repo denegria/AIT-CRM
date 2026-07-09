@@ -21,7 +21,7 @@ export default function TeamMonitorPage() {
   if (!canUseTeamMonitor(monitorCurrentUser)) {
     return (
       <div className="empty-state">
-        <p>Team Monitor is available to administrators and senior coordinators.</p>
+        <p>Team Monitor is available to administrators.</p>
         <Link className="btn btn-sm" href="/">Back to dashboard</Link>
       </div>
     );
