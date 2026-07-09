@@ -89,35 +89,68 @@
   min-width: 0;
 }
 
-.snapshotGrid {
+.teamPulse {
+  align-items: stretch;
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--accent-muted) 52%, var(--bg-secondary)), var(--bg-secondary));
   border-bottom: 1px solid var(--border-subtle);
   display: grid;
-  gap: 0;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-
-.snapshotItem {
-  border-right: 1px solid var(--border-subtle);
+  gap: 12px;
+  grid-template-columns: minmax(190px, 0.7fr) minmax(0, 1fr);
   padding: 14px 16px;
 }
 
-.snapshotItem:last-child {
-  border-right: 0;
+.pulseLead {
+  border-right: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border-subtle));
+  display: grid;
+  gap: 3px;
+  padding-right: 16px;
 }
 
-.snapshotItem strong {
+.pulseLead span,
+.pulseStats small {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.pulseLead strong {
   color: var(--text-primary);
-  display: block;
+  font-size: clamp(28px, 3vw, 40px);
+  line-height: 0.95;
+}
+
+.pulseLead small {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.pulseStats {
+  align-items: stretch;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.pulseStats span {
+  align-content: center;
+  background: color-mix(in srgb, var(--bg-tertiary) 72%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
+  border-radius: var(--radius-md);
+  display: grid;
+  gap: 4px;
+  min-height: 64px;
+  padding: 10px 12px;
+}
+
+.pulseStats strong {
+  color: var(--text-primary);
   font-size: var(--text-xl);
   line-height: 1;
-}
-
-.snapshotItem span {
-  color: var(--text-muted);
-  display: block;
-  font-size: var(--text-xs);
-  font-weight: 750;
-  margin-top: 5px;
 }
 
 .previewList {
@@ -641,18 +674,19 @@
     grid-template-columns: 1fr;
   }
 
-  .snapshotGrid,
+  .teamPulse,
   .previewEmployee {
     grid-template-columns: 1fr;
   }
 
-  .snapshotItem {
-    border-bottom: 1px solid var(--border-subtle);
+  .pulseLead {
     border-right: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border-subtle));
+    padding: 0 0 12px;
   }
 
-  .snapshotItem:last-child {
-    border-bottom: 0;
+  .pulseStats {
+    grid-template-columns: 1fr;
   }
 
   .sectionHeader,
