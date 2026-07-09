@@ -7,6 +7,7 @@ import {
   businessUnits as businessUnitsTable,
   contacts as contactsTable,
   contactPeople as contactPeopleTable,
+  leadStatusHistory as leadStatusHistoryTable,
   workOrders as workOrdersTable,
   estimates as estimatesTable,
   financialDocuments as financialDocumentsTable,
@@ -71,6 +72,15 @@ function latestTime(...values) {
     const time = value instanceof Date ? value.getTime() : new Date(value || '').getTime();
     return Number.isNaN(time) ? latest : Math.max(latest, time);
   }, 0);
+}
+
+function latestStatusTransitionDate(rows = [], targetStatus = '') {
+  const normalizedTarget = clean(targetStatus).toLowerCase();
+  if (!normalizedTarget) return '';
+  const match = rows
+    .filter((row) => clean(row.toStatus).toLowerCase() === normalizedTarget)
+    .sort((left, right) => latestTime(right.occurredAt, right.createdAt) - latestTime(left.occurredAt, left.createdAt))[0];
+  return match ? toIsoDateTime(match.occurredAt || match.createdAt) : '';
 }
 
 function sourceCategoryForContact({ source = '', sourceLabel = '', workflowKey = '' } = {}) {
@@ -210,6 +220,7 @@ function mapContacts(
   const conversationMessagesByContactId = rowsByContactId(relatedRows.conversationMessages || []);
   const peopleByContactId = rowsByContactId(relatedRows.contactPeople || []);
   const courseRecordsByContactId = rowsByContactId(relatedRows.courseRecords || []);
+  const leadStatusHistoryByContactId = rowsByContactId(relatedRows.leadStatusHistory || []);
 
   return contactRows.map((contact, index) => {
     const lead = leadByContactId.get(contact.id);
@@ -233,6 +244,10 @@ function mapContacts(
     const submittedAt = submittedAtForLead(contactEvents, lead);
     const contactConversationMessages = filterTimelineRowsForBusinessUnit(
       conversationMessagesByContactId.get(contact.id) || [],
+      businessUnitIds,
+    );
+    const contactLeadStatusHistory = filterTimelineRowsForBusinessUnit(
+      leadStatusHistoryByContactId.get(contact.id) || [],
       businessUnitIds,
     );
     const source = lead?.sourceName || lead?.sourceType || contact.sourceLabel || seedData.SOURCES[index % seedData.SOURCES.length];
@@ -346,6 +361,8 @@ function mapContacts(
       },
       courseRecords: courseSummary.records,
       courseSummary,
+      enrollmentStatusChangedAt: latestStatusTransitionDate(contactLeadStatusHistory, 'Enrolled'),
+      droppedStatusChangedAt: latestStatusTransitionDate(contactLeadStatusHistory, 'Dropped / Quit'),
       sourceActivityDate,
       assignedTo: lead?.assignedUserId || '',
       submittedAt,
@@ -676,6 +693,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       conversationMessageRows,
       contactPeopleRows,
       contactCourseRecordRows,
+      leadStatusHistoryRows,
       taskRows,
       userRows,
       membershipRows,
@@ -695,6 +713,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       db.select().from(conversationMessagesTable).where(scopedOrgWhere(conversationMessagesTable, session)).orderBy(desc(conversationMessagesTable.occurredAt)),
       db.select().from(contactPeopleTable).where(scopedOrgWhere(contactPeopleTable, session)).orderBy(desc(contactPeopleTable.isPrimary), asc(contactPeopleTable.name)),
       db.select().from(contactCourseRecordsTable).where(scopedBusinessUnitWhere(contactCourseRecordsTable, session)).orderBy(desc(contactCourseRecordsTable.createdAt)),
+      db.select().from(leadStatusHistoryTable).where(scopedBusinessUnitWhere(leadStatusHistoryTable, session)).orderBy(desc(leadStatusHistoryTable.occurredAt), desc(leadStatusHistoryTable.createdAt)),
       db.select().from(tasksTable).where(scopedTaskWhere(tasksTable, session)).orderBy(asc(tasksTable.dueAt), desc(tasksTable.createdAt)),
       db.select().from(usersTable).where(and(
         eq(usersTable.organizationId, session.user.organizationId),
@@ -745,6 +764,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
         conversationMessages: conversationMessageRows,
         contactPeople: contactPeopleRows,
         courseRecords: contactCourseRecordRows,
+        leadStatusHistory: leadStatusHistoryRows,
       },
     );
     const contactLookup = new Map([
