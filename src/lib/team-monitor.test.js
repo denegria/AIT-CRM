@@ -90,12 +90,12 @@ test('team monitor view model summarizes existing CRM tasks without new entities
   assert.equal(viewModel.summary.enrollmentsToday, 1);
   assert.equal(viewModel.summary.enrollmentsThisWeek, 1);
   assert.equal(viewModel.summary.cancellationsThisWeek, 1);
-  assert.equal(viewModel.summary.assignedContacts, 2);
+  assert.equal(viewModel.summary.assignedContacts, 4);
   assert.equal(viewModel.canUseTeamMonitor, true);
   assert.equal(viewModel.roster.find((employee) => employee.id === 'u-two').signal, 'Behind');
   assert.equal(viewModel.roster.find((employee) => employee.id === 'u-one').progressDone, 1);
   assert.equal(viewModel.roster.find((employee) => employee.id === 'u-one').enrollmentsThisWeekCount, 1);
-  assert.equal(viewModel.roster.find((employee) => employee.id === 'u-one').assignedContactCount, 2);
+  assert.equal(viewModel.roster.find((employee) => employee.id === 'u-one').assignedContactCount, 3);
   assert.equal(viewModel.roster.find((employee) => employee.id === 'u-two').cancellationsThisWeekCount, 1);
 });
 

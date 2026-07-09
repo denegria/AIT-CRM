@@ -369,8 +369,8 @@ export function TeamMonitorPreview({ employees, tasks, contacts, currentUser }) 
           <ExternalLink size={14} />
         </Link>
       </div>
-      <TeamPulse summary={viewModel.summary} />
       <PreviewEmployeeList roster={viewModel.roster} />
+      <TeamPulse summary={viewModel.summary} />
       <p className={s.lowData}>{viewModel.lowDataNotice}</p>
     </section>
   );
