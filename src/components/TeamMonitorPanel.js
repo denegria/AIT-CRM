@@ -27,7 +27,7 @@ const KPI_META = [
 const PULSE_STATS = [
   { key: 'assignedContacts', label: 'Assigned contacts' },
   { key: 'enrollmentsToday', label: 'Today' },
-  { key: 'cancellationsThisWeek', label: 'Cancellations wk' },
+  { key: 'cancellationsThisWeek', label: 'Cancellations' },
 ];
 
 function taskDateLabel(value) {
@@ -85,9 +85,14 @@ function TeamPulse({ summary }) {
   return (
     <div className={s.teamPulse}>
       <div className={s.pulseLead}>
-        <span>Team pulse</span>
-        <strong>{summary.enrollmentsThisWeek}</strong>
-        <small>Enrollments this week · {summary.enrollmentTrendLabel}</small>
+        <span className={s.pulseEyebrow}>Team pulse</span>
+        <div className={s.pulsePrimary}>
+          <strong>{summary.enrollmentsThisWeek}</strong>
+          <span>
+            <b>Enrollments this week</b>
+            <small>{summary.enrollmentTrendLabel}</small>
+          </span>
+        </div>
       </div>
       <div className={s.pulseStats}>
         {PULSE_STATS.map(({ key, label }) => (

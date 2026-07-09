@@ -75,11 +75,21 @@ function latestTime(...values) {
   }, 0);
 }
 
+function isBulkStatusReconcile(row = {}) {
+  const source = clean(row.metadataJson?.source || row.metadata_json?.source).toLowerCase();
+  if (!source) return false;
+  if (row.actorUserId || row.actor_user_id || clean(row.fromStatus || row.from_status)) return false;
+  return source.includes('retargeting-reconcile') ||
+    source.includes('status-reconcile') ||
+    source.includes('backfill') ||
+    source.includes('import');
+}
+
 function latestStatusTransitionDate(rows = [], targetStatus = '') {
   const normalizedTarget = clean(targetStatus).toLowerCase();
   if (!normalizedTarget) return '';
   const match = rows
-    .filter((row) => clean(row.toStatus).toLowerCase() === normalizedTarget)
+    .filter((row) => clean(row.toStatus).toLowerCase() === normalizedTarget && !isBulkStatusReconcile(row))
     .sort((left, right) => latestTime(right.occurredAt, right.createdAt) - latestTime(left.occurredAt, left.createdAt))[0];
   return match ? toIsoDateTime(match.occurredAt || match.createdAt) : '';
 }
