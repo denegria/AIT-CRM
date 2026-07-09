@@ -74,6 +74,13 @@ test('team monitor view model summarizes existing CRM tasks without new entities
         assignedTo: 'u-one',
         leadCreatedAt: '2026-07-08T12:00:00Z',
       },
+      {
+        id: 'c-4',
+        workflowKey: 'ait_usa',
+        status: 'Retargeting',
+        assignedTo: 'u-one',
+        leadCreatedAt: '2026-07-08T12:00:00Z',
+      },
     ],
   });
 
@@ -83,7 +90,7 @@ test('team monitor view model summarizes existing CRM tasks without new entities
   assert.equal(viewModel.summary.enrollmentsToday, 1);
   assert.equal(viewModel.summary.enrollmentsThisWeek, 1);
   assert.equal(viewModel.summary.cancellationsThisWeek, 1);
-  assert.equal(viewModel.summary.assignedContacts, 3);
+  assert.equal(viewModel.summary.assignedContacts, 2);
   assert.equal(viewModel.canUseTeamMonitor, true);
   assert.equal(viewModel.roster.find((employee) => employee.id === 'u-two').signal, 'Behind');
   assert.equal(viewModel.roster.find((employee) => employee.id === 'u-one').progressDone, 1);

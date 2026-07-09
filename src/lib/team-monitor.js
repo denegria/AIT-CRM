@@ -128,9 +128,15 @@ function isCancellationContact(contact = {}) {
     courseRecords(contact).some((record) => ['cancelled', 'dropped', 'transferred'].includes(clean(record.status)));
 }
 
+function isCurrentAssignedContact(contact = {}) {
+  if (!isAitUsaContact(contact)) return false;
+  const status = contactStatus(contact);
+  return ['New Lead', 'Follow Up', 'Enrolled'].includes(status);
+}
+
 function isAssignedContact(contact = {}) {
   if (!isAitUsaContact(contact)) return false;
-  return Boolean(contactOwnerId(contact));
+  return Boolean(contactOwnerId(contact)) && isCurrentAssignedContact(contact);
 }
 
 function trendLabel(current = 0, previous = 0) {
@@ -359,7 +365,7 @@ export function buildTeamMonitorViewModel({
     canUseTeamMonitor: canUseTeamMonitor(currentUser),
     summary,
     roster,
-    lowDataNotice: 'Online/last-online use current session plus task activity. Enrollment counts use assigned contacts with Enrolled status-change dates where available.',
+    lowDataNotice: 'Online/last-online use current session plus task activity. Assigned contacts exclude retargeting and dropped historical rows.',
     updatedLabel: 'Local CRM data',
   };
 }
