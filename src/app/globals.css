@@ -587,6 +587,7 @@ a { color: inherit; text-decoration: none; }
   border-color: color-mix(in srgb, var(--success) 25%, var(--border-subtle));
 }
 .main-content {
+  position: relative;
   flex: 1;
   min-width: 0;
   max-width: 100%;
@@ -598,12 +599,19 @@ a { color: inherit; text-decoration: none; }
     radial-gradient(circle at 98% 0%, color-mix(in srgb, var(--accent-muted) 58%, transparent), transparent 260px);
 }
 
-.app-topbar {
+.app-notification-dock {
+  pointer-events: none;
+  position: absolute;
+  top: 24px;
+  right: 32px;
+  z-index: 80;
   display: flex;
   justify-content: flex-end;
   align-items: center;
-  min-height: 38px;
-  margin: -10px 0 14px;
+}
+
+.app-notification-dock > * {
+  pointer-events: auto;
 }
 
 [data-theme="dark"] .main-content {
@@ -639,9 +647,9 @@ a { color: inherit; text-decoration: none; }
     padding-bottom: var(--mobile-shell-clearance);
   }
 
-  .app-topbar {
-    min-height: 36px;
-    margin: 0 0 10px;
+  .app-notification-dock {
+    top: 12px;
+    right: 12px;
   }
 
   .app-layout-has-mobile-scope .main-content {
@@ -699,6 +707,7 @@ a { color: inherit; text-decoration: none; }
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 16px;
+  padding-right: 56px;
   margin-bottom: 22px;
 }
 .page-title {
@@ -2529,6 +2538,7 @@ a { color: inherit; text-decoration: none; }
   .page-header {
     align-items: stretch;
     flex-direction: column;
+    padding-right: 46px;
   }
 
   .page-header > .flex-gap {

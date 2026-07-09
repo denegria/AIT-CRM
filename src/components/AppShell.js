@@ -43,9 +43,9 @@ export default function AppShell({ children }) {
       <div className={`app-layout ${hasMobileScopeBar ? 'app-layout-has-mobile-scope' : ''}`}>
         <Sidebar />
         <main className="main-content">
-          <header className="app-topbar" aria-label="Workspace notifications">
+          <div className="app-notification-dock" aria-label="Workspace notifications">
             <NotificationBell />
-          </header>
+          </div>
           {loaded && !canUseRoute ? (
             <div className="empty-state">
               {isWorkOrdersRoute
