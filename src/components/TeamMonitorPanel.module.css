@@ -86,16 +86,22 @@
 }
 
 .previewCard {
+  align-self: start;
+  display: flex;
+  flex-direction: column;
+  height: 520px;
   min-width: 0;
+  overflow: hidden;
 }
 
 .teamPulse {
   align-items: center;
   background: linear-gradient(135deg, color-mix(in srgb, var(--accent-muted) 36%, var(--bg-secondary)), var(--bg-secondary));
-  border-bottom: 1px solid var(--border-subtle);
+  border-top: 1px solid var(--border-subtle);
   display: grid;
   gap: 18px;
   grid-template-columns: minmax(230px, 0.78fr) minmax(0, 1fr);
+  margin-top: auto;
   padding: 16px 18px;
 }
 
@@ -184,6 +190,7 @@
 
 .previewList {
   display: grid;
+  flex: 0 0 auto;
 }
 
 .previewEmployee {
@@ -623,6 +630,7 @@
 }
 
 .dashboardLayout {
+  align-items: start;
   display: grid;
   gap: 18px;
   grid-template-columns: minmax(0, 1fr) minmax(280px, 360px);
@@ -708,9 +716,15 @@
     grid-template-columns: 1fr;
   }
 
+  .previewCard {
+    height: auto;
+    overflow: visible;
+  }
+
   .teamPulse {
     align-items: stretch;
     gap: 12px;
+    margin-top: 0;
   }
 
   .pulseStats {
