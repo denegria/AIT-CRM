@@ -1,10 +1,7 @@
 'use client';
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import {
-  publishActiveSession,
-  sessionIdentityForUser,
-} from '@/lib/auth/session-sync.js';
+import { usePathname } from 'next/navigation';
+import { AuthWelcomeLobby, LoginGate } from '@/components/AuthExperience';
 import * as defaults from './data';
 
 const CRMContext = createContext(null);
@@ -133,62 +130,6 @@ function getInitialData(seedData = defaults) {
 
 function crmWriteAccessError() {
   return new Error('Insufficient CRM write access.');
-}
-
-function LoginGate({ authError }) {
-  const router = useRouter();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState(authError || '');
-  const [submitting, setSubmitting] = useState(false);
-
-  async function handleSubmit(event) {
-    event.preventDefault();
-    setSubmitting(true);
-    setError('');
-    try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ email, password }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(payload.error || 'Sign-in failed.');
-      const sessionResponse = await fetch('/api/auth/session', { cache: 'no-store' }).catch(() => null);
-      const sessionPayload = await sessionResponse?.json?.().catch(() => ({}));
-      if (sessionPayload?.user) {
-        publishActiveSession(sessionIdentityForUser(sessionPayload.user), 'login');
-      }
-      router.refresh();
-    } catch (err) {
-      setError(err.message || 'Sign-in failed.');
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  return (
-    <div className="auth-shell">
-      <form className="card auth-card" onSubmit={handleSubmit}>
-        <div className="card-title">AIT CRM sign in</div>
-        <p className="page-subtitle" style={{marginTop:0}}>
-          Database-backed CRM data requires a signed-in user with server-owned permissions.
-        </p>
-        <div className="form-group">
-          <label className="form-label">Email</label>
-          <input className="input" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="email" required />
-        </div>
-        <div className="form-group">
-          <label className="form-label">Password</label>
-          <input className="input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required />
-        </div>
-        {error && <div className="empty-state" style={{padding:10, marginBottom:12}}>{error}</div>}
-        <button className="btn btn-primary" type="submit" disabled={submitting}>
-          {submitting ? 'Signing in...' : 'Sign in'}
-        </button>
-      </form>
-    </div>
-  );
 }
 
 export function CRMProvider({ children, initialData }) {
@@ -671,7 +612,12 @@ export function CRMProvider({ children, initialData }) {
     );
   }
 
-  return <CRMContext.Provider value={value}>{children}</CRMContext.Provider>;
+  return (
+    <CRMContext.Provider value={value}>
+      <AuthWelcomeLobby currentUser={currentUser} />
+      {children}
+    </CRMContext.Provider>
+  );
 }
 
 export function useCRM() {
