@@ -12,9 +12,9 @@ const employees = [
   { id: 'u-two', name: 'Mateo', roleKeys: ['account_manager'] },
 ];
 
-test('team monitor access is limited to admin and senior coordinator roles', () => {
+test('team monitor access is limited to admin roles', () => {
   assert.equal(canUseTeamMonitor({ primaryRoleKey: 'admin' }), true);
-  assert.equal(canUseTeamMonitor({ primaryRoleKey: 'senior_coordinator' }), true);
+  assert.equal(canUseTeamMonitor({ primaryRoleKey: 'senior_coordinator' }), false);
   assert.equal(canUseTeamMonitor({ primaryRoleKey: 'account_manager' }), false);
   assert.equal(canUseTeamMonitor({ primaryRoleKey: 'sales_manager' }), false);
 });
