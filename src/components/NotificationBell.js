@@ -25,12 +25,14 @@ export default function NotificationBell() {
   const [items, setItems] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState('');
   const panelRef = useRef(null);
   const enabled = dataSource === 'postgres' && currentUser && access.canReadCrm;
 
   const loadNotifications = useCallback(async () => {
     if (!enabled) return;
     setLoading(true);
+    setLoadError('');
     try {
       const response = await fetch('/api/notifications?limit=8', { cache: 'no-store' });
       const payload = await response.json().catch(() => ({}));
@@ -39,6 +41,7 @@ export default function NotificationBell() {
       setUnreadCount(Number(payload.unreadCount || 0));
     } catch (error) {
       console.error(error);
+      setLoadError('Notifications unavailable');
     } finally {
       setLoading(false);
     }
@@ -109,8 +112,14 @@ export default function NotificationBell() {
             )}
           </div>
           <div className={s.list}>
-            {loading && !items.length && <div className={s.empty}>Loading...</div>}
-            {!loading && !items.length && <div className={s.empty}>No notifications</div>}
+            {loading && !items.length && <div className={s.empty}>Loading notifications</div>}
+            {!loading && loadError && !items.length && (
+              <div className={s.stateBlock}>
+                <span>{loadError}</span>
+                <button type="button" onClick={loadNotifications}>Retry</button>
+              </div>
+            )}
+            {!loading && !loadError && !items.length && <div className={s.empty}>No new notifications</div>}
             {items.map((item) => (
               <div key={item.id} className={`${s.item} ${item.readAt ? '' : s.unread}`}>
                 <Link href={item.href || '/pipeline'} className={s.itemLink} onClick={() => {
