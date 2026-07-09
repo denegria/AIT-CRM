@@ -24,11 +24,10 @@ const KPI_META = [
   { key: 'overdue', label: 'Overdue tasks', Icon: Clock3, tone: 'danger' },
 ];
 
-const SNAPSHOT_META = [
-  { key: 'enrollmentsToday', label: 'Enrollments today' },
-  { key: 'enrollmentsThisWeek', label: 'Enrollments week' },
-  { key: 'cancellationsThisWeek', label: 'Cancellations week' },
+const PULSE_STATS = [
   { key: 'assignedContacts', label: 'Assigned contacts' },
+  { key: 'enrollmentsToday', label: 'Today' },
+  { key: 'cancellationsThisWeek', label: 'Cancellations wk' },
 ];
 
 function taskDateLabel(value) {
@@ -82,15 +81,22 @@ function MetricCards({ summary }) {
   );
 }
 
-function BusinessSnapshot({ summary }) {
+function TeamPulse({ summary }) {
   return (
-    <div className={s.snapshotGrid}>
-      {SNAPSHOT_META.map(({ key, label }) => (
-        <div key={key} className={s.snapshotItem}>
-          <strong>{summary[key]}</strong>
-          <span>{label}</span>
-        </div>
-      ))}
+    <div className={s.teamPulse}>
+      <div className={s.pulseLead}>
+        <span>Team pulse</span>
+        <strong>{summary.enrollmentsThisWeek}</strong>
+        <small>Enrollments this week · {summary.enrollmentTrendLabel}</small>
+      </div>
+      <div className={s.pulseStats}>
+        {PULSE_STATS.map(({ key, label }) => (
+          <span key={key}>
+            <strong>{summary[key]}</strong>
+            <small>{label}</small>
+          </span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -358,7 +364,7 @@ export function TeamMonitorPreview({ employees, tasks, contacts, currentUser }) 
           <ExternalLink size={14} />
         </Link>
       </div>
-      <BusinessSnapshot summary={viewModel.summary} />
+      <TeamPulse summary={viewModel.summary} />
       <PreviewEmployeeList roster={viewModel.roster} />
       <p className={s.lowData}>{viewModel.lowDataNotice}</p>
     </section>
