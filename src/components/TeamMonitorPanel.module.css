@@ -131,20 +131,25 @@
 
 .pulseStats {
   align-items: stretch;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.pulseStats span {
-  align-content: center;
   background: color-mix(in srgb, var(--bg-tertiary) 72%, transparent);
   border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
   border-radius: var(--radius-md);
   display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+}
+
+.pulseStats span {
+  align-content: center;
+  border-left: 1px solid var(--border-subtle);
+  display: grid;
   gap: 4px;
   min-height: 64px;
   padding: 10px 12px;
+}
+
+.pulseStats span:first-child {
+  border-left: 0;
 }
 
 .pulseStats strong {
@@ -685,8 +690,13 @@
     padding: 0 0 12px;
   }
 
-  .pulseStats {
-    grid-template-columns: 1fr;
+  .pulseStats span {
+    min-height: 56px;
+    padding: 9px 10px;
+  }
+
+  .pulseStats strong {
+    font-size: var(--text-lg);
   }
 
   .sectionHeader,
