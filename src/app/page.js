@@ -315,6 +315,7 @@ export default function Dashboard() {
             <TeamMonitorPreview
               employees={employees}
               tasks={tasks}
+              contacts={contacts}
               currentUser={monitorCurrentUser}
             />
             <aside className={monitorStyles.rightRail}>

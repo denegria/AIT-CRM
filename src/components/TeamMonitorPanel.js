@@ -3,12 +3,12 @@
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
-  CalendarDays,
   CheckSquare,
   Clock3,
   ExternalLink,
-  Flag,
   MessageSquare,
+  TrendingDown,
+  UserCheck,
   UsersRound,
 } from 'lucide-react';
 import {
@@ -19,9 +19,16 @@ import s from './TeamMonitorPanel.module.css';
 
 const KPI_META = [
   { key: 'onlineNow', label: 'Online now', Icon: UsersRound, tone: 'success' },
-  { key: 'dueToday', label: 'Due today', Icon: CalendarDays, tone: 'accent' },
-  { key: 'overdue', label: 'Overdue', Icon: Clock3, tone: 'danger' },
-  { key: 'needsFollowUp', label: 'Needs follow-up', Icon: Flag, tone: 'warning' },
+  { key: 'signupsThisWeek', label: 'Signups this week', Icon: UserCheck, tone: 'accent', captionKey: 'signupTrendLabel' },
+  { key: 'cancellationsThisWeek', label: 'Cancellations this week', Icon: TrendingDown, tone: 'warning', captionKey: 'cancellationTrendLabel' },
+  { key: 'overdue', label: 'Overdue tasks', Icon: Clock3, tone: 'danger' },
+];
+
+const SNAPSHOT_META = [
+  { key: 'signupsToday', label: 'Signups today' },
+  { key: 'signupsThisWeek', label: 'Signups week' },
+  { key: 'cancellationsThisWeek', label: 'Cancellations week' },
+  { key: 'activeEnrollmentLeads', label: 'Active leads' },
 ];
 
 function taskDateLabel(value) {
@@ -59,7 +66,7 @@ function EmployeeAvatar({ employee }) {
 function MetricCards({ summary }) {
   return (
     <div className={s.kpiGrid}>
-      {KPI_META.map(({ key, label, Icon, tone }) => (
+      {KPI_META.map(({ key, label, Icon, tone, captionKey }) => (
         <div key={key} className={s.kpiCard}>
           <span className={`${s.kpiIcon} ${s[`tone_${tone}`]}`}>
             <Icon size={20} />
@@ -67,9 +74,58 @@ function MetricCards({ summary }) {
           <span>
             <span className={s.kpiLabel}>{label}</span>
             <strong className={s.kpiValue}>{summary[key]}</strong>
+            {captionKey && <small className={s.kpiCaption}>{summary[captionKey]}</small>}
           </span>
         </div>
       ))}
+    </div>
+  );
+}
+
+function BusinessSnapshot({ summary }) {
+  return (
+    <div className={s.snapshotGrid}>
+      {SNAPSHOT_META.map(({ key, label }) => (
+        <div key={key} className={s.snapshotItem}>
+          <strong>{summary[key]}</strong>
+          <span>{label}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PreviewEmployeeList({ roster }) {
+  const visibleRoster = roster.slice(0, 5);
+  return (
+    <div className={s.previewList}>
+      {visibleRoster.map((employee) => (
+        <div key={employee.id} className={s.previewEmployee}>
+          <div className={s.previewIdentity}>
+            <EmployeeAvatar employee={employee} />
+            <span>
+              <strong>{employee.name || employee.email || 'Unnamed user'}</strong>
+              <small>{employee.presenceLabel} · {employee.lastOnlineLabel}</small>
+            </span>
+          </div>
+          <div className={s.previewProgress}>
+            <span>{employee.progressDone} of {employee.progressTotal} tasks</span>
+            <div className={s.progressTrack}>
+              <span style={{ width: progressWidth(employee.progressDone, employee.progressTotal) }} />
+            </div>
+          </div>
+          <div className={s.previewOutcome}>
+            <strong>{employee.signupsThisWeekCount}</strong>
+            <span>signups wk</span>
+          </div>
+          <span className={employee.overdueCount ? s.previewRiskDanger : s.previewRisk}>
+            {employee.overdueCount ? `${employee.overdueCount} overdue` : employee.signal}
+          </span>
+        </div>
+      ))}
+      {!visibleRoster.length && (
+        <div className={s.emptyDetail}>No active employees are available for this scope.</div>
+      )}
     </div>
   );
 }
@@ -84,8 +140,9 @@ function RosterTable({ roster, selectedEmployeeId, onSelectEmployee, compact = f
             <th>Employee</th>
             <th>Status / last online</th>
             <th>Today progress</th>
-            <th>Assigned</th>
-            <th>Incomplete</th>
+            <th>Active leads</th>
+            <th>Signups wk</th>
+            <th>Cancels wk</th>
             <th>Overdue</th>
             <th>Signal</th>
           </tr>
@@ -121,8 +178,9 @@ function RosterTable({ roster, selectedEmployeeId, onSelectEmployee, compact = f
                   </div>
                 </div>
               </td>
-              <td>{employee.assignedCount}</td>
-              <td><span className={s.softCount}>{employee.incompleteCount}</span></td>
+              <td>{employee.activeLeadCount}</td>
+              <td><span className={s.successCount}>{employee.signupsThisWeekCount}</span></td>
+              <td><span className={employee.cancellationsThisWeekCount ? s.softCount : s.zeroCount}>{employee.cancellationsThisWeekCount}</span></td>
               <td><span className={employee.overdueCount ? s.dangerCount : s.zeroCount}>{employee.overdueCount}</span></td>
               <td>
                 <span className={s.signal}>
@@ -134,7 +192,7 @@ function RosterTable({ roster, selectedEmployeeId, onSelectEmployee, compact = f
           ))}
           {!visibleRoster.length && (
             <tr>
-              <td colSpan={7} className={s.emptyCell}>No active employees are available for this scope.</td>
+              <td colSpan={8} className={s.emptyCell}>No active employees are available for this scope.</td>
             </tr>
           )}
         </tbody>
@@ -161,6 +219,15 @@ function EmployeeDetail({ employee }) {
           <small>{employee.roleLabel}</small>
           <small>{employee.presenceLabel} · {employee.lastOnlineLabel}</small>
         </span>
+      </div>
+      <div className={s.detailSection}>
+        <div className={s.detailTitle}>Enrollment movement</div>
+        <div className={s.detailStats}>
+          <span><strong>{employee.activeLeadCount}</strong><small>active leads</small></span>
+          <span><strong>{employee.signupsTodayCount}</strong><small>today</small></span>
+          <span><strong>{employee.signupsThisWeekCount}</strong><small>signups wk</small></span>
+          <span><strong>{employee.cancellationsThisWeekCount}</strong><small>cancels wk</small></span>
+        </div>
       </div>
       <div className={s.detailSection}>
         <div className={s.detailTitle}>Today tasks</div>
@@ -276,29 +343,30 @@ function TaskScopePreview({ tasks, employees, currentUser, showScopeControls = t
   );
 }
 
-export function TeamMonitorPreview({ employees, tasks, currentUser }) {
-  const viewModel = useMemo(() => buildTeamMonitorViewModel({ employees, tasks, currentUser }), [currentUser, employees, tasks]);
+export function TeamMonitorPreview({ employees, tasks, contacts, currentUser }) {
+  const viewModel = useMemo(() => buildTeamMonitorViewModel({ employees, tasks, contacts, currentUser }), [contacts, currentUser, employees, tasks]);
 
   return (
     <section className={s.previewCard}>
       <div className={s.sectionHeader}>
         <div>
           <h2>Team Monitor Preview</h2>
-          <p>Today&apos;s employee activity and task progress.</p>
+          <p>Online status, task progress, and enrollment movement.</p>
         </div>
         <Link className="btn btn-sm" href="/team-monitor">
           Open Team Monitor
           <ExternalLink size={14} />
         </Link>
       </div>
-      <RosterTable roster={viewModel.roster} compact />
+      <BusinessSnapshot summary={viewModel.summary} />
+      <PreviewEmployeeList roster={viewModel.roster} />
       <p className={s.lowData}>{viewModel.lowDataNotice}</p>
     </section>
   );
 }
 
-export function TeamMonitorPageSurface({ employees, tasks, currentUser }) {
-  const viewModel = useMemo(() => buildTeamMonitorViewModel({ employees, tasks, currentUser }), [currentUser, employees, tasks]);
+export function TeamMonitorPageSurface({ employees, tasks, contacts, currentUser }) {
+  const viewModel = useMemo(() => buildTeamMonitorViewModel({ employees, tasks, contacts, currentUser }), [contacts, currentUser, employees, tasks]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState(() => viewModel.roster[0]?.id || '');
   const selectedEmployee = viewModel.roster.find((employee) => employee.id === selectedEmployeeId) || viewModel.roster[0] || null;
 
@@ -307,7 +375,7 @@ export function TeamMonitorPageSurface({ employees, tasks, currentUser }) {
       <div className="page-header">
         <div>
           <h1 className="page-title">Team Monitor</h1>
-          <p className="page-subtitle">Today&apos;s employee activity and task progress.</p>
+          <p className="page-subtitle">Employee activity, task progress, signups, and cancellation movement.</p>
         </div>
       </div>
       <MetricCards summary={viewModel.summary} />

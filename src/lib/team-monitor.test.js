@@ -51,14 +51,44 @@ test('team monitor view model summarizes existing CRM tasks without new entities
         dueAt: '2026-07-08T10:00:00Z',
       },
     ],
+    contacts: [
+      {
+        id: 'c-1',
+        workflowKey: 'ait_usa',
+        status: 'Enrolled',
+        assignedTo: 'u-one',
+        courseRecords: [{ id: 'cr-1', status: 'active', startDate: '2026-07-08' }],
+      },
+      {
+        id: 'c-2',
+        workflowKey: 'ait_usa',
+        status: 'Dropped / Quit',
+        assignedTo: 'u-two',
+        courseRecords: [{ id: 'cr-2', status: 'cancelled', endDate: '2026-07-07' }],
+      },
+      {
+        id: 'c-3',
+        workflowKey: 'ait_usa',
+        status: 'Follow Up',
+        assignedTo: 'u-one',
+        leadCreatedAt: '2026-07-08T12:00:00Z',
+      },
+    ],
   });
 
   assert.equal(viewModel.summary.onlineNow, 1);
   assert.equal(viewModel.summary.dueToday, 1);
   assert.equal(viewModel.summary.overdue, 1);
+  assert.equal(viewModel.summary.signupsToday, 1);
+  assert.equal(viewModel.summary.signupsThisWeek, 1);
+  assert.equal(viewModel.summary.cancellationsThisWeek, 1);
+  assert.equal(viewModel.summary.activeEnrollmentLeads, 1);
   assert.equal(viewModel.canUseTeamMonitor, true);
   assert.equal(viewModel.roster.find((employee) => employee.id === 'u-two').signal, 'Behind');
   assert.equal(viewModel.roster.find((employee) => employee.id === 'u-one').progressDone, 1);
+  assert.equal(viewModel.roster.find((employee) => employee.id === 'u-one').signupsThisWeekCount, 1);
+  assert.equal(viewModel.roster.find((employee) => employee.id === 'u-one').activeLeadCount, 1);
+  assert.equal(viewModel.roster.find((employee) => employee.id === 'u-two').cancellationsThisWeekCount, 1);
 });
 
 test('dashboard task preview scopes my, team, and all employee tasks', () => {

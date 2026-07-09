@@ -8,6 +8,7 @@ import { useCRM } from '@/lib/store';
 export default function TeamMonitorPage() {
   const {
     role,
+    contacts,
     employees,
     tasks,
     currentUser,
@@ -30,6 +31,7 @@ export default function TeamMonitorPage() {
     <TeamMonitorPageSurface
       employees={employees}
       tasks={tasks}
+      contacts={contacts}
       currentUser={monitorCurrentUser}
     />
   );

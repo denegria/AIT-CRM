@@ -6,6 +6,7 @@ import {
   taskDateKey,
 } from './tasks/visibility.js';
 import { ROLE_KEYS, roleKeysForUser } from './crm/coordinator-policy.js';
+import { WORKFLOW_KEYS, normalizeLifecycleStatus } from './crm/lifecycle.js';
 
 const TEAM_MONITOR_ROLE_KEYS = new Set([
   ROLE_KEYS.ADMIN,
@@ -14,6 +15,14 @@ const TEAM_MONITOR_ROLE_KEYS = new Set([
 
 function taskOwnerId(task = {}) {
   return task.ownerUserId || task.assignedTo || '';
+}
+
+function clean(value = '') {
+  return String(value || '').trim();
+}
+
+function contactOwnerId(contact = {}) {
+  return contact.assignedTo || contact.ownerUserId || contact.assignedUserId || '';
 }
 
 function taskTime(task = {}) {
@@ -39,6 +48,176 @@ function relativeTimeLabel(time, now = Date.now()) {
   if (hours < 24) return `${hours}h ago`;
   const days = Math.floor(hours / 24);
   return `${days}d ago`;
+}
+
+function dateTime(value = '') {
+  if (!value) return 0;
+  const time = new Date(value).getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function dateOnly(value = '') {
+  const time = dateTime(value);
+  return time ? new Date(time).toISOString().slice(0, 10) : '';
+}
+
+function startOfUtcDay(time) {
+  const date = new Date(time);
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+}
+
+function startOfUtcWeek(time) {
+  const dayStart = startOfUtcDay(time);
+  const day = new Date(dayStart).getUTCDay();
+  const mondayOffset = (day + 6) % 7;
+  return dayStart - (mondayOffset * 24 * 60 * 60 * 1000);
+}
+
+function inRange(time, start, end) {
+  return Boolean(time && time >= start && time < end);
+}
+
+function contactStatus(contact = {}) {
+  const workflowKey = clean(contact.workflowKey);
+  return normalizeLifecycleStatus(clean(contact.currentStage) || clean(contact.status), { workflowKey }) ||
+    clean(contact.currentStage) ||
+    clean(contact.status);
+}
+
+function isAitUsaContact(contact = {}) {
+  return contact.workflowKey === WORKFLOW_KEYS.AIT_USA;
+}
+
+function courseRecords(contact = {}) {
+  return Array.isArray(contact.courseRecords) ? contact.courseRecords : [];
+}
+
+function enrollmentDateForContact(contact = {}) {
+  const activeCourse = courseRecords(contact)
+    .filter((record) => ['active', 'planned'].includes(clean(record.status)))
+    .sort((left, right) => dateTime(right.startDate || right.createdAt) - dateTime(left.startDate || left.createdAt))[0];
+  return dateOnly(
+    contact.enrolledAt ||
+    contact.enrollmentDate ||
+    activeCourse?.startDate ||
+    activeCourse?.createdAt ||
+    contact.lastEdited ||
+    contact.leadCreatedAt ||
+    contact.createdAt,
+  );
+}
+
+function cancellationDateForContact(contact = {}) {
+  const endedCourse = courseRecords(contact)
+    .filter((record) => ['cancelled', 'dropped', 'transferred'].includes(clean(record.status)))
+    .sort((left, right) => dateTime(right.endDate || right.updatedAt || right.createdAt) - dateTime(left.endDate || left.updatedAt || left.createdAt))[0];
+  return dateOnly(
+    contact.cancelledAt ||
+    contact.canceledAt ||
+    contact.droppedAt ||
+    endedCourse?.endDate ||
+    endedCourse?.updatedAt ||
+    contact.lastEdited ||
+    contact.leadCreatedAt ||
+    contact.createdAt,
+  );
+}
+
+function isSignupContact(contact = {}) {
+  if (!isAitUsaContact(contact)) return false;
+  return contactStatus(contact) === 'Enrolled' ||
+    courseRecords(contact).some((record) => ['active', 'planned'].includes(clean(record.status)));
+}
+
+function isCancellationContact(contact = {}) {
+  if (!isAitUsaContact(contact)) return false;
+  return contactStatus(contact) === 'Dropped / Quit' ||
+    courseRecords(contact).some((record) => ['cancelled', 'dropped', 'transferred'].includes(clean(record.status)));
+}
+
+function isActiveEnrollmentLead(contact = {}) {
+  if (!isAitUsaContact(contact)) return false;
+  const status = contactStatus(contact);
+  return ['New Lead', 'Follow Up'].includes(status);
+}
+
+function trendLabel(current = 0, previous = 0) {
+  const delta = current - previous;
+  if (delta > 0) return `+${delta} vs last week`;
+  if (delta < 0) return `${delta} vs last week`;
+  return 'Flat vs last week';
+}
+
+function buildBusinessMovement({ contacts = [], employeeIds = [], now = Date.now() } = {}) {
+  const todayStart = startOfUtcDay(now);
+  const tomorrowStart = todayStart + 24 * 60 * 60 * 1000;
+  const weekStart = startOfUtcWeek(now);
+  const nextWeekStart = weekStart + 7 * 24 * 60 * 60 * 1000;
+  const previousWeekStart = weekStart - 7 * 24 * 60 * 60 * 1000;
+  const employeeSet = new Set(employeeIds);
+  const byEmployee = new Map(employeeIds.map((id) => [id, {
+    activeLeads: 0,
+    signupsToday: 0,
+    signupsThisWeek: 0,
+    signupsPreviousWeek: 0,
+    cancellationsThisWeek: 0,
+    cancellationsPreviousWeek: 0,
+    enrolledTotal: 0,
+  }]));
+  const totals = {
+    activeLeads: 0,
+    signupsToday: 0,
+    signupsThisWeek: 0,
+    signupsPreviousWeek: 0,
+    cancellationsThisWeek: 0,
+    cancellationsPreviousWeek: 0,
+    enrolledTotal: 0,
+  };
+
+  for (const contact of contacts) {
+    if (!isAitUsaContact(contact)) continue;
+    const ownerId = contactOwnerId(contact);
+    const employeeMetrics = employeeSet.has(ownerId) ? byEmployee.get(ownerId) : null;
+    const targets = [totals, employeeMetrics].filter(Boolean);
+
+    if (isActiveEnrollmentLead(contact)) {
+      for (const target of targets) target.activeLeads += 1;
+    }
+
+    if (isSignupContact(contact)) {
+      const signupTime = dateTime(enrollmentDateForContact(contact));
+      for (const target of targets) target.enrolledTotal += 1;
+      if (inRange(signupTime, todayStart, tomorrowStart)) {
+        for (const target of targets) target.signupsToday += 1;
+      }
+      if (inRange(signupTime, weekStart, nextWeekStart)) {
+        for (const target of targets) target.signupsThisWeek += 1;
+      }
+      if (inRange(signupTime, previousWeekStart, weekStart)) {
+        for (const target of targets) target.signupsPreviousWeek += 1;
+      }
+    }
+
+    if (isCancellationContact(contact)) {
+      const cancellationTime = dateTime(cancellationDateForContact(contact));
+      if (inRange(cancellationTime, weekStart, nextWeekStart)) {
+        for (const target of targets) target.cancellationsThisWeek += 1;
+      }
+      if (inRange(cancellationTime, previousWeekStart, weekStart)) {
+        for (const target of targets) target.cancellationsPreviousWeek += 1;
+      }
+    }
+  }
+
+  return {
+    byEmployee,
+    totals: {
+      ...totals,
+      netSignupsThisWeek: totals.signupsThisWeek - totals.cancellationsThisWeek,
+      signupTrendLabel: trendLabel(totals.signupsThisWeek, totals.signupsPreviousWeek),
+      cancellationTrendLabel: trendLabel(totals.cancellationsThisWeek, totals.cancellationsPreviousWeek),
+    },
+  };
 }
 
 export function canUseTeamMonitor(user = {}) {
@@ -106,11 +285,14 @@ export function buildTaskScopePreview({
 export function buildTeamMonitorViewModel({
   employees = [],
   tasks = [],
+  contacts = [],
   currentUser = null,
   today = taskDateKey(new Date()),
   now = Date.now(),
 } = {}) {
   const normalizedTasks = tasks.map(normalizeMonitorTask);
+  const employeeIds = employees.map((employee) => employee.id).filter(Boolean);
+  const businessMovement = buildBusinessMovement({ contacts, employeeIds, now });
   const tasksByOwner = new Map();
   for (const task of normalizedTasks) {
     if (!task.ownerUserId) continue;
@@ -121,6 +303,7 @@ export function buildTeamMonitorViewModel({
 
   const roster = employees.map((employee) => {
     const employeeTasks = tasksByOwner.get(employee.id) || [];
+    const businessMetrics = businessMovement.byEmployee.get(employee.id) || {};
     const openTasks = employeeTasks.filter(isTaskOpen);
     const completedToday = employeeTasks.filter((task) => task.completed && taskDateKey(task.completedAt || task.updatedAt) === today);
     const dueToday = employeeTasks.filter((task) => isTaskDueToday(task, today));
@@ -150,6 +333,11 @@ export function buildTeamMonitorViewModel({
       overdueCount: overdue.length,
       dueTodayCount: dueToday.length,
       needsFollowUpCount: attentionCount,
+      activeLeadCount: businessMetrics.activeLeads || 0,
+      signupsTodayCount: businessMetrics.signupsToday || 0,
+      signupsThisWeekCount: businessMetrics.signupsThisWeek || 0,
+      cancellationsThisWeekCount: businessMetrics.cancellationsThisWeek || 0,
+      enrolledTotalCount: businessMetrics.enrolledTotal || 0,
       signal,
       signalTone: signal === 'Behind' ? 'danger' : signal === 'Watch' ? 'warning' : 'success',
       todayTasks: dueToday.slice(0, 5),
@@ -166,13 +354,20 @@ export function buildTeamMonitorViewModel({
     dueToday: normalizedTasks.filter((task) => isTaskDueToday(task, today)).length,
     overdue: normalizedTasks.filter((task) => isTaskOverdue(task, today)).length,
     needsFollowUp: roster.reduce((sum, employee) => sum + employee.needsFollowUpCount, 0),
+    signupsToday: businessMovement.totals.signupsToday,
+    signupsThisWeek: businessMovement.totals.signupsThisWeek,
+    cancellationsThisWeek: businessMovement.totals.cancellationsThisWeek,
+    activeEnrollmentLeads: businessMovement.totals.activeLeads,
+    netSignupsThisWeek: businessMovement.totals.netSignupsThisWeek,
+    signupTrendLabel: businessMovement.totals.signupTrendLabel,
+    cancellationTrendLabel: businessMovement.totals.cancellationTrendLabel,
   };
 
   return {
     canUseTeamMonitor: canUseTeamMonitor(currentUser),
     summary,
     roster,
-    lowDataNotice: 'Online and last-online use current session plus CRM task activity until dedicated activity tracking exists.',
+    lowDataNotice: 'Online/last-online use current session plus task activity. Signup and cancellation counts use assigned lead/course dates until transition audit attribution exists.',
     updatedLabel: 'Local CRM data',
   };
 }
