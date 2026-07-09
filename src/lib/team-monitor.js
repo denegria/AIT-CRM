@@ -99,11 +99,7 @@ function enrollmentDateForContact(contact = {}) {
   return dateOnly(
     contact.enrolledAt ||
     contact.enrollmentDate ||
-    activeCourse?.startDate ||
-    activeCourse?.createdAt ||
-    contact.lastEdited ||
-    contact.leadCreatedAt ||
-    contact.createdAt,
+    activeCourse?.startDate,
   );
 }
 
@@ -115,11 +111,7 @@ function cancellationDateForContact(contact = {}) {
     contact.cancelledAt ||
     contact.canceledAt ||
     contact.droppedAt ||
-    endedCourse?.endDate ||
-    endedCourse?.updatedAt ||
-    contact.lastEdited ||
-    contact.leadCreatedAt ||
-    contact.createdAt,
+    endedCourse?.endDate,
   );
 }
 

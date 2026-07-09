@@ -111,3 +111,36 @@ test('dashboard task preview scopes my, team, and all employee tasks', () => {
     ['unassigned'],
   );
 });
+
+test('weekly owner metrics require explicit enrollment and cancellation dates', () => {
+  const viewModel = buildTeamMonitorViewModel({
+    employees,
+    currentUser: { id: 'u-admin', primaryRoleKey: 'admin' },
+    today: '2026-07-08',
+    now: new Date('2026-07-08T18:00:00Z').getTime(),
+    contacts: [
+      {
+        id: 'old-enrolled',
+        workflowKey: 'ait_usa',
+        status: 'Enrolled',
+        assignedTo: 'u-one',
+        lastEdited: '2026-07-08T12:00:00Z',
+        leadCreatedAt: '2026-07-08T12:00:00Z',
+      },
+      {
+        id: 'old-dropped',
+        workflowKey: 'ait_usa',
+        status: 'Dropped / Quit',
+        assignedTo: 'u-two',
+        lastEdited: '2026-07-08T12:00:00Z',
+        leadCreatedAt: '2026-07-08T12:00:00Z',
+        courseRecords: [{ id: 'no-end-date', status: 'cancelled', updatedAt: '2026-07-08T12:00:00Z' }],
+      },
+    ],
+  });
+
+  assert.equal(viewModel.summary.signupsThisWeek, 0);
+  assert.equal(viewModel.summary.cancellationsThisWeek, 0);
+  assert.equal(viewModel.roster.find((employee) => employee.id === 'u-one').enrolledTotalCount, 1);
+  assert.equal(viewModel.roster.find((employee) => employee.id === 'u-two').cancellationsThisWeekCount, 0);
+});
