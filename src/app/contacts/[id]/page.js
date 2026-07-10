@@ -1447,6 +1447,134 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
+  const profileSidebar = (
+    <div className={s.profileCard}>
+      <div className={s.profileHeader}>
+        <div className={s.profileAvatarLarge}>{contact.name.charAt(0)}</div>
+        <div className={s.profileTitleBlock}>
+          <div className={s.profileNameRow}>
+            <h1 className={s.profileName}>{contact.name}</h1>
+            <span className={`badge badge-${contact.status.toLowerCase().replace(' ', '')}`}>{contact.status}</span>
+          </div>
+          <div className={s.profileRole}>{detailView.profileTitle}</div>
+          {detailView.sourceEyebrow && <div className={s.profileSource}>{detailView.sourceEyebrow}</div>}
+        </div>
+      </div>
+
+      {(detailView.workflowTitle || detailView.workflowNext || detailView.workflowChips?.length) && (
+        <div className={s.workflowCard}>
+          <div className={s.workflowHeader}>
+            <AlertCircle size={15} />
+            <span>{detailView.workflowTitle}</span>
+          </div>
+          {detailView.workflowNext && <div className={s.workflowNext}>{detailView.workflowNext}</div>}
+          {!!detailView.workflowChips?.length && (
+            <div className={s.workflowTags}>
+              {detailView.workflowChips.map((tag) => (
+                <span key={tag} className={s.workflowTag}><Tag size={11} /> {tag.replaceAll('_', ' ')}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {access.canReadImportReview && !!cleanupAudits.length && (
+        <div className={s.cleanupSummary} aria-label="Cleanup provenance">
+          <div className={s.cleanupSummaryHeader}>
+            <Archive size={15} />
+            <span>Cleanup provenance</span>
+          </div>
+          {cleanupAudits.map((audit) => (
+            <div key={audit.id} className={s.cleanupSummaryItem}>
+              <strong>{audit.title}</strong>
+              <span>{audit.detail}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className={s.profileInfo}>
+        <div className={s.infoItem}>
+          <Mail size={16} />
+          {cleanText(contact.email) ? (
+            <a className={s.infoLink} href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a>
+          ) : (
+            <span className={s.missingInfo}>Missing email</span>
+          )}
+        </div>
+        <div className={s.infoItem}>
+          <Phone size={16} />
+          {cleanText(contact.phone) ? (
+            <a className={s.infoLink} href={phoneHref(contact.phone)}>{contact.phone}</a>
+          ) : (
+            <span className={s.missingInfo}>Missing phone</span>
+          )}
+        </div>
+        {contact.address && <div className={s.infoItem}><MapPin size={16} /> <span>{contact.address}</span></div>}
+        <div className={s.infoItem}><Calendar size={16} /> <span>Last touch: {contact.lastTouch || contact.lastContact || 'None'}</span></div>
+        <div className={s.infoItem}><Edit3 size={16} /> <span>Last edited: {contact.lastEdited || 'None'}</span></div>
+        {detailView.contactability?.status && detailView.contactability.status !== 'reachable' && (
+          <div className={s.infoItem}>
+            <AlertCircle size={16} />
+            <span>{detailView.contactability.reason || detailView.contactability.label}</span>
+          </div>
+        )}
+      </div>
+
+      {!!detailView.highlights?.length && (
+        <div className={s.highlightGrid} aria-label={`${detailView.profileTitle} summary`}>
+          {detailView.highlights.map((item) => (
+            <div key={`${item.label}-${item.value}`} className={`${s.highlightItem} ${item.tone ? s[`highlight_${item.tone}`] || '' : ''}`}>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className={s.profileAssignment}>
+        <div className={s.assignmentLabel}>Assigned To</div>
+        <div className={s.assignmentUser}>
+          <div className={s.userAvatarSmall}>{(assignedEmployee?.label || 'U').charAt(0)}</div>
+          <span>{assignedEmployee?.label || 'Unassigned'}</span>
+        </div>
+      </div>
+
+      {access.canWriteCrm && (
+        <div className={s.actionPanel} aria-label={`${detailView.profileTitle} actions`}>
+          <div className={s.actionPanelHeader}>Actions</div>
+          {nextStatus && (
+            <button
+              className={`${s.statusStepButton} btn btn-block`}
+              type="button"
+              onClick={moveToNextStatus}
+              disabled={statusUpdating}
+            >
+              <ArrowRight size={16} style={{marginRight: 8}} /> {statusUpdating ? 'Updating...' : `Move to ${nextStatus}`}
+            </button>
+          )}
+          <Link
+            className="btn btn-block btn-primary"
+            href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}
+          >
+            <CheckSquare size={16} style={{marginRight: 8}} /> Create Follow-up
+          </Link>
+          {showWorkOrdersTab && access.canWriteWorkOrders && (
+            <Link
+              className="btn btn-block"
+              href={`/work-orders?contactId=${encodeURIComponent(contact.id)}`}
+            >
+              <ClipboardList size={16} style={{marginRight: 8}} /> Create Work Order
+            </Link>
+          )}
+          <button className="btn btn-block" onClick={openEditModal}>
+            <Edit3 size={16} style={{marginRight: 8}} /> Edit Profile
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className={s.detailPage + " fade-in"}>
       <div className="page-header">
@@ -1456,134 +1584,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       </div>
 
       <div className={s.detailLayout}>
-        {/* Left Sidebar: Profile */}
-        <div className={s.profileCard}>
-          <div className={s.profileHeader}>
-            <div className={s.profileAvatarLarge}>{contact.name.charAt(0)}</div>
-            <div className={s.profileTitleBlock}>
-              <div className={s.profileNameRow}>
-                <h1 className={s.profileName}>{contact.name}</h1>
-                <span className={`badge badge-${contact.status.toLowerCase().replace(' ', '')}`}>{contact.status}</span>
-              </div>
-              <div className={s.profileRole}>{detailView.profileTitle}</div>
-              {detailView.sourceEyebrow && <div className={s.profileSource}>{detailView.sourceEyebrow}</div>}
-            </div>
-          </div>
-
-          {(detailView.workflowTitle || detailView.workflowNext || detailView.workflowChips?.length) && (
-            <div className={s.workflowCard}>
-              <div className={s.workflowHeader}>
-                <AlertCircle size={15} />
-                <span>{detailView.workflowTitle}</span>
-              </div>
-              {detailView.workflowNext && <div className={s.workflowNext}>{detailView.workflowNext}</div>}
-              {!!detailView.workflowChips?.length && (
-                <div className={s.workflowTags}>
-                  {detailView.workflowChips.map((tag) => (
-                    <span key={tag} className={s.workflowTag}><Tag size={11} /> {tag.replaceAll('_', ' ')}</span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {access.canReadImportReview && !!cleanupAudits.length && (
-            <div className={s.cleanupSummary} aria-label="Cleanup provenance">
-              <div className={s.cleanupSummaryHeader}>
-                <Archive size={15} />
-                <span>Cleanup provenance</span>
-              </div>
-              {cleanupAudits.map((audit) => (
-                <div key={audit.id} className={s.cleanupSummaryItem}>
-                  <strong>{audit.title}</strong>
-                  <span>{audit.detail}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className={s.profileInfo}>
-            <div className={s.infoItem}>
-              <Mail size={16} />
-              {cleanText(contact.email) ? (
-                <a className={s.infoLink} href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a>
-              ) : (
-                <span className={s.missingInfo}>Missing email</span>
-              )}
-            </div>
-            <div className={s.infoItem}>
-              <Phone size={16} />
-              {cleanText(contact.phone) ? (
-                <a className={s.infoLink} href={phoneHref(contact.phone)}>{contact.phone}</a>
-              ) : (
-                <span className={s.missingInfo}>Missing phone</span>
-              )}
-            </div>
-            {contact.address && <div className={s.infoItem}><MapPin size={16} /> <span>{contact.address}</span></div>}
-            <div className={s.infoItem}><Calendar size={16} /> <span>Last touch: {contact.lastTouch || contact.lastContact || 'None'}</span></div>
-            <div className={s.infoItem}><Edit3 size={16} /> <span>Last edited: {contact.lastEdited || 'None'}</span></div>
-            {detailView.contactability?.status && detailView.contactability.status !== 'reachable' && (
-              <div className={s.infoItem}>
-                <AlertCircle size={16} />
-                <span>{detailView.contactability.reason || detailView.contactability.label}</span>
-              </div>
-            )}
-          </div>
-
-          {!!detailView.highlights?.length && (
-            <div className={s.highlightGrid} aria-label={`${detailView.profileTitle} summary`}>
-              {detailView.highlights.map((item) => (
-                <div key={`${item.label}-${item.value}`} className={`${s.highlightItem} ${item.tone ? s[`highlight_${item.tone}`] || '' : ''}`}>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className={s.profileAssignment}>
-            <div className={s.assignmentLabel}>Assigned To</div>
-            <div className={s.assignmentUser}>
-              <div className={s.userAvatarSmall}>{(assignedEmployee?.label || 'U').charAt(0)}</div>
-              <span>{assignedEmployee?.label || 'Unassigned'}</span>
-            </div>
-          </div>
-          
-          {access.canWriteCrm && (
-            <div className={s.actionPanel} aria-label={`${detailView.profileTitle} actions`}>
-              <div className={s.actionPanelHeader}>Actions</div>
-              {nextStatus && (
-                <button
-                  className={`${s.statusStepButton} btn btn-block`}
-                  type="button"
-                  onClick={moveToNextStatus}
-                  disabled={statusUpdating}
-                >
-                  <ArrowRight size={16} style={{marginRight: 8}} /> {statusUpdating ? 'Updating...' : `Move to ${nextStatus}`}
-                </button>
-              )}
-              <Link
-                className="btn btn-block btn-primary"
-                href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}
-              >
-                <CheckSquare size={16} style={{marginRight: 8}} /> Create Follow-up
-              </Link>
-              {showWorkOrdersTab && access.canWriteWorkOrders && (
-                <Link
-                  className="btn btn-block"
-                  href={`/work-orders?contactId=${encodeURIComponent(contact.id)}`}
-                >
-                  <ClipboardList size={16} style={{marginRight: 8}} /> Create Work Order
-                </Link>
-              )}
-              <button className="btn btn-block" onClick={openEditModal}>
-                <Edit3 size={16} style={{marginRight: 8}} /> Edit Profile
-              </button>
-            </div>
-          )}
-        </div>
-
-        {/* Right Section: Content */}
+        {/* Main Section: Review content */}
         <div className={s.contentSection}>
           <section className={s.reviewContext} aria-label={`${detailView.profileTitle} review context`}>
             <div className={s.reviewContextHeader}>
@@ -2304,6 +2305,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             )}
           </div>
         </div>
+        {profileSidebar}
       </div>
 
       {courseModal && (

@@ -24,6 +24,8 @@
 }
 
 .profileCard {
+  grid-column: 1;
+  grid-row: 1;
   background: linear-gradient(180deg, var(--bg-elevated), var(--bg-secondary));
   border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
   border-radius: var(--radius-xl);
@@ -449,6 +451,8 @@
 }
 
 .contentSection {
+  grid-column: 2;
+  grid-row: 1;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -1872,9 +1876,13 @@
     grid-template-columns: minmax(0, 1fr);
   }
   .contentSection {
+    grid-column: 1;
+    grid-row: auto;
     order: 1;
   }
   .profileCard {
+    grid-column: 1;
+    grid-row: auto;
     position: static;
     order: 2;
   }
