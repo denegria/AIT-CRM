@@ -1165,9 +1165,74 @@ a { color: inherit; text-decoration: none; }
 .contacts-filter-popover-anchor {
   position: relative;
   display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 .contacts-table-add-button {
   min-height: 34px;
+}
+.contacts-active-filter-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  max-width: min(560px, calc(100vw - 120px));
+}
+.contacts-active-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  min-width: 0;
+  padding: 4px 9px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 78%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-elevated) 88%, var(--bg-secondary));
+}
+.contacts-active-filter-chip small {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1.1;
+}
+.contacts-active-filter-chip strong {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 850;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.contacts-active-filter-chip-remove,
+.contacts-active-filter-chip-lock,
+.contacts-filter-done {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.contacts-active-filter-chip-remove {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-tertiary) 72%, var(--bg-secondary));
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.contacts-active-filter-chip-remove:hover {
+  background: color-mix(in srgb, var(--accent-muted) 82%, var(--bg-secondary));
+  color: var(--accent);
+}
+.contacts-active-filter-chip-lock {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-secondary));
+  color: var(--accent);
 }
 .contacts-filter-menu {
   position: absolute;
@@ -1230,6 +1295,25 @@ a { color: inherit; text-decoration: none; }
   justify-content: flex-end;
   gap: 8px;
   flex: 0 0 auto;
+}
+.contacts-filter-reset-inline,
+.contacts-filter-done {
+  margin-top: 0;
+}
+.contacts-filter-done {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+}
+.contacts-filter-done:hover {
+  filter: brightness(0.98);
 }
 .contacts-filter-summary-strip {
   display: flex;
@@ -1815,6 +1899,36 @@ a { color: inherit; text-decoration: none; }
 .timeframe-calendar-card.active {
   border-color: color-mix(in srgb, var(--accent) 34%, var(--border-subtle));
   background: color-mix(in srgb, var(--accent-muted) 26%, var(--bg-elevated));
+}
+.timeframe-preset-summary {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+}
+.timeframe-preset-summary small {
+  color: var(--text-muted);
+  font-size: 9px;
+  font-weight: 850;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.timeframe-preset-summary strong {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1.15;
+}
+.timeframe-preset-summary p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 750;
+  line-height: 1.3;
 }
 .timeframe-date-chips {
   display: grid;

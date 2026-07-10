@@ -6,6 +6,7 @@ import {
   CONTACT_LEAD_DATE_SCOPE_ALL,
   CONTACT_LEAD_DATE_SCOPE_CUSTOM,
   CONTACT_LEAD_DATE_SCOPE_QUARTER,
+  contactLeadDatePanelSummary,
   DEFAULT_CONTACT_LEAD_DATE_SCOPE,
 } from '@/lib/contact-directory-filters';
 
@@ -93,6 +94,10 @@ export default function TimeframeFilterPanel({
   const [visibleMonth, setVisibleMonth] = useState(() => monthStart(initialMonth));
   const days = useMemo(() => calendarDays(visibleMonth), [visibleMonth]);
   const isCustom = activeScope === CONTACT_LEAD_DATE_SCOPE_CUSTOM;
+  const panelSummary = useMemo(
+    () => contactLeadDatePanelSummary(activeScope, leadDateFrom, leadDateTo),
+    [activeScope, leadDateFrom, leadDateTo],
+  );
 
   const options = [
     {
@@ -158,16 +163,24 @@ export default function TimeframeFilterPanel({
       </div>
 
       <div className={`timeframe-calendar-card ${isCustom ? 'active' : ''}`}>
-        <div className="timeframe-date-chips" aria-label="Selected calendar range">
-          <span>
-            <small>From</small>
-            <strong>{displayDate(leadDateFrom)}</strong>
-          </span>
-          <span>
-            <small>To</small>
-            <strong>{displayDate(leadDateTo)}</strong>
-          </span>
-        </div>
+        {isCustom ? (
+          <div className="timeframe-date-chips" aria-label="Selected calendar range">
+            <span>
+              <small>From</small>
+              <strong>{displayDate(leadDateFrom)}</strong>
+            </span>
+            <span>
+              <small>To</small>
+              <strong>{displayDate(leadDateTo)}</strong>
+            </span>
+          </div>
+        ) : (
+          <div className="timeframe-preset-summary" aria-label="Selected timeframe">
+            <small>{panelSummary.label}</small>
+            <strong>{panelSummary.value}</strong>
+            <p>{panelSummary.detail}</p>
+          </div>
+        )}
 
         <div className="timeframe-calendar-head">
           <button
@@ -212,7 +225,7 @@ export default function TimeframeFilterPanel({
         </div>
 
         <div className="timeframe-calendar-hint">
-          {isCustom ? `${counts.custom} matching range` : 'Select dates for a custom range'}
+          {isCustom ? `${counts.custom} matching range` : 'Choose dates below to switch to a custom range'}
         </div>
       </div>
     </div>

@@ -14,6 +14,7 @@ import {
 import {
   buildCourseFilterOptions,
   buildSourceFilterOptions,
+  contactLeadDateScopeLabel,
   contactFilterQuery,
   contactFilterStateFromParams,
   contactMatchesLeadDateScope,
@@ -46,7 +47,7 @@ import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import TimeframeFilterPanel from '@/components/TimeframeFilterPanel';
-import { Activity, AlertCircle, BadgeDollarSign, Clock3, ListFilter, PhoneOff, RotateCcw, UserRoundCheck, UsersRound } from 'lucide-react';
+import { Activity, AlertCircle, BadgeDollarSign, Check, Clock3, ListFilter, PhoneOff, RotateCcw, UserRoundCheck, UsersRound, X } from 'lucide-react';
 
 const empty = {
   name: '',
@@ -293,18 +294,6 @@ function BucketCell({ row }) {
       {bucket.detail && <div className="workflow-next">{bucket.detail}</div>}
     </div>
   );
-}
-
-function dateScopeLabel(scope = DEFAULT_CONTACT_LEAD_DATE_SCOPE, from = '', to = '') {
-  if (scope === CONTACT_LEAD_DATE_SCOPE_QUARTER) return 'This Quarter';
-  if (scope === CONTACT_LEAD_DATE_SCOPE_ALL) return 'All Leads';
-  if (scope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
-    if (from && to) return `${from} to ${to}`;
-    if (from) return `From ${from}`;
-    if (to) return `Through ${to}`;
-    return 'Custom time frame';
-  }
-  return 'Current Year';
 }
 
 export default function ContactsPage({ mode = 'contacts' } = {}) {
@@ -661,7 +650,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     return sourceFilterOptions.find((option) => option.value === sourceFilter)?.label || sourceFilter;
   }, [sourceFilter, sourceFilterOptions]);
   const selectedDateLabel = useMemo(
-    () => dateScopeLabel(effectiveLeadDateScope, leadDateFrom, leadDateTo),
+    () => contactLeadDateScopeLabel(effectiveLeadDateScope, leadDateFrom, leadDateTo),
     [effectiveLeadDateScope, leadDateFrom, leadDateTo],
   );
   const implicitLeadDate = (coordinatorUiPolicy.ownerScoped && !hasExplicitLeadDateFilter) || ownerFilterImpliesAllLeadDates;
@@ -729,6 +718,11 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   ]);
   const activeFilterCount = activeFilterChips.filter((chip) => chip.onRemove).length;
   const filterSummaryChips = activeFilterChips.filter((chip) => chip.onRemove).slice(0, 3);
+  const visibleActiveFilterChips = activeFilterChips.filter((chip) => (
+    chip.onRemove ||
+    (chip.key === 'leadDateScope' && !dateFilterIsDefault) ||
+    (chip.key === 'owner' && selectedOwnerLabel)
+  ));
   const hasNonDefaultLeadDateFilter = coordinatorUiPolicy.ownerScoped
     ? hasExplicitLeadDateFilter
     : leadDateScope !== DEFAULT_CONTACT_LEAD_DATE_SCOPE ||
@@ -826,8 +820,61 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                 {hasNonDefaultFilters && <strong>{activeFilterCount}</strong>}
               </button>
 
+              {visibleActiveFilterChips.length > 0 && (
+                <div className="contacts-active-filter-chips" aria-label="Active contact filters">
+                  {visibleActiveFilterChips.map((chip) => (
+                    <span key={chip.key} className="contacts-active-filter-chip">
+                      <small>{CONTACT_FILTER_CHIP_LABELS[chip.key] || 'Filter'}</small>
+                      <strong>{chip.label}</strong>
+                      {chip.onRemove ? (
+                        <button
+                          type="button"
+                          className="contacts-active-filter-chip-remove"
+                          onClick={chip.onRemove}
+                          aria-label={`Remove ${CONTACT_FILTER_CHIP_LABELS[chip.key] || 'filter'}: ${chip.label}`}
+                        >
+                          <X size={12} />
+                        </button>
+                      ) : (
+                        <span className="contacts-active-filter-chip-lock" aria-hidden="true">
+                          <Check size={12} />
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                  {hasNonDefaultFilters && (
+                    <button className="contacts-filter-reset contacts-filter-reset-inline" type="button" onClick={resetFilters}>
+                      <RotateCcw size={13} />
+                      Clear all
+                    </button>
+                  )}
+                </div>
+              )}
+
               {filterMenuOpen && (
                 <div className="contacts-filter-menu" role="dialog" aria-label="Contact filters">
+                  <div className="contacts-filter-menu-header">
+                    <div className="contacts-filter-title">
+                      <span>Contact filters</span>
+                      {hasNonDefaultFilters ? <em>{activeFilterCount}</em> : null}
+                    </div>
+                    <div className="contacts-filter-menu-actions">
+                      {hasNonDefaultFilters && (
+                        <button className="contacts-filter-reset contacts-filter-reset-inline" type="button" onClick={resetFilters}>
+                          <RotateCcw size={13} />
+                          Clear all
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="contacts-filter-done"
+                        onClick={() => setFilterMenuOpen(false)}
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="contacts-filter-summary-strip" aria-label="Selected contact filters">
                     {filterSummaryChips.length > 0 ? (
                       <>

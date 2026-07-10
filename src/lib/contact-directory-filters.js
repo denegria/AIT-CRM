@@ -40,6 +40,53 @@ function clean(value = '') {
   return String(value || '').trim();
 }
 
+export function contactLeadDateScopeLabel(scope = DEFAULT_CONTACT_LEAD_DATE_SCOPE, from = '', to = '') {
+  if (scope === CONTACT_LEAD_DATE_SCOPE_QUARTER) return 'This Quarter';
+  if (scope === CONTACT_LEAD_DATE_SCOPE_ALL) return 'All Leads';
+  if (scope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
+    if (from && to) return `${from} to ${to}`;
+    if (from) return `From ${from}`;
+    if (to) return `Through ${to}`;
+    return 'Custom time frame';
+  }
+  return 'Current Year';
+}
+
+export function contactLeadDatePanelSummary(scope = DEFAULT_CONTACT_LEAD_DATE_SCOPE, from = '', to = '') {
+  if (scope === CONTACT_LEAD_DATE_SCOPE_QUARTER) {
+    return {
+      mode: 'preset',
+      label: 'Timeframe',
+      value: 'Quarter-to-date',
+      detail: 'Dates are applied automatically for the current quarter.',
+    };
+  }
+  if (scope === CONTACT_LEAD_DATE_SCOPE_ALL) {
+    return {
+      mode: 'preset',
+      label: 'Timeframe',
+      value: 'No date limit',
+      detail: 'All contacts stay visible until you choose a narrower range.',
+    };
+  }
+  if (scope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
+    return {
+      mode: 'custom',
+      label: 'Custom range',
+      value: contactLeadDateScopeLabel(scope, from, to),
+      detail: from || to
+        ? 'Selected dates are applied to the contact list.'
+        : 'Select dates below to narrow the contact list.',
+    };
+  }
+  return {
+    mode: 'preset',
+    label: 'Timeframe',
+    value: 'Year-to-date',
+    detail: 'Dates are applied automatically for the current calendar year.',
+  };
+}
+
 function normalized(value = '') {
   return clean(value).toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ');
 }

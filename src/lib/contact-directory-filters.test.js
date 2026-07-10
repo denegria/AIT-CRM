@@ -5,6 +5,8 @@ import {
   buildCourseFilterOptions,
   buildSourceFilterOptions,
   contactMatchesLeadDateScope,
+  contactLeadDatePanelSummary,
+  contactLeadDateScopeLabel,
   contactFilterQuery,
   contactFilterStateFromParams,
   contactMatchesSource,
@@ -102,6 +104,34 @@ test('lead date scopes support quarter, current year, all leads, and custom time
     contactFilterQuery({ leadDateScope: CONTACT_LEAD_DATE_SCOPE_QUARTER }),
     'leadDateScope=quarter',
   );
+});
+
+test('lead date display helpers keep preset and custom copy consistent', () => {
+  assert.equal(contactLeadDateScopeLabel(DEFAULT_CONTACT_LEAD_DATE_SCOPE), 'Current Year');
+  assert.equal(contactLeadDateScopeLabel(CONTACT_LEAD_DATE_SCOPE_QUARTER), 'This Quarter');
+  assert.equal(
+    contactLeadDateScopeLabel('custom', '2026-01-01', '2026-06-30'),
+    '2026-01-01 to 2026-06-30',
+  );
+
+  assert.deepEqual(contactLeadDatePanelSummary(DEFAULT_CONTACT_LEAD_DATE_SCOPE), {
+    mode: 'preset',
+    label: 'Timeframe',
+    value: 'Year-to-date',
+    detail: 'Dates are applied automatically for the current calendar year.',
+  });
+  assert.deepEqual(contactLeadDatePanelSummary(CONTACT_LEAD_DATE_SCOPE_QUARTER), {
+    mode: 'preset',
+    label: 'Timeframe',
+    value: 'Quarter-to-date',
+    detail: 'Dates are applied automatically for the current quarter.',
+  });
+  assert.deepEqual(contactLeadDatePanelSummary('custom', '2026-01-01', '2026-06-30'), {
+    mode: 'custom',
+    label: 'Custom range',
+    value: '2026-01-01 to 2026-06-30',
+    detail: 'Selected dates are applied to the contact list.',
+  });
 });
 
 test('pipeline filter params preserve date, owner, status, source, course, activity, search, and compact state', () => {
