@@ -298,6 +298,12 @@ function cleanText(value = '') {
   return String(value || '').trim();
 }
 
+function compactReviewText(value = '', maxLength = 82) {
+  const cleaned = cleanText(value).replace(/\s+/g, ' ');
+  if (cleaned.length <= maxLength) return cleaned;
+  return `${cleaned.slice(0, Math.max(0, maxLength - 3)).trim()}...`;
+}
+
 function phoneHref(value = '') {
   const digits = cleanText(value).replace(/[^\d+]/g, '');
   return digits ? `tel:${digits}` : '';
@@ -481,6 +487,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     estimate: contactFinancialCounts.estimate || 0,
     payment: contactFinancialCounts.payment || 0,
   }), [contactFinancialCounts, contactWorkOrders.length]);
+  const assignedOwnerId = contact?.assignedTo || contact?.ownerUserId || '';
+  const assignedEmployee = useMemo(() => (
+    ownerOptions.find((owner) => owner.id === assignedOwnerId) || null
+  ), [assignedOwnerId, ownerOptions]);
   const contactBusinessUnit = businessUnits.find((unit) => unit.id === contact?.businessUnitId || unit.id === contact?.primaryBusinessUnitId);
   const financialContext = useMemo(() => ({ contact, businessUnit: contactBusinessUnit }), [contact, contactBusinessUnit]);
   const estimateTotal = useMemo(() => estimateForm.items.reduce((sum, item) => (
@@ -567,7 +577,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     (!showCoursesTab && activeTab === 'courses')
       ? 'timeline'
       : activeTab;
-  const assignedEmployee = null;
   const fallbackTimeline = useMemo(() => {
     if (!contact) return [];
     if (Array.isArray(contact.timeline) && contact.timeline.length) return contact.timeline;
@@ -592,6 +601,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     if (renderedTimelineFilter === 'all') return timelineSource.filter((item) => !isSourceDetailTimelineItem(item));
     return timelineSource.filter((item) => timelineFilterCategory(item) === renderedTimelineFilter);
   }, [renderedTimelineFilter, timelineSource]);
+  const latestReviewActivity = useMemo(() => (
+    timelineSource.find((item) => !isSourceDetailTimelineItem(item)) || null
+  ), [timelineSource]);
   const hasMatchingServerConversations = serverConversations.contactId === contact?.id && serverConversations.reloadKey === conversationReloadKey;
   const conversationMessages = hasMatchingServerConversations && serverConversations.items ? serverConversations.items : [];
   const linkedSnapshotCounts = {
@@ -611,6 +623,39 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       detail: snapshotDetail(timelineSource, item.key, linkedCount, item.empty),
     };
   });
+  const reviewSummary = [
+    {
+      label: 'Status',
+      value: detailView.workflowTitle || contact?.status || contact?.currentStage || 'No status set',
+      detail: detailView.sourceEyebrow || contactBusinessUnit?.name || '',
+    },
+    {
+      label: 'Owner',
+      value: assignedEmployee?.label || 'Unassigned',
+      detail: assignedEmployee ? 'Assigned coordinator' : 'No coordinator assigned',
+      tone: assignedEmployee ? '' : 'warning',
+    },
+    {
+      label: 'Contactability',
+      value: detailView.contactability?.label || 'Reachable',
+      detail: detailView.contactability?.reason || [
+        cleanText(contact?.phone) ? 'Phone on file' : '',
+        cleanText(contact?.email) ? 'Email on file' : '',
+      ].filter(Boolean).join(' and ') || 'No contact channel on file',
+      tone: detailView.contactability?.canFollowUp === false ? 'warning' : '',
+    },
+    {
+      label: 'Latest activity',
+      value: latestReviewActivity ? compactReviewText(latestReviewActivity.title || latestReviewActivity.text || timelineCategoryLabel(latestReviewActivity)) : 'No activity recorded',
+      detail: latestReviewActivity ? [timelineCategoryLabel(latestReviewActivity), dateLabel(latestReviewActivity)].filter(Boolean).join(' - ') : 'Timeline is empty',
+    },
+    {
+      label: 'Next context',
+      value: detailView.workflowNext ? compactReviewText(detailView.workflowNext) : 'No next follow-up recorded',
+      detail: detailView.workflowChips?.length ? detailView.workflowChips.join(' - ') : '',
+      tone: detailView.workflowNext || detailView.workflowChips?.length ? '' : 'muted',
+    },
+  ];
   const conversationStatus = dataSource === 'postgres' && contact?.id && !hasMatchingServerConversations
     ? 'loading'
     : hasMatchingServerConversations && serverConversations.error
@@ -1499,17 +1544,17 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           <div className={s.profileAssignment}>
             <div className={s.assignmentLabel}>Assigned To</div>
             <div className={s.assignmentUser}>
-              <div className={s.userAvatarSmall}>{assignedEmployee?.name?.charAt(0)}</div>
-              <span>{assignedEmployee?.name || 'Unassigned'}</span>
+              <div className={s.userAvatarSmall}>{(assignedEmployee?.label || 'U').charAt(0)}</div>
+              <span>{assignedEmployee?.label || 'Unassigned'}</span>
             </div>
           </div>
           
           {access.canWriteCrm && (
-            <>
+            <div className={s.actionPanel} aria-label={`${detailView.profileTitle} actions`}>
+              <div className={s.actionPanelHeader}>Actions</div>
               {nextStatus && (
                 <button
                   className={`${s.statusStepButton} btn btn-block`}
-                  style={{marginTop: 20}}
                   type="button"
                   onClick={moveToNextStatus}
                   disabled={statusUpdating}
@@ -1519,7 +1564,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               )}
               <Link
                 className="btn btn-block btn-primary"
-                style={{marginTop: nextStatus ? 8 : 20}}
                 href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}
               >
                 <CheckSquare size={16} style={{marginRight: 8}} /> Create Follow-up
@@ -1527,21 +1571,39 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               {showWorkOrdersTab && access.canWriteWorkOrders && (
                 <Link
                   className="btn btn-block"
-                  style={{marginTop: 8}}
                   href={`/work-orders?contactId=${encodeURIComponent(contact.id)}`}
                 >
                   <ClipboardList size={16} style={{marginRight: 8}} /> Create Work Order
                 </Link>
               )}
-              <button className="btn btn-block" style={{marginTop: 8}} onClick={openEditModal}>
+              <button className="btn btn-block" onClick={openEditModal}>
                 <Edit3 size={16} style={{marginRight: 8}} /> Edit Profile
               </button>
-            </>
+            </div>
           )}
         </div>
 
         {/* Right Section: Content */}
         <div className={s.contentSection}>
+          <section className={s.reviewContext} aria-label={`${detailView.profileTitle} review context`}>
+            <div className={s.reviewContextHeader}>
+              <div>
+                <span>Review context</span>
+                <strong>{contact.name}</strong>
+              </div>
+              <small>{detailView.profileTitle}</small>
+            </div>
+            <div className={s.reviewGrid}>
+              {reviewSummary.map((item) => (
+                <div key={item.label} className={`${s.reviewItem} ${item.tone ? s[`review_${item.tone}`] || '' : ''}`}>
+                  <span>{item.label}</span>
+                  <strong>{item.value}</strong>
+                  {item.detail && <small>{item.detail}</small>}
+                </div>
+              ))}
+            </div>
+          </section>
+
           <div className={s.contentTabs}>
             <button className={`${s.contentTab} ${renderedActiveTab === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')}>Timeline</button>
             <button className={`${s.contentTab} ${renderedActiveTab === 'conversations' ? s.active : ''}`} onClick={() => setActiveTab('conversations')}>Conversations ({conversationMessages.length})</button>
@@ -1562,23 +1624,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           <div className={s.tabContent}>
             {renderedActiveTab === 'timeline' && (
               <div className={s.timelineView}>
-                <div className={s.noteBox}>
-                  <textarea 
-                    placeholder="Type an internal note..."
-                    value={noteInput}
-                    onChange={e => setNoteInput(e.target.value)}
-                    disabled={!access.canWriteCrm}
-                  />
-                  <div className={s.noteBoxFooter}>
-                    <button className="btn btn-primary btn-sm" onClick={addNote} disabled={!access.canWriteCrm}>
-                      <Plus size={14} /> Add Note
-                    </button>
-                    <button className="btn btn-sm" type="button" onClick={openFollowUpModal} disabled={!access.canWriteCrm}>
-                      <AlertCircle size={14} /> Log Follow-up
-                    </button>
-                  </div>
-                </div>
-
                 <div className={s.snapshotStrip} aria-label={`Current ${singularLabel.toLowerCase()} snapshot`}>
                   {timelineSnapshot.map((item) => {
                     const Icon = SNAPSHOT_ICONS[item.icon] || Activity;
@@ -1723,6 +1768,23 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   {timeline.length === 0 && (
                     <div className={s.timelineEmpty}>{timelineEmptyText(renderedTimelineFilter, detailView.timelineFilters)}</div>
                   )}
+                </div>
+
+                <div className={s.noteBox}>
+                  <textarea
+                    placeholder="Type an internal note..."
+                    value={noteInput}
+                    onChange={e => setNoteInput(e.target.value)}
+                    disabled={!access.canWriteCrm}
+                  />
+                  <div className={s.noteBoxFooter}>
+                    <button className="btn btn-primary btn-sm" onClick={addNote} disabled={!access.canWriteCrm}>
+                      <Plus size={14} /> Add Note
+                    </button>
+                    <button className="btn btn-sm" type="button" onClick={openFollowUpModal} disabled={!access.canWriteCrm}>
+                      <AlertCircle size={14} /> Log Follow-up
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
