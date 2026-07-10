@@ -17,6 +17,8 @@ test('team monitor access is limited to admin roles', () => {
   assert.equal(canUseTeamMonitor({ primaryRoleKey: 'senior_coordinator' }), false);
   assert.equal(canUseTeamMonitor({ primaryRoleKey: 'account_manager' }), false);
   assert.equal(canUseTeamMonitor({ primaryRoleKey: 'sales_manager' }), false);
+  assert.equal(canUseTeamMonitor({ primaryRoleKey: 'account_manager', canAccessAllBusinessUnits: true }), false);
+  assert.equal(canUseTeamMonitor({ primaryRoleKey: 'senior_coordinator', canAccessAllBusinessUnits: true }), false);
 });
 
 test('team monitor view model summarizes existing CRM tasks without new entities', () => {

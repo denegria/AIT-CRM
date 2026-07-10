@@ -276,6 +276,7 @@ function EmployeeDetail({ employee }) {
 function TaskScopePreview({ tasks, employees, currentUser, showScopeControls = true }) {
   const [scope, setScope] = useState('mine');
   const [filter, setFilter] = useState('today');
+  const showAdminControls = Boolean(showScopeControls);
   const effectiveScope = showScopeControls ? scope : 'mine';
   const previewTasks = useMemo(() => buildTaskScopePreview({
     tasks,
@@ -291,12 +292,12 @@ function TaskScopePreview({ tasks, employees, currentUser, showScopeControls = t
       <div className={s.sectionHeader}>
         <div>
           <h2>My Tasks</h2>
-          <p>Normal CRM tasks with admin view scope controls.</p>
+          <p>{showAdminControls ? 'Normal CRM tasks with admin view scope controls.' : 'Your normal CRM tasks due today.'}</p>
         </div>
         <Link className="btn btn-sm" href="/tasks">Open tasks</Link>
       </div>
-      <div className={s.controlRow}>
-        {showScopeControls && (
+      {showAdminControls && (
+        <div className={s.controlRow}>
           <div className={s.segmented} aria-label="Task scope">
             {[
               ['mine', 'My tasks'],
@@ -308,19 +309,19 @@ function TaskScopePreview({ tasks, employees, currentUser, showScopeControls = t
               </button>
             ))}
           </div>
-        )}
-        <div className={s.segmented} aria-label="Task filter">
-          {[
-            ['today', 'Due today'],
-            ['overdue', 'Overdue'],
-            ['unassigned', 'Unassigned'],
-          ].map(([value, label]) => (
-            <button key={value} type="button" className={filter === value ? s.activeSegment : ''} onClick={() => setFilter(value)}>
-              {label}
-            </button>
-          ))}
+          <div className={s.segmented} aria-label="Task filter">
+            {[
+              ['today', 'Due today'],
+              ['overdue', 'Overdue'],
+              ['unassigned', 'Unassigned'],
+            ].map(([value, label]) => (
+              <button key={value} type="button" className={filter === value ? s.activeSegment : ''} onClick={() => setFilter(value)}>
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
       <div className={s.taskTableWrap}>
         <table className={s.taskTable}>
           <thead>
