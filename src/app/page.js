@@ -75,9 +75,9 @@ export default function Dashboard() {
   } = useCRM();
   const [dashboardNow] = useState(() => Date.now());
   const currentUserId = currentUser?.id || 'emp-1';
-  const isAdminView = role === 'admin' || Boolean(currentUser?.canAccessAllBusinessUnits);
   const monitorCurrentUser = currentUser || { id: currentUserId, primaryRoleKey: role };
-  const canUseTeamMonitorView = canUseTeamMonitor(monitorCurrentUser);
+  const isAdminView = canUseTeamMonitor(monitorCurrentUser);
+  const canUseTeamMonitorView = isAdminView;
   const canReadFinancials = Boolean(access?.canReadFinancials);
 
   const kpis = useMemo(() => {
@@ -93,7 +93,7 @@ export default function Dashboard() {
     const dueTodayTasks = myTasks.filter(task => isTaskDueToday(task));
     const overdueTasks = myTasks.filter(task => isTaskOverdue(task));
     const myTasksCount = myTasks.filter(isTaskCurrentWork).length;
-    const unassignedLeadFollowUps = tasks.filter(isUnassignedInboundLeadFollowUp);
+    const unassignedLeadFollowUps = isAdminView ? tasks.filter(isUnassignedInboundLeadFollowUp) : [];
     const unassignedFacebookFollowUps = unassignedLeadFollowUps.filter(isFacebookLeadFollowUp);
     const activeContacts = currentContacts.length;
     const pendingInvoices = invoices.filter(f => f.status === 'Pending').length;
@@ -200,8 +200,8 @@ export default function Dashboard() {
   }, [canReadFinancials, currentBusinessUnit, isAdminView, kpis, workOrders]);
 
   const unassignedLeadFollowUps = useMemo(
-    () => tasks.filter(isUnassignedInboundLeadFollowUp),
-    [tasks],
+    () => (isAdminView ? tasks.filter(isUnassignedInboundLeadFollowUp) : []),
+    [isAdminView, tasks],
   );
   const unassignedFacebookFollowUps = useMemo(
     () => unassignedLeadFollowUps.filter(isFacebookLeadFollowUp),
