@@ -1,10 +1,12 @@
 'use client';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ListTodo, UserPlus } from 'lucide-react';
 import { useCRM } from '@/lib/store';
 import KPICard from '@/components/KPICard';
+import TaskList from '@/components/TaskList';
 import Calendar from '@/components/Calendar';
+import { useToast } from '@/components/Toast';
 import {
   DashboardTasksPanel,
   TeamMonitorPreview,
@@ -12,14 +14,26 @@ import {
 import monitorStyles from '@/components/TeamMonitorPanel.module.css';
 import { canUseTeamMonitor } from '@/lib/team-monitor.js';
 import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from '@/lib/crm/lifecycle';
-import { isOpenTask } from '@/lib/dashboard/task-calendar';
+import {
+  buildTaskCalendarEvents,
+  isOpenTask,
+  taskDueKey,
+} from '@/lib/dashboard/task-calendar';
 import { isCurrentLeadDateScope } from '@/lib/contact-directory-view';
 import { filterContactsByDirectoryFacet } from '@/lib/contact-directory-facets';
 import {
+  isTaskCompletedToday,
   isTaskCurrentWork,
   isTaskDueToday,
   isTaskOverdue,
 } from '@/lib/tasks/visibility.js';
+
+function dateInputToIso(value) {
+  if (!value) return null;
+  const date = new Date(`${value}T09:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
 
 function moneyLabel(value) {
   return `$${Math.round(Number(value || 0)).toLocaleString()}`;
@@ -65,6 +79,8 @@ export default function Dashboard() {
     tasks,
     calendarEvents,
     employees,
+    updateTask,
+    addTask,
     loaded,
     dataSource,
     importStaging,
@@ -73,6 +89,7 @@ export default function Dashboard() {
     currentBusinessUnit,
     scopeLabel,
   } = useCRM();
+  const { toast } = useToast();
   const [dashboardNow] = useState(() => Date.now());
   const currentUserId = currentUser?.id || 'emp-1';
   const monitorCurrentUser = currentUser || { id: currentUserId, primaryRoleKey: role };
@@ -219,6 +236,67 @@ export default function Dashboard() {
     ];
   }, [contacts, tasks]);
 
+  const dashboardDueTodayTasks = useMemo(() => {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    return myTasks
+      .filter((task) => isOpenTask(task) && taskDueKey(task) === todayKey)
+      .sort((a, b) => String(a.title || '').localeCompare(String(b.title || '')));
+  }, [myTasks]);
+
+  const dashboardCompletedTodayTasks = useMemo(() => {
+    const todayKey = new Date().toISOString().slice(0, 10);
+    return myTasks
+      .filter((task) => isTaskCompletedToday(task, todayKey))
+      .sort((a, b) => String(b.completedAt || '').localeCompare(String(a.completedAt || '')))
+      .slice(0, 5);
+  }, [myTasks]);
+
+  const dashboardCalendarEvents = useMemo(() => {
+    const taskEvents = buildTaskCalendarEvents(myTasks);
+    return [...calendarEvents, ...taskEvents];
+  }, [calendarEvents, myTasks]);
+
+  const createDashboardTask = useCallback(async (draft) => {
+    if (!access.canWriteCrm) throw new Error('CRM write access is required.');
+    const ownerUserId = currentUser?.id || '';
+    if (!ownerUserId) throw new Error('Sign in again before creating a task.');
+    if (dataSource !== 'postgres') {
+      addTask({ ...draft, assignedTo: ownerUserId, ownerUserId });
+      toast('Task created');
+      return;
+    }
+
+    const taskBusinessUnitId = currentBusinessUnit?.id;
+    if (!taskBusinessUnitId || taskBusinessUnitId === 'all' || taskBusinessUnitId === 'unassigned') {
+      throw new Error('Select a division before creating a task.');
+    }
+
+    const response = await fetch('/api/tasks', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        title: draft.title,
+        businessUnitId: taskBusinessUnitId,
+        dueAt: dateInputToIso(draft.dueDate),
+        ownerUserId,
+        taskType: 'manual_reminder',
+        priority: 'medium',
+        sourceType: 'manual',
+      }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || 'Task could not be created.');
+    addTask({
+      ...payload.task,
+      assignedTo: payload.task.ownerUserId || '',
+      dueDate: (payload.task.dueAt || '').slice(0, 10),
+      completed: payload.task.status === 'completed',
+      priority: 'Medium',
+      taskStatus: payload.task.status,
+    });
+    toast('Task created');
+  }, [access.canWriteCrm, addTask, currentBusinessUnit?.id, currentUser?.id, dataSource, toast]);
+
   if (!loaded) return <div className="empty-state">Loading...</div>;
 
   const today = new Date();
@@ -346,15 +424,58 @@ export default function Dashboard() {
         </>
       ) : (
         <div className="dashboard-panel-grid" style={{marginBottom:20}}>
-          <DashboardTasksPanel
-            tasks={myTasks}
-            employees={employees}
-            currentUser={monitorCurrentUser}
-            showScopeControls={false}
-          />
+          <div className="card">
+            <div className="flex-between" style={{marginBottom:12, gap:12}}>
+              <div className="card-title" style={{marginBottom:0}}>Tasks</div>
+              <Link className="btn btn-sm" href="/tasks">Open tasks</Link>
+            </div>
+            <TaskList
+              tasks={dashboardDueTodayTasks}
+              onToggle={(id, u) => updateTask(id, u)}
+              onAdd={createDashboardTask}
+              employees={employees}
+              canAdd={Boolean(access.canWriteCrm)}
+              fixedOwnerId={currentUser?.id || ''}
+              ownerRequired
+              showOwnerSelect={false}
+              emptyText="No tasks due today."
+            />
+            {dashboardCompletedTodayTasks.length > 0 && (
+              <div style={{marginTop:14, paddingTop:12, borderTop:'1px solid var(--border-subtle)'}}>
+                <div className="flex-between" style={{marginBottom:8, gap:8}}>
+                  <div style={{fontSize:'var(--text-xs)', color:'var(--text-secondary)', fontWeight:700, textTransform:'uppercase', letterSpacing:0}}>
+                    Done today
+                  </div>
+                  <span className="badge badge-completed">{dashboardCompletedTodayTasks.length}</span>
+                </div>
+                <div style={{display:'grid', gap:8}}>
+                  {dashboardCompletedTodayTasks.map((task) => (
+                    <div
+                      key={`dashboard-completed-${task.id}`}
+                      style={{
+                        display:'flex',
+                        alignItems:'center',
+                        justifyContent:'space-between',
+                        gap:10,
+                        padding:'8px 10px',
+                        border:'1px solid var(--border-subtle)',
+                        borderRadius:'var(--radius-md)',
+                        background:'var(--bg-secondary)',
+                      }}
+                    >
+                      <span style={{fontSize:'var(--text-sm)', color:'var(--text-primary)', fontWeight:650, minWidth:0, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+                        {task.title || 'Untitled task'}
+                      </span>
+                      <span className="badge badge-completed">Done</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
           <div className="card">
             <div className="card-title">Calendar</div>
-            <Calendar events={calendarEvents} />
+            <Calendar events={dashboardCalendarEvents} />
           </div>
         </div>
       )}
