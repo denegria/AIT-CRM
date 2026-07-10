@@ -20,6 +20,10 @@ import { isAssignableEmployee } from '@/lib/crm/assignable-employees.js';
 import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import { lifecycleBucket } from '@/lib/contact-directory-view.js';
 import {
+  routeBusinessUnitFilterForGlobalScope,
+  syncRouteBusinessUnitFilter,
+} from '@/lib/division-scope.js';
+import {
   isTaskClosed,
   isTaskCompletedToday,
   isTaskCurrentWork,
@@ -287,7 +291,7 @@ export default function FollowUpQueuePage() {
   const [filters, setFilters] = useState({
     due: DUE_OPTION_VALUES.has(searchParams.get('due')) ? searchParams.get('due') : 'work',
     ownerUserId: lockedTaskOwnerFilter || searchParams.get('ownerUserId') || (searchParams.get('mine') === 'true' ? '__me' : 'all'),
-    businessUnitId: searchParams.get('businessUnitId') || (currentBusinessUnitId === 'all' || currentBusinessUnitId === 'unassigned' ? 'all' : currentBusinessUnitId),
+    businessUnitId: searchParams.get('businessUnitId') || routeBusinessUnitFilterForGlobalScope(currentBusinessUnitId),
     taskType: TASK_TYPE_OPTIONS.some(([value]) => value === searchParams.get('taskType')) ? searchParams.get('taskType') : 'all',
     status: STATUS_OPTION_VALUES.has(searchParams.get('status')) ? searchParams.get('status') : 'all',
     link: LINK_OPTION_VALUES.has(searchParams.get('link')) ? searchParams.get('link') : 'all',
@@ -413,6 +417,18 @@ export default function FollowUpQueuePage() {
     () => (accessibleContacts || []).find((contact) => contact.id === createDraft.contactId) || null,
     [accessibleContacts, createDraft.contactId],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setFilters((prev) => syncRouteBusinessUnitFilter(prev, currentBusinessUnitId));
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentBusinessUnitId]);
 
   const readTasks = useCallback(async () => {
     if (dataSource !== 'postgres') {
@@ -1004,7 +1020,7 @@ export default function FollowUpQueuePage() {
   const resetFilters = () => setFilters({
     due: 'work',
     ownerUserId: lockedTaskOwnerFilter || 'all',
-    businessUnitId: currentBusinessUnitId === 'all' || currentBusinessUnitId === 'unassigned' ? 'all' : currentBusinessUnitId,
+    businessUnitId: routeBusinessUnitFilterForGlobalScope(currentBusinessUnitId),
     taskType: 'all',
     status: 'all',
     link: 'all',
