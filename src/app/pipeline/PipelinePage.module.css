@@ -1266,17 +1266,16 @@
   }
 
   .mobileStageTabs {
-    display: flex;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
-    margin: 0 -16px;
-    padding: 0 16px 4px;
-    overflow-x: auto;
-    scroll-padding: 16px;
+    margin: 0;
+    padding: 0;
   }
 
   .mobileStageTab {
-    flex: 0 0 auto;
-    min-width: 112px;
+    width: 100%;
+    min-width: 0;
     min-height: 42px;
     display: inline-flex;
     align-items: center;
@@ -1296,9 +1295,8 @@
 
   .mobileStageTab span {
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+    white-space: normal;
   }
 
   .mobileStageTab strong {
@@ -1381,6 +1379,56 @@
     overflow-wrap: anywhere;
   }
 
+  .mobileTriageGrid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    width: 100%;
+  }
+
+  .mobileTriageItem {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+    padding: 7px 8px;
+    border: 1px solid color-mix(in srgb, var(--border-subtle) 72%, transparent);
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--bg-tertiary) 44%, transparent);
+  }
+
+  .mobileTriageItem span,
+  .mobileCardAction span {
+    color: var(--text-muted);
+    font-size: 10px;
+    font-weight: 850;
+    line-height: 1.1;
+    text-transform: uppercase;
+  }
+
+  .mobileTriageItem strong,
+  .mobileCardAction strong {
+    min-width: 0;
+    color: var(--text-primary);
+    font-size: 11px;
+    font-weight: 780;
+    line-height: 1.2;
+    overflow-wrap: anywhere;
+  }
+
+  .mobileTriageStale {
+    border-color: color-mix(in srgb, var(--warning) 34%, var(--border-subtle));
+    background: color-mix(in srgb, var(--warning-muted) 34%, var(--bg-tertiary));
+  }
+
+  .mobileCardAction {
+    display: grid;
+    gap: 3px;
+    padding: 8px 9px;
+    border-left: 3px solid color-mix(in srgb, var(--accent) 48%, var(--border-subtle));
+    border-radius: var(--radius-md);
+    background: color-mix(in srgb, var(--accent-muted) 28%, transparent);
+  }
+
   .mobileCardStage {
     display: inline-flex;
     align-items: center;
@@ -1400,16 +1448,23 @@
   }
 
   .mobileCardTools {
-    display: flex;
-    align-items: center;
+    display: grid;
+    grid-template-columns: 1fr;
+    align-items: stretch;
     gap: 8px;
     padding: 8px 12px 12px;
     border-top: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
   }
 
+  .mobileCardTools :global(.btn) {
+    width: 100%;
+    justify-content: center;
+    min-height: 36px;
+  }
+
   .mobileMoveSelect {
+    width: 100%;
     min-width: 0;
-    flex: 1;
   }
 
   .mobileEmpty {

@@ -801,16 +801,30 @@
   }
 
   .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     justify-content: stretch;
+    gap: 8px;
   }
 
   .actions .iconButton,
   .actions a,
-  .actions button,
+  .actions button {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+    justify-content: center;
+  }
+
+  .actions a:first-child {
+    grid-column: 1 / -1;
+  }
+
   .taskActionButtons button,
   .completionActions button,
   .editActions button {
-    flex: 1 1 44px;
+    flex: 1 1 100%;
+    min-height: 38px;
     justify-content: center;
   }
 
@@ -824,7 +838,10 @@
   }
 
   .taskActionButtons {
+    display: grid;
+    grid-template-columns: 1fr;
     justify-content: stretch;
+    gap: 8px;
   }
 
   .completionPanel {

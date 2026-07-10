@@ -12,6 +12,7 @@ import {
   isPipelineNewLeadBucket,
   matchesPipelineQuickFilter,
 } from '@/lib/contact-workflow-buckets';
+import { mobilePipelineTriageItems } from '@/lib/pipeline-mobile-triage.js';
 import {
   buildCourseFilterOptions,
   contactMatchesLeadDateScope,
@@ -1030,7 +1031,20 @@ export default function PipelinePage() {
                   <span className={s.mobileCardStage}>{contact.needsFirstOutreach && contact.status ? contact.status : (contact.currentStage || contact.status)}</span>
                   <strong>{contact.name}</strong>
                   <small>{mobileCardMeta(contact)}</small>
-                  {contact.nextAction && <span className={s.mobileCardAction}>{contact.nextAction}</span>}
+                  <span className={s.mobileTriageGrid} aria-label={`Triage context for ${contact.name}`}>
+                    {mobilePipelineTriageItems(contact).map((item) => (
+                      <span key={item.label} className={`${s.mobileTriageItem} ${item.tone === 'stale' ? s.mobileTriageStale : ''}`}>
+                        <span>{item.label}</span>
+                        <strong>{item.value}</strong>
+                      </span>
+                    ))}
+                  </span>
+                  {contact.nextAction && (
+                    <span className={s.mobileCardAction}>
+                      <span>Next</span>
+                      <strong>{contact.nextAction}</strong>
+                    </span>
+                  )}
                 </button>
                 {canWrite && (
                   <div className={s.mobileCardTools}>
@@ -1040,7 +1054,7 @@ export default function PipelinePage() {
                       onClick={() => setMobileMoveCardId(isMoving ? '' : contact.id)}
                       aria-expanded={isMoving}
                     >
-                      <ArrowRight size={14} /> Move
+                      <ArrowRight size={14} /> Change Stage
                     </button>
                     {isMoving && (
                       <select
