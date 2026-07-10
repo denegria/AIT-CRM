@@ -467,6 +467,31 @@
   flex-wrap: wrap;
 }
 
+.taskActionsPanel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.taskActionHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.taskActionButtons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .completionPanel {
   grid-column: 1 / -1;
   display: grid;
@@ -782,10 +807,24 @@
   .actions .iconButton,
   .actions a,
   .actions button,
+  .taskActionButtons button,
   .completionActions button,
   .editActions button {
     flex: 1 1 44px;
     justify-content: center;
+  }
+
+  .taskActionHeader {
+    display: grid;
+    gap: 3px;
+  }
+
+  .taskActionsPanel {
+    grid-template-columns: 1fr;
+  }
+
+  .taskActionButtons {
+    justify-content: stretch;
   }
 
   .completionPanel {

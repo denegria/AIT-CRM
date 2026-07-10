@@ -9,6 +9,7 @@ import {
   ExternalLink,
   FilterX,
   ListTodo,
+  MoreHorizontal,
   Plus,
   RefreshCcw,
   Repeat2,
@@ -35,6 +36,7 @@ import {
 } from '@/lib/tasks/visibility.js';
 import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import s from './FollowUpQueue.module.css';
 
 const TASK_TYPE_OPTIONS = [
@@ -316,6 +318,8 @@ export default function FollowUpQueuePage() {
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState('');
   const [editDraft, setEditDraft] = useState(() => editDraftFromTask({}));
+  const [actionPanelTaskId, setActionPanelTaskId] = useState('');
+  const [confirmTaskAction, setConfirmTaskAction] = useState(null);
 
   const fallbackAssignees = useMemo(() => {
     const mappedEmployees = (employees || []).map((employee) => ({
@@ -754,6 +758,7 @@ export default function FollowUpQueuePage() {
     setEditDraft(editDraftFromTask(task));
     setEditError('');
     setCompletionTaskId('');
+    setActionPanelTaskId(task.id);
   }
 
   function updateEditDraft(patch) {
@@ -973,6 +978,43 @@ export default function FollowUpQueuePage() {
       nextOwnerUserId: draft.nextOwnerUserId || task.ownerUserId || null,
       ...(coordinatorUiPolicy.lockedOwnerUserId ? { nextOwnerUserId: coordinatorUiPolicy.lockedOwnerUserId } : {}),
     });
+  }
+
+  function openTaskActionPanel(taskId) {
+    setActionPanelTaskId((current) => (current === taskId ? '' : taskId));
+  }
+
+  function queueTaskActionConfirmation(task, action, payload = {}) {
+    const isComplete = action === 'complete';
+    const isRequest = action === 'request_cancel';
+    setConfirmTaskAction({
+      task,
+      action,
+      payload,
+      title: isComplete
+        ? 'Complete this task?'
+        : isRequest
+          ? 'Request task cancellation?'
+          : 'Cancel this task?',
+      message: isComplete
+        ? `This will mark "${task.title || 'this task'}" completed. Review the task details before confirming.`
+        : isRequest
+          ? `This will send "${task.title || 'this task'}" for cancellation approval instead of removing it immediately.`
+          : `This will cancel "${task.title || 'this task'}" and remove it from current work.`,
+      confirmLabel: isComplete
+        ? 'Complete Task'
+        : isRequest
+          ? 'Request Cancel'
+          : 'Cancel Task',
+      variant: isComplete || isRequest ? 'primary' : 'danger',
+    });
+  }
+
+  function confirmQueuedTaskAction() {
+    const queuedAction = confirmTaskAction;
+    if (!queuedAction) return;
+    setConfirmTaskAction(null);
+    applyTaskAction(queuedAction.task, queuedAction.action, queuedAction.payload);
   }
 
   function openArchiveDecision(task, decision) {
@@ -1456,108 +1498,139 @@ export default function FollowUpQueuePage() {
                   {assignee?.email && <span className={s.mutedText}>{assignee.email}</span>}
                 </div>
                 <div className={s.actions}>
+                  <Link className="btn btn-sm btn-primary" href={`/tasks/${encodeURIComponent(task.id)}`}>
+                    <ListTodo size={14} />
+                    Review
+                  </Link>
+                  {task.contactId && (
+                    <Link className="btn btn-sm" href={`/contacts/${encodeURIComponent(task.contactId)}`}>
+                      <ExternalLink size={14} />
+                      Contact
+                    </Link>
+                  )}
                   <button
-                    className={`btn btn-sm ${s.iconButton}`}
-                    data-tooltip="Edit task"
-                    disabled={!access.canWriteCrm || editBusy || isArchiveApprovalTask || isTaskRemovalApprovalTask}
-                    onClick={() => (showEditPanel ? setEditTaskId('') : openEditPanel(task))}
-                    aria-label="Edit task"
+                    className="btn btn-sm"
+                    type="button"
+                    onClick={() => openTaskActionPanel(task.id)}
+                    aria-expanded={actionPanelTaskId === task.id}
+                    aria-controls={`task-actions-${task.id}`}
                   >
-                    <Pencil size={14} />
+                    <MoreHorizontal size={14} />
+                    Actions
                   </button>
-                  {showAssignToMe && (
-                    <button
-                      className={`btn btn-sm ${s.iconButton}`}
-                      data-tooltip="Assign to me"
-                      disabled={!access.canWriteCrm || busyTaskId === task.id || !currentUser?.id}
-                      onClick={() => applyTaskAction(task, 'assign', { ownerUserId: currentUser.id })}
-                      aria-label="Assign to me"
-                    >
-                      <UserPlus size={14} />
-                    </button>
-                  )}
-                  {isArchiveApprovalTask ? (
-                    <>
-                      <button
-                        className="btn btn-sm"
-                        disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task) || !canReviewArchiveApprovalTasks}
-                        onClick={() => openArchiveDecision(task, 'deny')}
-                      >
-                        <X size={14} />
-                        Deny
-                      </button>
-                      <button
-                        className="btn btn-sm btn-primary"
-                        disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task) || !canReviewArchiveApprovalTasks}
-                        onClick={() => openArchiveDecision(task, 'approve')}
-                      >
-                        <CheckCircle2 size={14} />
-                        Approve
-                      </button>
-                    </>
-                  ) : isTaskRemovalApprovalTask ? (
-                    <>
-                      <button
-                        className="btn btn-sm"
-                        disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task) || !canReviewArchiveApprovalTasks}
-                        onClick={() => openRemovalDecision(task, 'deny')}
-                      >
-                        <X size={14} />
-                        Deny
-                      </button>
-                      <button
-                        className="btn btn-sm btn-primary"
-                        disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task) || !canReviewArchiveApprovalTasks}
-                        onClick={() => openRemovalDecision(task, 'approve')}
-                      >
-                        <CheckCircle2 size={14} />
-                        Approve
-                      </button>
-                    </>
-                  ) : task.taskType === 'follow_up' ? (
-                    <button
-                      className="btn btn-sm btn-primary"
-                      disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task)}
-                      onClick={() => setCompletionTaskId((current) => (current === task.id ? '' : task.id))}
-                    >
-                      <CheckCircle2 size={14} />
-                      Complete
-                    </button>
-                  ) : (
-                    <button
-                      className="btn btn-sm btn-primary"
-                      disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task)}
-                      onClick={() => applyTaskAction(task, 'complete')}
-                    >
-                      <CheckCircle2 size={14} />
-                      Complete
-                    </button>
-                  )}
-                  {showCancelAction && (
-                    <button
-                      className={`btn btn-sm ${coordinatorUiPolicy.ownerScoped ? '' : 'btn-danger'}`}
-                      disabled={!access.canWriteCrm || busyTaskId === task.id}
-                      onClick={() => applyTaskAction(
-                        task,
-                        coordinatorUiPolicy.ownerScoped ? 'request_cancel' : 'cancel',
-                        coordinatorUiPolicy.ownerScoped
-                          ? { reason: 'Task cancellation requested from the task queue.' }
-                          : {},
-                      )}
-                    >
-                      <X size={14} />
-                      {coordinatorUiPolicy.ownerScoped ? 'Request Cancel' : 'Cancel'}
-                    </button>
-                  )}
                   {removalApprovalPending && (
                     <span className="badge badge-pending">Cancel Requested</span>
                   )}
-                  {task.contactId && (
-                    <Link className={`btn btn-sm ${s.iconButton}`} href={`/contacts/${task.contactId}`} data-tooltip="Open contact" aria-label="Open contact">
-                      <ExternalLink size={14} />
-                    </Link>
-                  )}
                 </div>
+                {actionPanelTaskId === task.id && (
+                  <div className={s.taskActionsPanel} id={`task-actions-${task.id}`} aria-label={`Task actions for ${task.title}`}>
+                    <div className={s.taskActionHeader}>
+                      <span className={s.compactLabel}>Task actions</span>
+                    </div>
+                    <div className={s.taskActionButtons}>
+                      <button
+                        className="btn btn-sm"
+                        type="button"
+                        disabled={!access.canWriteCrm || editBusy || isArchiveApprovalTask || isTaskRemovalApprovalTask}
+                        onClick={() => (showEditPanel ? setEditTaskId('') : openEditPanel(task))}
+                      >
+                        <Pencil size={14} />
+                        Edit
+                      </button>
+                      {showAssignToMe && (
+                        <button
+                          className="btn btn-sm"
+                          type="button"
+                          disabled={!access.canWriteCrm || busyTaskId === task.id || !currentUser?.id}
+                          onClick={() => applyTaskAction(task, 'assign', { ownerUserId: currentUser.id })}
+                        >
+                          <UserPlus size={14} />
+                          Assign to me
+                        </button>
+                      )}
+                      {isArchiveApprovalTask ? (
+                        <>
+                          <button
+                            className="btn btn-sm"
+                            type="button"
+                            disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task) || !canReviewArchiveApprovalTasks}
+                            onClick={() => openArchiveDecision(task, 'deny')}
+                          >
+                            <X size={14} />
+                            Deny
+                          </button>
+                          <button
+                            className="btn btn-sm btn-primary"
+                            type="button"
+                            disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task) || !canReviewArchiveApprovalTasks}
+                            onClick={() => openArchiveDecision(task, 'approve')}
+                          >
+                            <CheckCircle2 size={14} />
+                            Approve
+                          </button>
+                        </>
+                      ) : isTaskRemovalApprovalTask ? (
+                        <>
+                          <button
+                            className="btn btn-sm"
+                            type="button"
+                            disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task) || !canReviewArchiveApprovalTasks}
+                            onClick={() => openRemovalDecision(task, 'deny')}
+                          >
+                            <X size={14} />
+                            Deny
+                          </button>
+                          <button
+                            className="btn btn-sm btn-primary"
+                            type="button"
+                            disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task) || !canReviewArchiveApprovalTasks}
+                            onClick={() => openRemovalDecision(task, 'approve')}
+                          >
+                            <CheckCircle2 size={14} />
+                            Approve
+                          </button>
+                        </>
+                      ) : task.taskType === 'follow_up' ? (
+                        <button
+                          className="btn btn-sm"
+                          type="button"
+                          disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task)}
+                          onClick={() => setCompletionTaskId((current) => (current === task.id ? '' : task.id))}
+                        >
+                          <CheckCircle2 size={14} />
+                          Complete
+                        </button>
+                      ) : (
+                        <button
+                          className="btn btn-sm"
+                          type="button"
+                          disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task)}
+                          onClick={() => queueTaskActionConfirmation(task, 'complete')}
+                        >
+                          <CheckCircle2 size={14} />
+                          Complete
+                        </button>
+                      )}
+                      {showCancelAction && (
+                        <button
+                          className={`btn btn-sm ${coordinatorUiPolicy.ownerScoped ? '' : 'btn-danger'}`}
+                          type="button"
+                          disabled={!access.canWriteCrm || busyTaskId === task.id}
+                          onClick={() => queueTaskActionConfirmation(
+                            task,
+                            coordinatorUiPolicy.ownerScoped ? 'request_cancel' : 'cancel',
+                            coordinatorUiPolicy.ownerScoped
+                              ? { reason: 'Task cancellation requested from the task queue.' }
+                              : {},
+                          )}
+                        >
+                          <X size={14} />
+                          {coordinatorUiPolicy.ownerScoped ? 'Request Cancel' : 'Cancel'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
                 {showEditPanel && (
                   <form className={s.editPanel} onSubmit={submitEditedTask}>
                     <label className={s.createTitleField}>
@@ -1920,6 +1993,15 @@ export default function FollowUpQueuePage() {
           </section>
         )}
       </div>
+      <ConfirmDialog
+        open={!!confirmTaskAction}
+        onClose={() => setConfirmTaskAction(null)}
+        onConfirm={confirmQueuedTaskAction}
+        title={confirmTaskAction?.title || 'Confirm task action'}
+        message={confirmTaskAction?.message || ''}
+        confirmLabel={confirmTaskAction?.confirmLabel || 'Confirm'}
+        variant={confirmTaskAction?.variant || 'danger'}
+      />
     </div>
   );
 }
