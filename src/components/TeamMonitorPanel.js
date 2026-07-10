@@ -292,7 +292,7 @@ function TaskScopePreview({ tasks, employees, currentUser, showScopeControls = t
       <div className={s.sectionHeader}>
         <div>
           <h2>My Tasks</h2>
-          <p>{showAdminControls ? 'Normal CRM tasks with admin view scope controls.' : 'Your normal CRM tasks due today.'}</p>
+          <p>{showAdminControls ? 'Normal CRM tasks with admin view scope controls.' : 'Your normal CRM task list.'}</p>
         </div>
         <Link className="btn btn-sm" href="/tasks">Open tasks</Link>
       </div>
