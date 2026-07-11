@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowRight, ListFilter, RotateCcw, Search, UserPlus, UserRoundCheck } from 'lucide-react';
+import { ArrowRight, ListFilter, RotateCcw, Search, UserPlus, UserRoundCheck, X } from 'lucide-react';
 import KanbanBoard from '@/components/KanbanBoard';
 import { useToast } from '@/components/Toast';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
@@ -15,7 +15,9 @@ import {
 import { mobilePipelineTriageItems } from '@/lib/pipeline-mobile-triage.js';
 import {
   buildCourseFilterOptions,
+  buildSchoolLocationFilterOptions,
   contactMatchesLeadDateScope,
+  contactMatchesSchoolLocation,
   contactMatchesStatusOwnerCourse,
   CONTACT_LEAD_DATE_SCOPE_ALL,
   CONTACT_LEAD_DATE_SCOPE_CUSTOM,
@@ -26,6 +28,7 @@ import {
   DEFAULT_PIPELINE_ACTIVITY_FILTER,
   DEFAULT_PIPELINE_COMPACT_MODE,
   DEFAULT_PIPELINE_COURSE_FILTER,
+  DEFAULT_PIPELINE_LOCATION_FILTER,
   DEFAULT_PIPELINE_OWNER_FILTER,
   DEFAULT_PIPELINE_SEARCH,
   DEFAULT_PIPELINE_SOURCE_FILTER,
@@ -33,6 +36,8 @@ import {
   pipelineFilterQuery,
   pipelineFilterStateFromParams,
 } from '@/lib/contact-directory-filters';
+import { schoolLocationForContact } from '@/lib/school-locations';
+import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
 import TimeframeFilterPanel from '@/components/TimeframeFilterPanel';
 import s from './PipelinePage.module.css';
 
@@ -56,6 +61,7 @@ const PIPELINE_FILTER_CHIP_LABELS = {
   status: 'Status',
   source: 'Source',
   course: 'Course',
+  location: 'Location',
   activity: 'Activity',
   search: 'Search',
   cards: 'Cards',
@@ -89,6 +95,7 @@ function matchesSearch(contact, query) {
     contact.name,
     contact.email,
     contact.phone,
+    schoolLocationForContact(contact),
     contact.source,
     contact.latestComment,
     contact.assignedLabel,
@@ -130,7 +137,7 @@ function mobileCardMeta(contact) {
   return [
     contact.enrollmentSignals?.inquiry?.programInterest || contact.programInterest,
     contact.enrollmentSignals?.inquiry?.age ? `Age ${contact.enrollmentSignals.inquiry.age}` : '',
-    contact.enrollmentSignals?.inquiry?.location,
+    schoolLocationForContact(contact) || contact.enrollmentSignals?.inquiry?.location,
     contact.phone || contact.email || 'No contact channel',
   ].filter(Boolean).join(' · ');
 }
@@ -210,6 +217,7 @@ export default function PipelinePage() {
     statusFilter,
     sourceFilter,
     courseFilter,
+    locationFilter,
     activityFilter,
     search,
     leadDateScope,
@@ -258,6 +266,7 @@ export default function PipelinePage() {
   };
   const setSourceFilter = (value) => updatePipelineFilterQuery({ sourceFilter: value });
   const setCourseFilter = (value) => updatePipelineFilterQuery({ courseFilter: value });
+  const setLocationFilter = (value) => updatePipelineFilterQuery({ locationFilter: value });
   const setActivityFilter = (value) => updatePipelineFilterQuery({ activityFilter: value });
   const setSearch = (value) => updatePipelineFilterQuery({ search: value });
   const setCompactMode = (value) => updatePipelineFilterQuery({ compactMode: value });
@@ -287,6 +296,8 @@ export default function PipelinePage() {
   });
 
   const selectedBusinessUnitId = resolvedPipelineBusinessUnitId || currentScopedBusinessUnitId;
+  const isAitUsaPipeline = activeWorkflow?.key === WORKFLOW_KEYS.AIT_USA;
+  const effectiveLocationFilter = isAitUsaPipeline ? locationFilter : DEFAULT_PIPELINE_LOCATION_FILTER;
   const scopedRows = useMemo(() => contactRows.filter((contact) => {
     if (!selectedBusinessUnitId) return true;
     return (contact.businessUnitId || contact.primaryBusinessUnitId) === selectedBusinessUnitId;
@@ -340,6 +351,10 @@ export default function PipelinePage() {
     () => buildCourseFilterOptions(pipelineScopedRows),
     [pipelineScopedRows],
   );
+  const locationFilterOptions = useMemo(
+    () => isAitUsaPipeline ? buildSchoolLocationFilterOptions(pipelineScopedRows) : [],
+    [isAitUsaPipeline, pipelineScopedRows],
+  );
   const ownerOptions = useMemo(() => {
     return (employees || [])
       .filter((employee) => employee?.id && employee.id !== currentUser?.id)
@@ -364,14 +379,15 @@ export default function PipelinePage() {
       courseFilter,
     });
     const sourceMatch = sourceFilter === 'all' || sourceValue(contact) === sourceFilter;
+    const locationMatch = contactMatchesSchoolLocation(contact, { locationFilter: effectiveLocationFilter });
     const touchAge = daysSince(contactTouchDate(contact));
     const activityMatch =
       activityFilter === 'all' ||
       (activityFilter === 'no_touch' && !contactTouchDate(contact)) ||
       (activityFilter === 'stale_30' && touchAge > 30) ||
       (activityFilter === 'recent_7' && touchAge <= 7);
-    return statusOwnerCourseMatch && sourceMatch && activityMatch && matchesSearch(contact, normalizedSearch);
-  }), [activityFilter, courseFilter, normalizedSearch, ownerFilter, pipelineScopedRows, sourceFilter, statusFilter]);
+    return statusOwnerCourseMatch && sourceMatch && locationMatch && activityMatch && matchesSearch(contact, normalizedSearch);
+  }), [activityFilter, courseFilter, effectiveLocationFilter, normalizedSearch, ownerFilter, pipelineScopedRows, sourceFilter, statusFilter]);
   const closedOutcomeColumns = useMemo(
     () => normalizedColumns.filter((column) => column.isTerminal && !column.isOperational).sort(closedOutcomeSort),
     [normalizedColumns],
@@ -412,6 +428,8 @@ export default function PipelinePage() {
     pipelineStatusOptions.find((option) => option.value === statusFilter)?.label || statusFilter;
   const selectedCourseLabel = courseFilter === DEFAULT_PIPELINE_COURSE_FILTER ? '' :
     courseFilterOptions.find((option) => option.value === courseFilter)?.label || courseFilter;
+  const selectedLocationLabel = !isAitUsaPipeline || effectiveLocationFilter === DEFAULT_PIPELINE_LOCATION_FILTER ? '' :
+    locationFilterOptions.find((option) => option.value === effectiveLocationFilter)?.label || effectiveLocationFilter;
   const selectedDateLabel = dateScopeLabel(effectiveLeadDateScope, leadDateFrom, leadDateTo);
   const implicitLeadDate = (coordinatorUiPolicy.ownerScoped && !hasExplicitLeadDateFilter) || ownerFilterImpliesAllLeadDates;
   const dateFilterIsDefault = implicitLeadDate ||
@@ -426,7 +444,11 @@ export default function PipelinePage() {
       label: selectedDateLabel,
       primary: !coordinatorUiPolicy.ownerScoped,
       onRemove: dateFilterIsDefault
-        ? null
+        ? () => updatePipelineFilterQuery({
+          leadDateScope: CONTACT_LEAD_DATE_SCOPE_ALL,
+          leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
+          leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
+        })
         : () => updatePipelineFilterQuery({
           leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE,
           leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
@@ -454,6 +476,11 @@ export default function PipelinePage() {
       label: selectedCourseLabel,
       onRemove: () => setCourseFilter(DEFAULT_PIPELINE_COURSE_FILTER),
     } : null,
+    selectedLocationLabel ? {
+      key: 'location',
+      label: selectedLocationLabel,
+      onRemove: () => setLocationFilter(DEFAULT_PIPELINE_LOCATION_FILTER),
+    } : null,
     activityFilter !== DEFAULT_PIPELINE_ACTIVITY_FILTER ? {
       key: 'activity',
       label: optionLabel(PIPELINE_ACTIVITY_OPTIONS, activityFilter),
@@ -472,6 +499,7 @@ export default function PipelinePage() {
   ].filter(Boolean);
   const activeFilterCount = activeFilterChips.filter((chip) => chip.onRemove).length;
   const filterSummaryChips = activeFilterChips.filter((chip) => chip.onRemove).slice(0, 3);
+  const visibleActiveFilterChips = activeFilterChips.filter((chip) => chip.onRemove);
   const hasNonDefaultLeadDateFilter = coordinatorUiPolicy.ownerScoped
     ? hasExplicitLeadDateFilter
     : leadDateScope !== DEFAULT_CONTACT_LEAD_DATE_SCOPE ||
@@ -482,6 +510,7 @@ export default function PipelinePage() {
     statusFilter !== DEFAULT_PIPELINE_STATUS_FILTER ||
     sourceFilter !== DEFAULT_PIPELINE_SOURCE_FILTER ||
     courseFilter !== DEFAULT_PIPELINE_COURSE_FILTER ||
+    effectiveLocationFilter !== DEFAULT_PIPELINE_LOCATION_FILTER ||
     activityFilter !== DEFAULT_PIPELINE_ACTIVITY_FILTER ||
     search !== DEFAULT_PIPELINE_SEARCH ||
     compactMode !== DEFAULT_PIPELINE_COMPACT_MODE;
@@ -511,6 +540,11 @@ export default function PipelinePage() {
       label: 'Course',
       summary: selectedCourseLabel || 'All Courses',
     } : null,
+    isAitUsaPipeline ? {
+      id: 'location',
+      label: 'Location',
+      summary: selectedLocationLabel || 'All Locations',
+    } : null,
     {
       id: 'activity',
       label: 'Activity',
@@ -526,6 +560,7 @@ export default function PipelinePage() {
       statusFilter: DEFAULT_PIPELINE_STATUS_FILTER,
       sourceFilter: DEFAULT_PIPELINE_SOURCE_FILTER,
       courseFilter: DEFAULT_PIPELINE_COURSE_FILTER,
+      locationFilter: DEFAULT_PIPELINE_LOCATION_FILTER,
       activityFilter: DEFAULT_PIPELINE_ACTIVITY_FILTER,
       search: DEFAULT_PIPELINE_SEARCH,
       leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE,
@@ -656,7 +691,7 @@ export default function PipelinePage() {
                       ))}
                     </div>
 
-                    <div className={`${s.filterDetail} ${['timeframe', 'owner', 'status', 'source', 'course', 'activity'].includes(activeFilterSection) ? s.filterDetailCompact : ''}`}>
+                    <div className={`${s.filterDetail} ${['timeframe', 'owner', 'status', 'source', 'course', 'location', 'activity'].includes(activeFilterSection) ? s.filterDetailCompact : ''}`}>
                       {activeFilterSection === 'timeframe' && (
                         <section className={s.filterBlock}>
                           <div className={s.filterHeading}>Timeframe</div>
@@ -846,6 +881,37 @@ export default function PipelinePage() {
                         </section>
                       )}
 
+                      {activeFilterSection === 'location' && isAitUsaPipeline && (
+                        <section className={s.filterBlock}>
+                          <div className={s.filterHeading}>Location</div>
+                          <div className={s.optionList} role="listbox" aria-label="AIT USA pipeline location filters">
+                            <button
+                              type="button"
+                              className={`${s.optionTile} ${effectiveLocationFilter === DEFAULT_PIPELINE_LOCATION_FILTER ? s.active : ''}`}
+                              onClick={() => setLocationFilter(DEFAULT_PIPELINE_LOCATION_FILTER)}
+                              aria-selected={effectiveLocationFilter === DEFAULT_PIPELINE_LOCATION_FILTER}
+                              role="option"
+                            >
+                              <span>All Locations</span>
+                              <strong>{pipelineScopedRows.length}</strong>
+                            </button>
+                            {locationFilterOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className={`${s.optionTile} ${effectiveLocationFilter === option.value ? s.active : ''}`}
+                                onClick={() => setLocationFilter(option.value)}
+                                aria-selected={effectiveLocationFilter === option.value}
+                                role="option"
+                              >
+                                <span>{option.label}</span>
+                                <strong>{option.count}</strong>
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+
                       {activeFilterSection === 'activity' && (
                         <section className={s.filterBlock}>
                           <div className={s.filterHeading}>Activity</div>
@@ -889,6 +955,22 @@ export default function PipelinePage() {
                 </div>
               )}
             </div>
+            {visibleActiveFilterChips.length > 0 && (
+              <div className={s.filterPills} aria-label="Active pipeline filters">
+                {visibleActiveFilterChips.map((chip) => (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    className={s.filterPill}
+                    onClick={chip.onRemove}
+                    aria-label={`Remove ${PIPELINE_FILTER_CHIP_LABELS[chip.key] || 'filter'}: ${chip.label}`}
+                  >
+                    <span>{PIPELINE_FILTER_CHIP_LABELS[chip.key] || 'Filter'}: {chip.label}</span>
+                    <X size={12} />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className={s.pipelineActions}>
             <button className="btn" onClick={() => nextLead ? router.push(`/contacts/${nextLead.id}`) : toast('No lead matches the current filters.', 'error')}>

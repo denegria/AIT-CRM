@@ -13,11 +13,13 @@ import {
 } from '@/lib/contact-directory-facets';
 import {
   buildCourseFilterOptions,
+  buildSchoolLocationFilterOptions,
   buildSourceFilterOptions,
   contactLeadDateScopeLabel,
   contactFilterQuery,
   contactFilterStateFromParams,
   contactMatchesLeadDateScope,
+  contactMatchesSchoolLocation,
   contactMatchesSource,
   contactMatchesStatusOwnerCourse,
   courseTagsForDirectoryRow,
@@ -29,6 +31,7 @@ import {
   DEFAULT_CONTACT_LEAD_DATE_FROM,
   DEFAULT_CONTACT_LEAD_DATE_SCOPE,
   DEFAULT_CONTACT_LEAD_DATE_TO,
+  DEFAULT_CONTACT_LOCATION_FILTER,
   DEFAULT_CONTACT_OWNER_FILTER,
   DEFAULT_CONTACT_SOURCE_FILTER,
   DEFAULT_CONTACT_STATUS_FILTER,
@@ -41,7 +44,7 @@ import {
   lifecycleBucket,
 } from '@/lib/contact-directory-view';
 import { workflowForBusinessUnit } from '@/lib/sales-workflow';
-import { schoolLocationOptions } from '@/lib/school-locations';
+import { schoolLocationForContact, schoolLocationOptions } from '@/lib/school-locations';
 import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
@@ -69,6 +72,7 @@ const CONTACT_FILTER_CHIP_LABELS = {
   status: 'Status',
   source: 'Source',
   course: 'Course',
+  location: 'Location',
   facet: 'Segments',
 };
 
@@ -338,6 +342,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     leadDateTo,
     courseFilter,
     sourceFilter,
+    locationFilter,
   } = contactFilterStateFromParams(searchParams);
   const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
   const effectiveOwnerFilter = coordinatorUiPolicy.lockedOwnerUserId || ownerFilter;
@@ -362,10 +367,11 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       leadDateTo,
       courseFilter,
       sourceFilter,
+      locationFilter,
       ...patch,
     });
     router.replace(nextQuery ? `${routeBase}?${nextQuery}` : routeBase, { scroll: false });
-  }, [coordinatorUiPolicy.ownerScoped, courseFilter, directoryFacet, leadDateFrom, leadDateScope, leadDateTo, ownerFilter, routeBase, router, sourceFilter, statusFilter]);
+  }, [coordinatorUiPolicy.ownerScoped, courseFilter, directoryFacet, leadDateFrom, leadDateScope, leadDateTo, locationFilter, ownerFilter, routeBase, router, sourceFilter, statusFilter]);
   useEffect(() => {
     if (!coordinatorUiPolicy.ownerScoped || (!searchParams.has('owner') && !searchParams.has('ownerUserId'))) return;
     updateFilterQuery({ ownerFilter: DEFAULT_CONTACT_OWNER_FILTER });
@@ -391,6 +397,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   }), [updateFilterQuery]);
   const setCourseFilter = useCallback((value) => updateFilterQuery({ courseFilter: value }), [updateFilterQuery]);
   const setSourceFilter = useCallback((value) => updateFilterQuery({ sourceFilter: value }), [updateFilterQuery]);
+  const setLocationFilter = useCallback((value) => updateFilterQuery({ locationFilter: value }), [updateFilterQuery]);
 
   const directoryContacts = useMemo(() => {
     return contacts;
@@ -427,6 +434,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     workflowKey: activeWorkflow?.key,
     isSingleDivisionScope: Boolean(currentScopedBusinessUnitId),
   });
+  const isAitUsaDirectory = activeWorkflow?.key === WORKFLOW_KEYS.AIT_USA;
+  const effectiveLocationFilter = isAitUsaDirectory ? locationFilter : DEFAULT_CONTACT_LOCATION_FILTER;
   const ownerOptions = useMemo(() => {
     return (employees || [])
       .filter((employee) => employee?.id)
@@ -462,6 +471,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         contact.linkedPeoplePreview || '',
       ].filter(Boolean).join(' '),
       enrollmentStage: enrollmentStageText(contact),
+      schoolLocation: schoolLocationForContact(contact),
       inquirySource: enrollmentSourceText(contact),
       sourceCategoryText: directorySourceText(contact),
       signalLabels,
@@ -541,6 +551,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     ] : []),
     ...(columnMode === 'ait_usa' ? [
       { key: 'enrollmentStage', label: 'Enrollment', sortable: true, render: (row) => <EnrollmentCell row={row} /> },
+      { key: 'schoolLocation', label: 'Location', sortable: true },
       { key: 'inquirySource', label: 'Source', sortable: true, render: (row) => <EnrollmentSourceCell row={row} /> },
     ] : []),
     ...(columnMode !== 'ait_usa' ? [{ key: 'status', label: columnMode === 'ait_signs' ? 'Stage' : 'Status', type: 'badge', sortable: true }] : []),
@@ -598,13 +609,20 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     () => buildCourseFilterOptions(sourceFilteredContacts),
     [sourceFilteredContacts],
   );
-  const baseFilteredContacts = useMemo(() => sourceFilteredContacts.filter((contact) => (
+  const courseFilteredContacts = useMemo(() => sourceFilteredContacts.filter((contact) => (
     contactMatchesStatusOwnerCourse(contact, {
       statusFilter: DEFAULT_CONTACT_STATUS_FILTER,
       ownerFilter: DEFAULT_CONTACT_OWNER_FILTER,
       courseFilter,
     })
   )), [courseFilter, sourceFilteredContacts]);
+  const locationFilterOptions = useMemo(
+    () => isAitUsaDirectory ? buildSchoolLocationFilterOptions(courseFilteredContacts) : [],
+    [courseFilteredContacts, isAitUsaDirectory],
+  );
+  const baseFilteredContacts = useMemo(() => courseFilteredContacts.filter((contact) => (
+    contactMatchesSchoolLocation(contact, { locationFilter: effectiveLocationFilter })
+  )), [courseFilteredContacts, effectiveLocationFilter]);
   const facetGroups = useMemo(
     () => buildContactDirectoryFacetGroups(baseFilteredContacts, facetContext),
     [baseFilteredContacts, facetContext],
@@ -645,6 +663,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     if (courseFilter === DEFAULT_CONTACT_COURSE_FILTER) return '';
     return courseFilterOptions.find((option) => option.value === courseFilter)?.label || courseFilter;
   }, [courseFilter, courseFilterOptions]);
+  const selectedLocationLabel = useMemo(() => {
+    if (!isAitUsaDirectory || effectiveLocationFilter === DEFAULT_CONTACT_LOCATION_FILTER) return '';
+    return locationFilterOptions.find((option) => option.value === effectiveLocationFilter)?.label || effectiveLocationFilter;
+  }, [effectiveLocationFilter, isAitUsaDirectory, locationFilterOptions]);
   const selectedSourceLabel = useMemo(() => {
     if (sourceFilter === DEFAULT_CONTACT_SOURCE_FILTER) return '';
     return sourceFilterOptions.find((option) => option.value === sourceFilter)?.label || sourceFilter;
@@ -666,7 +688,11 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       label: selectedDateLabel,
       primary: !coordinatorUiPolicy.ownerScoped,
       onRemove: dateFilterIsDefault
-        ? null
+        ? () => updateFilterQuery({
+          leadDateScope: CONTACT_LEAD_DATE_SCOPE_ALL,
+          leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
+          leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
+        })
         : () => updateFilterQuery({
           leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE,
           leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
@@ -694,6 +720,11 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       label: selectedCourseLabel,
       onRemove: () => setCourseFilter(DEFAULT_CONTACT_COURSE_FILTER),
     } : null,
+    selectedLocationLabel ? {
+      key: 'location',
+      label: selectedLocationLabel,
+      onRemove: () => setLocationFilter(DEFAULT_CONTACT_LOCATION_FILTER),
+    } : null,
     selectedFacetLabel ? {
       key: 'facet',
       label: selectedFacetLabel,
@@ -704,10 +735,12 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     selectedCourseLabel,
     selectedDateLabel,
     selectedFacetLabel,
+    selectedLocationLabel,
     selectedOwnerLabel,
     selectedSourceLabel,
     setCourseFilter,
     setDirectoryFacet,
+    setLocationFilter,
     setOwnerFilter,
     coordinatorUiPolicy.ownerScoped,
     setStatusFilter,
@@ -720,7 +753,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const filterSummaryChips = activeFilterChips.filter((chip) => chip.onRemove).slice(0, 3);
   const visibleActiveFilterChips = activeFilterChips.filter((chip) => (
     chip.onRemove ||
-    (chip.key === 'leadDateScope' && !dateFilterIsDefault) ||
     (chip.key === 'owner' && selectedOwnerLabel)
   ));
   const hasNonDefaultLeadDateFilter = coordinatorUiPolicy.ownerScoped
@@ -733,6 +765,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     (!coordinatorUiPolicy.ownerScoped && ownerFilter !== DEFAULT_CONTACT_OWNER_FILTER) ||
     sourceFilter !== DEFAULT_CONTACT_SOURCE_FILTER ||
     courseFilter !== DEFAULT_CONTACT_COURSE_FILTER ||
+    effectiveLocationFilter !== DEFAULT_CONTACT_LOCATION_FILTER ||
     effectiveDirectoryFacet !== DEFAULT_CONTACT_FACET_FILTER;
   const filterSections = [
     {
@@ -760,6 +793,11 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       label: 'Course',
       summary: selectedCourseLabel || 'All Courses',
     } : null,
+    isAitUsaDirectory ? {
+      id: 'location',
+      label: 'Location',
+      summary: selectedLocationLabel || 'All Locations',
+    } : null,
     visibleSegmentGroups.groups.length > 0 ? {
       id: 'segments',
       label: 'Segments',
@@ -776,6 +814,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       sourceFilter: DEFAULT_CONTACT_SOURCE_FILTER,
       directoryFacet: DEFAULT_CONTACT_FACET_FILTER,
       courseFilter: DEFAULT_CONTACT_COURSE_FILTER,
+      locationFilter: DEFAULT_CONTACT_LOCATION_FILTER,
     });
   };
   const mobileFieldKeys = columnMode === 'ait_signs'
@@ -911,7 +950,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                       ))}
                     </div>
 
-                    <div className={`contacts-filter-detail ${['timeframe', 'owner', 'status', 'source', 'course'].includes(activeFilterSection) ? 'contacts-filter-detail-compact' : ''}`}>
+                    <div className={`contacts-filter-detail ${['timeframe', 'owner', 'status', 'source', 'course', 'location'].includes(activeFilterSection) ? 'contacts-filter-detail-compact' : ''}`}>
                       {activeFilterSection === 'timeframe' && (
                         <section className="contacts-filter-block">
                           <div className="contacts-filter-heading">Timeframe</div>
@@ -1091,6 +1130,37 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                                 className={`contacts-option-tile ${courseFilter === option.value ? 'active' : ''}`}
                                 onClick={() => setCourseFilter(option.value)}
                                 aria-selected={courseFilter === option.value}
+                                role="option"
+                              >
+                                <span>{option.label}</span>
+                                <strong>{option.count}</strong>
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+
+                      {activeFilterSection === 'location' && isAitUsaDirectory && (
+                        <section className="contacts-filter-block">
+                          <div className="contacts-filter-heading">Location</div>
+                          <div className="contacts-option-list" role="listbox" aria-label="AIT USA location filters">
+                            <button
+                              type="button"
+                              className={`contacts-option-tile ${effectiveLocationFilter === DEFAULT_CONTACT_LOCATION_FILTER ? 'active' : ''}`}
+                              onClick={() => setLocationFilter(DEFAULT_CONTACT_LOCATION_FILTER)}
+                              aria-selected={effectiveLocationFilter === DEFAULT_CONTACT_LOCATION_FILTER}
+                              role="option"
+                            >
+                              <span>All Locations</span>
+                              <strong>{courseFilteredContacts.length}</strong>
+                            </button>
+                            {locationFilterOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className={`contacts-option-tile ${effectiveLocationFilter === option.value ? 'active' : ''}`}
+                                onClick={() => setLocationFilter(option.value)}
+                                aria-selected={effectiveLocationFilter === option.value}
                                 role="option"
                               >
                                 <span>{option.label}</span>

@@ -3,7 +3,9 @@ import test from 'node:test';
 
 import {
   buildCourseFilterOptions,
+  buildSchoolLocationFilterOptions,
   buildSourceFilterOptions,
+  contactMatchesSchoolLocation,
   contactMatchesLeadDateScope,
   contactLeadDatePanelSummary,
   contactLeadDateScopeLabel,
@@ -12,6 +14,7 @@ import {
   contactMatchesSource,
   contactMatchesStatusOwnerCourse,
   DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+  DEFAULT_CONTACT_LOCATION_FILTER,
   CONTACT_LEAD_DATE_SCOPE_QUARTER,
   courseForContactDirectoryFilter,
   courseTagsForDirectoryRow,
@@ -20,7 +23,7 @@ import {
 } from './contact-directory-filters.js';
 
 test('contact filter params parse status, source, course, date, owner, and facet state', () => {
-  const params = new URLSearchParams('status=Course+Completed&source=WordPress+Website+Form&course=Forklift&leadDateScope=custom&leadDateFrom=2026-01-01&leadDateTo=2026-06-30&owner=user-1&facet=usa_course_completed');
+  const params = new URLSearchParams('status=Course+Completed&source=WordPress+Website+Form&course=Forklift&location=Plainfield&leadDateScope=custom&leadDateFrom=2026-01-01&leadDateTo=2026-06-30&owner=user-1&facet=usa_course_completed');
 
   assert.deepEqual(contactFilterStateFromParams(params), {
     statusFilter: 'Course Completed',
@@ -31,18 +34,19 @@ test('contact filter params parse status, source, course, date, owner, and facet
     leadDateTo: '2026-06-30',
     courseFilter: 'Forklift',
     sourceFilter: 'WordPress Website Form',
+    locationFilter: 'Plainfield',
   });
   assert.equal(
     contactFilterQuery(contactFilterStateFromParams(params)),
-    'leadDateScope=custom&leadDateFrom=2026-01-01&leadDateTo=2026-06-30&owner=user-1&status=Course+Completed&source=WordPress+Website+Form&facet=usa_course_completed&course=Forklift',
+    'leadDateScope=custom&leadDateFrom=2026-01-01&leadDateTo=2026-06-30&owner=user-1&status=Course+Completed&source=WordPress+Website+Form&facet=usa_course_completed&course=Forklift&location=Plainfield',
   );
 });
 
 test('contact filter query omits default filters', () => {
   assert.equal(contactFilterQuery(), '');
   assert.equal(
-    contactFilterQuery({ statusFilter: 'Enrolled', sourceFilter: 'Website', courseFilter: 'OSHA' }),
-    'status=Enrolled&source=Website&course=OSHA',
+    contactFilterQuery({ statusFilter: 'Enrolled', sourceFilter: 'Website', courseFilter: 'OSHA', locationFilter: 'Online' }),
+    'status=Enrolled&source=Website&course=OSHA&location=Online',
   );
 });
 
@@ -135,7 +139,7 @@ test('lead date display helpers keep preset and custom copy consistent', () => {
 });
 
 test('pipeline filter params preserve date, owner, status, source, course, activity, search, and compact state', () => {
-  const params = new URLSearchParams('leadDateScope=custom&leadDateFrom=2026-02-01&leadDateTo=2026-05-30&workflow=new_leads&owner=unassigned&status=New+Lead&source=Website&course=OSHA&activity=recent_7&q=anna&compact=0');
+  const params = new URLSearchParams('leadDateScope=custom&leadDateFrom=2026-02-01&leadDateTo=2026-05-30&workflow=new_leads&owner=unassigned&status=New+Lead&source=Website&course=OSHA&location=Flemington&activity=recent_7&q=anna&compact=0');
 
   assert.deepEqual(pipelineFilterStateFromParams(params), {
     workflowFilter: 'all',
@@ -143,6 +147,7 @@ test('pipeline filter params preserve date, owner, status, source, course, activ
     ownerFilter: 'unassigned',
     sourceFilter: 'Website',
     courseFilter: 'OSHA',
+    locationFilter: 'Flemington',
     activityFilter: 'recent_7',
     search: 'anna',
     leadDateScope: 'custom',
@@ -152,7 +157,39 @@ test('pipeline filter params preserve date, owner, status, source, course, activ
   });
   assert.equal(
     pipelineFilterQuery(pipelineFilterStateFromParams(params)),
-    'leadDateScope=custom&leadDateFrom=2026-02-01&leadDateTo=2026-05-30&owner=unassigned&status=New+Lead&source=Website&course=OSHA&activity=recent_7&q=anna&compact=0',
+    'leadDateScope=custom&leadDateFrom=2026-02-01&leadDateTo=2026-05-30&owner=unassigned&status=New+Lead&source=Website&course=OSHA&location=Flemington&activity=recent_7&q=anna&compact=0',
+  );
+});
+
+test('location filters match AIT USA school locations without treating campaign markets as schools', () => {
+  const rows = [
+    { id: 'plainfield', address: 'Plainfield' },
+    { id: 'piscataway', locationPreference: 'Piscataway' },
+    { id: 'online', enrollmentSignals: { inquiry: { location: 'Online' } } },
+    { id: 'madrid', address: 'Madrid, Spain' },
+  ];
+
+  assert.deepEqual(
+    buildSchoolLocationFilterOptions(rows).map((option) => [option.label, option.count]),
+    [
+      ['Bound Brook', 0],
+      ['Plainfield', 1],
+      ['Piscataway', 1],
+      ['Flemington', 0],
+      ['Online', 1],
+    ],
+  );
+  assert.deepEqual(
+    rows
+      .filter((contact) => contactMatchesSchoolLocation(contact, { locationFilter: 'Piscataway' }))
+      .map((contact) => contact.id),
+    ['piscataway'],
+  );
+  assert.deepEqual(
+    rows
+      .filter((contact) => contactMatchesSchoolLocation(contact, { locationFilter: DEFAULT_CONTACT_LOCATION_FILTER }))
+      .map((contact) => contact.id),
+    ['plainfield', 'piscataway', 'online', 'madrid'],
   );
 });
 
