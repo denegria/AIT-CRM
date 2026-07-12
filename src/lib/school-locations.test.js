@@ -29,6 +29,8 @@ test('school location options preserve a legacy current value', () => {
     'Online',
   ]);
   assert.deepEqual(schoolLocationOptions('Plainfield'), AIT_USA_SCHOOL_LOCATIONS);
+  assert.equal(schoolLocationOptions().includes('Hybrid'), false);
+  assert.equal(schoolLocationOptions().includes('Madrid, Spain'), false);
 });
 
 test('school location helpers keep Madrid out of campus semantics', () => {

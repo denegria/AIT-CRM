@@ -18,7 +18,7 @@ import {
 import { PIPELINE_STATUSES, isWorkflowStatusClosed, workflowForBusinessUnit } from '@/lib/sales-workflow';
 import { buildContactDetailViewModel } from '@/lib/contact-detail-view-model';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
-import { schoolLocationOptions } from '@/lib/school-locations';
+import { schoolLocationForContact, schoolLocationOptions } from '@/lib/school-locations';
 import {
   COURSE_RECORD_STATUS_OPTIONS,
   courseRecordStatusLabel,
@@ -71,6 +71,7 @@ const emptyPaymentForm = {
 const emptyCourseForm = {
   id: '',
   courseName: '',
+  courseLocation: '',
   status: 'active',
   startDate: '',
   endDate: '',
@@ -542,6 +543,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       : contactFinancials
   ), [contactFinancials, isAitUsaContact]);
   const editSchoolLocationOptions = schoolLocationOptions(editForm?.address);
+  const courseLocationOptions = schoolLocationOptions(courseForm.courseLocation);
   const showWorkOrdersTab = detailView.tabs.showWorkOrders;
   const showFinancialsTab = detailView.tabs.showFinancials || (isAitUsaContact && access.canWriteFinancials);
   const showCoursesTab = isAitUsaContact;
@@ -918,6 +920,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     setCourseForm(isEdit || isComplete || isEnd ? {
       id: record.id,
       courseName: record.courseName || '',
+      courseLocation: record.courseLocation || '',
       status: isComplete ? 'completed' : (isEnd ? 'cancelled' : record.status || 'active'),
       startDate: dateForInput(record.startDate),
       endDate: dateForInput(record.endDate) || (isComplete || isEnd ? todayDate() : ''),
@@ -925,6 +928,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       notes: record.notes || '',
     } : {
       ...emptyCourseForm,
+      courseLocation: mode === 'history' ? '' : schoolLocationForContact(contact),
       status: mode === 'history' ? 'completed' : 'active',
       startDate: mode === 'enrollment' ? todayDate() : '',
       endDate: mode === 'history' ? todayDate() : '',
@@ -1802,6 +1806,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                         {activeCourseRecord
                           ? [
                               activeCourseRecord.startDate ? `Started ${activeCourseRecord.startDate}` : '',
+                              activeCourseRecord.courseLocation || 'Location not set',
                               activeCourseRecord.notes || '',
                             ].filter(Boolean).join(' - ') || 'Active course record'
                           : 'Start a new course when the student enrolls again. Older courses stay in history.'}
@@ -1878,6 +1883,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                             <strong>{record.courseName}</strong>
                             <small>
                               {courseRecordStatusLabel(record.status)}
+                              {` - ${record.courseLocation || 'Location not set'}`}
                               {record.startDate ? ` - ${record.startDate}` : ''}
                               {record.endDate ? ` to ${record.endDate}` : ''}
                             </small>
@@ -1900,6 +1906,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                             <div>
                               <span>Started</span>
                               <strong>{selectedCourseRecord.startDate || 'Not set'}</strong>
+                            </div>
+                            <div>
+                              <span>Location</span>
+                              <strong>{selectedCourseRecord.courseLocation || 'Location not set'}</strong>
                             </div>
                             <div>
                               <span>Ended</span>
@@ -2336,6 +2346,20 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               placeholder="Forklift, OSHA 30, ESL Level 1..."
               onChange={(event) => updateCourseForm({ courseName: event.target.value })}
             />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Location</label>
+            <select
+              className="input select"
+              value={courseForm.courseLocation || ''}
+              disabled={courseBusy}
+              onChange={(event) => updateCourseForm({ courseLocation: event.target.value })}
+            >
+              <option value="">Location not set</option>
+              {courseLocationOptions.map((location) => (
+                <option key={location} value={location}>{location}</option>
+              ))}
+            </select>
           </div>
           <div className="grid-2">
             <div className="form-group">

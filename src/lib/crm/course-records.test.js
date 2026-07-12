@@ -4,6 +4,7 @@ import {
   courseRecordInputFromPayload,
   courseRecordPayloadFromRow,
   courseRecordStatusLabel,
+  courseRecordValuesFromInput,
   deriveCourseSummary,
   normalizeCourseRecordStatus,
   validateCourseRecordInput,
@@ -20,16 +21,34 @@ test('course record status normalization maps staff language', () => {
 test('course record input trims text and supports clearable dates', () => {
   assert.deepEqual(courseRecordInputFromPayload({
     courseName: '  OSHA 30 ',
+    courseLocation: 'plainfield',
     status: 'Dropped / Quit',
     startDate: '',
     endDate: '2026-07-06',
     outcomeReason: ' cancelled halfway ',
   }, { allowClear: true }), {
     courseName: 'OSHA 30',
+    courseLocation: 'Plainfield',
     status: 'dropped',
     startDate: null,
     endDate: '2026-07-06',
     outcomeReason: 'cancelled halfway',
+  });
+});
+
+test('course record location round-trips structured and legacy values', () => {
+  assert.deepEqual(courseRecordInputFromPayload({ courseLocation: ' piscataway ' }), {
+    courseLocation: 'Piscataway',
+  });
+  assert.deepEqual(courseRecordInputFromPayload({ courseLocation: '' }, { allowClear: true }), {
+    courseLocation: null,
+  });
+  assert.equal(courseRecordPayloadFromRow({
+    courseName: 'Forklift',
+    courseLocation: 'Legacy Campus',
+  }).courseLocation, 'Legacy Campus');
+  assert.deepEqual(courseRecordValuesFromInput({ courseLocation: ' Bound Brook ' }), {
+    courseLocation: 'Bound Brook',
   });
 });
 
@@ -60,10 +79,11 @@ test('course summary derives current and historical records', () => {
   const summary = deriveCourseSummary([
     { id: '1', courseName: 'ESL Level 1', status: 'completed', endDate: '2026-06-01' },
     { id: '2', courseName: 'OSHA 30', status: 'cancelled', endDate: '2026-06-20', outcomeReason: 'Cancelled halfway' },
-    { id: '3', courseName: 'Forklift', status: 'active', startDate: '2026-07-01' },
+    { id: '3', courseName: 'Forklift', courseLocation: 'Flemington', status: 'active', startDate: '2026-07-01' },
   ]);
 
   assert.equal(summary.currentCourse.courseName, 'Forklift');
+  assert.equal(summary.currentCourse.courseLocation, 'Flemington');
   assert.equal(summary.latestCompletedCourse.courseName, 'ESL Level 1');
   assert.equal(summary.latestEndedCourse.courseName, 'OSHA 30');
   assert.deepEqual(courseRecordPayloadFromRow(summary.currentCourse).statusLabel, 'Current');

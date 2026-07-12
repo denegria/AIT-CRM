@@ -271,6 +271,7 @@ export const contactCourseRecords = pgTable('contact_course_records', {
   contactId: uuid('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
   leadId: uuid('lead_id').references(() => leads.id, { onDelete: 'set null' }),
   courseName: text('course_name').notNull(),
+  courseLocation: text('course_location'),
   status: text('status').notNull().default('active'),
   startDate: date('start_date'),
   endDate: date('end_date'),

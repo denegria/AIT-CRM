@@ -1,3 +1,5 @@
+import { canonicalAitUsaSchoolLocation } from '../school-locations.js';
+
 const COURSE_RECORD_STATUSES = Object.freeze([
   'planned',
   'active',
@@ -41,6 +43,17 @@ function dateForDb(value, { allowClear = false } = {}) {
   return clean;
 }
 
+function courseLocationForPayload(value = '') {
+  const clean = cleanText(value);
+  return canonicalAitUsaSchoolLocation(clean) || clean;
+}
+
+function courseLocationForDb(value, { allowClear = false } = {}) {
+  const clean = courseLocationForPayload(value);
+  if (!clean) return allowClear ? null : undefined;
+  return clean;
+}
+
 export function normalizeCourseRecordStatus(value = '') {
   const status = normalized(value);
   if (!status) return 'active';
@@ -68,6 +81,7 @@ export function courseRecordPayloadFromRow(row = {}) {
     leadId: row.leadId || '',
     businessUnitId: row.businessUnitId || '',
     courseName: cleanText(row.courseName),
+    courseLocation: courseLocationForPayload(row.courseLocation),
     status: normalizeCourseRecordStatus(row.status),
     statusLabel: courseRecordStatusLabel(row.status),
     startDate: dateForPayload(row.startDate),
@@ -86,6 +100,9 @@ export function courseRecordInputFromPayload(payload = {}, { allowClear = false 
   const input = {};
   if (Object.prototype.hasOwnProperty.call(source, 'courseName')) {
     input.courseName = cleanText(source.courseName);
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'courseLocation')) {
+    input.courseLocation = courseLocationForDb(source.courseLocation, { allowClear });
   }
   if (Object.prototype.hasOwnProperty.call(source, 'status')) {
     input.status = normalizeCourseRecordStatus(source.status);
@@ -111,6 +128,7 @@ export function courseRecordValuesFromInput(input = {}, defaults = {}) {
   return {
     ...defaults,
     ...(Object.prototype.hasOwnProperty.call(input, 'courseName') ? { courseName: cleanText(input.courseName) } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'courseLocation') ? { courseLocation: courseLocationForPayload(input.courseLocation) || null } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'status') ? { status: normalizeCourseRecordStatus(input.status) } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'startDate') ? { startDate: input.startDate || null } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'endDate') ? { endDate: input.endDate || null } : {}),
