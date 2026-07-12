@@ -18,7 +18,7 @@ const PERMISSIONS = {
     'business_units:all',
   ],
   designer: ['crm:read', 'work_orders:write'],
-  account_manager: ['crm:read', 'crm:write', 'financials:read', 'financials:write', 'work_orders:write'],
+  account_coordinator: ['crm:read', 'crm:write', 'financials:read', 'financials:write', 'work_orders:write'],
   senior_coordinator: ['crm:read', 'crm:write', 'financials:read', 'financials:write', 'work_orders:write'],
   sales_manager: ['crm:read', 'crm:write', 'reports:read', 'financials:read'],
 };
@@ -26,9 +26,13 @@ const PERMISSIONS = {
 const ROLE_NAMES = {
   admin: 'Administrator',
   designer: 'Designer',
-  account_manager: 'Account Coordinator',
+  account_coordinator: 'Account Coordinator',
   senior_coordinator: 'Senior Coordinator',
   sales_manager: 'Sales Manager',
+};
+
+const ROLE_ALIASES = {
+  account_manager: 'account_coordinator',
 };
 
 function requiredEnv(name) {
@@ -45,6 +49,11 @@ function firstDefinedEnv(...names) {
     if (value) return value;
   }
   return '';
+}
+
+function normalizeRoleKey(value) {
+  const roleKey = String(value || '').trim();
+  return ROLE_ALIASES[roleKey] || roleKey;
 }
 
 function hashPassword(password) {
@@ -92,7 +101,7 @@ async function main() {
   if (!email) throw new Error('AIT_CRM_BOOTSTRAP_EMAIL (or AIT_CRM_BOOTSTRAP_ADMIN_EMAIL) is required.');
   if (!password) throw new Error('AIT_CRM_BOOTSTRAP_PASSWORD (or AIT_CRM_BOOTSTRAP_ADMIN_PASSWORD) is required.');
   const normalizedEmail = email.trim().toLowerCase();
-  const roleKey = firstDefinedEnv('AIT_CRM_BOOTSTRAP_ROLE', 'AIT_CRM_BOOTSTRAP_ADMIN_ROLE') || 'admin';
+  const roleKey = normalizeRoleKey(firstDefinedEnv('AIT_CRM_BOOTSTRAP_ROLE', 'AIT_CRM_BOOTSTRAP_ADMIN_ROLE') || 'admin');
   const name = firstDefinedEnv('AIT_CRM_BOOTSTRAP_NAME', 'AIT_CRM_BOOTSTRAP_ADMIN_NAME') || 'AIT CRM User';
   const configuredBusinessUnitIds = firstDefinedEnv(
     'AIT_CRM_BOOTSTRAP_BUSINESS_UNIT_IDS',

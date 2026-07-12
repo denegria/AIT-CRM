@@ -8,16 +8,16 @@ import {
 } from './admin-policy.js';
 
 test('recognizes administrator role from primary role or role list', () => {
-  assert.equal(userHasAdminRole({ primaryRoleKey: 'admin', roleKeys: ['account_manager'] }), true);
-  assert.equal(userHasAdminRole({ primaryRoleKey: 'account_manager', roleKeys: ['admin'] }), true);
+  assert.equal(userHasAdminRole({ primaryRoleKey: 'admin', roleKeys: ['account_coordinator'] }), true);
+  assert.equal(userHasAdminRole({ primaryRoleKey: 'account_coordinator', roleKeys: ['admin'] }), true);
   assert.equal(sessionHasAdminRole({ user: { primaryRoleKey: 'sales_manager', roleKeys: ['sales_manager'] } }), false);
 });
 
 test('rejects non-admin CRM writers with a 403 policy error', () => {
   const session = {
     user: {
-      primaryRoleKey: 'account_manager',
-      roleKeys: ['account_manager'],
+      primaryRoleKey: 'account_coordinator',
+      roleKeys: ['account_coordinator'],
       permissions: ['crm:read', 'crm:write'],
     },
   };

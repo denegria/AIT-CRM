@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { publishLogout } from '@/lib/auth/session-sync.js';
+import { roleLabel } from '@/lib/roles.js';
 import { useCRM } from '@/lib/store';
 import { canUseWorkOrdersForBusinessUnit, coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import { isClientAccountBusinessUnit } from '@/lib/crm/lifecycle';
@@ -32,14 +33,6 @@ const mobilePrimaryPriority = ['/', '/clients', '/contacts', '/pipeline', '/task
 const regularCoordinatorNav = new Set(['/', '/clients', '/contacts', '/pipeline', '/tasks', '/work-orders']);
 const scopePersistenceKeys = ['ait-crm-business-unit-scope', 'ait-crm-scope-user-id'];
 
-const roleLabels = {
-  admin: 'Administrator',
-  senior_coordinator: 'Senior Coordinator',
-  account_manager: 'Account Coordinator',
-  designer: 'Designer',
-  sales_manager: 'Sales Manager',
-};
-
 const themeOptions = [
   { value: 'light', label: 'Light', Icon: Sun },
   { value: 'dusk', label: 'Dusk', Icon: CloudSun },
@@ -52,9 +45,7 @@ function isRouteActive(pathname, href) {
 }
 
 function formatRoleLabel(roleKey) {
-  return roleLabels[roleKey] || String(roleKey || '')
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (char) => char.toUpperCase());
+  return roleLabel(roleKey);
 }
 
 function divisionBrandFor(unit) {

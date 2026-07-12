@@ -291,7 +291,7 @@ V1 should keep the same user types already present in the CRM prototype:
 
 - Administrator: `admin`
 - Designer: `designer`
-- Account Manager: `account_manager`
+- Account Coordinator: `account_coordinator`
 - Sales Manager: `sales_manager`
 
 Core tables:
@@ -337,7 +337,7 @@ Example rules:
 
 - Admin sees all business units.
 - Sales Manager sees sales activity, assigned teams/leads, and business-unit scoped performance.
-- Account Manager sees assigned contacts, customer activity, and account follow-up work.
+- Account Coordinator sees assigned contacts, customer activity, and account follow-up work.
 - Designer sees design/job-related work assigned to them, with restricted financial/settings access.
 - Future accounting/production roles can be split out when those workflows become first-class.
 
@@ -742,7 +742,7 @@ First Codex task should not be app implementation. It should be a repo-backed da
 
 - Add real authentication.
 - Add real users/roles/permissions.
-- Seed roles: admin, designer, account_manager, sales_manager.
+- Seed roles: admin, designer, account_coordinator, senior_coordinator, sales_manager.
 - Replace the mock role toggle.
 - Add server-side authorization helpers.
 - Enforce business-unit and assignment boundaries before production/broader user access.

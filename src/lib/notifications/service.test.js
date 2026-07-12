@@ -87,8 +87,8 @@ test('regular coordinators cannot read broad inbound lead notifications', () => 
     userId: null,
   };
 
-  assert.equal(canReadInboundLeadNotifications(session(['account_manager'])), false);
-  assert.equal(canReadNotification(session(['account_manager']), notification), false);
+  assert.equal(canReadInboundLeadNotifications(session(['account_coordinator'])), false);
+  assert.equal(canReadNotification(session(['account_coordinator']), notification), false);
 });
 
 test('senior coordinators can read inbound lead notifications for their business units', () => {
@@ -98,6 +98,6 @@ test('senior coordinators can read inbound lead notifications for their business
     userId: null,
   };
 
-  assert.equal(canReadInboundLeadNotifications(session(['account_manager', 'senior_coordinator'])), true);
-  assert.equal(canReadNotification(session(['account_manager', 'senior_coordinator']), notification), true);
+  assert.equal(canReadInboundLeadNotifications(session(['account_coordinator', 'senior_coordinator'])), true);
+  assert.equal(canReadNotification(session(['account_coordinator', 'senior_coordinator']), notification), true);
 });

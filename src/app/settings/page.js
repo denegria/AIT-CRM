@@ -7,9 +7,10 @@ import { useToast } from '@/components/Toast';
 
 const defaultRoleOptions = [
   { key: 'admin', label: 'Administrator' },
-  { key: 'account_manager', label: 'Account Coordinator' },
-  { key: 'sales_manager', label: 'Sales Manager' },
+  { key: 'senior_coordinator', label: 'Senior Coordinator' },
   { key: 'designer', label: 'Designer' },
+  { key: 'account_coordinator', label: 'Account Coordinator' },
+  { key: 'sales_manager', label: 'Sales Manager' },
 ];
 
 const followUpChannels = [
@@ -73,7 +74,7 @@ export default function SettingsPage() {
     name: '',
     email: '',
     password: '',
-    roleKey: 'account_manager',
+    roleKey: 'account_coordinator',
     businessUnitIds: [],
     isActive: true,
   });
@@ -194,7 +195,7 @@ export default function SettingsPage() {
       name: '',
       email: '',
       password: '',
-      roleKey: 'account_manager',
+      roleKey: 'account_coordinator',
       businessUnitIds: [],
       isActive: true,
     });
@@ -449,7 +450,7 @@ export default function SettingsPage() {
       name: user.name || '',
       email: user.email || '',
       password: '',
-      roleKey: user.primaryRoleKey || 'account_manager',
+      roleKey: user.primaryRoleKey || 'account_coordinator',
       businessUnitIds: user.primaryRoleKey === 'admin' ? [] : user.businessUnitIds || [],
       isActive: user.isActive !== false,
     });

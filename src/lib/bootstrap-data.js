@@ -47,6 +47,7 @@ import { attachPaymentSnapshotContactLinks } from './financial-linkage.js';
 import { filterAssignableEmployees } from './crm/assignable-employees.js';
 import { courseRecordPayloadFromRow, deriveCourseSummary } from './crm/course-records.js';
 import { getServerAppVersion } from './app-version.js';
+import { canonicalRoleKeys } from './roles.js';
 
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const toBootstrapBusinessUnitPayload = (row) => toBusinessUnitPayload(row, { emptyColor: null });
@@ -189,7 +190,7 @@ function mapEmployees(userRows = [], membershipRows = [], roleRows = []) {
     email: user.email || '',
     phone: user.phone || '',
     isActive: user.isActive,
-    roleKeys: roleKeysByUserId.get(user.id) || [],
+    roleKeys: canonicalRoleKeys(roleKeysByUserId.get(user.id) || []),
     businessUnitIds: membershipsByUserId.get(user.id) || [],
   })));
 }

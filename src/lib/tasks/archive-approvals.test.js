@@ -7,7 +7,7 @@ import {
 } from './archive-approvals.js';
 import { TASK_STATUSES, TASK_TYPES } from './constants.js';
 
-function session(roleKeys = ['account_manager'], overrides = {}) {
+function session(roleKeys = ['account_coordinator'], overrides = {}) {
   return {
     user: {
       id: overrides.id || 'user-1',
@@ -105,7 +105,7 @@ test('regular coordinator archive requests reuse an existing open approval task'
   const result = await createOrReuseArchiveApprovalTask({
     db,
     organizationId: 'org-1',
-    session: session(['account_manager']),
+    session: session(['account_coordinator']),
     contact,
     reason: 'Duplicate imported contact.',
   });
@@ -137,7 +137,7 @@ test('regular coordinator archive requests create a reviewer-owned approval task
   const result = await createOrReuseArchiveApprovalTask({
     db,
     organizationId: 'org-1',
-    session: session(['account_manager']),
+    session: session(['account_coordinator']),
     contact,
     reason: 'Duplicate imported contact.',
   });
@@ -153,7 +153,7 @@ test('regular coordinator archive requests create a reviewer-owned approval task
 });
 
 test('only senior coordinators and admins can review archive approvals', async () => {
-  assert.equal(canReviewArchiveApproval(session(['account_manager'])), false);
+  assert.equal(canReviewArchiveApproval(session(['account_coordinator'])), false);
   assert.equal(canReviewArchiveApproval(session(['senior_coordinator'])), true);
   assert.equal(canReviewArchiveApproval(session(['admin'])), true);
 
@@ -161,7 +161,7 @@ test('only senior coordinators and admins can review archive approvals', async (
     () => decideArchiveApprovalTask({
       db: fakeDb(),
       organizationId: 'org-1',
-      session: session(['account_manager']),
+      session: session(['account_coordinator']),
       existingTask: { taskType: TASK_TYPES.ARCHIVE_APPROVAL, status: TASK_STATUSES.OPEN },
       decision: 'approve',
     }),

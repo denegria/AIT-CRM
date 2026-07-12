@@ -8,8 +8,8 @@ function session(overrides = {}) {
       id: 'user-1',
       canAccessAllBusinessUnits: false,
       businessUnitIds: ['bu-1'],
-      primaryRoleKey: 'account_manager',
-      roleKeys: ['account_manager'],
+      primaryRoleKey: 'account_coordinator',
+      roleKeys: ['account_coordinator'],
       ...overrides,
     },
   };

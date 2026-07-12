@@ -8,9 +8,9 @@ import {
 
 test('assignable employee policy excludes staging test and automation accounts', () => {
   const users = [
-    { id: 'user-1', name: 'Sofia Lopez', email: 'sofia@aitusa.com', roleKeys: ['account_manager'] },
-    { id: 'user-2', name: 'Meeting Account Manager', email: 'meeting.account.manager@aitcrm.app', roleKeys: ['account_manager'] },
-    { id: 'user-3', name: 'Sentry Client', email: 'sentry.client@aitcrm.app', roleKeys: ['account_manager'] },
+    { id: 'user-1', name: 'Sofia Lopez', email: 'sofia@aitusa.com', roleKeys: ['account_coordinator'] },
+    { id: 'user-2', name: 'Meeting Account Coordinator', email: 'meeting.account.coordinator@aitcrm.app', roleKeys: ['account_coordinator'] },
+    { id: 'user-3', name: 'Sentry Client', email: 'sentry.client@aitcrm.app', roleKeys: ['account_coordinator'] },
     { id: 'user-4', name: 'Inactive Employee', email: 'inactive@aitusa.com', roleKeys: ['designer'], isActive: false },
     { id: 'user-5', name: 'Jessica Vega', email: 'jessica@aitusa.com', roleKeys: ['designer'] },
     { id: 'user-6', name: 'Alvaro Denegri', email: 'alvarodenegri98@gmail.com', roleKeys: ['admin'] },
@@ -28,6 +28,12 @@ test('assignable employee policy requires first-party employee roles when roles 
     id: 'user-1',
     name: 'Real Employee',
     email: 'employee@aitusa.com',
+    roleKeys: ['account_coordinator'],
+  }), true);
+  assert.equal(isAssignableEmployee({
+    id: 'legacy-user',
+    name: 'Legacy Employee',
+    email: 'legacy.employee@aitusa.com',
     roleKeys: ['account_manager'],
   }), true);
   assert.equal(isAssignableEmployee({

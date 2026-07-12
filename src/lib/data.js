@@ -34,10 +34,10 @@ export const SOURCES = ['Facebook Ads', 'Website', 'Referral', 'Cold Call', 'Goo
 
 export const EMPLOYEES = [
   { id: 'emp-1', name: 'Carlos Rivera', roleKeys: ['admin'] },
-  { id: 'emp-2', name: 'Dana Kim', roleKeys: ['account_manager'] },
+  { id: 'emp-2', name: 'Dana Kim', roleKeys: ['account_coordinator'] },
   { id: 'emp-3', name: 'Marcus Hall', roleKeys: ['designer'] },
-  { id: 'emp-4', name: 'Sofia Ramirez', roleKeys: ['account_manager'] },
-  { id: 'emp-5', name: 'Mateo Cruz', roleKeys: ['account_manager'] },
+  { id: 'emp-4', name: 'Sofia Ramirez', roleKeys: ['account_coordinator'] },
+  { id: 'emp-5', name: 'Mateo Cruz', roleKeys: ['account_coordinator'] },
 ];
 
 export const businessUnits = [

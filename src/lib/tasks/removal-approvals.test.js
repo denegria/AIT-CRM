@@ -7,7 +7,7 @@ import {
 } from './removal-approvals.js';
 import { TASK_STATUSES, TASK_TYPES } from './constants.js';
 
-function session(roleKeys = ['account_manager'], overrides = {}) {
+function session(roleKeys = ['account_coordinator'], overrides = {}) {
   return {
     user: {
       id: overrides.id || 'user-1',
@@ -129,7 +129,7 @@ test('regular coordinator task removal requests create reviewer-owned approval t
   const result = await createOrReuseTaskRemovalApprovalTask({
     db,
     organizationId: 'org-1',
-    session: session(['account_manager']),
+    session: session(['account_coordinator']),
     targetTask,
     reason: 'Duplicate task.',
   });
@@ -159,7 +159,7 @@ test('regular coordinator task removal requests reuse an existing open approval 
   const result = await createOrReuseTaskRemovalApprovalTask({
     db,
     organizationId: 'org-1',
-    session: session(['account_manager']),
+    session: session(['account_coordinator']),
     targetTask,
     reason: 'Duplicate task.',
   });
@@ -170,7 +170,7 @@ test('regular coordinator task removal requests reuse an existing open approval 
 });
 
 test('only senior coordinators and admins can review task removal approvals', async () => {
-  assert.equal(canReviewTaskRemovalApproval(session(['account_manager'])), false);
+  assert.equal(canReviewTaskRemovalApproval(session(['account_coordinator'])), false);
   assert.equal(canReviewTaskRemovalApproval(session(['senior_coordinator'])), true);
   assert.equal(canReviewTaskRemovalApproval(session(['admin'])), true);
 
@@ -178,7 +178,7 @@ test('only senior coordinators and admins can review task removal approvals', as
     () => decideTaskRemovalApprovalTask({
       db: fakeDb(),
       organizationId: 'org-1',
-      session: session(['account_manager']),
+      session: session(['account_coordinator']),
       existingTask: { taskType: TASK_TYPES.TASK_REMOVAL_APPROVAL, status: TASK_STATUSES.OPEN },
       decision: 'approve',
     }),

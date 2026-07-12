@@ -41,7 +41,7 @@ test('senior coordinator is not treated as a regular owner-scoped coordinator', 
 });
 
 test('regular coordinator is owner scoped and cannot use direct archive or reassignment powers', () => {
-  const regular = session(['account_manager']);
+  const regular = session(['account_coordinator']);
   assert.equal(isRegularCoordinatorSession(regular), true);
   assert.equal(canManageCoordinatorAssignments(regular), false);
   assert.equal(canManageWorkOrderAssignments(regular), false);
@@ -51,8 +51,15 @@ test('regular coordinator is owner scoped and cannot use direct archive or reass
   assert.equal(canAccessContactLead(regular, { assignedUserId: null }), false);
 });
 
-test('work order self-scope applies to employee roles but not senior coordinator roles', () => {
+test('legacy account manager role key remains a regular coordinator during rollout', () => {
   const regular = session(['account_manager']);
+  assert.equal(isRegularCoordinatorSession(regular), true);
+  assert.equal(canManageCoordinatorAssignments(regular), false);
+  assert.equal(canArchiveContactsDirectly(regular), false);
+});
+
+test('work order self-scope applies to employee roles but not senior coordinator roles', () => {
+  const regular = session(['account_coordinator']);
   const designer = session(['designer']);
   const senior = session(['senior_coordinator']);
   const admin = session(['admin']);
@@ -68,7 +75,7 @@ test('work order self-scope applies to employee roles but not senior coordinator
 });
 
 test('work order access is assigned-user scoped for employee roles', () => {
-  const regular = session(['account_manager']);
+  const regular = session(['account_coordinator']);
   const designer = session(['designer']);
   const senior = session(['senior_coordinator']);
 
@@ -80,7 +87,7 @@ test('work order access is assigned-user scoped for employee roles', () => {
 });
 
 test('ait usa-only employees cannot use the work orders workspace or data scope', () => {
-  const aitUsaOnly = session(['account_manager']);
+  const aitUsaOnly = session(['account_coordinator']);
   aitUsaOnly.user.businessUnitIds = ['bu-usa'];
   aitUsaOnly.user.businessUnitMemberships = [{ id: 'bu-usa', name: 'AIT USA Institute', isPrimary: true }];
   aitUsaOnly.user.businessUnitNamesById = { 'bu-usa': 'AIT USA Institute' };
@@ -92,7 +99,7 @@ test('ait usa-only employees cannot use the work orders workspace or data scope'
 });
 
 test('mixed ait signs and ait usa employees keep signs-only work order access', () => {
-  const mixed = session(['account_manager']);
+  const mixed = session(['account_coordinator']);
   mixed.user.businessUnitIds = ['bu-usa', 'bu-signs'];
   mixed.user.businessUnitMemberships = [
     { id: 'bu-usa', name: 'AIT USA Institute', isPrimary: true },
@@ -113,7 +120,7 @@ test('mixed ait signs and ait usa employees keep signs-only work order access', 
 test('regular coordinator UI policy locks owner-scoped surfaces to the current user', () => {
   const policy = coordinatorUiPolicyForUser({
     id: 'coordinator-1',
-    primaryRoleKey: 'account_manager',
+    primaryRoleKey: 'account_coordinator',
     roleKeys: [],
   });
 
@@ -131,7 +138,7 @@ test('senior coordinator UI policy keeps broad coordinator controls available', 
   const policy = coordinatorUiPolicyForUser({
     id: 'senior-1',
     primaryRoleKey: 'senior_coordinator',
-    roleKeys: ['account_manager', 'senior_coordinator'],
+    roleKeys: ['account_coordinator', 'senior_coordinator'],
   });
 
   assert.equal(policy.isRegularCoordinator, false);
@@ -160,8 +167,8 @@ test('regular coordinator route policy allows only personal CRM workspace routes
 });
 
 test('senior coordinator route policy keeps broad workspace routes available', () => {
-  assert.equal(canUseCoordinatorRoute(session(['account_manager']).user, '/work-orders'), true);
-  assert.equal(canUseCoordinatorRoute(session(['account_manager']).user, '/financials'), false);
+  assert.equal(canUseCoordinatorRoute(session(['account_coordinator']).user, '/work-orders'), true);
+  assert.equal(canUseCoordinatorRoute(session(['account_coordinator']).user, '/financials'), false);
   assert.equal(canUseCoordinatorRoute(session(['senior_coordinator']).user, '/work-orders'), true);
   assert.equal(canUseCoordinatorRoute(session(['admin']).user, '/settings'), true);
 });
@@ -176,7 +183,7 @@ test('regular coordinator contact list keeps only contacts whose latest lead is 
   ];
 
   assert.deepEqual(
-    filterContactsForSession(contacts, leads, session(['account_manager'])).map((contact) => contact.id),
+    filterContactsForSession(contacts, leads, session(['account_coordinator'])).map((contact) => contact.id),
     ['contact-1'],
   );
   assert.deepEqual(

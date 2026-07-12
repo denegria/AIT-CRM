@@ -206,7 +206,7 @@ test('buildContactTimeline labels first manual AIT USA follow-up as first outrea
       actorUserId: 'user-1',
       occurredAt: new Date('2026-06-12T13:33:00.000Z'),
     }],
-    users: [{ id: 'user-1', name: 'AIT USA Account Manager' }],
+    users: [{ id: 'user-1', name: 'AIT USA Account Coordinator' }],
     businessUnits: [{ id: 'bu-1', name: 'AIT USA Institute', label: 'Divisions' }],
   });
 
@@ -241,7 +241,7 @@ test('buildContactTimeline hides generic regular note activity artifacts', () =>
       actorUserId: 'user-1',
       occurredAt: new Date('2026-06-12T13:33:00.000Z'),
     }],
-    users: [{ id: 'user-1', name: 'AIT USA Account Manager' }],
+    users: [{ id: 'user-1', name: 'AIT USA Account Coordinator' }],
     businessUnits: [{ id: 'bu-1', name: 'AIT USA Institute', label: 'Divisions' }],
   });
 
