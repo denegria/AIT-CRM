@@ -15,9 +15,11 @@ import {
   contactMatchesStatusOwnerCourse,
   DEFAULT_CONTACT_LEAD_DATE_SCOPE,
   DEFAULT_CONTACT_LOCATION_FILTER,
+  CONTACT_LEAD_DATE_SCOPE_ALL,
   CONTACT_LEAD_DATE_SCOPE_QUARTER,
   courseForContactDirectoryFilter,
   courseTagsForDirectoryRow,
+  effectiveLeadDateScopeForDirectory,
   pipelineFilterQuery,
   pipelineFilterStateFromParams,
 } from './contact-directory-filters.js';
@@ -37,7 +39,7 @@ test('contact filter params parse status, source, course, date, owner, and facet
     locationFilter: 'Plainfield',
   });
   assert.equal(
-    contactFilterQuery(contactFilterStateFromParams(params)),
+    contactFilterQuery({ ...contactFilterStateFromParams(params), includeLeadDateScope: true }),
     'leadDateScope=custom&leadDateFrom=2026-01-01&leadDateTo=2026-06-30&owner=user-1&status=Course+Completed&source=WordPress+Website+Form&facet=usa_course_completed&course=Forklift&location=Plainfield',
   );
 });
@@ -52,16 +54,72 @@ test('contact filter query omits default filters', () => {
 
 test('owner filters can preserve explicit current-year lead date scope', () => {
   assert.equal(
+    contactFilterQuery({ leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE, includeLeadDateScope: true }),
+    'leadDateScope=current',
+  );
+  assert.equal(
+    pipelineFilterQuery({ leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE, includeLeadDateScope: true }),
+    'leadDateScope=current',
+  );
+  assert.equal(
     contactFilterQuery({ ownerFilter: 'user-1', leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE }),
-    'leadDateScope=current&owner=user-1',
+    'owner=user-1',
   );
   assert.equal(
     pipelineFilterQuery({ ownerFilter: 'user-1', leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE }),
+    'owner=user-1',
+  );
+  assert.equal(
+    contactFilterQuery({ ownerFilter: 'user-1', leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE, includeLeadDateScope: true }),
+    'leadDateScope=current&owner=user-1',
+  );
+  assert.equal(
+    pipelineFilterQuery({ ownerFilter: 'user-1', leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE, includeLeadDateScope: true }),
     'leadDateScope=current&owner=user-1',
   );
   assert.equal(
     contactFilterStateFromParams(new URLSearchParams('leadDateScope=current&owner=user-1')).leadDateScope,
     DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+  );
+});
+
+test('directory date scope defaults to no date limit until a date filter is explicit', () => {
+  const now = new Date('2026-06-24T00:00:00.000Z');
+  const rows = [
+    { id: 'current', workflowKey: 'ait_usa', status: 'New Lead', leadCreatedAt: '2026-02-01T12:00:00.000Z' },
+    { id: 'prior', workflowKey: 'ait_usa', status: 'New Lead', leadCreatedAt: '2025-11-20T12:00:00.000Z' },
+  ];
+
+  assert.equal(
+    effectiveLeadDateScopeForDirectory({
+      leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+      hasExplicitLeadDateFilter: false,
+    }),
+    CONTACT_LEAD_DATE_SCOPE_ALL,
+  );
+  assert.deepEqual(
+    rows
+      .filter((contact) => contactMatchesLeadDateScope(contact, {
+        leadDateScope: effectiveLeadDateScopeForDirectory({
+          leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+          hasExplicitLeadDateFilter: false,
+        }),
+        now,
+      }))
+      .map((contact) => contact.id),
+    ['current', 'prior'],
+  );
+  assert.deepEqual(
+    rows
+      .filter((contact) => contactMatchesLeadDateScope(contact, {
+        leadDateScope: effectiveLeadDateScopeForDirectory({
+          leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+          hasExplicitLeadDateFilter: true,
+        }),
+        now,
+      }))
+      .map((contact) => contact.id),
+    ['current'],
   );
 });
 
@@ -105,7 +163,7 @@ test('lead date scopes support quarter, current year, all leads, and custom time
     ['current', 'prior'],
   );
   assert.equal(
-    contactFilterQuery({ leadDateScope: CONTACT_LEAD_DATE_SCOPE_QUARTER }),
+    contactFilterQuery({ leadDateScope: CONTACT_LEAD_DATE_SCOPE_QUARTER, includeLeadDateScope: true }),
     'leadDateScope=quarter',
   );
 });
@@ -156,7 +214,7 @@ test('pipeline filter params preserve date, owner, status, source, course, activ
     compactMode: false,
   });
   assert.equal(
-    pipelineFilterQuery(pipelineFilterStateFromParams(params)),
+    pipelineFilterQuery({ ...pipelineFilterStateFromParams(params), includeLeadDateScope: true }),
     'leadDateScope=custom&leadDateFrom=2026-02-01&leadDateTo=2026-05-30&owner=unassigned&status=New+Lead&source=Website&course=OSHA&location=Flemington&activity=recent_7&q=anna&compact=0',
   );
 });

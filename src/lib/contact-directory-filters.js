@@ -241,17 +241,18 @@ export function contactFilterQuery({
   leadDateScope = DEFAULT_CONTACT_LEAD_DATE_SCOPE,
   leadDateFrom = DEFAULT_CONTACT_LEAD_DATE_FROM,
   leadDateTo = DEFAULT_CONTACT_LEAD_DATE_TO,
+  includeLeadDateScope = false,
   courseFilter = DEFAULT_CONTACT_COURSE_FILTER,
   sourceFilter = DEFAULT_CONTACT_SOURCE_FILTER,
   locationFilter = DEFAULT_CONTACT_LOCATION_FILTER,
 } = {}) {
   const params = new URLSearchParams();
-  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_ALL);
-  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_QUARTER) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_QUARTER);
-  if (leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE && ownerFilter && ownerFilter !== DEFAULT_CONTACT_OWNER_FILTER) {
+  if (includeLeadDateScope && leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_ALL);
+  if (includeLeadDateScope && leadDateScope === CONTACT_LEAD_DATE_SCOPE_QUARTER) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_QUARTER);
+  if (includeLeadDateScope && leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE) {
     params.set('leadDateScope', DEFAULT_CONTACT_LEAD_DATE_SCOPE);
   }
-  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
+  if (includeLeadDateScope && leadDateScope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
     params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_CUSTOM);
     if (leadDateFrom) params.set('leadDateFrom', leadDateFrom);
     if (leadDateTo) params.set('leadDateTo', leadDateTo);
@@ -263,6 +264,13 @@ export function contactFilterQuery({
   if (courseFilter && courseFilter !== DEFAULT_CONTACT_COURSE_FILTER) params.set('course', courseFilter);
   if (locationFilter && locationFilter !== DEFAULT_CONTACT_LOCATION_FILTER) params.set('location', locationFilter);
   return params.toString();
+}
+
+export function effectiveLeadDateScopeForDirectory({
+  leadDateScope = DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+  hasExplicitLeadDateFilter = false,
+} = {}) {
+  return hasExplicitLeadDateFilter ? leadDateScope : CONTACT_LEAD_DATE_SCOPE_ALL;
 }
 
 export function contactMatchesLeadDateScope(contact = {}, {
@@ -437,15 +445,16 @@ export function pipelineFilterQuery({
   leadDateScope = DEFAULT_CONTACT_LEAD_DATE_SCOPE,
   leadDateFrom = DEFAULT_CONTACT_LEAD_DATE_FROM,
   leadDateTo = DEFAULT_CONTACT_LEAD_DATE_TO,
+  includeLeadDateScope = false,
   compactMode = DEFAULT_PIPELINE_COMPACT_MODE,
 } = {}) {
   const params = new URLSearchParams();
-  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_ALL);
-  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_QUARTER) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_QUARTER);
-  if (leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE && ownerFilter && ownerFilter !== DEFAULT_PIPELINE_OWNER_FILTER) {
+  if (includeLeadDateScope && leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_ALL);
+  if (includeLeadDateScope && leadDateScope === CONTACT_LEAD_DATE_SCOPE_QUARTER) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_QUARTER);
+  if (includeLeadDateScope && leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE) {
     params.set('leadDateScope', DEFAULT_CONTACT_LEAD_DATE_SCOPE);
   }
-  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
+  if (includeLeadDateScope && leadDateScope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
     params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_CUSTOM);
     if (leadDateFrom) params.set('leadDateFrom', leadDateFrom);
     if (leadDateTo) params.set('leadDateTo', leadDateTo);

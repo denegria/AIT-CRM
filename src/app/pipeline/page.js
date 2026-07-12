@@ -19,6 +19,7 @@ import {
   contactMatchesLeadDateScope,
   contactMatchesSchoolLocation,
   contactMatchesStatusOwnerCourse,
+  effectiveLeadDateScopeForDirectory,
   CONTACT_LEAD_DATE_SCOPE_ALL,
   CONTACT_LEAD_DATE_SCOPE_CUSTOM,
   CONTACT_LEAD_DATE_SCOPE_QUARTER,
@@ -233,17 +234,26 @@ export default function PipelinePage() {
     !coordinatorUiPolicy.ownerScoped &&
     ownerFilter !== DEFAULT_PIPELINE_OWNER_FILTER &&
     !hasExplicitLeadDateFilter;
-  const effectiveLeadDateScope = (coordinatorUiPolicy.ownerScoped && !hasExplicitLeadDateFilter) || ownerFilterImpliesAllLeadDates
-    ? CONTACT_LEAD_DATE_SCOPE_ALL
-    : leadDateScope;
+  const effectiveLeadDateScope = effectiveLeadDateScopeForDirectory({
+    leadDateScope,
+    hasExplicitLeadDateFilter: hasExplicitLeadDateFilter || ownerFilterImpliesAllLeadDates,
+  });
   const updatePipelineFilterQuery = useCallback((patch) => {
+    const patchHasLeadDateScope =
+      Object.prototype.hasOwnProperty.call(patch, 'leadDateScope') ||
+      Object.prototype.hasOwnProperty.call(patch, 'leadDateFrom') ||
+      Object.prototype.hasOwnProperty.call(patch, 'leadDateTo');
+    const includeLeadDateScope = Object.prototype.hasOwnProperty.call(patch, 'includeLeadDateScope')
+      ? patch.includeLeadDateScope
+      : hasExplicitLeadDateFilter || patchHasLeadDateScope;
     const nextQuery = pipelineFilterQuery({
       ...parsedFilters,
       ownerFilter: coordinatorUiPolicy.ownerScoped ? DEFAULT_PIPELINE_OWNER_FILTER : ownerFilter,
+      includeLeadDateScope,
       ...patch,
     });
     router.replace(nextQuery ? `/pipeline?${nextQuery}` : '/pipeline', { scroll: false });
-  }, [coordinatorUiPolicy.ownerScoped, ownerFilter, parsedFilters, router]);
+  }, [coordinatorUiPolicy.ownerScoped, hasExplicitLeadDateFilter, ownerFilter, parsedFilters, router]);
   useEffect(() => {
     const hasLegacyWorkflowParam = searchParams.has('workflow');
     const hasLockedOwnerParam = coordinatorUiPolicy.ownerScoped && (searchParams.has('owner') || searchParams.has('ownerUserId'));
@@ -432,14 +442,9 @@ export default function PipelinePage() {
     locationFilterOptions.find((option) => option.value === effectiveLocationFilter)?.label || effectiveLocationFilter;
   const selectedDateLabel = dateScopeLabel(effectiveLeadDateScope, leadDateFrom, leadDateTo);
   const implicitLeadDate = (coordinatorUiPolicy.ownerScoped && !hasExplicitLeadDateFilter) || ownerFilterImpliesAllLeadDates;
-  const dateFilterIsDefault = implicitLeadDate ||
-    (
-      leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE &&
-      leadDateFrom === DEFAULT_CONTACT_LEAD_DATE_FROM &&
-      leadDateTo === DEFAULT_CONTACT_LEAD_DATE_TO
-    );
+  const dateFilterIsDefault = !hasExplicitLeadDateFilter || implicitLeadDate;
   const activeFilterChips = [
-    coordinatorUiPolicy.ownerScoped && implicitLeadDate ? null : {
+    !hasExplicitLeadDateFilter || (coordinatorUiPolicy.ownerScoped && implicitLeadDate) ? null : {
       key: 'date',
       label: selectedDateLabel,
       primary: !coordinatorUiPolicy.ownerScoped,
@@ -450,9 +455,10 @@ export default function PipelinePage() {
           leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
         })
         : () => updatePipelineFilterQuery({
-          leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+          leadDateScope: CONTACT_LEAD_DATE_SCOPE_ALL,
           leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
           leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
+          includeLeadDateScope: false,
         }),
     },
     selectedOwnerLabel ? {
@@ -500,11 +506,7 @@ export default function PipelinePage() {
   const activeFilterCount = activeFilterChips.filter((chip) => chip.onRemove).length;
   const filterSummaryChips = activeFilterChips.filter((chip) => chip.onRemove).slice(0, 3);
   const visibleActiveFilterChips = activeFilterChips.filter((chip) => chip.onRemove);
-  const hasNonDefaultLeadDateFilter = coordinatorUiPolicy.ownerScoped
-    ? hasExplicitLeadDateFilter
-    : leadDateScope !== DEFAULT_CONTACT_LEAD_DATE_SCOPE ||
-      leadDateFrom !== DEFAULT_CONTACT_LEAD_DATE_FROM ||
-      leadDateTo !== DEFAULT_CONTACT_LEAD_DATE_TO;
+  const hasNonDefaultLeadDateFilter = hasExplicitLeadDateFilter;
   const hasNonDefaultFilters = hasNonDefaultLeadDateFilter ||
     (!coordinatorUiPolicy.ownerScoped && ownerFilter !== DEFAULT_PIPELINE_OWNER_FILTER) ||
     statusFilter !== DEFAULT_PIPELINE_STATUS_FILTER ||
@@ -563,9 +565,10 @@ export default function PipelinePage() {
       locationFilter: DEFAULT_PIPELINE_LOCATION_FILTER,
       activityFilter: DEFAULT_PIPELINE_ACTIVITY_FILTER,
       search: DEFAULT_PIPELINE_SEARCH,
-      leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+      leadDateScope: CONTACT_LEAD_DATE_SCOPE_ALL,
       leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
       leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
+      includeLeadDateScope: false,
       compactMode: DEFAULT_PIPELINE_COMPACT_MODE,
     });
   };
