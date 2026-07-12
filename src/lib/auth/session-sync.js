@@ -50,6 +50,13 @@ function broadcastSessionEvent(event) {
   } catch {}
 }
 
+function expireUserScopedCookie(key) {
+  if (typeof document === 'undefined') return;
+  try {
+    document.cookie = `${key}=; Path=/; Max-Age=0; SameSite=Lax`;
+  } catch {}
+}
+
 export function publishActiveSession(identity, reason = 'session') {
   if (typeof window === 'undefined' || !identity?.userId) return;
   try {
@@ -64,6 +71,7 @@ export function clearUserScopedSessionState() {
     try {
       window.localStorage.removeItem(key);
     } catch {}
+    expireUserScopedCookie(key);
   }
 }
 

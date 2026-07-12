@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  USER_SCOPED_STORAGE_KEYS,
+  clearUserScopedSessionState,
   parseStoredSession,
   sameSessionIdentity,
   sessionIdentityForUser,
@@ -33,4 +35,37 @@ test('parses stored session values defensively', () => {
   });
   assert.equal(parseStoredSession('{bad'), null);
   assert.equal(parseStoredSession('{"email":"missing-id@example.com"}'), null);
+});
+
+test('clears user-scoped local storage and cookies', () => {
+  const removedKeys = [];
+  const expiredCookies = [];
+  const previousWindow = globalThis.window;
+  const previousDocument = globalThis.document;
+
+  globalThis.window = {
+    localStorage: {
+      removeItem(key) {
+        removedKeys.push(key);
+      },
+    },
+  };
+  globalThis.document = {
+    set cookie(value) {
+      expiredCookies.push(value);
+    },
+  };
+
+  try {
+    clearUserScopedSessionState();
+  } finally {
+    globalThis.window = previousWindow;
+    globalThis.document = previousDocument;
+  }
+
+  assert.deepEqual(removedKeys, USER_SCOPED_STORAGE_KEYS);
+  assert.deepEqual(
+    expiredCookies,
+    USER_SCOPED_STORAGE_KEYS.map((key) => `${key}=; Path=/; Max-Age=0; SameSite=Lax`)
+  );
 });

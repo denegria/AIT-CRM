@@ -46,6 +46,7 @@ import { buildAitUsaEnrollmentSignals } from './ait-usa-enrollment-signals.js';
 import { attachPaymentSnapshotContactLinks } from './financial-linkage.js';
 import { filterAssignableEmployees } from './crm/assignable-employees.js';
 import { courseRecordPayloadFromRow, deriveCourseSummary } from './crm/course-records.js';
+import { getServerAppVersion } from './app-version.js';
 
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const toBootstrapBusinessUnitPayload = (row) => toBusinessUnitPayload(row, { emptyColor: null });
@@ -534,6 +535,7 @@ function mapTasks(rows, contactLookup) {
 function authData({ authRequired = false, authError = '', currentUser = null } = {}) {
   return {
     ...seedData,
+    appVersion: getServerAppVersion(),
     dataSource: process.env.DATABASE_URL ? 'postgres' : 'local',
     authRequired,
     authError,
@@ -635,6 +637,7 @@ async function getImportStagingSummary(db) {
 function emptyDbData(businessUnitRows = [], importStaging = null) {
   return {
     ...seedData,
+    appVersion: getServerAppVersion(),
     dataSource: 'postgres',
     authRequired: false,
     authError: '',
@@ -653,9 +656,11 @@ function emptyDbData(businessUnitRows = [], importStaging = null) {
 }
 
 export const getBootstrapData = cache(async function getBootstrapData(session = null) {
+  const appVersion = getServerAppVersion();
   if (!process.env.DATABASE_URL) {
     return {
       ...seedData,
+      appVersion,
       authRequired: false,
       currentUser: {
         id: 'local-admin',
@@ -794,6 +799,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
     const tasks = mapTasks(taskRows, contactLookup);
     return {
       ...seedData,
+      appVersion,
       dataSource: 'postgres',
       authRequired: false,
       authError: '',
@@ -811,6 +817,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
     console.warn('Falling back to empty CRM data because Postgres bootstrap failed:', error.message);
     return {
       ...emptyDbData(),
+      appVersion,
       currentUser: session.user,
       access: sessionAccess(session),
     };

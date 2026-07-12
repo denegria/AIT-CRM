@@ -110,6 +110,7 @@ function getInitialData(seedData = defaults) {
   const fallback = seedData || defaults;
   return {
     dataSource: fallback.dataSource || 'local',
+    appVersion: fallback.appVersion || '',
     authRequired: fallback.authRequired || false,
     authError: fallback.authError || '',
     currentUser: fallback.currentUser || null,
@@ -583,6 +584,7 @@ export function CRMProvider({ children, initialData }) {
   const value = {
     role, setRole: serverOwnedSetRole, theme, setTheme, loaded,
     dataSource: bootstrapData.dataSource,
+    appVersion: bootstrapData.appVersion,
     authRequired: bootstrapData.authRequired,
     currentUser,
     access,

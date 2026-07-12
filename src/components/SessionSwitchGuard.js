@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Lock, LogOut, RotateCcw } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Lock, LogOut, RefreshCw, RotateCcw } from 'lucide-react';
 import { useCRM } from '@/lib/store';
+import { sameAppVersion } from '@/lib/app-version.js';
 import {
   SESSION_CHANNEL_NAME,
   SESSION_EVENT_STORAGE_KEY,
@@ -22,11 +23,13 @@ function eventIdentity(event) {
 }
 
 export default function SessionSwitchGuard() {
-  const { dataSource, currentUser } = useCRM();
+  const { appVersion, dataSource, currentUser } = useCRM();
   const [lockedIdentity, setLockedIdentity] = useState(null);
+  const [staleVersion, setStaleVersion] = useState(null);
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const loadedAppVersionRef = useRef(appVersion || '');
   const currentIdentity = useMemo(() => sessionIdentityForUser(currentUser), [currentUser]);
   const enabled = dataSource === 'postgres' && Boolean(currentIdentity);
 
@@ -37,6 +40,18 @@ export default function SessionSwitchGuard() {
     setError('');
     setLockedIdentity(identity);
   }, [currentIdentity]);
+
+  const lockForStaleVersion = useCallback((serverVersion) => {
+    if (sameAppVersion(loadedAppVersionRef.current, serverVersion)) return;
+    clearUserScopedSessionState();
+    setPassword('');
+    setError('');
+    setLockedIdentity(null);
+    setStaleVersion({
+      loaded: loadedAppVersionRef.current,
+      server: serverVersion,
+    });
+  }, []);
 
   const publishCurrentIdentity = useCallback((reason) => {
     if (!currentIdentity) return;
@@ -53,6 +68,10 @@ export default function SessionSwitchGuard() {
         window.location.reload();
         return;
       }
+      if (!sameAppVersion(loadedAppVersionRef.current, payload.appVersion)) {
+        lockForStaleVersion(payload.appVersion);
+        return;
+      }
       const serverIdentity = sessionIdentityForUser(payload.user);
       if (!sameSessionIdentity(serverIdentity, currentIdentity)) {
         publishActiveSession(serverIdentity, 'server-session-check');
@@ -61,7 +80,7 @@ export default function SessionSwitchGuard() {
     } catch {
       // Keep the current tab usable during a transient network failure.
     }
-  }, [currentIdentity, enabled, lockForIdentity]);
+  }, [currentIdentity, enabled, lockForIdentity, lockForStaleVersion]);
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -165,7 +184,42 @@ export default function SessionSwitchGuard() {
     window.location.reload();
   }
 
-  if (!enabled || !lockedIdentity) return null;
+  function handleRefresh() {
+    window.location.reload();
+  }
+
+  if (!enabled) return null;
+
+  if (staleVersion) {
+    return (
+      <div className={s.backdrop} role="alertdialog" aria-modal="true" aria-labelledby="app-version-title">
+        <div className={s.panel}>
+          <div className={s.icon}><RefreshCw size={22} /></div>
+          <h2 id="app-version-title">CRM update available</h2>
+          <p>
+            This tab is running an older CRM version. Refresh and sign in again if prompted to continue on the latest CRM.
+          </p>
+          {staleVersion.loaded && staleVersion.server && (
+            <p className={s.versionMeta}>
+              Loaded version {staleVersion.loaded.slice(0, 12)} / current version {staleVersion.server.slice(0, 12)}
+            </p>
+          )}
+          <div className={s.actions}>
+            <button className="btn btn-primary" type="button" onClick={handleRefresh}>
+              <RefreshCw size={16} />
+              <span>Refresh CRM</span>
+            </button>
+            <button className="btn" type="button" disabled={submitting} onClick={handleSignOut}>
+              <LogOut size={16} />
+              <span>Sign out</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!lockedIdentity) return null;
 
   return (
     <div className={s.backdrop} role="alertdialog" aria-modal="true" aria-labelledby="session-switch-title">
