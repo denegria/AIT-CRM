@@ -1238,144 +1238,178 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         />
       </div>
 
-      <Modal open={!!drawer} onClose={close} title={drawer === 'new' ? `New ${singularLabel}` : `Edit ${singularLabel}`}
+      <Modal
+        open={!!drawer}
+        onClose={close}
+        title={drawer === 'new' ? `New ${singularLabel}` : `Edit ${singularLabel}`}
+        variant="dialog"
+        panelClassName="contact-dialog-panel"
         footer={<>
           {canWrite && drawer && drawer !== 'new' && (
-            <button className="btn btn-danger" type="button" onClick={requestDelete}>
+            <button className="btn btn-danger contact-dialog-archive-action" type="button" onClick={requestDelete}>
               {coordinatorUiPolicy.canArchiveContactsDirectly ? 'Delete' : 'Request Archive'}
             </button>
           )}
-          <button className="btn" onClick={close}>Cancel</button>
-          <button className="btn btn-primary" onClick={save}>Save</button>
+          <button className="btn" type="button" onClick={close}>Cancel</button>
+          <button className="btn btn-primary" type="submit" form="contact-dialog-form">Save</button>
         </>}>
-        {formError && (
-          <div
-            role="alert"
-            style={{
-              marginBottom: 12,
-              padding: '8px 10px',
-              border: '1px solid var(--danger)',
-              borderRadius: 'var(--radius-md)',
-              color: 'var(--danger)',
-              background: 'color-mix(in srgb, var(--danger) 8%, transparent)',
-              fontSize: 'var(--text-sm)',
-            }}
-          >
-            {formError}
+        <form
+          id="contact-dialog-form"
+          className="contact-dialog-form"
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            save();
+          }}
+        >
+          <div className="contact-dialog-intro">
+            <p>{drawer === 'new' ? 'Start with identity, then set the current routing and context.' : 'Update this contact’s identity, routing, and current context.'}</p>
+            {drawer === 'new' && <span>Name and one contact method are required.</span>}
           </div>
-        )}
-        <div className="form-group">
-          <label className="form-label">Name</label>
-          <input className="input" value={form.name} required onChange={e => setForm(f => ({...f, name: e.target.value}))} />
-        </div>
-        <div className="grid-2">
-          <div className="form-group">
-            <label className="form-label">Email</label>
-            <input className="input" type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Phone</label>
-            <input className="input" type="tel" value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} />
-          </div>
-        </div>
-        <div className="grid-2">
-          <div className="form-group">
-            <label className="form-label">Status</label>
-            <select className="input select" value={form.status} onChange={e => setForm(f => ({...f, status: e.target.value}))}>
-              {[
-                ...new Set([
-                  ...(statusOptionsForBusinessUnitId(form.businessUnitId || form.primaryBusinessUnitId) || []),
-                  ...(form.status ? [form.status] : []),
-                ]),
-              ].map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Source</label>
-            <select className="input select" value={form.source} onChange={e => setForm(f => ({...f, source: e.target.value}))}>
-              {['Wix Historical Import','Website','Facebook Ads','Referral','Cold Call','Google Ads'].map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-        </div>
-        {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
-          <div className="form-group">
-            <label className="form-label">Assigned To</label>
-            <select className="input select" value={form.assignedTo || ''} onChange={e => setForm(f => ({...f, assignedTo: e.target.value}))}>
-              <option value="">Unassigned</option>
-              {ownerOptions.map((owner) => (
-                <option key={owner.id} value={owner.id}>{owner.label}</option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <input type="hidden" value={form.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
-        )}
-        <div className="form-group">
-          <label className="form-label">{scopeLabel}</label>
-          <select
-            className="input select"
-            value={form.businessUnitId || form.primaryBusinessUnitId || ''}
-            onChange={e => {
-              const nextBusinessUnitId = e.target.value;
-              const nextStatuses = statusOptionsForBusinessUnitId(nextBusinessUnitId);
-              setForm(f => ({
-                ...f,
-                businessUnitId: nextBusinessUnitId,
-                primaryBusinessUnitId: nextBusinessUnitId,
-                status: nextStatuses.includes(f.status) ? f.status : nextStatuses[0] || f.status,
-              }));
-            }}
-          >
-            {canUseConsolidatedScope && <option value="">Unassigned</option>}
-            {accessibleBusinessUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
-          </select>
-        </div>
-        {isAitUsaForm ? (
-          <div className="form-group">
-            <label className="form-label">School Location</label>
-            <select
-              className="input select"
-              value={form.address || ''}
-              onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-            >
-              <option value="">Select school location</option>
-              {formSchoolLocationOptions.map((location) => (
-                <option key={location} value={location}>{location}</option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <div className="form-group">
-            <label className="form-label">Address</label>
-            <input
-              className="input"
-              value={form.address || ''}
-              onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-            />
-          </div>
-        )}
-        <div className="form-group">
-          <label className="form-label">Notes</label>
-          <textarea className="input" rows={3} 
-            value={Array.isArray(form.notes) ? (form.notes[form.notes.length - 1]?.text || '') : form.notes} 
-            onChange={e => {
-              const text = e.target.value;
-              setForm(f => {
-                const newNotes = Array.isArray(f.notes) ? [...f.notes] : [{ text: f.notes, date: new Date().toISOString().slice(0,10) }];
-                if (newNotes.length > 0) {
-                  newNotes[newNotes.length - 1] = { ...newNotes[newNotes.length - 1], text, date: new Date().toISOString().slice(0,10) };
-                } else {
-                  newNotes.push({ text, date: new Date().toISOString().slice(0,10) });
-                }
-                return { ...f, notes: newNotes };
-              });
-            }} 
-            style={{resize:'vertical'}} 
-          />
-          <div style={{fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 4}}>
-            Editing the latest note. Full timeline available in Contact Details.
-          </div>
-        </div>
+
+          {formError && <div className="contact-dialog-error" role="alert">{formError}</div>}
+
+          <section className="contact-dialog-section contact-dialog-identity">
+            <div className="contact-dialog-section-header">
+              <span className="contact-dialog-section-index">1</span>
+              <div>
+                <h2>Identity</h2>
+                <p>Keep the person and their preferred contact details clear.</p>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Name</label>
+              <input className="input" value={form.name} required autoFocus onChange={e => setForm(f => ({...f, name: e.target.value}))} />
+            </div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label className="form-label">Email</label>
+                <input className="input" type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Phone</label>
+                <input className="input" type="tel" value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} />
+              </div>
+            </div>
+          </section>
+
+          <section className="contact-dialog-section contact-dialog-routing">
+            <div className="contact-dialog-section-header">
+              <span className="contact-dialog-section-index">2</span>
+              <div>
+                <h2>Routing</h2>
+                <p>Place this contact in the right workflow and scope.</p>
+              </div>
+            </div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label className="form-label">Status</label>
+                <select className="input select" value={form.status} onChange={e => setForm(f => ({...f, status: e.target.value}))}>
+                  {[
+                    ...new Set([
+                      ...(statusOptionsForBusinessUnitId(form.businessUnitId || form.primaryBusinessUnitId) || []),
+                      ...(form.status ? [form.status] : []),
+                    ]),
+                  ].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Source</label>
+                <select className="input select" value={form.source} onChange={e => setForm(f => ({...f, source: e.target.value}))}>
+                  {['Wix Historical Import','Website','Facebook Ads','Referral','Cold Call','Google Ads'].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="contact-dialog-routing-details">
+              {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
+                <div className="form-group">
+                  <label className="form-label">Assigned To</label>
+                  <select className="input select" value={form.assignedTo || ''} onChange={e => setForm(f => ({...f, assignedTo: e.target.value}))}>
+                    <option value="">Unassigned</option>
+                    {ownerOptions.map((owner) => (
+                      <option key={owner.id} value={owner.id}>{owner.label}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <input type="hidden" value={form.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
+              )}
+              <div className="form-group">
+                <label className="form-label">{scopeLabel}</label>
+                <select
+                  className="input select"
+                  value={form.businessUnitId || form.primaryBusinessUnitId || ''}
+                  onChange={e => {
+                    const nextBusinessUnitId = e.target.value;
+                    const nextStatuses = statusOptionsForBusinessUnitId(nextBusinessUnitId);
+                    setForm(f => ({
+                      ...f,
+                      businessUnitId: nextBusinessUnitId,
+                      primaryBusinessUnitId: nextBusinessUnitId,
+                      status: nextStatuses.includes(f.status) ? f.status : nextStatuses[0] || f.status,
+                    }));
+                  }}
+                >
+                  {canUseConsolidatedScope && <option value="">Unassigned</option>}
+                  {accessibleBusinessUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <section className="contact-dialog-section contact-dialog-context">
+            <div className="contact-dialog-section-header">
+              <span className="contact-dialog-section-index">3</span>
+              <div>
+                <h2>Context</h2>
+                <p>Capture the location and latest information for follow-up.</p>
+              </div>
+            </div>
+            {isAitUsaForm ? (
+              <div className="form-group">
+                <label className="form-label">School Location</label>
+                <select
+                  className="input select"
+                  value={form.address || ''}
+                  onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+                >
+                  <option value="">Select school location</option>
+                  {formSchoolLocationOptions.map((location) => (
+                    <option key={location} value={location}>{location}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div className="form-group">
+                <label className="form-label">Address</label>
+                <input
+                  className="input"
+                  value={form.address || ''}
+                  onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+                />
+              </div>
+            )}
+            <div className="form-group">
+              <label className="form-label">Notes</label>
+              <textarea className="input contact-dialog-notes" rows={3}
+                value={Array.isArray(form.notes) ? (form.notes[form.notes.length - 1]?.text || '') : form.notes}
+                onChange={e => {
+                  const text = e.target.value;
+                  setForm(f => {
+                    const newNotes = Array.isArray(f.notes) ? [...f.notes] : [{ text: f.notes, date: new Date().toISOString().slice(0,10) }];
+                    if (newNotes.length > 0) {
+                      newNotes[newNotes.length - 1] = { ...newNotes[newNotes.length - 1], text, date: new Date().toISOString().slice(0,10) };
+                    } else {
+                      newNotes.push({ text, date: new Date().toISOString().slice(0,10) });
+                    }
+                    return { ...f, notes: newNotes };
+                  });
+                }}
+              />
+              <div className="contact-dialog-note-help">Editing the latest note. Full timeline available in Contact Details.</div>
+            </div>
+          </section>
+        </form>
       </Modal>
       <ConfirmDialog
         open={!!deleteTarget}
