@@ -2638,6 +2638,19 @@ a { color: inherit; text-decoration: none; }
     flex: 1 1 100%;
     max-width: none;
   }
+  .contact-dialog-form {
+    grid-template-columns: 1fr;
+  }
+  .contact-dialog-context {
+    grid-column: auto;
+    grid-row: auto;
+    padding-left: 0;
+    border-left: 0;
+  }
+  .contact-dialog-routing {
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
   .contact-dialog-intro {
     display: grid;
     gap: 8px;
