@@ -1218,8 +1218,13 @@ a { color: inherit; text-decoration: none; }
   padding: 0 0 18px;
   border-bottom: 1px solid var(--border-subtle);
 }
+.contact-dialog-identity,
+.contact-dialog-routing {
+  grid-column: 1;
+}
 .contact-dialog-context {
   grid-column: 2;
+  grid-row: 2 / span 2;
   align-content: start;
   padding-left: 26px;
   border-bottom: 0;
