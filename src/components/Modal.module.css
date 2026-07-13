@@ -14,7 +14,7 @@
 
 .dialog {
   position:fixed; top:50%; left:50%;
-  width:min(820px, calc(100vw - 48px));
+  width:min(var(--modal-dialog-width, 820px), calc(100vw - 48px));
   max-height:calc(100dvh - 48px);
   transform:translate(-50%, -50%);
   background:var(--bg-secondary); border:1px solid var(--border-subtle);

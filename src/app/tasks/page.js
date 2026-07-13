@@ -299,6 +299,7 @@ export default function FollowUpQueuePage() {
   const canReviewArchiveApprovalTasks = useMemo(() => canReviewArchiveApprovals(currentUser), [currentUser]);
   const lockedTaskOwnerFilter = coordinatorUiPolicy.ownerScoped && currentUser?.id ? '__me' : '';
   const prefillSignatureRef = useRef('');
+  const newTaskTriggerRef = useRef(null);
   const createFormRef = useRef(null);
   const createDiscardConfirmedRef = useRef(false);
   const [queueTasks, setQueueTasks] = useState([]);
@@ -1178,7 +1179,7 @@ export default function FollowUpQueuePage() {
           </p>
         </div>
         <div className="flex-gap">
-          <button className="btn btn-sm btn-primary" onClick={() => openCreatePanel()} disabled={!access.canWriteCrm}>
+          <button ref={newTaskTriggerRef} className="btn btn-sm btn-primary" type="button" onClick={() => openCreatePanel()} disabled={!access.canWriteCrm}>
             <Plus size={14} />
             New Task
           </button>
@@ -1195,6 +1196,7 @@ export default function FollowUpQueuePage() {
         title="New Task"
         variant="dialog"
         panelClassName={s.createDialog}
+        returnFocusRef={newTaskTriggerRef}
         footer={(
           <>
             <button className="btn btn-sm" type="button" disabled={createBusy} onClick={closeCreateDialog}>Cancel</button>
@@ -1207,14 +1209,11 @@ export default function FollowUpQueuePage() {
       >
         <form id="new-task-form" ref={createFormRef} className={s.createForm} onSubmit={submitCreatedTask} noValidate>
           <div className={s.createIntro}>
-            <div>
-              <span className={s.createIntroLabel}>Task setup</span>
-              <p>Capture the owner, deadline, and contact context before it joins the queue.</p>
-            </div>
+            <p>Set the essentials, then leave the assignee the context they need.</p>
             <span className={s.createRequired}>* Required</span>
           </div>
 
-          <section className={s.createSection}>
+          <section className={`${s.createSection} ${s.createWhat}`}>
             <div className={s.createSectionHeader}>
               <span className={s.createSectionIndex}>1</span>
               <div>
@@ -1252,7 +1251,7 @@ export default function FollowUpQueuePage() {
             </div>
           </section>
 
-          <section className={s.createSection}>
+          <section className={`${s.createSection} ${s.createWho}`}>
             <div className={s.createSectionHeader}>
               <span className={s.createSectionIndex}>2</span>
               <div>
@@ -1279,7 +1278,7 @@ export default function FollowUpQueuePage() {
             </label>
           </section>
 
-          <section className={s.createSection}>
+          <section className={`${s.createSection} ${s.createWhen}`}>
             <div className={s.createSectionHeader}>
               <span className={s.createSectionIndex}>3</span>
               <div>
@@ -1309,7 +1308,7 @@ export default function FollowUpQueuePage() {
             </div>
           </section>
 
-          <section className={s.createSection}>
+          <section className={`${s.createSection} ${s.createContext}`}>
             <div className={s.createSectionHeader}>
               <span className={s.createSectionIndex}>4</span>
               <div>
@@ -2066,15 +2065,25 @@ export default function FollowUpQueuePage() {
         confirmLabel={confirmTaskAction?.confirmLabel || 'Confirm'}
         variant={confirmTaskAction?.variant || 'danger'}
       />
-      <ConfirmDialog
+      <Modal
         open={createDiscardConfirmationOpen}
         onClose={closeCreateDiscardConfirmation}
-        onConfirm={discardCreateDraft}
         title="Discard task draft?"
-        message="Your unsaved task details will be lost."
-        confirmLabel="Discard Draft"
-        variant="danger"
-      />
+        variant="dialog"
+        footer={(
+          <>
+            <button className="btn" type="button" onClick={closeCreateDiscardConfirmation}>Keep Editing</button>
+            <button className="btn btn-danger" type="button" onClick={() => {
+              discardCreateDraft();
+              closeCreateDiscardConfirmation();
+            }}>
+              Discard Draft
+            </button>
+          </>
+        )}
+      >
+        <p className={s.createDiscardCopy}>Your unsaved task details will be lost.</p>
+      </Modal>
     </div>
   );
 }

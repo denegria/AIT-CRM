@@ -219,6 +219,13 @@
   background: color-mix(in srgb, var(--danger) 8%, var(--bg-secondary));
 }
 
+.createDiscardCopy {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
 .createActions {
   display: flex;
   justify-content: flex-end;
@@ -227,33 +234,27 @@
 }
 
 .createDialog {
-  min-height: min(620px, calc(100dvh - 48px));
+  --modal-dialog-width: 952px;
+  min-height: 0;
 }
 
 .createForm {
   display: grid;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.08fr) minmax(300px, 0.92fr);
+  gap: 18px 26px;
 }
 
 .createIntro {
+  grid-column: 1 / -1;
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
   justify-content: space-between;
   gap: 14px;
-  padding: 2px 2px 4px;
-}
-
-.createIntroLabel {
-  display: block;
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-weight: 760;
-  line-height: 1.2;
+  padding: 0 2px;
 }
 
 .createIntro p {
-  max-width: 350px;
-  margin: 4px 0 0;
+  margin: 0;
   color: var(--text-secondary);
   font-size: var(--text-sm);
   line-height: 1.4;
@@ -262,23 +263,36 @@
 .createRequired {
   flex: 0 0 auto;
   margin-top: 1px;
-  padding: 3px 7px;
+  padding: 0;
   color: var(--text-secondary);
   font-size: var(--text-xs);
   font-weight: 700;
   line-height: 1.2;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  background: var(--bg-primary);
 }
 
 .createSection {
   display: grid;
   gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-primary) 84%, var(--bg-secondary));
+  padding: 0 0 18px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.createWhen,
+.createContext {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.createContext {
+  grid-column: 2;
+  grid-row: 2 / span 3;
+  align-content: start;
+  border-left: 1px solid var(--border-subtle);
+  padding-left: 26px;
+}
+
+.createForm > .createError {
+  grid-column: 1 / -1;
 }
 
 .createSectionHeader {
@@ -289,18 +303,14 @@
 }
 
 .createSectionIndex {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
   flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
+  width: auto;
+  padding-top: 2px;
   color: var(--accent);
   font-size: var(--text-xs);
   font-weight: 800;
   line-height: 1;
-  border-radius: 999px;
-  background: var(--accent-muted);
 }
 
 .createSectionTitle {
@@ -723,6 +733,25 @@
   .completionActions,
   .editActions {
     grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 900px) {
+  .createForm {
+    grid-template-columns: 1fr;
+  }
+
+  .createContext {
+    grid-column: auto;
+    grid-row: auto;
+    padding-left: 0;
+    border-left: 0;
+    border-bottom: 0;
+  }
+
+  .createWhen {
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border-subtle);
   }
 }
 
