@@ -105,6 +105,17 @@ const TASK_RECURRENCE_OPTIONS = [
   ['biweekly', 'Biweekly'],
   ['monthly', 'Monthly'],
 ];
+const CREATE_DRAFT_FIELDS = [
+  'title',
+  'description',
+  'taskType',
+  'dueDate',
+  'ownerUserId',
+  'businessUnitId',
+  'contactId',
+  'priority',
+  'recurrenceFrequency',
+];
 
 function dateKey(value) {
   return taskDateKey(value);
@@ -288,6 +299,8 @@ export default function FollowUpQueuePage() {
   const canReviewArchiveApprovalTasks = useMemo(() => canReviewArchiveApprovals(currentUser), [currentUser]);
   const lockedTaskOwnerFilter = coordinatorUiPolicy.ownerScoped && currentUser?.id ? '__me' : '';
   const prefillSignatureRef = useRef('');
+  const createFormRef = useRef(null);
+  const createDiscardConfirmedRef = useRef(false);
   const [queueTasks, setQueueTasks] = useState([]);
   const [assignees, setAssignees] = useState([]);
   const [filters, setFilters] = useState({
@@ -313,7 +326,13 @@ export default function FollowUpQueuePage() {
     accessibleBusinessUnits,
     currentUser,
   }));
+  const [createInitialDraft, setCreateInitialDraft] = useState(() => defaultCreateDraft({
+    currentBusinessUnitId,
+    accessibleBusinessUnits,
+    currentUser,
+  }));
   const [createContactSearch, setCreateContactSearch] = useState('');
+  const [createDiscardConfirmationOpen, setCreateDiscardConfirmationOpen] = useState(false);
   const [editTaskId, setEditTaskId] = useState('');
   const [editBusy, setEditBusy] = useState(false);
   const [editError, setEditError] = useState('');
@@ -706,7 +725,7 @@ export default function FollowUpQueuePage() {
     const scopedBusinessUnit = filters.businessUnitId && filters.businessUnitId !== 'all'
       ? filters.businessUnitId
       : '';
-    setCreateDraft({
+    const nextDraft = {
       ...baseDraft,
       taskType: scopedTaskType || baseDraft.taskType,
       dueDate: dueDateForFilter(filters.due),
@@ -718,14 +737,19 @@ export default function FollowUpQueuePage() {
         scopedOwner ||
         baseDraft.ownerUserId ||
         defaultOwnerUserId(currentUser, visibleAssignees),
-    });
+    };
+    setCreateDraft(nextDraft);
+    setCreateInitialDraft(nextDraft);
     setCreateContactSearch('');
     setCreateError('');
+    createDiscardConfirmedRef.current = false;
+    setCreateDiscardConfirmationOpen(false);
     setCreateOpen(true);
   }
 
   function updateCreateDraft(patch) {
     setCreateDraft((prev) => ({ ...prev, ...patch }));
+    if (createError) setCreateError('');
   }
 
   function updateCreateBusinessUnit(businessUnitId) {
@@ -739,6 +763,7 @@ export default function FollowUpQueuePage() {
       };
     });
     setCreateContactSearch('');
+    if (createError) setCreateError('');
   }
 
   function updateCreateContact(contactId) {
@@ -751,6 +776,7 @@ export default function FollowUpQueuePage() {
       businessUnitId,
     }));
     setCreateContactSearch(selectedOption?.label || '');
+    if (createError) setCreateError('');
   }
 
   function openEditPanel(task) {
@@ -806,7 +832,7 @@ export default function FollowUpQueuePage() {
     prefillSignatureRef.current = signature;
     queueMicrotask(() => {
       if (cancelled) return;
-      setCreateDraft({
+      const nextDraft = {
         ...defaultCreateDraft({ currentBusinessUnitId, accessibleBusinessUnits, currentUser }),
         title: `${taskType === 'first_outreach' ? 'First outreach' : 'Follow up'} - ${selectedContact.name || selectedContact.client || 'contact'}`,
         taskType,
@@ -814,9 +840,13 @@ export default function FollowUpQueuePage() {
         contactId,
         ownerUserId: selectedContact.assignedTo || defaultOwnerUserId(currentUser, visibleAssignees),
         ...(coordinatorUiPolicy.lockedOwnerUserId ? { ownerUserId: coordinatorUiPolicy.lockedOwnerUserId } : {}),
-      });
+      };
+      setCreateDraft(nextDraft);
+      setCreateInitialDraft(nextDraft);
       setCreateContactSearch(selectedContact.name || selectedContact.client || '');
       setCreateError('');
+      createDiscardConfirmedRef.current = false;
+      setCreateDiscardConfirmationOpen(false);
       setCreateOpen(true);
     });
     return () => {
@@ -829,19 +859,19 @@ export default function FollowUpQueuePage() {
     if (!access.canWriteCrm || createBusy) return;
     const title = createDraft.title.trim();
     if (!title) {
-      setCreateError('Task title is required.');
+      showCreateValidationError('Task title is required.', 'title');
       return;
     }
     if (!createDraft.ownerUserId) {
-      setCreateError('Task owner is required.');
+      showCreateValidationError('Task owner is required.', 'ownerUserId');
       return;
     }
     if (!createDraft.dueDate) {
-      setCreateError('Task due date is required.');
+      showCreateValidationError('Task due date is required.', 'dueDate');
       return;
     }
     if (!createDraft.businessUnitId) {
-      setCreateError(`${scopeLabel} is required.`);
+      showCreateValidationError(`${scopeLabel} is required.`, 'businessUnitId');
       return;
     }
 
@@ -871,6 +901,7 @@ export default function FollowUpQueuePage() {
       setQueueTasks((prev) => [nextTask, ...prev.filter((task) => task.id !== nextTask.id)]);
       setCreateDraft(defaultCreateDraft({ currentBusinessUnitId, accessibleBusinessUnits, currentUser }));
       setCreateContactSearch('');
+      setCreateDiscardConfirmationOpen(false);
       setCreateOpen(false);
       toast('Task created');
     } catch (err) {
@@ -984,6 +1015,42 @@ export default function FollowUpQueuePage() {
     setActionPanelTaskId((current) => (current === taskId ? '' : taskId));
   }
 
+  function showCreateValidationError(message, fieldName) {
+    setCreateError(message);
+    window.requestAnimationFrame(() => {
+      createFormRef.current?.elements.namedItem(fieldName)?.focus();
+    });
+  }
+
+  function closeCreateDialog() {
+    if (createBusy) return;
+    const isDirty = CREATE_DRAFT_FIELDS.some((field) => createDraft[field] !== createInitialDraft[field]);
+    if (isDirty) {
+      createDiscardConfirmedRef.current = false;
+      setCreateOpen(false);
+      setCreateDiscardConfirmationOpen(true);
+      return;
+    }
+    setCreateOpen(false);
+  }
+
+  function discardCreateDraft() {
+    createDiscardConfirmedRef.current = true;
+    setCreateError('');
+  }
+
+  function closeCreateDiscardConfirmation() {
+    setCreateDiscardConfirmationOpen(false);
+    if (!createDiscardConfirmedRef.current) setCreateOpen(true);
+    createDiscardConfirmedRef.current = false;
+  }
+
+  function toggleFollowUpCompletion(taskId) {
+    const nextTaskId = completionTaskId === taskId ? '' : taskId;
+    setCompletionTaskId(nextTaskId);
+    if (nextTaskId) setEditTaskId((currentEditTaskId) => (currentEditTaskId === taskId ? '' : currentEditTaskId));
+  }
+
   function queueTaskActionConfirmation(task, action, payload = {}) {
     const isComplete = action === 'complete';
     const isRequest = action === 'request_cancel';
@@ -1087,9 +1154,6 @@ export default function FollowUpQueuePage() {
     if (filters.link !== 'all') parts.push(optionLabel(LINK_OPTIONS, filters.link));
     return parts.filter(Boolean).join(' · ');
   })();
-  const createTitle = createDraft.title.trim();
-  const canSubmitCreate = Boolean(access.canWriteCrm && createTitle && createDraft.dueDate && createDraft.ownerUserId && createDraft.businessUnitId);
-
   if (!access.canReadCrm) {
     return (
       <div className="fade-in">
@@ -1127,22 +1191,21 @@ export default function FollowUpQueuePage() {
 
       <Modal
         open={createOpen}
-        onClose={() => {
-          if (!createBusy) setCreateOpen(false);
-        }}
+        onClose={closeCreateDialog}
         title="New Task"
-        drawerClassName={s.createDrawer}
+        variant="dialog"
+        panelClassName={s.createDialog}
         footer={(
           <>
-            <button className="btn btn-sm" type="button" disabled={createBusy} onClick={() => setCreateOpen(false)}>Cancel</button>
-            <button className="btn btn-sm btn-primary" type="submit" form="new-task-form" disabled={createBusy || !canSubmitCreate}>
+            <button className="btn btn-sm" type="button" disabled={createBusy} onClick={closeCreateDialog}>Cancel</button>
+            <button className="btn btn-sm btn-primary" type="submit" form="new-task-form" disabled={createBusy || !access.canWriteCrm}>
               <Plus size={14} />
               Create Task
             </button>
           </>
         )}
       >
-        <form id="new-task-form" className={s.createForm} onSubmit={submitCreatedTask}>
+        <form id="new-task-form" ref={createFormRef} className={s.createForm} onSubmit={submitCreatedTask} noValidate>
           <div className={s.createIntro}>
             <div>
               <span className={s.createIntroLabel}>Task setup</span>
@@ -1163,9 +1226,11 @@ export default function FollowUpQueuePage() {
               <span className="form-label">Title *</span>
               <input
                 className="input"
+                name="title"
                 value={createDraft.title}
                 required
                 aria-required="true"
+                autoFocus
                 disabled={createBusy}
                 onChange={(event) => updateCreateDraft({ title: event.target.value })}
                 placeholder="Call student about next step"
@@ -1198,7 +1263,7 @@ export default function FollowUpQueuePage() {
             {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
               <label>
                 <span className="form-label">Owner *</span>
-                <select className="select" value={createDraft.ownerUserId} disabled={createBusy} onChange={(event) => updateCreateDraft({ ownerUserId: event.target.value })}>
+                <select className="select" name="ownerUserId" value={createDraft.ownerUserId} disabled={createBusy} onChange={(event) => updateCreateDraft({ ownerUserId: event.target.value })}>
                   <option value="" disabled>Select owner</option>
                   {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
                 </select>
@@ -1208,7 +1273,7 @@ export default function FollowUpQueuePage() {
             )}
             <label>
               <span className="form-label">{scopeLabel} *</span>
-              <select className="select" value={createDraft.businessUnitId} disabled={createBusy} onChange={(event) => updateCreateBusinessUnit(event.target.value)}>
+              <select className="select" name="businessUnitId" value={createDraft.businessUnitId} disabled={createBusy} onChange={(event) => updateCreateBusinessUnit(event.target.value)}>
                 {accessibleBusinessUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
               </select>
             </label>
@@ -1227,6 +1292,7 @@ export default function FollowUpQueuePage() {
                 <span className="form-label">Due Date *</span>
                 <input
                   className="input"
+                  name="dueDate"
                   type="date"
                   value={createDraft.dueDate}
                   required
@@ -1289,7 +1355,7 @@ export default function FollowUpQueuePage() {
             </label>
           </section>
 
-          {createError && <div className={s.createError}>{createError}</div>}
+          {createError && <div className={s.createError} role="alert">{createError}</div>}
         </form>
       </Modal>
 
@@ -1593,7 +1659,7 @@ export default function FollowUpQueuePage() {
                           className="btn btn-sm"
                           type="button"
                           disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task)}
-                          onClick={() => setCompletionTaskId((current) => (current === task.id ? '' : task.id))}
+                          onClick={() => toggleFollowUpCompletion(task.id)}
                         >
                           <CheckCircle2 size={14} />
                           Complete
@@ -1999,6 +2065,15 @@ export default function FollowUpQueuePage() {
         message={confirmTaskAction?.message || ''}
         confirmLabel={confirmTaskAction?.confirmLabel || 'Confirm'}
         variant={confirmTaskAction?.variant || 'danger'}
+      />
+      <ConfirmDialog
+        open={createDiscardConfirmationOpen}
+        onClose={closeCreateDiscardConfirmation}
+        onConfirm={discardCreateDraft}
+        title="Discard task draft?"
+        message="Your unsaved task details will be lost."
+        confirmLabel="Discard Draft"
+        variant="danger"
       />
     </div>
   );

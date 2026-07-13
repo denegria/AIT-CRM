@@ -226,9 +226,8 @@
   flex-wrap: wrap;
 }
 
-.createDrawer {
-  width: 540px;
-  max-width: min(94vw, 540px);
+.createDialog {
+  min-height: min(620px, calc(100dvh - 48px));
 }
 
 .createForm {
@@ -807,9 +806,8 @@
     grid-template-columns: 1fr;
   }
 
-  .createDrawer {
-    width: 100vw;
-    max-width: 100vw;
+  .createDialog {
+    min-height: 100dvh;
   }
 
   .createIntro {
