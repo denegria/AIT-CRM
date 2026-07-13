@@ -1332,7 +1332,9 @@ export default function FollowUpQueuePage() {
               <span className={s.contactHint}>
                 {contactOptions.length > visibleContactOptions.length
                   ? `Showing ${visibleContactOptions.length} of ${contactOptions.length}. Type to narrow.`
-                  : `${contactOptions.length} available contacts`}
+                  : contactOptions.length === 0
+                    ? 'No contacts available'
+                    : `${contactOptions.length} available contacts`}
               </span>
             </label>
             {selectedCreateContact && (
