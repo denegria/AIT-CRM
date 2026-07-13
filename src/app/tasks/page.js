@@ -1294,19 +1294,19 @@ export default function FollowUpQueuePage() {
       </Modal>
 
       <div className={s.summaryGrid}>
-        <div className={s.summaryTile}><span className={s.summaryValue}>{stats.currentWork}</span><span className={s.summaryLabel}>Current Work</span></div>
-        <div className={s.summaryTile}><span className={s.summaryValue}>{stats.dueToday}</span><span className={s.summaryLabel}>Due Today</span></div>
-        <div className={s.summaryTile}><span className={s.summaryValue}>{stats.overdue}</span><span className={s.summaryLabel}>Overdue</span></div>
+        <div className={`${s.summaryTile} ${s.summaryTileCurrent}`}><span className={s.summaryValue}>{stats.currentWork}</span><span className={s.summaryLabel}>Current Work</span></div>
+        <div className={`${s.summaryTile} ${s.summaryTileToday}`}><span className={s.summaryValue}>{stats.dueToday}</span><span className={s.summaryLabel}>Due Today</span></div>
+        <div className={`${s.summaryTile} ${s.summaryTileOverdue}`}><span className={s.summaryValue}>{stats.overdue}</span><span className={s.summaryLabel}>Overdue</span></div>
         {!coordinatorUiPolicy.ownerScoped && (
           <button className={`${s.summaryTile} ${s.summaryButton}`} type="button" onClick={showUnassignedLeadFollowUps}>
             <span className={s.summaryValue}>{stats.unassigned}</span>
             <span className={s.summaryLabel}>Unassigned</span>
           </button>
         )}
-        <div className={s.summaryTile}><span className={s.summaryValue}>{stats.completedToday}</span><span className={s.summaryLabel}>Done Today</span></div>
+        <div className={`${s.summaryTile} ${s.summaryTileCompleted}`}><span className={s.summaryValue}>{stats.completedToday}</span><span className={s.summaryLabel}>Done Today</span></div>
       </div>
 
-      <div className="card">
+      <section className={`card ${s.queueSurface}`} aria-label="Task queue">
         {!coordinatorUiPolicy.ownerScoped && unassignedLeadFollowUps.length > 0 && (
           <div className={s.intakeAlert}>
             <div className={s.intakeAlertText}>
@@ -1322,16 +1322,19 @@ export default function FollowUpQueuePage() {
             </button>
           </div>
         )}
-        <div className={s.mobileFilterSummary} aria-label="Active task filters">
-          <div className={s.mobileFilterText}>
-            <span className={s.mobileFilterLabel}>Active filters</span>
-            <span className={s.mobileFilterScope}>{activeTaskScope}</span>
-            <span className={s.mobileFilterCount}>{loading ? 'Loading tasks' : `${filteredTasks.length} tasks shown`}</span>
+        <div className={s.queueHeader}>
+          <div>
+            <span className={s.sectionEyebrow}>Work queue</span>
+            <h2 className={s.queueTitle}>Current tasks</h2>
+            <p className={s.queueSubtitle}>{activeTaskScope}</p>
           </div>
-          <button className="btn btn-sm" type="button" onClick={resetFilters}>
-            <FilterX size={14} />
-            Reset
-          </button>
+          <div className={s.queueHeaderActions}>
+            <span className={s.queueCount} aria-live="polite">{loading ? 'Loading tasks' : `${filteredTasks.length} shown`}</span>
+            <button className="btn btn-sm" type="button" onClick={resetFilters}>
+              <FilterX size={14} />
+              Reset
+            </button>
+          </div>
         </div>
         <div className={s.toolbar}>
           <label className={s.filterGroup}>
@@ -1385,14 +1388,6 @@ export default function FollowUpQueuePage() {
               {LINK_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
-          <div className={s.filterGroup}>
-            <span className="form-label">Results</span>
-            <div className={s.dueText}>{loading ? 'Loading' : `${filteredTasks.length} tasks`}</div>
-          </div>
-          <button className="btn btn-sm" onClick={resetFilters}>
-            <FilterX size={14} />
-            Reset
-          </button>
         </div>
 
         {error && (
@@ -1469,7 +1464,7 @@ export default function FollowUpQueuePage() {
                     {task.recurrence && <span className="badge badge-pending">{recurrenceLabel(task.recurrence)}</span>}
                   </div>
                 </div>
-                <div>
+                <div className={s.taskSchedule}>
                   <div className={s.compactLabel}>Due</div>
                   <div className={`${s.dueText} ${isOverdue ? s.dueTextDanger : ''}`}>{formatDate(task.dueAt)}</div>
                   {task.recurrence && (
@@ -1478,7 +1473,10 @@ export default function FollowUpQueuePage() {
                       {recurrenceLabel(task.recurrence)}
                     </div>
                   )}
-                  <div className={s.mutedText}>{task.contactName || 'No contact linked'}</div>
+                  <div className={s.taskContext}>
+                    <span className={s.compactLabel}>Contact</span>
+                    <span className={s.mutedText}>{task.contactName || 'No contact linked'}</span>
+                  </div>
                 </div>
                 <div className={s.assigneeSelect}>
                   <span className={s.compactLabel}>Owner</span>
@@ -1992,7 +1990,7 @@ export default function FollowUpQueuePage() {
             </div>
           </section>
         )}
-      </div>
+      </section>
       <ConfirmDialog
         open={!!confirmTaskAction}
         onClose={() => setConfirmTaskAction(null)}
