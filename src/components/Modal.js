@@ -26,8 +26,9 @@ export default function Modal({ open, onClose, title, children, footer, drawerCl
     const focusPanel = () => {
       const panel = panelRef.current;
       if (!panel || panel.contains(document.activeElement)) return;
-      const initialFocus = panel.querySelector('[autofocus]');
-      (initialFocus || panel.querySelector('button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])') || panel).focus();
+      const initialFocus = panel.querySelector('[data-autofocus], [autofocus], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled])');
+      const firstFocusable = panel.querySelector('button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])');
+      (initialFocus || firstFocusable || panel).focus();
     };
     const frame = managesDialogFocus ? window.requestAnimationFrame(focusPanel) : null;
     const handleKeyDown = (event) => {
