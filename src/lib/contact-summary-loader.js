@@ -2,6 +2,7 @@ import {
   and,
   asc,
   desc,
+  eq,
   ilike,
   inArray,
   isNotNull,
@@ -41,6 +42,26 @@ const SYSTEM_APPROVAL_PATTERN = '^mis-[0-9]+[[:space:]]+approved';
 function contactIdScope(table, contactIds = []) {
   if (!contactIds.length) return sql`false`;
   return inArray(table.contactId, contactIds);
+}
+
+function paymentSourceKeys(paymentRows = []) {
+  const keys = new Map();
+  for (const row of paymentRows) {
+    if (!row?.sourceRow) continue;
+    const sourceSheet = String(row.sourceSheet || '').trim().toLowerCase();
+    const key = `${sourceSheet}:${row.sourceRow}`;
+    keys.set(key, { sourceSheet, sourceRow: row.sourceRow });
+  }
+  return [...keys.values()];
+}
+
+function paymentSourceScope(table, paymentRows = []) {
+  const keys = paymentSourceKeys(paymentRows);
+  if (!keys.length) return sql`false`;
+  return or(...keys.map(({ sourceSheet, sourceRow }) => and(
+    sql`lower(trim(coalesce(${table.sourceSheet}, ''))) = ${sourceSheet}`,
+    eq(table.sourceRow, sourceRow),
+  )));
 }
 
 function selectionWithRowId(table, category) {
@@ -204,6 +225,7 @@ export async function loadContactBootstrapSummaryRows({
   db,
   visibleContactIds = [],
   signsContactIds = [],
+  paymentRows = [],
 }) {
   const signsIds = new Set(signsContactIds);
   const nonSignsContactIds = visibleContactIds.filter((contactId) => !signsIds.has(contactId));
@@ -252,6 +274,7 @@ export async function loadContactBootstrapSummaryRows({
           .where(and(
             contactIdScope(activityEventsTable, visibleContactIds),
             isNotNull(activityEventsTable.sourceRow),
+            paymentSourceScope(activityEventsTable, paymentRows),
           ))
       : Promise.resolve([]),
   ]);
