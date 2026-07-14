@@ -1341,6 +1341,9 @@ a { color: inherit; text-decoration: none; }
   min-height: 292px;
   align-content: start;
 }
+.contact-profile-dialog-section .textarea {
+  min-height: 82px;
+}
 .profile-editor-helper {
   margin-top: 8px;
   padding: 9px 10px;
