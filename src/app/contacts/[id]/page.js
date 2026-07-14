@@ -442,6 +442,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState(null);
+  const [activeProfileEditTab, setActiveProfileEditTab] = useState('general');
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
   const [archiveReason, setArchiveReason] = useState('');
   const [archiveBusy, setArchiveBusy] = useState(false);
@@ -532,6 +533,16 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const canGenerateStudentReceipt = !isAitUsaContact || isEnrolledStudent(contact);
   const hasWorkOrders = contactWorkOrders.length > 0;
   const hasInvoices = contactInvoices.length > 0;
+  const profileEditTabs = useMemo(() => {
+    const tabs = [
+      { id: 'general', label: 'General', summary: 'Identity, status, and owner' },
+      { id: 'source', label: 'Source & location', summary: 'Attribution and school context' },
+    ];
+    if (isAitUsaContact) {
+      tabs.push({ id: 'enrollment', label: 'Enrollment', summary: 'Program preferences and profile notes' });
+    }
+    return tabs;
+  }, [isAitUsaContact]);
   const selectedInvoiceWorkOrder = contactWorkOrders.find((workOrder) => workOrder.id === invoiceWorkOrderId) || null;
   const workOrdersHref = `/work-orders${contact?.id ? `?contactId=${encodeURIComponent(contact.id)}` : ''}`;
   const visibleFinancials = useMemo(() => (
@@ -838,6 +849,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
   const openEditModal = () => {
     if (!access.canWriteCrm) return;
+    setActiveProfileEditTab('general');
     setEditForm({
       ...contact,
       assignedTo: contact?.assignedTo || '',
@@ -999,6 +1011,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
   const handleEditSave = () => {
     if (isClosedStatusReopen && !editForm.statusChangeReason) {
+      setActiveProfileEditTab('general');
       toast('Choose why this closed status is being reopened.', 'error');
       return;
     }
@@ -2593,185 +2606,217 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               <span>Profile and routing details</span>
             </div>
 
-            <section className="contact-profile-dialog-section">
-              <div className="contact-dialog-section-header">
-                <span className="contact-dialog-section-index">1</span>
-                <div>
-                  <h2>Identity</h2>
-                  <p>Keep the person and their preferred contact details current.</p>
-                </div>
-              </div>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Full Name</label>
-                  <input className="input" value={editForm.name} autoFocus onChange={e => setEditForm({...editForm, name: e.target.value})} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Email</label>
-                  <input className="input" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Phone</label>
-                <input className="input" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
-              </div>
-            </section>
-
-            <section className="contact-profile-dialog-section">
-              <div className="contact-dialog-section-header">
-                <span className="contact-dialog-section-index">2</span>
-                <div>
-                  <h2>Routing</h2>
-                  <p>Set the workflow, source, and location for this contact.</p>
-                </div>
-              </div>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Status</label>
-                  <select className="input select" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}>
-                    {[...new Set([...(contactStatusOptions || PIPELINE_STATUSES), ...(editForm.status ? [editForm.status] : [])])].map(st => <option key={st} value={st}>{st}</option>)}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Source</label>
-                  <select className="input select" value={editForm.source} onChange={e => setEditForm({...editForm, source: e.target.value})}>
-                    {sources.map(src => <option key={src} value={src}>{src}</option>)}
-                  </select>
-                </div>
-              </div>
-              {showSchoolLocationField ? (
-                <div className="form-group">
-                  <label className="form-label">School Location</label>
-                  <select className="input select" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})}>
-                    <option value="">Select school location</option>
-                    {editSchoolLocationOptions.map((location) => (
-                      <option key={location} value={location}>{location}</option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <div className="form-group">
-                  <label className="form-label">Address</label>
-                  <input className="input" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})} />
-                </div>
-              )}
-              {isClosedStatusReopen && (
-                <div className="form-group">
-                  <label className="form-label">Reopen reason</label>
-                  <select
-                    className="input select"
-                    value={editForm.statusChangeReason || ''}
-                    onChange={e => setEditForm({...editForm, statusChangeReason: e.target.value})}
+            <div className="profile-editor-tabs" role="tablist" aria-label="Profile edit sections">
+              {profileEditTabs.map((tab) => {
+                const selected = activeProfileEditTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    aria-controls={`profile-edit-panel-${tab.id}`}
+                    id={`profile-edit-tab-${tab.id}`}
+                    className={`profile-editor-tab ${selected ? 'is-active' : ''}`}
+                    onClick={() => setActiveProfileEditTab(tab.id)}
                   >
-                    <option value="">Choose why this closed status is changing</option>
-                    <option value="correction">Correction - closed status was entered by mistake</option>
-                    <option value="new_course_follow_up">New course follow-up - previous student is active again</option>
-                  </select>
-                  <div className="empty-state" style={{padding: 10, marginTop: 8}}>
-                    Use correction only for data-entry mistakes. For a new class or program, choose new course follow-up so history shows this is re-engagement, not an erased completion.
-                  </div>
-                </div>
-              )}
-            </section>
+                    <span>{tab.label}</span>
+                    <small>{tab.summary}</small>
+                  </button>
+                );
+              })}
+            </div>
 
-            {isAitUsaContact && (
-              <section className="contact-profile-dialog-section">
+            {activeProfileEditTab === 'general' && (
+              <section
+                className="contact-profile-dialog-section"
+                role="tabpanel"
+                id="profile-edit-panel-general"
+                aria-labelledby="profile-edit-tab-general"
+              >
                 <div className="contact-dialog-section-header">
-                  <span className="contact-dialog-section-index">3</span>
                   <div>
-                    <h2>AIT USA profile</h2>
-                    <p>Capture program preferences and the details needed for follow-up.</p>
+                    <h2>General profile</h2>
+                    <p>Update the fields employees reach for most: contact info, status, and ownership.</p>
                   </div>
                 </div>
                 <div className="grid-2">
                   <div className="form-group">
-                    <label className="form-label">Program Interest</label>
-                    <input className="input" value={editForm.leadProfile?.programInterest || ''} onChange={e => updateEditLeadProfile('programInterest', e.target.value)} />
+                    <label className="form-label" htmlFor="profile-edit-name">Full Name</label>
+                    <input id="profile-edit-name" className="input" value={editForm.name} autoFocus onChange={e => setEditForm({...editForm, name: e.target.value})} />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Location Preference</label>
-                    <input className="input" value={editForm.leadProfile?.locationPreference || ''} onChange={e => updateEditLeadProfile('locationPreference', e.target.value)} />
+                    <label className="form-label" htmlFor="profile-edit-email">Email</label>
+                    <input id="profile-edit-email" className="input" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} />
                   </div>
                 </div>
                 <div className="grid-2">
                   <div className="form-group">
-                    <label className="form-label">Preferred Day</label>
-                    <input className="input" value={editForm.leadProfile?.preferredDay || ''} onChange={e => updateEditLeadProfile('preferredDay', e.target.value)} />
+                    <label className="form-label" htmlFor="profile-edit-phone">Phone</label>
+                    <input id="profile-edit-phone" className="input" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
                   </div>
                   <div className="form-group">
-                    <label className="form-label">Preferred Schedule</label>
-                    <input className="input" value={editForm.leadProfile?.preferredSchedule || ''} onChange={e => updateEditLeadProfile('preferredSchedule', e.target.value)} />
+                    <label className="form-label" htmlFor="profile-edit-status">Status</label>
+                    <select id="profile-edit-status" className="input select" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}>
+                      {[...new Set([...(contactStatusOptions || PIPELINE_STATUSES), ...(editForm.status ? [editForm.status] : [])])].map(st => <option key={st} value={st}>{st}</option>)}
+                    </select>
+                  </div>
+                </div>
+                {isClosedStatusReopen && (
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-reopen-reason">Reopen reason</label>
+                    <select
+                      id="profile-edit-reopen-reason"
+                      className="input select"
+                      value={editForm.statusChangeReason || ''}
+                      onChange={e => setEditForm({...editForm, statusChangeReason: e.target.value})}
+                    >
+                      <option value="">Choose why this closed status is changing</option>
+                      <option value="correction">Correction - closed status was entered by mistake</option>
+                      <option value="new_course_follow_up">New course follow-up - previous student is active again</option>
+                    </select>
+                    <div className="profile-editor-helper">
+                      Use correction only for data-entry mistakes. For a new class or program, choose new course follow-up so history shows this is re-engagement, not an erased completion.
+                    </div>
+                  </div>
+                )}
+                {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-owner">Assigned To</label>
+                    <select id="profile-edit-owner" className="input select" value={editForm.assignedTo || ''} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
+                      <option value="">Unassigned</option>
+                      {ownerOptions.map((owner) => (
+                        <option key={owner.id} value={owner.id}>{owner.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <input type="hidden" value={editForm.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
+                )}
+                {access.canWriteCrm ? (
+                  <div className="profile-editor-account-action">
+                    <div>
+                      <strong>{coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive ${singularLabel}` : 'Request archive approval'}</strong>
+                      <p>
+                        {coordinatorUiPolicy.canArchiveContactsDirectly
+                          ? `Archive removes this ${singularLabel.toLowerCase()} from normal CRM lists. History is retained for audit and recovery.`
+                          : `Request senior approval to archive this ${singularLabel.toLowerCase()}. The contact stays active until approved.`}
+                      </p>
+                    </div>
+                    <button
+                      className="btn btn-danger"
+                      type="button"
+                      onClick={() => {
+                        setArchiveReason('');
+                        setArchiveConfirmOpen(true);
+                      }}
+                    >
+                      {coordinatorUiPolicy.canArchiveContactsDirectly ? 'Archive' : 'Request Approval'}
+                    </button>
+                  </div>
+                ) : null}
+              </section>
+            )}
+
+            {activeProfileEditTab === 'source' && (
+              <section
+                className="contact-profile-dialog-section"
+                role="tabpanel"
+                id="profile-edit-panel-source"
+                aria-labelledby="profile-edit-tab-source"
+              >
+                <div className="contact-dialog-section-header">
+                  <div>
+                    <h2>Source and location</h2>
+                    <p>Keep attribution and school routing clear without mixing it into daily contact edits.</p>
                   </div>
                 </div>
                 <div className="grid-2">
                   <div className="form-group">
-                    <label className="form-label">Test</label>
-                    <input className="input" value={editForm.leadProfile?.testInterest || ''} onChange={e => updateEditLeadProfile('testInterest', e.target.value)} />
+                    <label className="form-label" htmlFor="profile-edit-source">Source</label>
+                    <select id="profile-edit-source" className="input select" value={editForm.source} onChange={e => setEditForm({...editForm, source: e.target.value})}>
+                      {sources.map(src => <option key={src} value={src}>{src}</option>)}
+                    </select>
                   </div>
-                  <div className="form-group">
-                    <label className="form-label">Level</label>
-                    <input className="input" value={editForm.leadProfile?.educationLevel || ''} onChange={e => updateEditLeadProfile('educationLevel', e.target.value)} />
-                  </div>
-                </div>
-                <div className="grid-2">
-                  <div className="form-group">
-                    <label className="form-label">School</label>
-                    <input className="input" value={editForm.leadProfile?.schoolName || ''} onChange={e => updateEditLeadProfile('schoolName', e.target.value)} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label">Source Detail</label>
-                    <input className="input" value={editForm.leadProfile?.sourceDetail || ''} onChange={e => updateEditLeadProfile('sourceDetail', e.target.value)} />
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Profile Details</label>
-                  <textarea className="textarea" rows={2} value={editForm.leadProfile?.profileDetails || ''} onChange={e => updateEditLeadProfile('profileDetails', e.target.value)} />
+                  {showSchoolLocationField ? (
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="profile-edit-school-location">School Location</label>
+                      <select id="profile-edit-school-location" className="input select" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})}>
+                        <option value="">Select school location</option>
+                        {editSchoolLocationOptions.map((location) => (
+                          <option key={location} value={location}>{location}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="profile-edit-address">Address</label>
+                      <input id="profile-edit-address" className="input" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})} />
+                    </div>
+                  )}
                 </div>
               </section>
             )}
 
-            <section className="contact-profile-dialog-section">
-              <div className="contact-dialog-section-header">
-                <span className="contact-dialog-section-index">{isAitUsaContact ? '4' : '3'}</span>
-                <div>
-                  <h2>Assignment and account handling</h2>
-                  <p>Keep ownership current. Archiving always requires a separate confirmation.</p>
-                </div>
-              </div>
-              {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
-                <div className="form-group">
-                  <label className="form-label">Assigned To</label>
-                  <select className="input select" value={editForm.assignedTo || ''} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
-                    <option value="">Unassigned</option>
-                    {ownerOptions.map((owner) => (
-                      <option key={owner.id} value={owner.id}>{owner.label}</option>
-                    ))}
-                  </select>
-                </div>
-              ) : (
-                <input type="hidden" value={editForm.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
-              )}
-              {access.canWriteCrm ? (
-                <div className="empty-state" style={{padding: 12, borderColor: 'var(--danger-muted)'}}>
-                  <div style={{fontWeight: 700, color: 'var(--danger)', marginBottom: 4}}>Danger zone</div>
-                  <div style={{fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 10}}>
-                    {coordinatorUiPolicy.canArchiveContactsDirectly
-                      ? `Archive removes this ${singularLabel.toLowerCase()} from normal CRM lists. History is retained for audit and recovery.`
-                      : `Request senior approval to archive this ${singularLabel.toLowerCase()}. The contact stays active until approved.`}
+            {activeProfileEditTab === 'enrollment' && isAitUsaContact && (
+              <section
+                className="contact-profile-dialog-section"
+                role="tabpanel"
+                id="profile-edit-panel-enrollment"
+                aria-labelledby="profile-edit-tab-enrollment"
+              >
+                <div className="contact-dialog-section-header">
+                  <div>
+                    <h2>Enrollment profile</h2>
+                    <p>Capture program preferences and background details when they matter for follow-up.</p>
                   </div>
-                  <button
-                    className="btn btn-danger"
-                    type="button"
-                    onClick={() => {
-                      setArchiveReason('');
-                      setArchiveConfirmOpen(true);
-                    }}
-                  >
-                    {coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive ${singularLabel}` : 'Request Archive Approval'}
-                  </button>
                 </div>
-              ) : null}
-            </section>
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-program-interest">Program Interest</label>
+                    <input id="profile-edit-program-interest" className="input" value={editForm.leadProfile?.programInterest || ''} onChange={e => updateEditLeadProfile('programInterest', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-location-preference">Location Preference</label>
+                    <input id="profile-edit-location-preference" className="input" value={editForm.leadProfile?.locationPreference || ''} onChange={e => updateEditLeadProfile('locationPreference', e.target.value)} />
+                  </div>
+                </div>
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-preferred-day">Preferred Day</label>
+                    <input id="profile-edit-preferred-day" className="input" value={editForm.leadProfile?.preferredDay || ''} onChange={e => updateEditLeadProfile('preferredDay', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-preferred-schedule">Preferred Schedule</label>
+                    <input id="profile-edit-preferred-schedule" className="input" value={editForm.leadProfile?.preferredSchedule || ''} onChange={e => updateEditLeadProfile('preferredSchedule', e.target.value)} />
+                  </div>
+                </div>
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-test-interest">Test</label>
+                    <input id="profile-edit-test-interest" className="input" value={editForm.leadProfile?.testInterest || ''} onChange={e => updateEditLeadProfile('testInterest', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-education-level">Level</label>
+                    <input id="profile-edit-education-level" className="input" value={editForm.leadProfile?.educationLevel || ''} onChange={e => updateEditLeadProfile('educationLevel', e.target.value)} />
+                  </div>
+                </div>
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-school-name">School</label>
+                    <input id="profile-edit-school-name" className="input" value={editForm.leadProfile?.schoolName || ''} onChange={e => updateEditLeadProfile('schoolName', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-source-detail">Source Detail</label>
+                    <input id="profile-edit-source-detail" className="input" value={editForm.leadProfile?.sourceDetail || ''} onChange={e => updateEditLeadProfile('sourceDetail', e.target.value)} />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="profile-edit-profile-details">Profile Details</label>
+                  <textarea id="profile-edit-profile-details" className="textarea" rows={3} value={editForm.leadProfile?.profileDetails || ''} onChange={e => updateEditLeadProfile('profileDetails', e.target.value)} />
+                </div>
+              </section>
+            )}
           </div>
         </Modal>
       )}

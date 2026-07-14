@@ -1275,21 +1275,99 @@ a { color: inherit; text-decoration: none; }
   margin-right: auto;
 }
 .contact-profile-dialog-panel {
-  --modal-dialog-width: 880px;
+  --modal-dialog-width: 952px;
 }
 .contact-profile-dialog-form {
   display: grid;
-  gap: 20px;
+  gap: 16px;
+}
+.profile-editor-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 4px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-tertiary) 72%, transparent);
+}
+.profile-editor-tab {
+  min-width: 0;
+  min-height: 56px;
+  padding: 9px 11px;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-md) - 2px);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  text-align: left;
+  transition: background 140ms ease, border-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+.profile-editor-tab:hover {
+  background: color-mix(in srgb, var(--bg-elevated) 82%, transparent);
+  color: var(--text-primary);
+}
+.profile-editor-tab.is-active {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--border-subtle));
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+.profile-editor-tab span {
+  display: block;
+  overflow: hidden;
+  color: inherit;
+  font-size: var(--text-sm);
+  font-weight: 760;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.profile-editor-tab small {
+  display: block;
+  margin-top: 4px;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .contact-profile-dialog-section {
   display: grid;
   gap: 12px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--border-subtle);
+  min-height: 292px;
+  align-content: start;
 }
-.contact-profile-dialog-section:last-child {
-  padding-bottom: 0;
-  border-bottom: 0;
+.profile-editor-helper {
+  margin-top: 8px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-tertiary) 58%, transparent);
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.4;
+}
+.profile-editor-account-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 2px;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--border-subtle);
+}
+.profile-editor-account-action strong {
+  display: block;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  line-height: 1.2;
+}
+.profile-editor-account-action p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  line-height: 1.35;
 }
 .contacts-active-filter-chips {
   display: inline-flex;
@@ -2505,6 +2583,22 @@ a { color: inherit; text-decoration: none; }
     padding-bottom: 18px;
     border-bottom: 1px solid var(--border-subtle);
   }
+  .profile-editor-tabs {
+    grid-template-columns: 1fr;
+  }
+  .profile-editor-tab {
+    min-height: 48px;
+  }
+  .contact-profile-dialog-section {
+    min-height: 0;
+  }
+  .profile-editor-account-action {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .profile-editor-account-action .btn {
+    align-self: flex-start;
+  }
 }
 
 @media (max-width: 640px) {
@@ -2674,6 +2768,20 @@ a { color: inherit; text-decoration: none; }
   }
   .contact-dialog-routing-details {
     grid-template-columns: 1fr;
+  }
+  .profile-editor-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 3px;
+    overflow-x: auto;
+  }
+  .profile-editor-tab {
+    flex: 1 0 132px;
+    min-height: 42px;
+    padding: 8px 9px;
+  }
+  .profile-editor-tab small {
+    display: none;
   }
 }
 
