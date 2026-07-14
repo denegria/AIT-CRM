@@ -19,6 +19,8 @@ export default function DataTable({
   actions,
   onEdit,
   searchPlaceholder,
+  searchValue,
+  onSearchChange,
   toolbarAfterSearch,
   toolbarMeta,
   toolbarBeforeColumns,
@@ -31,7 +33,9 @@ export default function DataTable({
   mobileFields,
   mobileBadges,
 }) {
-  const [search, setSearch] = useState('');
+  const [localSearch, setLocalSearch] = useState('');
+  const search = searchValue === undefined ? localSearch : searchValue;
+  const setSearch = onSearchChange || setLocalSearch;
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
   const [editCell, setEditCell] = useState(null); // {rowId, key}
@@ -53,7 +57,7 @@ export default function DataTable({
 
   const filtered = useMemo(() => {
     let rows = data;
-    if (search) {
+    if (search && onSearchChange === undefined) {
       const q = search.toLowerCase();
       rows = rows.filter(r => columns.some(c => String(r[c.key] || '').toLowerCase().includes(q)));
     }
@@ -65,7 +69,7 @@ export default function DataTable({
       });
     }
     return rows;
-  }, [data, search, sortKey, sortDir, columns]);
+  }, [data, search, sortKey, sortDir, columns, onSearchChange]);
 
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');

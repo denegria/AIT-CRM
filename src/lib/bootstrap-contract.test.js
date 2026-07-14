@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   CONTACT_BOOTSTRAP_SUMMARY_FIELDS,
   DEFERRED_BOOTSTRAP_LOADERS,
+  deferBootstrapContactDirectory,
   deferBootstrapContactDetails,
   deferBootstrapTasks,
   hasDeferredBootstrapLoader,
@@ -76,6 +77,21 @@ test('global bootstrap defers task rows while preserving the rest of the contrac
   assert.deepEqual(projectedBootstrap.tasks, []);
   assert.equal(hasDeferredBootstrapLoader(projectedBootstrap, DEFERRED_BOOTSTRAP_LOADERS.TASKS), true);
   assert.ok(reductionPercent > 75, `expected task projection to reduce fixture bootstrap by >75%, got ${reductionPercent}%`);
+});
+
+test('contact directory shell excludes broad CRM collections before paged loading', () => {
+  const { core, tasks } = deterministicFixture();
+  const legacyBootstrap = { ...core, tasks };
+  const directoryBootstrap = deferBootstrapContactDirectory(deferBootstrapTasks(legacyBootstrap));
+  const legacyBytes = serializedBytes(legacyBootstrap);
+  const directoryBytes = serializedBytes(directoryBootstrap);
+  const reductionPercent = Number((((legacyBytes - directoryBytes) / legacyBytes) * 100).toFixed(1));
+
+  assert.deepEqual(directoryBootstrap.contacts, []);
+  assert.deepEqual(directoryBootstrap.workOrders, []);
+  assert.deepEqual(directoryBootstrap.financials, []);
+  assert.equal(hasDeferredBootstrapLoader(directoryBootstrap, DEFERRED_BOOTSTRAP_LOADERS.CONTACT_DIRECTORY), true);
+  assert.ok(reductionPercent > 90, `expected lean directory shell to reduce fixture bootstrap by >90%, got ${reductionPercent}%`);
 });
 
 test('route task payload maps the existing scoped API contract without changing task semantics', () => {

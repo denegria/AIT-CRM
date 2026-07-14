@@ -48,6 +48,7 @@ import {
 import { workflowForBusinessUnit } from '@/lib/sales-workflow';
 import { schoolLocationForContact, schoolLocationOptions } from '@/lib/school-locations';
 import { useToast } from '@/components/Toast';
+import { useDeferredContactDirectory } from '@/lib/contacts/directory-loader.js';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -307,6 +308,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     contacts,
     workOrders,
     financials,
+    contactDirectoryIsDeferred,
     addContact,
     updateContact,
     deleteContact,
@@ -331,6 +333,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [activeFilterSection, setActiveFilterSection] = useState('timeframe');
   const [ownerSearch, setOwnerSearch] = useState('');
+  const [directoryRefreshKey, setDirectoryRefreshKey] = useState(0);
   const isClientsMode = mode === 'clients';
   const singularLabel = isClientsMode ? 'Client' : 'Contact';
   const pluralLabel = isClientsMode ? 'Clients' : 'Contacts';
@@ -410,15 +413,25 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const setSourceFilter = useCallback((value) => updateFilterQuery({ sourceFilter: value }), [updateFilterQuery]);
   const setLocationFilter = useCallback((value) => updateFilterQuery({ locationFilter: value }), [updateFilterQuery]);
 
+  const deferredDirectory = useDeferredContactDirectory({
+    enabled: contactDirectoryIsDeferred,
+    searchParams,
+    businessUnitId: currentBusinessUnitId,
+    refreshKey: directoryRefreshKey,
+  });
+  const refreshDirectory = useCallback(() => {
+    if (contactDirectoryIsDeferred) setDirectoryRefreshKey((value) => value + 1);
+  }, [contactDirectoryIsDeferred]);
+
   const directoryContacts = useMemo(() => {
-    return contacts;
-  }, [contacts]);
+    return contactDirectoryIsDeferred ? deferredDirectory.contacts : contacts;
+  }, [contactDirectoryIsDeferred, contacts, deferredDirectory.contacts]);
   const directoryWorkOrders = useMemo(() => {
-    return workOrders;
-  }, [workOrders]);
+    return contactDirectoryIsDeferred ? deferredDirectory.workOrders : workOrders;
+  }, [contactDirectoryIsDeferred, deferredDirectory.workOrders, workOrders]);
   const directoryFinancials = useMemo(() => {
-    return financials;
-  }, [financials]);
+    return contactDirectoryIsDeferred ? deferredDirectory.financials : financials;
+  }, [contactDirectoryIsDeferred, deferredDirectory.financials, financials]);
   const directoryBusinessUnitId = currentBusinessUnitId;
   const directoryBusinessUnit = currentBusinessUnit;
 
@@ -518,6 +531,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           : `${singularLabel} archived`);
         setDeleteTarget(null);
         if (!result?.approvalRequested) close();
+        refreshDirectory();
       })
       .catch((error) => toast(error?.message || 'Archive failed.', 'error'));
   };
@@ -539,6 +553,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         .then(() => {
           toast(`${singularLabel} created successfully`);
           close();
+          refreshDirectory();
         })
         .catch((error) => toast(error?.message || `${singularLabel} create failed.`, 'error'));
     } else {
@@ -546,6 +561,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         .then(() => {
           toast(`${singularLabel} updated successfully`);
           close();
+          refreshDirectory();
         })
         .catch((error) => toast(error?.message || `${singularLabel} update failed.`, 'error'));
     }
@@ -829,7 +845,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       : ['phone', 'workflow', 'signalText', 'assignedLabel', 'divisionLabel', 'lastTouch', 'lastEdited'];
   const directoryScopeName = directoryBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`;
   const summaryNoun = pluralLabel.toLowerCase();
-  const directorySummary = `${filteredContacts.length.toLocaleString()} matching ${summaryNoun} in ${directoryScopeName}`;
+  const directoryResultCount = contactDirectoryIsDeferred ? deferredDirectory.total : filteredContacts.length;
+  const directorySummary = `${directoryResultCount.toLocaleString()} matching ${summaryNoun} in ${directoryScopeName}`;
   const formBusinessUnitId = form.businessUnitId || form.primaryBusinessUnitId || '';
   const formBusinessUnit = businessUnitById.get(formBusinessUnitId) || null;
   const isAitUsaForm = workflowForBusinessUnit(formBusinessUnit).key === WORKFLOW_KEYS.AIT_USA;
@@ -837,6 +854,19 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
 
   if (!loaded) {
     return <PageState tone="loading" title={`Loading ${pluralLabel.toLowerCase()}`} copy="Preparing the contact directory for your current division scope." />;
+  }
+  if (contactDirectoryIsDeferred && deferredDirectory.loading && !deferredDirectory.ready) {
+    return <PageState tone="loading" title={`Loading ${pluralLabel.toLowerCase()}`} copy="Loading the first 50 matching records for this division." />;
+  }
+  if (contactDirectoryIsDeferred && deferredDirectory.error && !deferredDirectory.ready) {
+    return (
+      <PageState
+        tone="error"
+        title={`${pluralLabel} could not load`}
+        copy={deferredDirectory.error}
+        actions={<button className="btn btn-primary" type="button" onClick={deferredDirectory.retry}>Try again</button>}
+      />
+    );
   }
 
   return (
@@ -853,6 +883,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           columns={columns}
           data={filteredContacts}
           searchPlaceholder={`Search ${pluralLabel.toLowerCase()}...`}
+          searchValue={contactDirectoryIsDeferred ? deferredDirectory.search : undefined}
+          onSearchChange={contactDirectoryIsDeferred ? deferredDirectory.setSearch : undefined}
           toolbarAfterSearch={(
             <div className="contacts-filter-popover-anchor">
               <button
@@ -1227,7 +1259,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           ) : null}
           onEdit={canWrite ? (id, u) => {
             updateContact(id, u)
-              .then(() => toast('Field updated'))
+              .then(() => {
+                toast('Field updated');
+                refreshDirectory();
+              })
               .catch((error) => toast(error?.message || 'Update failed.', 'error'));
           } : undefined}
           actions={[
@@ -1239,6 +1274,30 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           mobileBadges={['status']}
           mobileFields={mobileFieldKeys}
         />
+        {contactDirectoryIsDeferred && deferredDirectory.totalPages > 1 && (
+          <div className="contacts-directory-pagination" aria-label="Contact directory pages">
+            <button
+              className="btn btn-sm"
+              type="button"
+              disabled={deferredDirectory.page <= 1 || deferredDirectory.loading}
+              onClick={() => deferredDirectory.setPage((page) => Math.max(1, page - 1))}
+            >
+              Previous
+            </button>
+            <span>
+              Page {deferredDirectory.page.toLocaleString()} of {deferredDirectory.totalPages.toLocaleString()}
+              {' · '}{deferredDirectory.total.toLocaleString()} records
+            </span>
+            <button
+              className="btn btn-sm"
+              type="button"
+              disabled={deferredDirectory.page >= deferredDirectory.totalPages || deferredDirectory.loading}
+              onClick={() => deferredDirectory.setPage((page) => Math.min(deferredDirectory.totalPages, page + 1))}
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
 
       <Modal

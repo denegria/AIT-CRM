@@ -1,6 +1,7 @@
 export const DEFERRED_BOOTSTRAP_LOADERS = Object.freeze({
   TASKS: 'tasks',
   CONTACT_DETAILS: 'contactDetails',
+  CONTACT_DIRECTORY: 'contactDirectory',
 });
 
 export const CONTACT_BOOTSTRAP_SUMMARY_FIELDS = Object.freeze({
@@ -99,6 +100,19 @@ export function deferBootstrapTasks(payload = {}) {
   return {
     ...payload,
     tasks: [],
+    deferredLoaders: [...deferredLoaders],
+  };
+}
+
+export function deferBootstrapContactDirectory(payload = {}) {
+  const deferredLoaders = new Set(payload.deferredLoaders || []);
+  deferredLoaders.add(DEFERRED_BOOTSTRAP_LOADERS.CONTACT_DIRECTORY);
+
+  return {
+    ...payload,
+    contacts: [],
+    workOrders: [],
+    financials: [],
     deferredLoaders: [...deferredLoaders],
   };
 }

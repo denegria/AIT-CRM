@@ -23,12 +23,13 @@ function getBusinessUnitId(record) {
   return record?.businessUnitId || record?.primaryBusinessUnitId || '';
 }
 
-function defaultBusinessUnitScope({ businessUnits = [], currentUser = null, contacts = [] } = {}) {
+function defaultBusinessUnitScope({ businessUnits = [], currentUser = null, contacts = [], preferredBusinessUnitId = '' } = {}) {
   const activeUnits = (businessUnits || []).filter((unit) => unit.isActive !== false);
   const allowedIds = currentUser?.canAccessAllBusinessUnits
     ? activeUnits.map((unit) => unit.id)
     : currentUser?.businessUnitIds || activeUnits.map((unit) => unit.id);
   const allowedSet = new Set(allowedIds);
+  if (preferredBusinessUnitId && allowedSet.has(preferredBusinessUnitId)) return preferredBusinessUnitId;
   if (!currentUser?.canAccessAllBusinessUnits && currentUser?.primaryBusinessUnitId && allowedSet.has(currentUser.primaryBusinessUnitId)) {
     return currentUser.primaryBusinessUnitId;
   }
@@ -123,6 +124,7 @@ function getInitialData(seedData = defaults) {
     businessUnits: fallback.businessUnits || [],
     employees: fallback.employees || defaults.EMPLOYEES || [],
     contacts: fallback.contacts,
+    defaultBusinessUnitId: fallback.defaultBusinessUnitId || '',
     workOrders: fallback.workOrders,
     financials: fallback.financials,
     tasks: fallback.tasks,
@@ -158,6 +160,10 @@ export function CRMProvider({ children, initialData }) {
   const [businessUnits, setBusinessUnits] = useState(bootstrapData.businessUnits);
   const [employees] = useState(bootstrapData.employees);
   const [contacts, setContacts] = useState(bootstrapData.contacts);
+  const contactDirectoryIsDeferred = isPostgres && hasDeferredBootstrapLoader(
+    bootstrapData,
+    DEFERRED_BOOTSTRAP_LOADERS.CONTACT_DIRECTORY,
+  );
   const [workOrders, setWorkOrders] = useState(bootstrapData.workOrders);
   const [financials, setFinancials] = useState(bootstrapData.financials);
   const [tasks, setTasks] = useState(bootstrapData.tasks);
@@ -180,10 +186,17 @@ export function CRMProvider({ children, initialData }) {
       businessUnits: bootstrapData.businessUnits,
       currentUser: bootstrapData.currentUser,
       contacts: bootstrapData.contacts,
+      preferredBusinessUnitId: bootstrapData.defaultBusinessUnitId,
     });
   });
   const [storageReady, setStorageReady] = useState(isPostgres);
   const loaded = true;
+
+  useEffect(() => {
+    if (!contactDirectoryIsDeferred) return;
+    if (pathname === '/contacts' || pathname === '/clients') return;
+    window.location.reload();
+  }, [contactDirectoryIsDeferred, pathname]);
 
   const loadTasks = useCallback(({ force = false } = {}) => {
     if (!isPostgres || !tasksAreDeferred) return Promise.resolve(tasks);
@@ -626,7 +639,7 @@ export function CRMProvider({ children, initialData }) {
     currentBusinessUnitId: effectiveBusinessUnitId, currentBusinessUnit, setCurrentBusinessUnitId,
     canUseConsolidatedScope,
     scopeLabel,
-    contacts: scopedContacts, allContacts: contacts, addContact, updateContact, deleteContact,
+    contacts: scopedContacts, allContacts: contacts, contactDirectoryIsDeferred, addContact, updateContact, deleteContact,
     workOrders: scopedWorkOrders, allWorkOrders: workOrders, addWorkOrder, updateWorkOrder, deleteWorkOrder,
     financials: scopedFinancials, allFinancials: financials, addFinancial, updateFinancial, deleteFinancial, recordPayment,
     tasks: scopedTasks, allTasks: tasks, addTask, updateTask, deleteTask,

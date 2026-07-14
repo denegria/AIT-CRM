@@ -1,5 +1,5 @@
 import { cache } from 'react';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import * as seedData from './data';
 import { getDb } from '../db/index.js';
 import { hasPermission, isAuthEnabled, PERMISSIONS, SESSION_SECRET_ENV } from './auth';
@@ -42,6 +42,7 @@ import { getServerAppVersion } from './app-version.js';
 import { canonicalRoleKeys } from './roles.js';
 import {
   deferBootstrapContactDetails,
+  deferBootstrapContactDirectory,
   deferBootstrapTasks,
   toContactListPayload,
 } from './bootstrap-contract.js';
@@ -193,7 +194,7 @@ function mapEmployees(userRows = [], membershipRows = [], roleRows = []) {
   })));
 }
 
-function mapContacts(
+export function mapContacts(
   contactRows,
   leadRows,
   noteRows,
@@ -385,7 +386,7 @@ function mapContacts(
   });
 }
 
-function mapWorkOrders(rows, contactLookup) {
+export function mapWorkOrders(rows, contactLookup) {
   return rows.map((row, index) => ({
     id: row.id,
     number: row.workOrderNumber || `WO-${String(index + 1).padStart(3, '0')}`,
@@ -403,7 +404,7 @@ function mapWorkOrders(rows, contactLookup) {
   }));
 }
 
-function mapFinancials(estimateRows, paymentRows, contactLookup, documentRows = []) {
+export function mapFinancials(estimateRows, paymentRows, contactLookup, documentRows = []) {
   const estimates = estimateRows.map((row, index) => ({
     id: row.id,
     number: row.estimateNumber || `EST-${String(index + 1).padStart(3, '0')}`,
@@ -597,7 +598,7 @@ function emptyDbData(businessUnitRows = [], importStaging = null) {
   };
 }
 
-export const getBootstrapData = cache(async function getBootstrapData(session = null) {
+export const getBootstrapData = cache(async function getBootstrapData(session = null, bootstrapMode = 'full') {
   const appVersion = getServerAppVersion();
   if (!process.env.DATABASE_URL) {
     return {
@@ -645,6 +646,38 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
   try {
     const db = getDb();
     const access = sessionAccess(session);
+    if (bootstrapMode === 'contact-directory') {
+      const [businessUnitRows, contactCountRows, userRows, membershipRows, userRoleRows, importStaging] = await Promise.all([
+        db.select().from(businessUnitsTable).where(scopedOrgWhere(businessUnitsTable, session)).orderBy(asc(businessUnitsTable.name)),
+        db
+          .select({ businessUnitId: contactsTable.primaryBusinessUnitId, value: count() })
+          .from(contactsTable)
+          .where(scopedContactWhere(contactsTable, session))
+          .groupBy(contactsTable.primaryBusinessUnitId),
+        db.select().from(usersTable).where(and(
+          eq(usersTable.organizationId, session.user.organizationId),
+          eq(usersTable.isActive, true),
+        )).orderBy(asc(usersTable.name), asc(usersTable.email)),
+        db.select().from(businessUnitMembershipsTable),
+        db
+          .select({ userId: userRolesTable.userId, roleKey: rolesTable.key })
+          .from(userRolesTable)
+          .innerJoin(rolesTable, eq(userRolesTable.roleId, rolesTable.id))
+          .where(eq(rolesTable.organizationId, session.user.organizationId)),
+        access.canReadImportReview ? getImportStagingSummary(db) : Promise.resolve(null),
+      ]);
+      const defaultBusinessUnitId = contactCountRows
+        .filter((row) => row.businessUnitId)
+        .sort((left, right) => Number(right.value || 0) - Number(left.value || 0))[0]?.businessUnitId || '';
+      return deferBootstrapContactDirectory(deferBootstrapContactDetails(deferBootstrapTasks({
+        ...emptyDbData(businessUnitRows, importStaging),
+        appVersion,
+        currentUser: session.user,
+        access,
+        employees: mapEmployees(userRows, membershipRows, userRoleRows),
+        defaultBusinessUnitId,
+      })));
+    }
     const [
       businessUnitRows,
       contactRows,

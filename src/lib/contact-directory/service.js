@@ -1,0 +1,354 @@
+import {
+  and,
+  count,
+  desc,
+  eq,
+  ilike,
+  inArray,
+  isNull,
+  or,
+  sql,
+} from 'drizzle-orm';
+import {
+  activityEvents,
+  businessUnits,
+  contactCourseRecords,
+  contacts,
+  estimates,
+  financialDocuments,
+  leads,
+  paymentSnapshots,
+  workOrders,
+} from '@/db/schema.js';
+import {
+  mapContacts,
+  mapFinancials,
+  mapWorkOrders,
+} from '@/lib/bootstrap-data.js';
+import { loadContactBootstrapSummaryRows } from '@/lib/contact-summary-loader.js';
+import { attachPaymentSnapshotContactLinks } from '@/lib/financial-linkage.js';
+import {
+  isRegularCoordinatorSession,
+  scopedBusinessUnitWhere,
+  scopedContactWhere,
+  scopedOrgWhere,
+} from '@/lib/crm/access.js';
+import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from '@/lib/crm/lifecycle.js';
+
+export const CONTACT_DIRECTORY_PAGE_SIZE = 50;
+export const CONTACT_DIRECTORY_MAX_PAGE_SIZE = 100;
+
+function clean(value = '') {
+  return String(value || '').trim();
+}
+
+function positiveInteger(value, fallback) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function normalizedSql(column) {
+  return sql`regexp_replace(lower(trim(coalesce(${column}, ''))), '[_-]+', ' ', 'g')`;
+}
+
+function parseDate(value, endOfDay = false) {
+  const text = clean(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return null;
+  const date = new Date(`${text}T${endOfDay ? '23:59:59.999' : '00:00:00.000'}Z`);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function dateRangeCondition({ scope, from, to, latestLead, now = new Date() }) {
+  if (!scope || scope === 'all') return undefined;
+  let start = null;
+  let end = null;
+  if (scope === 'current') {
+    start = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+    end = new Date(Date.UTC(now.getUTCFullYear() + 1, 0, 1));
+  } else if (scope === 'quarter') {
+    const month = Math.floor(now.getUTCMonth() / 3) * 3;
+    start = new Date(Date.UTC(now.getUTCFullYear(), month, 1));
+    end = new Date(Date.UTC(now.getUTCFullYear(), month + 3, 1));
+  } else if (scope === 'custom') {
+    start = parseDate(from);
+    const inclusiveEnd = parseDate(to, true);
+    end = inclusiveEnd ? new Date(inclusiveEnd.getTime() + 1) : null;
+  }
+  const leadDate = sql`coalesce(${latestLead.createdAt}, ${contacts.createdAt})`;
+  if (start && end) return sql`${leadDate} >= ${start} and ${leadDate} < ${end}`;
+  if (start) return sql`${leadDate} >= ${start}`;
+  if (end) return sql`${leadDate} < ${end}`;
+  return undefined;
+}
+
+function sourceCondition(value, latestLead) {
+  const source = clean(value).toLowerCase();
+  if (!source || source === 'all') return undefined;
+  const sourceText = sql`lower(concat_ws(' ', ${latestLead.sourceName}, ${latestLead.sourceType}, ${contacts.sourceLabel}))`;
+  if (source === 'website form submission') {
+    return sql`${sourceText} ~ '(website|web form|wix|wordpress)'`;
+  }
+  if (source === 'workbook import') {
+    return sql`${sourceText} ~ '(workbook|xlsx|spreadsheet|archive|work_order|estimate|interesados|ait signs)'`;
+  }
+  if (source === 'manual / unknown') {
+    return sql`trim(${sourceText}) = '' or ${sourceText} like '%manual%'`;
+  }
+  if (source === 'other source') {
+    return sql`trim(${sourceText}) <> ''
+      and ${sourceText} !~ '(website|web form|wix|wordpress|workbook|xlsx|spreadsheet|archive|work_order|estimate|interesados|ait signs)'`;
+  }
+  return or(
+    eq(normalizedSql(latestLead.sourceName), source),
+    eq(normalizedSql(latestLead.sourceType), source),
+    eq(normalizedSql(contacts.sourceLabel), source),
+  );
+}
+
+function courseCondition(value, latestLead) {
+  const course = clean(value).toLowerCase();
+  if (!course || course === 'all') return undefined;
+  return sql`(
+    ${normalizedSql(latestLead.currentCourse)} = ${course}
+    or ${normalizedSql(latestLead.completedCourse)} = ${course}
+    or ${normalizedSql(latestLead.endedCourse)} = ${course}
+    or exists (
+      select 1 from ${contactCourseRecords}
+      where ${contactCourseRecords.contactId} = ${contacts.id}
+        and ${normalizedSql(contactCourseRecords.courseName)} = ${course}
+    )
+  )`;
+}
+
+function facetCondition(value, latestLead, session) {
+  const facet = clean(value);
+  const status = normalizedSql(sql`coalesce(${latestLead.currentStage}, ${latestLead.status})`);
+  const assignedUserId = latestLead.assignedUserId;
+  const phoneDigits = sql`regexp_replace(coalesce(${contacts.phone}, ''), '[^0-9]', '', 'g')`;
+  const closedStatuses = ['lost', 'completed', 'not interested', 'course completed', 'dropped / quit'];
+  const statusIs = (label) => eq(status, label.toLowerCase());
+  if (!facet || facet === 'all') return undefined;
+  if (facet === 'mine') return eq(assignedUserId, session.user.id);
+  if (facet === 'unassigned') return isNull(assignedUserId);
+  if (facet === 'needs_first_outreach') return sql`${status} in ('new lead', 'intake')`;
+  if (facet === 'needs_contact_info') return and(
+    sql`trim(coalesce(${contacts.phone}, '')) = ''`,
+    sql`trim(coalesce(${contacts.email}, '')) = ''`,
+  );
+  if (facet === 'invalid_phone') return sql`trim(coalesce(${contacts.phone}, '')) <> '' and length(${phoneDigits}) not in (10, 11)`;
+  if (facet === 'closed') return inArray(status, closedStatuses);
+  if (facet === 'active') return sql`${status} not in ('lost', 'completed', 'not interested', 'course completed', 'dropped / quit')`;
+  if (facet === 'no_recent_touch') {
+    return sql`not exists (
+      select 1 from ${activityEvents}
+      where ${activityEvents.contactId} = ${contacts.id}
+        and coalesce(${activityEvents.occurredAt}, ${activityEvents.createdAt}) >= now() - interval '30 days'
+    )`;
+  }
+  if (facet === 'signs_linked_people') {
+    return sql`exists (select 1 from contact_people cp where cp.contact_id = ${contacts.id})`;
+  }
+  if (facet === 'signs_payment_balance') {
+    return or(
+      statusIs('invoice / payment'),
+      sql`exists (
+        select 1 from ${paymentSnapshots} ps
+        left join ${estimates} e on e.id = ps.estimate_id
+        left join ${workOrders} wo on wo.id = ps.work_order_id
+        where e.contact_id = ${contacts.id} or wo.contact_id = ${contacts.id}
+      )`,
+    );
+  }
+  const statusFacets = {
+    signs_intake: 'intake',
+    signs_estimate: 'estimate',
+    signs_work_order: 'work order',
+    signs_fulfillment: 'fulfillment',
+    signs_invoice_payment: 'invoice / payment',
+    usa_new_lead: 'new lead',
+    usa_follow_up: 'follow up',
+    usa_enrolled: 'enrolled',
+    usa_dropped_quit: 'dropped / quit',
+    usa_retargeting: 'retargeting',
+    usa_not_interested: 'not interested',
+    usa_course_completed: 'course completed',
+  };
+  if (statusFacets[facet]) return statusIs(statusFacets[facet]);
+  if (facet === 'usa_bad_contact_channel') {
+    return or(
+      eq(contacts.isDoNotCall, true),
+      eq(contacts.isWrongNumber, true),
+      and(sql`trim(coalesce(${contacts.phone}, '')) <> ''`, sql`length(${phoneDigits}) not in (10, 11)`),
+    );
+  }
+  return undefined;
+}
+
+function directoryConditions({ searchParams, latestLead, session }) {
+  const conditions = [scopedContactWhere(contacts, session)];
+  const businessUnitId = clean(searchParams.get('businessUnitId'));
+  if (businessUnitId === 'unassigned') conditions.push(isNull(contacts.primaryBusinessUnitId));
+  else if (businessUnitId && businessUnitId !== 'all') {
+    const allowed = session.user.canAccessAllBusinessUnits || session.user.businessUnitIds.includes(businessUnitId);
+    conditions.push(allowed ? eq(contacts.primaryBusinessUnitId, businessUnitId) : sql`false`);
+  }
+  if (isRegularCoordinatorSession(session)) conditions.push(eq(latestLead.assignedUserId, session.user.id));
+
+  const query = clean(searchParams.get('q'));
+  if (query) {
+    const pattern = `%${query}%`;
+    conditions.push(or(
+      ilike(contacts.name, pattern),
+      ilike(contacts.companyName, pattern),
+      ilike(contacts.email, pattern),
+      ilike(contacts.phone, pattern),
+      ilike(latestLead.sourceName, pattern),
+    ));
+  }
+  const status = clean(searchParams.get('status'));
+  if (status && status !== 'All') {
+    conditions.push(eq(
+      normalizedSql(sql`coalesce(${latestLead.currentStage}, ${latestLead.status})`),
+      status.toLowerCase().replace(/[_-]+/g, ' '),
+    ));
+  }
+  const owner = clean(searchParams.get('owner'));
+  if (owner === 'unassigned') conditions.push(isNull(latestLead.assignedUserId));
+  else if (owner && owner !== 'all') conditions.push(eq(latestLead.assignedUserId, owner));
+
+  const source = sourceCondition(searchParams.get('source'), latestLead);
+  if (source) conditions.push(source);
+  const course = courseCondition(searchParams.get('course'), latestLead);
+  if (course) conditions.push(course);
+  const location = clean(searchParams.get('location')).toLowerCase();
+  if (location && location !== 'all') {
+    conditions.push(or(
+      eq(normalizedSql(contacts.address), location),
+      eq(normalizedSql(latestLead.locationPreference), location),
+    ));
+  }
+  const date = dateRangeCondition({
+    scope: searchParams.get('leadDateScope'),
+    from: searchParams.get('leadDateFrom'),
+    to: searchParams.get('leadDateTo'),
+    latestLead,
+  });
+  if (date) conditions.push(date);
+  const facet = facetCondition(searchParams.get('facet'), latestLead, session);
+  if (facet) conditions.push(facet);
+  return conditions;
+}
+
+function paymentWhereForPage({ estimateRows, workOrderRows, paymentLinkRows }) {
+  const conditions = [];
+  const estimateIds = estimateRows.map((row) => row.id);
+  const workOrderIds = workOrderRows.map((row) => row.id);
+  if (estimateIds.length) conditions.push(inArray(paymentSnapshots.estimateId, estimateIds));
+  if (workOrderIds.length) conditions.push(inArray(paymentSnapshots.workOrderId, workOrderIds));
+  for (const link of paymentLinkRows) {
+    if (!link.sourceSheet || link.sourceRow == null) continue;
+    conditions.push(and(
+      eq(paymentSnapshots.sourceSheet, link.sourceSheet),
+      eq(paymentSnapshots.sourceRow, link.sourceRow),
+    ));
+  }
+  return conditions.length ? or(...conditions) : sql`false`;
+}
+
+export async function loadContactDirectoryPage({ db, session, searchParams }) {
+  const page = positiveInteger(searchParams.get('page'), 1);
+  const pageSize = Math.min(
+    positiveInteger(searchParams.get('pageSize'), CONTACT_DIRECTORY_PAGE_SIZE),
+    CONTACT_DIRECTORY_MAX_PAGE_SIZE,
+  );
+  const latestLead = db
+    .selectDistinctOn([leads.contactId])
+    .from(leads)
+    .where(scopedOrgWhere(leads, session))
+    .orderBy(leads.contactId, desc(leads.createdAt), desc(leads.id))
+    .as('latest_contact_lead');
+  const conditions = directoryConditions({ searchParams, latestLead, session });
+  const where = and(...conditions);
+  const offset = (page - 1) * pageSize;
+
+  const [idRows, countRows, businessUnitRows] = await Promise.all([
+    db
+      .select({ id: contacts.id })
+      .from(contacts)
+      .leftJoin(latestLead, eq(latestLead.contactId, contacts.id))
+      .where(where)
+      .orderBy(desc(contacts.createdAt), desc(contacts.id))
+      .limit(pageSize)
+      .offset(offset),
+    db
+      .select({ value: count() })
+      .from(contacts)
+      .leftJoin(latestLead, eq(latestLead.contactId, contacts.id))
+      .where(where),
+    db.select().from(businessUnits).where(scopedOrgWhere(businessUnits, session)),
+  ]);
+  const contactIds = idRows.map((row) => row.id);
+  const total = Number(countRows[0]?.value || 0);
+  if (!contactIds.length) {
+    return { contacts: [], workOrders: [], financials: [], page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+  }
+
+  const [contactRows, leadRows, workOrderRows, estimateRows, documentRows] = await Promise.all([
+    db.select().from(contacts).where(inArray(contacts.id, contactIds)),
+    db.select().from(leads).where(and(scopedBusinessUnitWhere(leads, session), inArray(leads.contactId, contactIds))).orderBy(desc(leads.createdAt)),
+    db.select().from(workOrders).where(and(scopedBusinessUnitWhere(workOrders, session), inArray(workOrders.contactId, contactIds))).orderBy(desc(workOrders.createdAt)),
+    db.select().from(estimates).where(and(scopedBusinessUnitWhere(estimates, session), inArray(estimates.contactId, contactIds))).orderBy(desc(estimates.createdAt)),
+    db.select().from(financialDocuments).where(and(scopedBusinessUnitWhere(financialDocuments, session), inArray(financialDocuments.contactId, contactIds))).orderBy(desc(financialDocuments.createdAt)),
+  ]);
+  const signsBusinessUnitIds = new Set(
+    businessUnitRows
+      .filter((unit) => workflowKeyForBusinessUnit(unit) === WORKFLOW_KEYS.AIT_SIGNS)
+      .map((unit) => unit.id),
+  );
+  const signsContactIds = contactRows
+    .filter((row) => signsBusinessUnitIds.has(row.primaryBusinessUnitId))
+    .map((row) => row.id);
+  const summaryRows = await loadContactBootstrapSummaryRows({ db, visibleContactIds: contactIds, signsContactIds });
+  const paymentRows = await db
+    .select()
+    .from(paymentSnapshots)
+    .where(and(
+      scopedBusinessUnitWhere(paymentSnapshots, session),
+      paymentWhereForPage({ estimateRows, workOrderRows, paymentLinkRows: summaryRows.paymentLinkRows }),
+    ))
+    .orderBy(desc(paymentSnapshots.createdAt));
+  const linkedPaymentRows = attachPaymentSnapshotContactLinks(paymentRows, summaryRows.paymentLinkRows, {
+    estimateRows,
+    workOrderRows,
+  });
+  const mappedContacts = mapContacts(
+    contactRows,
+    leadRows,
+    summaryRows.noteRows,
+    summaryRows.eventRows,
+    businessUnitRows,
+    session.user.canAccessAllBusinessUnits ? null : session.user.businessUnitIds,
+    {
+      workOrders: workOrderRows,
+      estimates: estimateRows,
+      paymentSnapshots: linkedPaymentRows,
+      conversationMessages: summaryRows.conversationMessageRows,
+      contactPeople: summaryRows.contactPeopleRows,
+      courseRecords: summaryRows.contactCourseRecordRows,
+      leadStatusHistory: summaryRows.leadStatusHistoryRows,
+    },
+  );
+  const orderById = new Map(contactIds.map((id, index) => [id, index]));
+  mappedContacts.sort((left, right) => orderById.get(left.id) - orderById.get(right.id));
+  const contactLookup = new Map(mappedContacts.map((contact) => [contact.id, contact]));
+
+  return {
+    contacts: mappedContacts,
+    workOrders: mapWorkOrders(workOrderRows, contactLookup),
+    financials: mapFinancials(estimateRows, linkedPaymentRows, contactLookup, documentRows),
+    page,
+    pageSize,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / pageSize)),
+  };
+}
