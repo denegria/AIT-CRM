@@ -8,6 +8,8 @@ export default function ConfirmDialog({ open, onClose, onConfirm, title, message
       open={open} 
       onClose={onClose} 
       title={title || 'Confirmation'}
+      variant="dialog"
+      panelClassName="confirm-dialog-panel"
       footer={
         <>
           <button className="btn" onClick={onClose}>Cancel</button>

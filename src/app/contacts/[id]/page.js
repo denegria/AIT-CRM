@@ -2964,6 +2964,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           open={archiveConfirmOpen}
           onClose={() => !archiveBusy && setArchiveConfirmOpen(false)}
           title={coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive ${singularLabel}` : 'Request archive approval'}
+          variant="dialog"
+          panelClassName="archive-confirm-dialog-panel"
           footer={(
             <>
               <button className="btn" type="button" disabled={archiveBusy} onClick={() => setArchiveConfirmOpen(false)}>Cancel</button>

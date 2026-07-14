@@ -1087,15 +1087,16 @@ export default function FollowUpQueuePage() {
 
   function openArchiveDecision(task, decision) {
     if (!canReviewArchiveApprovalTasks) return;
-    setArchiveDecisionDrafts((prev) => ({
-      ...prev,
+    setActionPanelTaskId('');
+    setRemovalDecisionDrafts({});
+    setArchiveDecisionDrafts({
       [task.id]: {
         decision,
         reason: decision === 'approve'
           ? task.metadataJson?.requestedReason || 'Archive request approved.'
           : '',
       },
-    }));
+    });
   }
 
   async function submitArchiveDecision(task) {
@@ -1108,15 +1109,16 @@ export default function FollowUpQueuePage() {
 
   function openRemovalDecision(task, decision) {
     if (!canReviewArchiveApprovalTasks) return;
-    setRemovalDecisionDrafts((prev) => ({
-      ...prev,
+    setActionPanelTaskId('');
+    setArchiveDecisionDrafts({});
+    setRemovalDecisionDrafts({
       [task.id]: {
         decision,
         reason: decision === 'approve'
           ? task.metadataJson?.requestedReason || 'Task cancellation approved.'
           : '',
       },
-    }));
+    });
   }
 
   async function submitRemovalDecision(task) {
@@ -1155,6 +1157,16 @@ export default function FollowUpQueuePage() {
     if (filters.link !== 'all') parts.push(optionLabel(LINK_OPTIONS, filters.link));
     return parts.filter(Boolean).join(' · ');
   })();
+  const archiveDecisionTaskId = Object.keys(archiveDecisionDrafts)[0] || '';
+  const activeArchiveDecisionDraft = archiveDecisionTaskId ? archiveDecisionDrafts[archiveDecisionTaskId] : null;
+  const activeArchiveDecisionTask = archiveDecisionTaskId
+    ? queueTasks.find((task) => task.id === archiveDecisionTaskId)
+    : null;
+  const removalDecisionTaskId = Object.keys(removalDecisionDrafts)[0] || '';
+  const activeRemovalDecisionDraft = removalDecisionTaskId ? removalDecisionDrafts[removalDecisionTaskId] : null;
+  const activeRemovalDecisionTask = removalDecisionTaskId
+    ? queueTasks.find((task) => task.id === removalDecisionTaskId)
+    : null;
   if (!access.canReadCrm) {
     return (
       <div className="fade-in">
@@ -1503,8 +1515,6 @@ export default function FollowUpQueuePage() {
             const showFollowUpCompletion = completionTaskId === task.id && task.taskType === 'follow_up';
             const isArchiveApprovalTask = task.taskType === 'archive_approval';
             const isTaskRemovalApprovalTask = task.taskType === 'task_removal_approval';
-            const archiveDecisionDraft = archiveDecisionDrafts[task.id] || null;
-            const removalDecisionDraft = removalDecisionDrafts[task.id] || null;
             const showEditPanel = editTaskId === task.id;
             const removalApprovalPending = task.metadataJson?.removalApproval?.decision === 'pending';
             const showAssignToMe = coordinatorUiPolicy.canManageCoordinatorAssignments &&
@@ -1926,96 +1936,6 @@ export default function FollowUpQueuePage() {
                     </div>
                   </div>
                 )}
-                {isArchiveApprovalTask && archiveDecisionDraft && (
-                  <div className={s.completionPanel}>
-                    <label className={s.completionNote}>
-                      <span className="form-label">
-                        {archiveDecisionDraft.decision === 'approve' ? 'Approval Reason' : 'Denial Reason'}
-                      </span>
-                      <textarea
-                        className="textarea"
-                        rows={2}
-                        value={archiveDecisionDraft.reason}
-                        disabled={busyTaskId === task.id}
-                        onChange={(event) => setArchiveDecisionDrafts((prev) => ({
-                          ...prev,
-                          [task.id]: {
-                            ...archiveDecisionDraft,
-                            reason: event.target.value,
-                          },
-                        }))}
-                      />
-                    </label>
-                    <div className={s.completionActions}>
-                      <button
-                        className="btn btn-sm"
-                        type="button"
-                        disabled={busyTaskId === task.id}
-                        onClick={() => setArchiveDecisionDrafts((prev) => {
-                          const next = { ...prev };
-                          delete next[task.id];
-                          return next;
-                        })}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        className="btn btn-sm btn-primary"
-                        type="button"
-                        disabled={busyTaskId === task.id || (archiveDecisionDraft.decision === 'deny' && !String(archiveDecisionDraft.reason || '').trim())}
-                        onClick={() => submitArchiveDecision(task)}
-                      >
-                        <CheckCircle2 size={14} />
-                        {archiveDecisionDraft.decision === 'approve' ? 'Approve Archive' : 'Deny Archive'}
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {isTaskRemovalApprovalTask && removalDecisionDraft && (
-                  <div className={s.completionPanel}>
-                    <label className={s.completionNote}>
-                      <span className="form-label">
-                        {removalDecisionDraft.decision === 'approve' ? 'Approval Reason' : 'Denial Reason'}
-                      </span>
-                      <textarea
-                        className="textarea"
-                        rows={2}
-                        value={removalDecisionDraft.reason}
-                        disabled={busyTaskId === task.id}
-                        onChange={(event) => setRemovalDecisionDrafts((prev) => ({
-                          ...prev,
-                          [task.id]: {
-                            ...removalDecisionDraft,
-                            reason: event.target.value,
-                          },
-                        }))}
-                      />
-                    </label>
-                    <div className={s.completionActions}>
-                      <button
-                        className="btn btn-sm"
-                        type="button"
-                        disabled={busyTaskId === task.id}
-                        onClick={() => setRemovalDecisionDrafts((prev) => {
-                          const next = { ...prev };
-                          delete next[task.id];
-                          return next;
-                        })}
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        className="btn btn-sm btn-primary"
-                        type="button"
-                        disabled={busyTaskId === task.id || (removalDecisionDraft.decision === 'deny' && !String(removalDecisionDraft.reason || '').trim())}
-                        onClick={() => submitRemovalDecision(task)}
-                      >
-                        <CheckCircle2 size={14} />
-                        {removalDecisionDraft.decision === 'approve' ? 'Approve Cancel' : 'Deny Cancel'}
-                      </button>
-                    </div>
-                  </div>
-                )}
               </article>
             );
           })}
@@ -2067,6 +1987,160 @@ export default function FollowUpQueuePage() {
         confirmLabel={confirmTaskAction?.confirmLabel || 'Confirm'}
         variant={confirmTaskAction?.variant || 'danger'}
       />
+      <Modal
+        open={Boolean(activeArchiveDecisionTask && activeArchiveDecisionDraft)}
+        onClose={() => busyTaskId !== activeArchiveDecisionTask?.id && setArchiveDecisionDrafts({})}
+        title={activeArchiveDecisionDraft?.decision === 'approve' ? 'Approve archive request?' : 'Deny archive request?'}
+        variant="dialog"
+        panelClassName={s.dangerDecisionDialog}
+        footer={(
+          <>
+            <button
+              className="btn"
+              type="button"
+              disabled={busyTaskId === activeArchiveDecisionTask?.id}
+              onClick={() => setArchiveDecisionDrafts({})}
+            >
+              Cancel
+            </button>
+            <button
+              className={`btn ${activeArchiveDecisionDraft?.decision === 'approve' ? 'btn-primary' : 'btn-danger'}`}
+              type="button"
+              disabled={
+                !activeArchiveDecisionTask ||
+                busyTaskId === activeArchiveDecisionTask.id ||
+                (activeArchiveDecisionDraft?.decision === 'deny' && !String(activeArchiveDecisionDraft?.reason || '').trim())
+              }
+              onClick={() => activeArchiveDecisionTask && submitArchiveDecision(activeArchiveDecisionTask)}
+            >
+              <CheckCircle2 size={14} />
+              {activeArchiveDecisionDraft?.decision === 'approve' ? 'Approve Archive' : 'Deny Archive'}
+            </button>
+          </>
+        )}
+      >
+        <div className={s.dangerDecisionBody}>
+          <div className={s.dangerDecisionNotice}>
+            <span className={s.dangerDecisionEyebrow}>
+              {activeArchiveDecisionDraft?.decision === 'approve' ? 'Final archive approval' : 'Archive request denial'}
+            </span>
+            <strong>
+              {activeArchiveDecisionDraft?.decision === 'approve'
+                ? `Archive ${activeArchiveDecisionTask?.contactName || 'this contact'}?`
+                : `Deny archive request for ${activeArchiveDecisionTask?.contactName || 'this contact'}?`}
+            </strong>
+            <p>
+              {activeArchiveDecisionDraft?.decision === 'approve'
+                ? 'Approving removes the contact from normal CRM lists while preserving history for audit and recovery.'
+                : 'Denial keeps the contact active and records why the archive request was rejected.'}
+            </p>
+          </div>
+          {activeArchiveDecisionTask?.metadataJson?.requestedReason && (
+            <div className={s.dangerDecisionRequest}>
+              <span>Requested reason</span>
+              <p>{activeArchiveDecisionTask.metadataJson.requestedReason}</p>
+            </div>
+          )}
+          <label className={s.dangerDecisionField}>
+            <span className="form-label">
+              {activeArchiveDecisionDraft?.decision === 'approve' ? 'Approval Reason' : 'Denial Reason *'}
+            </span>
+            <textarea
+              className="textarea"
+              rows={4}
+              value={activeArchiveDecisionDraft?.reason || ''}
+              disabled={busyTaskId === activeArchiveDecisionTask?.id}
+              placeholder={activeArchiveDecisionDraft?.decision === 'approve' ? 'Why is this archive approved?' : 'Explain why this archive should not proceed.'}
+              onChange={(event) => {
+                if (!archiveDecisionTaskId) return;
+                setArchiveDecisionDrafts({
+                  [archiveDecisionTaskId]: {
+                    ...activeArchiveDecisionDraft,
+                    reason: event.target.value,
+                  },
+                });
+              }}
+            />
+          </label>
+        </div>
+      </Modal>
+      <Modal
+        open={Boolean(activeRemovalDecisionTask && activeRemovalDecisionDraft)}
+        onClose={() => busyTaskId !== activeRemovalDecisionTask?.id && setRemovalDecisionDrafts({})}
+        title={activeRemovalDecisionDraft?.decision === 'approve' ? 'Approve task removal?' : 'Deny task removal?'}
+        variant="dialog"
+        panelClassName={s.dangerDecisionDialog}
+        footer={(
+          <>
+            <button
+              className="btn"
+              type="button"
+              disabled={busyTaskId === activeRemovalDecisionTask?.id}
+              onClick={() => setRemovalDecisionDrafts({})}
+            >
+              Cancel
+            </button>
+            <button
+              className={`btn ${activeRemovalDecisionDraft?.decision === 'approve' ? 'btn-primary' : 'btn-danger'}`}
+              type="button"
+              disabled={
+                !activeRemovalDecisionTask ||
+                busyTaskId === activeRemovalDecisionTask.id ||
+                (activeRemovalDecisionDraft?.decision === 'deny' && !String(activeRemovalDecisionDraft?.reason || '').trim())
+              }
+              onClick={() => activeRemovalDecisionTask && submitRemovalDecision(activeRemovalDecisionTask)}
+            >
+              <CheckCircle2 size={14} />
+              {activeRemovalDecisionDraft?.decision === 'approve' ? 'Approve Removal' : 'Deny Removal'}
+            </button>
+          </>
+        )}
+      >
+        <div className={s.dangerDecisionBody}>
+          <div className={s.dangerDecisionNotice}>
+            <span className={s.dangerDecisionEyebrow}>
+              {activeRemovalDecisionDraft?.decision === 'approve' ? 'Final task removal approval' : 'Task removal denial'}
+            </span>
+            <strong>
+              {activeRemovalDecisionDraft?.decision === 'approve'
+                ? `Remove "${activeRemovalDecisionTask?.title || 'this task'}"?`
+                : `Deny removal for "${activeRemovalDecisionTask?.title || 'this task'}"?`}
+            </strong>
+            <p>
+              {activeRemovalDecisionDraft?.decision === 'approve'
+                ? 'Approving closes the requested task removal. Use this only when the task should leave active work.'
+                : 'Denial keeps the task available and records why the removal request was rejected.'}
+            </p>
+          </div>
+          {activeRemovalDecisionTask?.metadataJson?.requestedReason && (
+            <div className={s.dangerDecisionRequest}>
+              <span>Requested reason</span>
+              <p>{activeRemovalDecisionTask.metadataJson.requestedReason}</p>
+            </div>
+          )}
+          <label className={s.dangerDecisionField}>
+            <span className="form-label">
+              {activeRemovalDecisionDraft?.decision === 'approve' ? 'Approval Reason' : 'Denial Reason *'}
+            </span>
+            <textarea
+              className="textarea"
+              rows={4}
+              value={activeRemovalDecisionDraft?.reason || ''}
+              disabled={busyTaskId === activeRemovalDecisionTask?.id}
+              placeholder={activeRemovalDecisionDraft?.decision === 'approve' ? 'Why is this task removal approved?' : 'Explain why this task should remain active.'}
+              onChange={(event) => {
+                if (!removalDecisionTaskId) return;
+                setRemovalDecisionDrafts({
+                  [removalDecisionTaskId]: {
+                    ...activeRemovalDecisionDraft,
+                    reason: event.target.value,
+                  },
+                });
+              }}
+            />
+          </label>
+        </div>
+      </Modal>
       <Modal
         open={createDiscardConfirmationOpen}
         onClose={closeCreateDiscardConfirmation}

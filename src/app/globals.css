@@ -3433,3 +3433,11 @@ a { color: inherit; text-decoration: none; }
   opacity: 1;
   transform: translateX(-50%) translateY(-8px);
 }
+
+.confirm-dialog-panel {
+  --modal-dialog-width: 520px;
+}
+
+.archive-confirm-dialog-panel {
+  --modal-dialog-width: 560px;
+}
