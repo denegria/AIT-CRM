@@ -1,5 +1,5 @@
 import { cache } from 'react';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import * as seedData from './data';
 import { getDb } from '../db/index.js';
 import { hasPermission, isAuthEnabled, PERMISSIONS, SESSION_SECRET_ENV } from './auth';
@@ -7,25 +7,19 @@ import { sessionHasAdminRole } from './auth/admin-policy.js';
 import {
   businessUnits as businessUnitsTable,
   contacts as contactsTable,
-  contactPeople as contactPeopleTable,
-  leadStatusHistory as leadStatusHistoryTable,
   workOrders as workOrdersTable,
   estimates as estimatesTable,
   financialDocuments as financialDocumentsTable,
   paymentSnapshots as paymentSnapshotsTable,
-  notes as notesTable,
-  activityEvents as activityEventsTable,
   leads as leadsTable,
   roles as rolesTable,
   users as usersTable,
   userRoles as userRolesTable,
   businessUnitMemberships as businessUnitMembershipsTable,
-  contactCourseRecords as contactCourseRecordsTable,
   importBatches as importBatchesTable,
   importSourceRows as importSourceRowsTable,
   importNormalizedRecords as importNormalizedRecordsTable,
   importReviewItems as importReviewItemsTable,
-  conversationMessages as conversationMessagesTable,
 } from '../db/schema.js';
 import {
   filterContactsForSession,
@@ -37,6 +31,7 @@ import {
 } from './crm/access.js';
 import { toBusinessUnitPayload } from './crm/payloads.js';
 import { isPipelineEligibleContact, workflowFromLead } from './sales-workflow';
+import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from './crm/lifecycle.js';
 import { filterTimelineRowsForBusinessUnit } from './timeline/service.js';
 import { latestExcelDateFromText, summarizeContactTouch } from './contact-touch.js';
 import { buildAitUsaEnrollmentSignals } from './ait-usa-enrollment-signals.js';
@@ -46,11 +41,11 @@ import { courseRecordSummaryPayloadFromRow, deriveCourseSummary } from './crm/co
 import { getServerAppVersion } from './app-version.js';
 import { canonicalRoleKeys } from './roles.js';
 import {
-  contactBootstrapSummarySelection,
   deferBootstrapContactDetails,
   deferBootstrapTasks,
   toContactListPayload,
 } from './bootstrap-contract.js';
+import { loadContactBootstrapSummaryRows } from './contact-summary-loader.js';
 
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const toBootstrapBusinessUnitPayload = (row) => toBusinessUnitPayload(row, { emptyColor: null });
@@ -658,12 +653,6 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       estimateRows,
       financialDocumentRows,
       paymentRows,
-      noteRows,
-      eventRows,
-      conversationMessageRows,
-      contactPeopleRows,
-      contactCourseRecordRows,
-      leadStatusHistoryRows,
       userRows,
       membershipRows,
       userRoleRows,
@@ -677,19 +666,6 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       db.select().from(estimatesTable).where(scopedBusinessUnitWhere(estimatesTable, session)).orderBy(desc(estimatesTable.createdAt)),
       db.select().from(financialDocumentsTable).where(scopedBusinessUnitWhere(financialDocumentsTable, session)).orderBy(desc(financialDocumentsTable.createdAt)),
       db.select().from(paymentSnapshotsTable).where(scopedBusinessUnitWhere(paymentSnapshotsTable, session)).orderBy(desc(paymentSnapshotsTable.createdAt)),
-      db.select(contactBootstrapSummarySelection(notesTable, 'notes')).from(notesTable).where(scopedOrgWhere(notesTable, session)).orderBy(desc(notesTable.createdAt)),
-      db.select(contactBootstrapSummarySelection(activityEventsTable, 'activityEvents')).from(activityEventsTable).where(scopedOrgWhere(activityEventsTable, session)).orderBy(desc(activityEventsTable.createdAt)),
-      db.select(contactBootstrapSummarySelection(conversationMessagesTable, 'conversationMessages')).from(conversationMessagesTable).where(scopedOrgWhere(conversationMessagesTable, session)).orderBy(desc(conversationMessagesTable.occurredAt)),
-      db.select(contactBootstrapSummarySelection(contactPeopleTable, 'contactPeople')).from(contactPeopleTable).where(scopedOrgWhere(contactPeopleTable, session)).orderBy(desc(contactPeopleTable.isPrimary), asc(contactPeopleTable.name)),
-      db.select(contactBootstrapSummarySelection(contactCourseRecordsTable, 'courseRecords')).from(contactCourseRecordsTable).where(scopedBusinessUnitWhere(contactCourseRecordsTable, session)).orderBy(desc(contactCourseRecordsTable.createdAt)),
-      db
-        .select(contactBootstrapSummarySelection(leadStatusHistoryTable, 'leadStatusHistory'))
-        .from(leadStatusHistoryTable)
-        .where(and(
-          scopedBusinessUnitWhere(leadStatusHistoryTable, session),
-          inArray(leadStatusHistoryTable.toStatus, ['Enrolled', 'Dropped / Quit']),
-        ))
-        .orderBy(desc(leadStatusHistoryTable.occurredAt), desc(leadStatusHistoryTable.createdAt)),
       db.select().from(usersTable).where(and(
         eq(usersTable.organizationId, session.user.organizationId),
         eq(usersTable.isActive, true),
@@ -721,7 +697,30 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       }));
     }
 
-    const paymentRowsWithContactLinks = attachPaymentSnapshotContactLinks(paymentRows, eventRows, {
+    const visibleContactIds = visibleContactRows.map((contact) => contact.id);
+    const signsBusinessUnitIds = new Set(
+      businessUnitRows
+        .filter((unit) => workflowKeyForBusinessUnit(unit) === WORKFLOW_KEYS.AIT_SIGNS)
+        .map((unit) => unit.id),
+    );
+    const signsContactIds = visibleContactRows
+      .filter((contact) => signsBusinessUnitIds.has(contact.primaryBusinessUnitId))
+      .map((contact) => contact.id);
+    const {
+      noteRows,
+      eventRows,
+      conversationMessageRows,
+      contactPeopleRows,
+      contactCourseRecordRows,
+      leadStatusHistoryRows,
+      paymentLinkRows,
+    } = await loadContactBootstrapSummaryRows({
+      db,
+      visibleContactIds,
+      signsContactIds,
+    });
+
+    const paymentRowsWithContactLinks = attachPaymentSnapshotContactLinks(paymentRows, paymentLinkRows, {
       estimateRows,
       workOrderRows,
     });
