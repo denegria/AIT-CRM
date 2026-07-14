@@ -79,6 +79,15 @@ const emptyCourseForm = {
   notes: '',
 };
 
+const COURSE_STATUS_HELP = {
+  planned: 'Use when the student is expected to start later.',
+  active: 'Use for the one course currently in progress.',
+  completed: 'Use when the course ended successfully.',
+  dropped: 'Use when the student left or quit before finishing.',
+  cancelled: 'Use when the course never moved forward.',
+  transferred: 'Use when the student moved into another class or location.',
+};
+
 const FOLLOW_UP_OUTCOME_OPTIONS = [
   ['reached_interested', 'Reached - interested'],
   ['left_voicemail', 'Left voicemail'],
@@ -408,6 +417,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [linkedPeople, setLinkedPeople] = useState({ contactId: '', items: [], loading: false, error: '' });
   const [personModal, setPersonModal] = useState(null);
   const [personForm, setPersonForm] = useState(emptyPersonForm);
+  const [personDeleteTarget, setPersonDeleteTarget] = useState(null);
+  const [personDeleteBusy, setPersonDeleteBusy] = useState(false);
   const [manualSend, setManualSend] = useState({
     channel: 'messenger',
     templateId: '',
@@ -572,6 +583,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     null
   ), [activeCourseRecord, currentCourseRecords, selectedCourseRecordId]);
   const courseStartDateRequired = courseForm.status === 'active';
+  const courseStatusIsTerminal = isTerminalCourseRecordStatus(courseForm.status);
+  const courseStatusLabel = courseRecordStatusLabel(courseForm.status);
+  const courseModeLabel = courseForm.id
+    ? 'Edit saved record'
+    : (courseModal === 'history' ? 'Backfill history' : 'Start current course');
   const canSaveCourseForm = Boolean(cleanText(courseForm.courseName)) &&
     (!courseStartDateRequired || Boolean(courseForm.startDate));
   const financialNotice = isAitUsaContact
@@ -903,25 +919,31 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       .catch((error) => toast(error.message || 'Linked person save failed.', 'error'));
   };
 
-  const deletePerson = (person) => {
+  const deletePerson = async () => {
+    const person = personDeleteTarget;
     if (!contact?.id || !person?.id || !access.canWriteCrm) return;
-    fetch(`/api/contacts/${contact.id}/people`, {
-      method: 'DELETE',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id: person.id }),
-    })
-      .then(async (response) => {
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.error || 'Linked person delete failed.');
-        setLinkedPeople({
-          contactId: contact.id,
-          items: Array.isArray(payload.people) ? payload.people : [],
-          loading: false,
-          error: '',
-        });
-        toast('Linked person removed', 'error');
-      })
-      .catch((error) => toast(error.message || 'Linked person delete failed.', 'error'));
+    setPersonDeleteBusy(true);
+    try {
+      const response = await fetch(`/api/contacts/${contact.id}/people`, {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: person.id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Linked person delete failed.');
+      setLinkedPeople({
+        contactId: contact.id,
+        items: Array.isArray(payload.people) ? payload.people : [],
+        loading: false,
+        error: '',
+      });
+      setPersonDeleteTarget(null);
+      toast('Linked person removed', 'error');
+    } catch (error) {
+      toast(error.message || 'Linked person delete failed.', 'error');
+    } finally {
+      setPersonDeleteBusy(false);
+    }
   };
 
   const openCourseModal = (mode = 'new', record = null) => {
@@ -1997,7 +2019,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       {access.canWriteCrm && (
                         <div className={s.personActions}>
                           <button type="button" onClick={() => openPersonModal(person)}>Edit</button>
-                          <button type="button" onClick={() => deletePerson(person)}>Remove</button>
+                          <button type="button" onClick={() => setPersonDeleteTarget(person)}>Remove</button>
                         </div>
                       )}
                     </div>
@@ -2336,6 +2358,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           open={Boolean(courseModal)}
           onClose={closeCourseModal}
           title={courseForm.id ? 'Edit Course' : (courseModal === 'history' ? 'Add Course History' : 'Start Course')}
+          variant="dialog"
+          panelClassName="course-editor-dialog-panel"
           footer={(
             <>
               <button className="btn" type="button" onClick={closeCourseModal} disabled={courseBusy}>Cancel</button>
@@ -2350,97 +2374,156 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             </>
           )}
         >
-          <div className="form-group">
-            <label className="form-label">Course</label>
-            <input
-              className="input"
-              value={courseForm.courseName}
-              disabled={courseBusy}
-              placeholder="Forklift, OSHA 30, ESL Level 1..."
-              onChange={(event) => updateCourseForm({ courseName: event.target.value })}
-            />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Location</label>
-            <select
-              className="input select"
-              value={courseForm.courseLocation || ''}
-              disabled={courseBusy}
-              onChange={(event) => updateCourseForm({ courseLocation: event.target.value })}
-            >
-              <option value="">Location not set</option>
-              {courseLocationOptions.map((location) => (
-                <option key={location} value={location}>{location}</option>
-              ))}
-            </select>
-          </div>
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Status</label>
-              <select
-                className="input select"
-                value={courseForm.status}
-                disabled={courseBusy}
-                onChange={(event) => updateCourseForm({
-                  status: event.target.value,
-                  endDate: isTerminalCourseRecordStatus(event.target.value) && !courseForm.endDate
-                    ? todayDate()
-                    : courseForm.endDate,
+          <div className="course-editor-form">
+            <div className="contact-dialog-intro">
+              <p>Record the course exactly as the student moved through it. Status changes which dates and outcome details matter.</p>
+              <span>{courseModeLabel}</span>
+            </div>
+
+            <section className="course-editor-section course-editor-course">
+              <div className="contact-dialog-section-header">
+                <div>
+                  <h2>Course</h2>
+                  <p>Name and location first, using the actual course record rather than lead-interest labels.</p>
+                </div>
+              </div>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">Course</label>
+                  <input
+                    className="input"
+                    value={courseForm.courseName}
+                    disabled={courseBusy}
+                    placeholder="Forklift, OSHA 30, ESL Level 1..."
+                    data-autofocus
+                    onChange={(event) => updateCourseForm({ courseName: event.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Location</label>
+                  <select
+                    className="input select"
+                    value={courseForm.courseLocation || ''}
+                    disabled={courseBusy}
+                    onChange={(event) => updateCourseForm({ courseLocation: event.target.value })}
+                  >
+                    <option value="">Location not set</option>
+                    {courseLocationOptions.map((location) => (
+                      <option key={location} value={location}>{location}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            <section className="course-editor-section course-editor-status">
+              <div className="contact-dialog-section-header">
+                <div>
+                  <h2>Status</h2>
+                  <p>Pick the student course state. The form below adapts to what that state needs.</p>
+                </div>
+              </div>
+              <div className="course-status-grid" role="radiogroup" aria-label="Course status">
+                {COURSE_RECORD_STATUS_OPTIONS.map((option) => {
+                  const selected = courseForm.status === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`course-status-card ${selected ? 'is-active' : ''}`}
+                      aria-pressed={selected}
+                      disabled={courseBusy}
+                      onClick={() => updateCourseForm({
+                        status: option.value,
+                        endDate: isTerminalCourseRecordStatus(option.value) && !courseForm.endDate
+                          ? todayDate()
+                          : courseForm.endDate,
+                      })}
+                    >
+                      <strong>{option.label}</strong>
+                      <span>{COURSE_STATUS_HELP[option.value] || 'Use when this status best matches the course record.'}</span>
+                    </button>
+                  );
                 })}
-              >
-                {COURSE_RECORD_STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Start Date</label>
-              <input
-                className="input"
-                type="date"
-                required={courseStartDateRequired}
-                value={courseForm.startDate || ''}
-                disabled={courseBusy}
-                onChange={(event) => updateCourseForm({ startDate: event.target.value })}
-              />
-            </div>
+              </div>
+            </section>
+
+            <section className="course-editor-section course-editor-details">
+              <div className="contact-dialog-section-header">
+                <div>
+                  <h2>{courseStatusLabel} details</h2>
+                  <p>{courseStatusIsTerminal ? 'Capture when it ended and why.' : 'Capture the planned or current start point.'}</p>
+                </div>
+              </div>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">{courseStartDateRequired ? 'Start Date Required' : 'Start Date'}</label>
+                  <input
+                    className="input"
+                    type="date"
+                    required={courseStartDateRequired}
+                    value={courseForm.startDate || ''}
+                    disabled={courseBusy}
+                    onChange={(event) => updateCourseForm({ startDate: event.target.value })}
+                  />
+                </div>
+                {courseStatusIsTerminal ? (
+                  <div className="form-group">
+                    <label className="form-label">End Date</label>
+                    <input
+                      className="input"
+                      type="date"
+                      value={courseForm.endDate || ''}
+                      disabled={courseBusy}
+                      onChange={(event) => updateCourseForm({ endDate: event.target.value })}
+                    />
+                  </div>
+                ) : (
+                  <div className="course-editor-state-note">
+                    <strong>{courseForm.status === 'planned' ? 'End date hidden' : 'Current course'}</strong>
+                    <span>{courseForm.status === 'planned' ? 'Set an end date after the student completes, drops, cancels, or transfers.' : 'Only one course can be current at a time for this student.'}</span>
+                  </div>
+                )}
+              </div>
+              {courseStatusIsTerminal && (
+                <div className="form-group">
+                  <label className="form-label">Outcome / Reason</label>
+                  <input
+                    className="input"
+                    value={courseForm.outcomeReason || ''}
+                    disabled={courseBusy}
+                    placeholder="Completed, cancelled halfway, transferred..."
+                    onChange={(event) => updateCourseForm({ outcomeReason: event.target.value })}
+                  />
+                </div>
+              )}
+              <div className="form-group">
+                <label className="form-label">Notes</label>
+                <textarea
+                  className="textarea course-editor-notes"
+                  rows={3}
+                  value={courseForm.notes || ''}
+                  disabled={courseBusy}
+                  placeholder={courseStatusIsTerminal ? 'Add final outcome context for the timeline.' : 'Add schedule, instructor, or coordination notes.'}
+                  onChange={(event) => updateCourseForm({ notes: event.target.value })}
+                />
+              </div>
+            </section>
+
+            <aside className="course-editor-summary" aria-label="Course save summary">
+              <span>Ready to save</span>
+              <strong>{courseForm.courseName || 'Course name required'}</strong>
+              <p>{courseStatusLabel}{courseForm.courseLocation ? ` at ${courseForm.courseLocation}` : ''}</p>
+              {courseStartDateRequired && !courseForm.startDate && (
+                <small>Current courses need a start date.</small>
+              )}
+            </aside>
+
+            {courseForm.status === 'active' && activeCourseRecord && activeCourseRecord.id !== courseForm.id && (
+              <div className={s.courseError}>End the current course before starting another current course.</div>
+            )}
+            {courseError && <div className={s.courseError}>{courseError}</div>}
           </div>
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">End Date</label>
-              <input
-                className="input"
-                type="date"
-                value={courseForm.endDate || ''}
-                disabled={courseBusy}
-                onChange={(event) => updateCourseForm({ endDate: event.target.value })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Outcome / Reason</label>
-              <input
-                className="input"
-                value={courseForm.outcomeReason || ''}
-                disabled={courseBusy}
-                placeholder="Completed, cancelled halfway, transferred..."
-                onChange={(event) => updateCourseForm({ outcomeReason: event.target.value })}
-              />
-            </div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Notes</label>
-            <textarea
-              className="textarea"
-              rows={3}
-              value={courseForm.notes || ''}
-              disabled={courseBusy}
-              onChange={(event) => updateCourseForm({ notes: event.target.value })}
-            />
-          </div>
-          {courseForm.status === 'active' && activeCourseRecord && activeCourseRecord.id !== courseForm.id && (
-            <div className={s.courseError}>End the current course before starting another current course.</div>
-          )}
-          {courseError && <div className={s.courseError}>{courseError}</div>}
         </Modal>
       )}
 
@@ -3024,36 +3107,93 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           open={!!personModal}
           onClose={closePersonModal}
           title={personModal === 'new' ? 'Add Linked Person' : 'Edit Linked Person'}
-          footer={<><button className="btn" onClick={closePersonModal}>Cancel</button><button className="btn btn-primary" onClick={savePerson}>Save</button></>}
+          variant="dialog"
+          panelClassName="linked-person-dialog-panel"
+          footer={<><button className="btn" onClick={closePersonModal}>Cancel</button><button className="btn btn-primary" onClick={savePerson}>Save Person</button></>}
         >
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Name</label>
-              <input className="input" value={personForm.name} onChange={e => setPersonForm({...personForm, name: e.target.value})} />
+          <div className="linked-person-dialog-form">
+            <div className="contact-dialog-intro">
+              <p>Capture who this person is and the safest way to reach them.</p>
+              <span>{personForm.isPrimary ? 'Primary contact' : 'Linked contact'}</span>
             </div>
-            <div className="form-group">
-              <label className="form-label">Role</label>
-              <input className="input" value={personForm.role} onChange={e => setPersonForm({...personForm, role: e.target.value})} />
+            <section className="linked-person-section">
+              <div className="contact-dialog-section-header">
+                <div>
+                  <h2>Relationship</h2>
+                  <p>Name, role, and whether staff should treat this as the main person.</p>
+                </div>
+              </div>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">Name</label>
+                  <input className="input" value={personForm.name} data-autofocus onChange={e => setPersonForm({...personForm, name: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Role</label>
+                  <input className="input" value={personForm.role} placeholder="Parent, spouse, assistant..." onChange={e => setPersonForm({...personForm, role: e.target.value})} />
+                </div>
+              </div>
+              <label className="linked-person-primary-toggle">
+                <input type="checkbox" checked={personForm.isPrimary} onChange={e => setPersonForm({...personForm, isPrimary: e.target.checked})} />
+                <span>
+                  <strong>Primary person for this client</strong>
+                  <small>Use when staff should call or email this person first.</small>
+                </span>
+              </label>
+            </section>
+            <section className="linked-person-section">
+              <div className="contact-dialog-section-header">
+                <div>
+                  <h2>Contact methods</h2>
+                  <p>Add whichever channel is reliable. Leave unknown fields blank.</p>
+                </div>
+              </div>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">Phone</label>
+                  <input className="input" value={personForm.phone} onChange={e => setPersonForm({...personForm, phone: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Email</label>
+                  <input className="input" value={personForm.email} onChange={e => setPersonForm({...personForm, email: e.target.value})} />
+                </div>
+              </div>
+            </section>
+            <section className="linked-person-section linked-person-notes">
+              <div className="form-group">
+                <label className="form-label">Notes</label>
+                <textarea className="textarea" rows={3} value={personForm.notes} placeholder="Relationship context, call preferences, permissions..." onChange={e => setPersonForm({...personForm, notes: e.target.value})} />
+              </div>
+            </section>
+          </div>
+        </Modal>
+      )}
+
+      {personDeleteTarget && (
+        <Modal
+          open={Boolean(personDeleteTarget)}
+          onClose={() => !personDeleteBusy && setPersonDeleteTarget(null)}
+          title="Remove Linked Person"
+          variant="dialog"
+          panelClassName="linked-person-remove-dialog-panel"
+          footer={(
+            <>
+              <button className="btn" type="button" disabled={personDeleteBusy} onClick={() => setPersonDeleteTarget(null)}>Cancel</button>
+              <button className="btn btn-danger" type="button" disabled={personDeleteBusy} onClick={deletePerson}>
+                {personDeleteBusy ? 'Removing...' : 'Remove Person'}
+              </button>
+            </>
+          )}
+        >
+          <div className="danger-action-panel">
+            <div className="danger-action-copy">
+              <span className="danger-action-eyebrow">
+                <AlertCircle size={14} /> Confirm removal
+              </span>
+              <strong>Remove {personDeleteTarget.name || 'this linked person'} from this contact?</strong>
+              <p>This does not delete the main contact, but it removes this saved relationship from the contact detail page.</p>
             </div>
           </div>
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Phone</label>
-              <input className="input" value={personForm.phone} onChange={e => setPersonForm({...personForm, phone: e.target.value})} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Email</label>
-              <input className="input" value={personForm.email} onChange={e => setPersonForm({...personForm, email: e.target.value})} />
-            </div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Notes</label>
-            <textarea className="input" rows={3} value={personForm.notes} onChange={e => setPersonForm({...personForm, notes: e.target.value})} />
-          </div>
-          <label className={s.primaryToggle}>
-            <input type="checkbox" checked={personForm.isPrimary} onChange={e => setPersonForm({...personForm, isPrimary: e.target.checked})} />
-            Primary person for this client
-          </label>
         </Modal>
       )}
     </div>
