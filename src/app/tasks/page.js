@@ -19,6 +19,7 @@ import {
 import { useCRM } from '@/lib/store';
 import { isAssignableEmployee } from '@/lib/crm/assignable-employees.js';
 import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
+import PageState, { PageStateAction } from '@/components/PageState';
 import { lifecycleBucket } from '@/lib/contact-directory-view.js';
 import {
   routeBusinessUnitFilterForGlobalScope,
@@ -1176,7 +1177,12 @@ export default function FollowUpQueuePage() {
             <p className="page-subtitle">CRM read access is required.</p>
           </div>
         </div>
-        <div className="empty-state">Missing CRM permission.</div>
+        <PageState
+          tone="denied"
+          title="Tasks require CRM read access"
+          copy="Your account can keep using the CRM surfaces assigned to your role. Ask an administrator if tasks should be added to your access."
+          actions={<PageStateAction href="/">Back to Dashboard</PageStateAction>}
+        />
       </div>
     );
   }
@@ -1470,10 +1476,13 @@ export default function FollowUpQueuePage() {
         </div>
 
         {error && (
-          <div className={s.statusRow}>
-            <span>{error}</span>
-            <button className="btn btn-sm" onClick={readTasks}>Retry</button>
-          </div>
+          <PageState
+            tone="error"
+            size="compact"
+            title="Task queue could not load"
+            copy={error}
+            actions={<PageStateAction onClick={readTasks}>Try Again</PageStateAction>}
+          />
         )}
 
         {!loading && !error && filteredTasks.length === 0 && (

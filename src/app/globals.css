@@ -3185,6 +3185,51 @@ a { color: inherit; text-decoration: none; }
   margin-top: 16px;
 }
 
+.page-state {
+  width: min(100%, 720px);
+  margin: 22px auto;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.page-state-compact {
+  width: 100%;
+  padding: 30px 18px;
+  margin: 12px 0;
+}
+
+.page-state-icon {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-soft);
+}
+
+.page-state-denied .page-state-icon,
+.page-state-error .page-state-icon {
+  color: var(--danger);
+  border-color: color-mix(in srgb, var(--danger) 28%, var(--border-subtle));
+  background: color-mix(in srgb, var(--danger-muted) 60%, var(--bg-elevated));
+}
+
+.page-state-loading .page-state-icon {
+  color: var(--accent);
+}
+
+.page-state-not-found .page-state-icon {
+  color: var(--warning);
+}
+
+.page-state-spinner {
+  animation: authSpin 1s linear infinite;
+}
+
 /* ── Animations ── */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(4px); }

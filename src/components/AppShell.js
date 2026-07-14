@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import CommandPalette from '@/components/CommandPalette';
 import NotificationBell from '@/components/NotificationBell';
+import PageState, { PageStateAction } from '@/components/PageState';
 import SessionSwitchGuard from '@/components/SessionSwitchGuard';
 import Sidebar from '@/components/Sidebar';
 import { canUseCoordinatorRoute, canUseWorkOrdersForBusinessUnit } from '@/lib/crm/coordinator-policy.js';
@@ -11,7 +11,6 @@ import { useCRM } from '@/lib/store';
 
 export default function AppShell({ children }) {
   const pathname = usePathname();
-  const router = useRouter();
   const { accessibleBusinessUnits, currentBusinessUnit, currentUser, loaded } = useCRM();
   const isPublicJoinPage = pathname === '/join';
   const hasMobileScopeBar = accessibleBusinessUnits?.length > 0;
@@ -20,17 +19,6 @@ export default function AppShell({ children }) {
     canUseCoordinatorRoute(currentUser, pathname) &&
     (!isWorkOrdersRoute || canUseWorkOrdersForBusinessUnit(currentUser, currentBusinessUnit))
   );
-
-  useEffect(() => {
-    if (!loaded || canUseRoute) return;
-    router.replace('/');
-    const fallback = window.setTimeout(() => {
-      if (window.location.pathname === pathname) {
-        window.location.replace('/');
-      }
-    }, 750);
-    return () => window.clearTimeout(fallback);
-  }, [canUseRoute, loaded, pathname, router]);
 
   if (isPublicJoinPage) {
     return <main className="public-main-content">{children}</main>;
@@ -47,11 +35,14 @@ export default function AppShell({ children }) {
             <NotificationBell />
           </div>
           {loaded && !canUseRoute ? (
-            <div className="empty-state">
-              {isWorkOrdersRoute
-                ? 'Work Orders are available from the AIT Signs division.'
-                : 'This workspace is limited to your assigned CRM queue.'}
-            </div>
+            <PageState
+              tone="denied"
+              title={isWorkOrdersRoute ? 'Switch to AIT Signs to use Work Orders' : 'This route is outside your queue'}
+              copy={isWorkOrdersRoute
+                ? 'Work Orders are only available inside the AIT Signs division. Change your division scope or return to your dashboard.'
+                : 'Your account can still use the CRM surfaces assigned to your role. Ask an administrator if this route should be added to your access.'}
+              actions={<PageStateAction href="/">Back to Dashboard</PageStateAction>}
+            />
           ) : children}
         </main>
       </div>

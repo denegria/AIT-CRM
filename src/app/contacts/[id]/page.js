@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
+import PageState, { PageStateAction } from '@/components/PageState';
 import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import { generateInvoicePDF, generateEstimatePDF, generateReceiptPDF, generateAitUsaReceiptPDF } from '@/lib/pdf';
 import s from './ContactDetail.module.css';
@@ -1414,7 +1415,14 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   };
 
   if (loaded && !contact) {
-    return <div className="empty-state">{singularLabel} not found</div>;
+    return (
+      <PageState
+        tone="not-found"
+        title={`${singularLabel} not found`}
+        copy={`This ${singularLabel.toLowerCase()} may be outside your current scope or no longer available.`}
+        actions={<PageStateAction href="/contacts">Back to Contacts</PageStateAction>}
+      />
+    );
   }
 
   const addNote = () => {
@@ -1484,7 +1492,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       });
   };
 
-  if (!loaded) return <div className="empty-state">Loading...</div>;
+  if (!loaded) {
+    return <PageState tone="loading" title={`Loading ${singularLabel.toLowerCase()}`} copy="Preparing profile, timeline, linked records, and communication history." />;
+  }
 
   const profileSidebar = (
     <div className={s.profileCard}>

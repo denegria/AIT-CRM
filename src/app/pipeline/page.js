@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowRight, ListFilter, RotateCcw, Search, UserPlus, UserRoundCheck, X } from 'lucide-react';
 import KanbanBoard from '@/components/KanbanBoard';
+import PageState from '@/components/PageState';
 import { useToast } from '@/components/Toast';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
 import { useCRM } from '@/lib/store';
@@ -601,7 +602,9 @@ export default function PipelinePage() {
     setBulkAssignMode(!bulkAssignMode);
   };
 
-  if (!loaded) return <div className="empty-state">Loading...</div>;
+  if (!loaded) {
+    return <PageState tone="loading" title="Loading pipeline" copy="Preparing lead stages and workflow filters for your current division." />;
+  }
 
   return (
     <div className="fade-in">

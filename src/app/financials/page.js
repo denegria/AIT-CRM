@@ -1,10 +1,10 @@
 'use client';
 import { useState, useMemo } from 'react';
-import Link from 'next/link';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
+import PageState, { PageStateAction } from '@/components/PageState';
 import { generateInvoicePDF, generateEstimatePDF, generateReceiptPDF, generateAitUsaReceiptPDF } from '@/lib/pdf';
 
 const types = ['Invoice', 'Estimate', 'Receipt'];
@@ -104,19 +104,27 @@ export default function FinancialsPage() {
   ];
   if (tab !== 'Receipt') columns.splice(4, 0, { key: 'dueDate', label: 'Due Date', sortable: true });
 
-  if (!loaded) return <div className="empty-state">Loading...</div>;
-  if (!access.canReadFinancials) return <div className="empty-state">Financials access is required.</div>;
+  if (!loaded) {
+    return <PageState tone="loading" title="Loading financials" copy="Preparing saved estimates, invoices, and receipts for your current scope." />;
+  }
+  if (!access.canReadFinancials) {
+    return (
+      <PageState
+        tone="denied"
+        title="Financials require finance access"
+        copy="Your account can keep working from contacts and tasks. Ask an administrator if you need the finance workspace."
+        actions={<PageStateAction href="/">Back to Dashboard</PageStateAction>}
+      />
+    );
+  }
   if (!canUseFinancialsWorkspace) {
     return (
-      <div className="empty-state">
-        <div className="empty-state-title">Financial actions start from contacts</div>
-        <p className="empty-state-copy">
-          This direct workspace is reserved for finance oversight. For your role, estimates, invoices, receipts, and payments live inside each contact/client record.
-        </p>
-        <div className="empty-state-actions">
-          <Link className="btn btn-primary" href="/contacts">Open Contacts</Link>
-        </div>
-      </div>
+      <PageState
+        tone="denied"
+        title="Financial actions start from contacts"
+        copy="This direct workspace is reserved for finance oversight. For your role, estimates, invoices, receipts, and payments live inside each contact/client record."
+        actions={<PageStateAction href="/contacts">Open Contacts</PageStateAction>}
+      />
     );
   }
 

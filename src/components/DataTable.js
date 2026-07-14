@@ -1,9 +1,10 @@
 'use client';
 import { useState, useMemo } from 'react';
 import ConfirmDialog from './ConfirmDialog';
+import PageState from './PageState';
 import s from './DataTable.module.css';
 
-import { Search, ArrowUp, ArrowDown, FileQuestion, Columns3 } from 'lucide-react';
+import { Search, ArrowUp, ArrowDown, Columns3 } from 'lucide-react';
 
 function badgeClass(val) {
   if (!val) return '';
@@ -183,10 +184,13 @@ export default function DataTable({
           search,
           clearSearch: () => setSearch(''),
         }) : (
-          <div className={s.empty}>
-            <FileQuestion size={32} style={{opacity:0.5, marginBottom: 8}} />
-            <div>No records found</div>
-          </div>
+          <PageState
+            className={s.empty}
+            size="compact"
+            tone={search.trim() ? 'not-found' : 'empty'}
+            title={search.trim() ? 'No records match this search' : 'No records yet'}
+            copy={search.trim() ? 'Try a different search term or clear the search field.' : 'Records will appear here once this workspace has data.'}
+          />
         )
       ) : (
         <>

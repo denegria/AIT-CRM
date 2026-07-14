@@ -3,6 +3,7 @@ import { useCallback, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ListTodo, UserPlus } from 'lucide-react';
 import { useCRM } from '@/lib/store';
+import PageState from '@/components/PageState';
 import KPICard from '@/components/KPICard';
 import TaskList from '@/components/TaskList';
 import Calendar from '@/components/Calendar';
@@ -297,7 +298,9 @@ export default function Dashboard() {
     toast('Task created');
   }, [access.canWriteCrm, addTask, currentBusinessUnit?.id, currentUser?.id, dataSource, toast]);
 
-  if (!loaded) return <div className="empty-state">Loading...</div>;
+  if (!loaded) {
+    return <PageState tone="loading" title="Loading dashboard" copy="Preparing your current tasks, contacts, and division summary." />;
+  }
 
   const today = new Date();
   const greeting = today.getHours() < 12 ? 'Good morning' : today.getHours() < 18 ? 'Good afternoon' : 'Good evening';

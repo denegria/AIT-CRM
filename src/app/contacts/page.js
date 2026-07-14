@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCRM } from '@/lib/store';
+import PageState from '@/components/PageState';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
 import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import { validateManualContactIdentity } from '@/lib/crm/contact-input';
@@ -834,7 +835,9 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const isAitUsaForm = workflowForBusinessUnit(formBusinessUnit).key === WORKFLOW_KEYS.AIT_USA;
   const formSchoolLocationOptions = schoolLocationOptions(form.address);
 
-  if (!loaded) return <div className="empty-state">Loading...</div>;
+  if (!loaded) {
+    return <PageState tone="loading" title={`Loading ${pluralLabel.toLowerCase()}`} copy="Preparing the contact directory for your current division scope." />;
+  }
 
   return (
     <div className="fade-in">

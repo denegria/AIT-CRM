@@ -12,6 +12,7 @@ import {
   Send,
   ShieldAlert,
 } from 'lucide-react';
+import PageState, { PageStateAction } from '@/components/PageState';
 import { useCRM } from '@/lib/store';
 
 const audienceSegments = [
@@ -287,14 +288,35 @@ export default function SmsCampaignsPage() {
     }
   }
 
-  if (!loaded || !access.canReadCrm) return <div className="empty-state">Loading...</div>;
-  if (dataSource !== 'postgres') return <div className="empty-state">SMS campaigns require the Postgres-backed app.</div>;
+  if (!loaded) {
+    return <PageState tone="loading" title="Loading SMS campaigns" copy="Preparing campaign drafts and compliance readiness for your current division." />;
+  }
+  if (!access.canReadCrm) {
+    return (
+      <PageState
+        tone="denied"
+        title="SMS campaigns require CRM access"
+        copy="Your account can keep using the CRM surfaces assigned to your role. Ask an administrator if campaign access is needed."
+        actions={<PageStateAction href="/">Back to Dashboard</PageStateAction>}
+      />
+    );
+  }
+  if (dataSource !== 'postgres') {
+    return <PageState tone="denied" title="SMS campaigns require Postgres" copy="Campaign management is only available in the Postgres-backed CRM runtime." />;
+  }
 
   const selectedBusinessUnit = accessibleBusinessUnits.find((unit) => unit.id === formBusinessUnitId);
   const canManageCampaigns = Boolean(access.canManageSmsCampaigns);
 
   if (!canManageCampaigns) {
-    return <div className="empty-state">SMS campaign management requires administrator access.</div>;
+    return (
+      <PageState
+        tone="denied"
+        title="SMS campaigns require administrator access"
+        copy="Campaign drafting and approval are restricted because they affect compliance and outbound messaging."
+        actions={<PageStateAction href="/">Back to Dashboard</PageStateAction>}
+      />
+    );
   }
 
   return (
