@@ -141,9 +141,11 @@ function dateRangeCondition({ scope, from, to, latestLead, workflowKey, now = ne
   if (!dateCondition) return undefined;
   if (scope !== 'current' || workflowKey !== WORKFLOW_KEYS.AIT_USA) return dateCondition;
   const status = normalizedSql(sql`coalesce(${latestLead.currentStage}, ${latestLead.status})`);
+  const leadStatus = normalizedSql(latestLead.status);
   return and(
     dateCondition,
     sql`${status} not in ('retargeting', 'dropped / quit', 'not interested', 'course completed')`,
+    sql`${leadStatus} not in ('retargeting', 'dropped / quit', 'not interested', 'course completed')`,
   );
 }
 
