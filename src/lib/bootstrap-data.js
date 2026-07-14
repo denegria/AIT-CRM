@@ -718,7 +718,6 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       db,
       visibleContactIds,
       signsContactIds,
-      paymentRows,
     });
 
     const paymentRowsWithContactLinks = attachPaymentSnapshotContactLinks(paymentRows, paymentLinkRows, {

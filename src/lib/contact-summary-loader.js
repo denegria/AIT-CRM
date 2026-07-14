@@ -5,7 +5,6 @@ import {
   eq,
   ilike,
   inArray,
-  isNotNull,
   not,
   or,
   sql,
@@ -17,6 +16,7 @@ import {
   conversationMessages as conversationMessagesTable,
   leadStatusHistory as leadStatusHistoryTable,
   notes as notesTable,
+  paymentSnapshots as paymentSnapshotsTable,
 } from '../db/schema.js';
 import { contactBootstrapSummarySelection } from './bootstrap-contract.js';
 
@@ -42,26 +42,6 @@ const SYSTEM_APPROVAL_PATTERN = '^mis-[0-9]+[[:space:]]+approved';
 function contactIdScope(table, contactIds = []) {
   if (!contactIds.length) return sql`false`;
   return inArray(table.contactId, contactIds);
-}
-
-function paymentSourceKeys(paymentRows = []) {
-  const keys = new Map();
-  for (const row of paymentRows) {
-    if (!row?.sourceRow) continue;
-    const sourceSheet = String(row.sourceSheet || '').trim().toLowerCase();
-    const key = `${sourceSheet}:${row.sourceRow}`;
-    keys.set(key, { sourceSheet, sourceRow: row.sourceRow });
-  }
-  return [...keys.values()];
-}
-
-function paymentSourceScope(table, paymentRows = []) {
-  const keys = paymentSourceKeys(paymentRows);
-  if (!keys.length) return sql`false`;
-  return or(...keys.map(({ sourceSheet, sourceRow }) => and(
-    sql`lower(trim(coalesce(${table.sourceSheet}, ''))) = ${sourceSheet}`,
-    eq(table.sourceRow, sourceRow),
-  )));
 }
 
 function selectionWithRowId(table, category) {
@@ -234,7 +214,6 @@ export async function loadContactBootstrapSummaryRows({
   db,
   visibleContactIds = [],
   signsContactIds = [],
-  paymentRows = [],
 }) {
   const signsIds = new Set(signsContactIds);
   const nonSignsContactIds = visibleContactIds.filter((contactId) => !signsIds.has(contactId));
@@ -280,11 +259,12 @@ export async function loadContactBootstrapSummaryRows({
             sourceRow: activityEventsTable.sourceRow,
           })
           .from(activityEventsTable)
-          .where(and(
-            contactIdScope(activityEventsTable, visibleContactIds),
-            isNotNull(activityEventsTable.sourceRow),
-            paymentSourceScope(activityEventsTable, paymentRows),
+          .innerJoin(paymentSnapshotsTable, and(
+            eq(paymentSnapshotsTable.organizationId, activityEventsTable.organizationId),
+            eq(paymentSnapshotsTable.sourceRow, activityEventsTable.sourceRow),
+            sql`lower(trim(coalesce(${paymentSnapshotsTable.sourceSheet}, ''))) = lower(trim(coalesce(${activityEventsTable.sourceSheet}, '')))`,
           ))
+          .where(contactIdScope(activityEventsTable, visibleContactIds))
       : Promise.resolve([]),
   ]);
 
