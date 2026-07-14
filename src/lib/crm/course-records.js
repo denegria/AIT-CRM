@@ -93,6 +93,19 @@ export function courseRecordPayloadFromRow(row = {}) {
   };
 }
 
+export function courseRecordSummaryPayloadFromRow(row = {}) {
+  return {
+    courseName: cleanText(row.courseName),
+    courseLocation: courseLocationForPayload(row.courseLocation),
+    status: normalizeCourseRecordStatus(row.status),
+    startDate: dateForPayload(row.startDate),
+    endDate: dateForPayload(row.endDate),
+    outcomeReason: cleanText(row.outcomeReason),
+    createdAt: row.createdAt?.toISOString?.() || row.createdAt || '',
+    updatedAt: row.updatedAt?.toISOString?.() || row.updatedAt || '',
+  };
+}
+
 export function courseRecordInputFromPayload(payload = {}, { allowClear = false } = {}) {
   const source = payload.courseRecord && typeof payload.courseRecord === 'object'
     ? payload.courseRecord

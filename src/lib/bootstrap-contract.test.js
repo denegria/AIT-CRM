@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  CONTACT_BOOTSTRAP_SUMMARY_FIELDS,
   DEFERRED_BOOTSTRAP_LOADERS,
+  deferBootstrapContactDetails,
   deferBootstrapTasks,
   hasDeferredBootstrapLoader,
+  projectContactBootstrapSummaryRows,
 } from './bootstrap-contract.js';
 import { loadDeferredTasks, toBootstrapTasks } from './tasks/bootstrap.js';
 
@@ -142,4 +145,204 @@ test('deferred task loader uses the existing scoped route and surfaces access er
     }),
     /Insufficient CRM read access/,
   );
+});
+
+function deterministicContactDetailFixture() {
+  const contacts = Array.from({ length: 60 }, (_, contactIndex) => {
+    const notes = Array.from({ length: 4 }, (_, noteIndex) => ({
+      id: `note-${contactIndex}-${noteIndex}`,
+      text: `Private note ${contactIndex}-${noteIndex}: ${'detail '.repeat(18)}`,
+      createdAt: `2026-06-${String(noteIndex + 1).padStart(2, '0')}T12:00:00.000Z`,
+    }));
+    const timeline = Array.from({ length: 18 }, (_, timelineIndex) => ({
+      id: `event-${contactIndex}-${timelineIndex}`,
+      type: timelineIndex % 2 ? 'activity' : 'note',
+      title: `Timeline entry ${timelineIndex}`,
+      text: `Contact ${contactIndex} detail ${timelineIndex}: ${'timeline body '.repeat(22)}`,
+      timestamp: `2026-06-${String((timelineIndex % 28) + 1).padStart(2, '0')}T12:00:00.000Z`,
+      presentation: { category: 'activity', provenance: { rawText: 'source detail '.repeat(12) } },
+    }));
+    const courseRecords = [{
+      courseName: `Course ${contactIndex % 5}`,
+      status: 'active',
+      startDate: '2026-06-01',
+      endDate: '',
+      notes: `Instructor-only course note ${'detail '.repeat(20)}`,
+    }];
+    return {
+      id: `contact-${contactIndex}`,
+      name: `Fixture Contact ${contactIndex}`,
+      businessUnitId: `bu-${contactIndex % 2}`,
+      status: contactIndex % 2 ? 'Follow Up' : 'Enrolled',
+      assignedTo: `user-${contactIndex % 6}`,
+      lastTouch: '2026-06-20',
+      linkedPeopleCount: 2,
+      linkedPeoplePreview: 'Primary Person, Secondary Person',
+      courseRecords,
+      courseSummary: { records: courseRecords },
+      notes,
+      timeline,
+    };
+  });
+
+  const rowsByCategory = {
+    notes: Array.from({ length: 240 }, (_, index) => ({
+      id: `note-${index}`,
+      organizationId: 'org-1',
+      businessUnitId: `bu-${index % 2}`,
+      contactId: `contact-${index % contacts.length}`,
+      leadId: `lead-${index % contacts.length}`,
+      estimateId: null,
+      workOrderId: null,
+      body: `Note summary source ${index}: ${'body '.repeat(14)}`,
+      authorUserId: `user-${index % 6}`,
+      createdAt: '2026-06-20T12:00:00.000Z',
+      updatedAt: '2026-06-20T12:00:00.000Z',
+    })),
+    activityEvents: Array.from({ length: 480 }, (_, index) => ({
+      id: `activity-${index}`,
+      organizationId: 'org-1',
+      businessUnitId: `bu-${index % 2}`,
+      contactId: `contact-${index % contacts.length}`,
+      leadId: `lead-${index % contacts.length}`,
+      estimateId: null,
+      workOrderId: null,
+      eventType: index % 2 ? 'ait_usa.follow_up' : 'website_lead_captured',
+      message: `Activity ${index}: ${'summary text '.repeat(10)}`,
+      metadataJson: { rawPayload: 'detail metadata '.repeat(24), sequence: index },
+      actorUserId: `user-${index % 6}`,
+      sourceSheet: 'Fixture',
+      sourceRow: index + 1,
+      occurredAt: '2026-06-20T12:00:00.000Z',
+      createdAt: '2026-06-20T12:00:00.000Z',
+    })),
+    conversationMessages: Array.from({ length: 300 }, (_, index) => ({
+      id: `message-${index}`,
+      conversationId: `conversation-${index % 30}`,
+      organizationId: 'org-1',
+      businessUnitId: `bu-${index % 2}`,
+      contactId: `contact-${index % contacts.length}`,
+      leadId: `lead-${index % contacts.length}`,
+      channel: 'sms',
+      provider: 'fixture',
+      direction: 'inbound',
+      deliveryStatus: 'received',
+      providerAccountId: 'provider-account',
+      providerThreadId: `thread-${index}`,
+      externalMessageId: `external-${index}`,
+      idempotencyKey: `key-${index}`,
+      senderIdentity: '+10000000000',
+      recipientIdentity: '+19999999999',
+      textBody: `Message ${index}: ${'conversation text '.repeat(12)}`,
+      rawPayloadJson: { providerDetail: 'raw payload '.repeat(30) },
+      occurredAt: '2026-06-20T12:00:00.000Z',
+      createdAt: '2026-06-20T12:00:00.000Z',
+      updatedAt: '2026-06-20T12:00:00.000Z',
+    })),
+    contactPeople: Array.from({ length: 180 }, (_, index) => ({
+      id: `person-${index}`,
+      organizationId: 'org-1',
+      businessUnitId: `bu-${index % 2}`,
+      contactId: `contact-${index % contacts.length}`,
+      name: `Linked Person ${index}`,
+      role: 'Stakeholder',
+      phone: '+10000000000',
+      email: `person-${index}@example.com`,
+      notes: `Relationship detail ${'private '.repeat(16)}`,
+      isPrimary: index % 3 === 0,
+      metadataJson: { source: 'fixture' },
+    })),
+    courseRecords: Array.from({ length: 120 }, (_, index) => ({
+      id: `course-${index}`,
+      organizationId: 'org-1',
+      businessUnitId: `bu-${index % 2}`,
+      contactId: `contact-${index % contacts.length}`,
+      leadId: `lead-${index % contacts.length}`,
+      courseName: `Course ${index % 5}`,
+      courseLocation: 'Main Campus',
+      status: index % 3 ? 'active' : 'completed',
+      startDate: '2026-06-01',
+      endDate: index % 3 ? null : '2026-06-20',
+      outcomeReason: index % 3 ? null : 'Completed',
+      notes: `Course detail ${'private '.repeat(20)}`,
+      metadataJson: { source: 'fixture', raw: 'course metadata '.repeat(18) },
+      createdAt: '2026-06-01T12:00:00.000Z',
+      updatedAt: '2026-06-20T12:00:00.000Z',
+    })),
+    leadStatusHistory: Array.from({ length: 180 }, (_, index) => ({
+      id: `status-${index}`,
+      organizationId: 'org-1',
+      businessUnitId: `bu-${index % 2}`,
+      contactId: `contact-${index % contacts.length}`,
+      leadId: `lead-${index % contacts.length}`,
+      fromStatus: 'Follow Up',
+      toStatus: index % 2 ? 'Enrolled' : 'Dropped / Quit',
+      actorUserId: `user-${index % 6}`,
+      reason: `Status detail ${'reason '.repeat(15)}`,
+      metadataJson: { source: 'fixture', audit: 'status metadata '.repeat(18) },
+      occurredAt: '2026-06-20T12:00:00.000Z',
+      createdAt: '2026-06-20T12:00:00.000Z',
+    })),
+  };
+
+  return { contacts, rowsByCategory };
+}
+
+test('contact bootstrap keeps list summaries but defers detail collections to scoped loaders', () => {
+  const { contacts, rowsByCategory } = deterministicContactDetailFixture();
+  const legacyBootstrap = { dataSource: 'postgres', contacts, deferredLoaders: [] };
+  const projectedBootstrap = deferBootstrapContactDetails(legacyBootstrap);
+  const projectedRows = projectContactBootstrapSummaryRows(rowsByCategory);
+
+  const queryCategories = Object.fromEntries(Object.keys(CONTACT_BOOTSTRAP_SUMMARY_FIELDS).map((category) => {
+    const legacyRows = rowsByCategory[category];
+    const summaryRows = projectedRows[category];
+    return [category, {
+      legacy: { bytes: serializedBytes(legacyRows), rows: legacyRows.length },
+      projected: { bytes: serializedBytes(summaryRows), rows: summaryRows.length },
+    }];
+  }));
+  const legacyBytes = serializedBytes(legacyBootstrap);
+  const projectedBytes = serializedBytes(projectedBootstrap);
+  const reductionBytes = legacyBytes - projectedBytes;
+  const reductionPercent = Number(((reductionBytes / legacyBytes) * 100).toFixed(1));
+
+  console.info(JSON.stringify({
+    measurement: 'MIS-312 deterministic contact list/detail boundary',
+    contactPayload: {
+      legacy: {
+        bytes: legacyBytes,
+        contactRows: contacts.length,
+        noteRows: contacts.reduce((sum, contact) => sum + contact.notes.length, 0),
+        timelineRows: contacts.reduce((sum, contact) => sum + contact.timeline.length, 0),
+      },
+      projected: {
+        bytes: projectedBytes,
+        contactRows: projectedBootstrap.contacts.length,
+        noteRows: projectedBootstrap.contacts.reduce((sum, contact) => sum + (contact.notes?.length || 0), 0),
+        timelineRows: projectedBootstrap.contacts.reduce((sum, contact) => sum + (contact.timeline?.length || 0), 0),
+      },
+      reduction: { bytes: reductionBytes, percent: reductionPercent },
+    },
+    queryCategories,
+  }));
+
+  assert.equal(projectedBootstrap.contacts.length, contacts.length);
+  assert.equal(projectedBootstrap.contacts[0].name, contacts[0].name);
+  assert.equal(projectedBootstrap.contacts[0].status, contacts[0].status);
+  assert.equal(projectedBootstrap.contacts[0].linkedPeopleCount, contacts[0].linkedPeopleCount);
+  assert.equal(projectedBootstrap.contacts[0].courseRecords.length, contacts[0].courseRecords.length);
+  assert.equal(Object.hasOwn(projectedBootstrap.contacts[0].courseRecords[0], 'notes'), false);
+  assert.equal(Object.hasOwn(projectedBootstrap.contacts[0], 'notes'), false);
+  assert.equal(Object.hasOwn(projectedBootstrap.contacts[0], 'timeline'), false);
+  assert.equal(Object.hasOwn(projectedBootstrap.contacts[0], 'courseSummary'), false);
+  assert.equal(hasDeferredBootstrapLoader(projectedBootstrap, DEFERRED_BOOTSTRAP_LOADERS.CONTACT_DETAILS), true);
+  assert.ok(reductionPercent > 80, `expected contact detail deferral to reduce fixture contact payload by >80%, got ${reductionPercent}%`);
+  for (const category of Object.keys(queryCategories)) {
+    assert.equal(queryCategories[category].legacy.rows, queryCategories[category].projected.rows);
+    assert.ok(
+      queryCategories[category].projected.bytes < queryCategories[category].legacy.bytes,
+      `expected ${category} summary projection to reduce serialized query bytes`,
+    );
+  }
 });

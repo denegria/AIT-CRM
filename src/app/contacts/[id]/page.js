@@ -26,6 +26,7 @@ import {
   deriveCourseSummary,
   isTerminalCourseRecordStatus,
 } from '@/lib/crm/course-records.js';
+import { appendContactNote, loadContactTimeline } from '@/lib/contacts/detail-loader.js';
 
 const SNAPSHOT_ICONS = {
   estimate: BriefcaseBusiness,
@@ -618,7 +619,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     : hasMatchingServerTimeline && serverTimeline.error
       ? 'error'
       : 'idle';
-  const timelineSource = hasMatchingServerTimeline && serverTimeline.items ? serverTimeline.items : fallbackTimeline;
+  const timelineSource = useMemo(() => (
+    dataSource === 'postgres'
+      ? (hasMatchingServerTimeline && serverTimeline.items ? serverTimeline.items : [])
+      : fallbackTimeline
+  ), [dataSource, fallbackTimeline, hasMatchingServerTimeline, serverTimeline.items]);
   const cleanupAudits = useMemo(() => timelineSource.map(timelineCleanupAudit).filter(Boolean).slice(0, 3), [timelineSource]);
   const timelineCounts = useMemo(() => timelineSource.reduce((counts, item) => {
     const category = timelineFilterCategory(item);
@@ -700,15 +705,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     let cancelled = false;
     const requestContactId = contact.id;
     const requestReloadKey = timelineReloadKey;
-    fetch(`/api/contacts/${contact.id}/timeline`, { cache: 'no-store' })
-      .then(async (response) => {
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.error || 'Timeline load failed.');
+    loadContactTimeline(contact.id)
+      .then((items) => {
         if (!cancelled) {
           setServerTimeline({
             contactId: requestContactId,
             reloadKey: requestReloadKey,
-            items: Array.isArray(payload.timeline) ? payload.timeline : [],
+            items,
             error: false,
           });
         }
@@ -1433,8 +1436,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       createdAt: new Date().toISOString(),
       id: crypto.randomUUID()
     };
-    const updatedNotes = Array.isArray(contact.notes) ? [...contact.notes, newNote] : [newNote];
-    updateContact(contact.id, { notes: updatedNotes })
+    const save = dataSource === 'postgres'
+      ? appendContactNote(contact.id, newNote.text)
+      : updateContact(contact.id, {
+          notes: Array.isArray(contact.notes) ? [...contact.notes, newNote] : [newNote],
+        });
+    save
       .then(() => {
         setNoteInput('');
         setTimelineReloadKey((key) => key + 1);
@@ -1714,10 +1721,26 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     ))}
                   </div>
                   {timelineStatus === 'loading' && <div className={s.timelineStatus}>Syncing</div>}
-                  {timelineStatus === 'error' && <div className={s.timelineStatus}>Using cached timeline</div>}
                 </div>
 
-                <div className={s.timeline}>
+                {timelineStatus === 'loading' && (
+                  <PageState
+                    tone="loading"
+                    size="compact"
+                    title="Loading timeline"
+                    copy="Fetching activity for this contact."
+                  />
+                )}
+                {timelineStatus === 'error' && (
+                  <PageState
+                    tone="error"
+                    size="compact"
+                    title="Timeline unavailable"
+                    copy="Activity could not be loaded for this contact."
+                    actions={<PageStateAction onClick={() => setTimelineReloadKey((key) => key + 1)}>Try Again</PageStateAction>}
+                  />
+                )}
+                {timelineStatus === 'idle' && <div className={s.timeline}>
                   {timeline.map((item) => {
                     const dateParts = timelineDateParts(item);
                     const provenance = item.presentation?.provenance;
@@ -1818,7 +1841,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   {timeline.length === 0 && (
                     <div className={s.timelineEmpty}>{timelineEmptyText(renderedTimelineFilter, detailView.timelineFilters)}</div>
                   )}
-                </div>
+                </div>}
 
                 <div className={s.noteBox}>
                   <textarea

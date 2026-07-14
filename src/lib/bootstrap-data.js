@@ -37,15 +37,20 @@ import {
 } from './crm/access.js';
 import { toBusinessUnitPayload } from './crm/payloads.js';
 import { isPipelineEligibleContact, workflowFromLead } from './sales-workflow';
-import { buildContactTimeline, filterTimelineRowsForBusinessUnit } from './timeline/service.js';
+import { filterTimelineRowsForBusinessUnit } from './timeline/service.js';
 import { latestExcelDateFromText, summarizeContactTouch } from './contact-touch.js';
 import { buildAitUsaEnrollmentSignals } from './ait-usa-enrollment-signals.js';
 import { attachPaymentSnapshotContactLinks } from './financial-linkage.js';
 import { filterAssignableEmployees } from './crm/assignable-employees.js';
-import { courseRecordPayloadFromRow, deriveCourseSummary } from './crm/course-records.js';
+import { courseRecordSummaryPayloadFromRow, deriveCourseSummary } from './crm/course-records.js';
 import { getServerAppVersion } from './app-version.js';
 import { canonicalRoleKeys } from './roles.js';
-import { deferBootstrapTasks } from './bootstrap-contract.js';
+import {
+  contactBootstrapSummarySelection,
+  deferBootstrapContactDetails,
+  deferBootstrapTasks,
+  toContactListPayload,
+} from './bootstrap-contract.js';
 
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const toBootstrapBusinessUnitPayload = (row) => toBusinessUnitPayload(row, { emptyColor: null });
@@ -242,7 +247,7 @@ function mapContacts(
     const contactPeople = (peopleByContactId.get(contact.id) || [])
       .slice()
       .sort((left, right) => Number(right.isPrimary) - Number(left.isPrimary) || clean(left.name).localeCompare(clean(right.name)));
-    const courseRecords = (courseRecordsByContactId.get(contact.id) || []).map(courseRecordPayloadFromRow);
+    const courseRecords = (courseRecordsByContactId.get(contact.id) || []).map(courseRecordSummaryPayloadFromRow);
     const courseSummary = deriveCourseSummary(courseRecords);
     const workflow = workflowFromLead(lead, {
       businessUnit,
@@ -310,31 +315,13 @@ function mapContacts(
       lastTouch: touchSummary.lastTouch,
       lastFollowUpTouch: touchSummary.lastFollowUpTouch,
     });
-    const noteItems = contactNotes.map((note) => ({
-      id: note.id,
-      text: note.body,
-      createdAt: note.createdAt?.toISOString?.() || '',
-      timestamp: note.createdAt?.toISOString?.() || '',
-      date: toIsoDate(note.createdAt),
-    }));
-    const eventItems = contactEvents.map((event) => ({
-      id: event.id,
-      text: event.message || event.eventType,
-      date: toIsoDate(event.occurredAt || event.createdAt),
-    }));
-    const timelineItems = buildContactTimeline({
-      notes: contactNotes,
-      activityEvents: contactEvents,
-      leads: lead ? [lead] : [],
-      businessUnits: businessUnitRows,
-    });
     const enrollmentSignals = buildAitUsaEnrollmentSignals({
       contact,
       lead,
       workflow,
     });
 
-    return {
+    return toContactListPayload({
       id: contact.id,
       name: contact.name,
       companyName: contact.companyName || '',
@@ -371,7 +358,6 @@ function mapContacts(
         courseOutcome: courseSummary.latestEndedCourse?.outcomeReason || lead?.courseOutcome || '',
       },
       courseRecords: courseSummary.records,
-      courseSummary,
       enrollmentStatusChangedAt: latestStatusTransitionDate(contactLeadStatusHistory, 'Enrolled'),
       droppedStatusChangedAt: latestStatusTransitionDate(contactLeadStatusHistory, 'Dropped / Quit'),
       sourceActivityDate,
@@ -400,9 +386,7 @@ function mapContacts(
       linkedPeopleCount: contactPeople.length,
       linkedPeoplePreview: contactPeople.slice(0, 3).map((person) => person.name).filter(Boolean).join(', '),
       primaryLinkedPerson: contactPeople.find((person) => person.isPrimary)?.name || contactPeople[0]?.name || '',
-      notes: noteItems.length ? noteItems : eventItems,
-      timeline: timelineItems,
-    };
+    });
   });
 }
 
@@ -693,12 +677,19 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       db.select().from(estimatesTable).where(scopedBusinessUnitWhere(estimatesTable, session)).orderBy(desc(estimatesTable.createdAt)),
       db.select().from(financialDocumentsTable).where(scopedBusinessUnitWhere(financialDocumentsTable, session)).orderBy(desc(financialDocumentsTable.createdAt)),
       db.select().from(paymentSnapshotsTable).where(scopedBusinessUnitWhere(paymentSnapshotsTable, session)).orderBy(desc(paymentSnapshotsTable.createdAt)),
-      db.select().from(notesTable).where(scopedOrgWhere(notesTable, session)).orderBy(desc(notesTable.createdAt)),
-      db.select().from(activityEventsTable).where(scopedOrgWhere(activityEventsTable, session)).orderBy(desc(activityEventsTable.createdAt)),
-      db.select().from(conversationMessagesTable).where(scopedOrgWhere(conversationMessagesTable, session)).orderBy(desc(conversationMessagesTable.occurredAt)),
-      db.select().from(contactPeopleTable).where(scopedOrgWhere(contactPeopleTable, session)).orderBy(desc(contactPeopleTable.isPrimary), asc(contactPeopleTable.name)),
-      db.select().from(contactCourseRecordsTable).where(scopedBusinessUnitWhere(contactCourseRecordsTable, session)).orderBy(desc(contactCourseRecordsTable.createdAt)),
-      db.select().from(leadStatusHistoryTable).where(scopedBusinessUnitWhere(leadStatusHistoryTable, session)).orderBy(desc(leadStatusHistoryTable.occurredAt), desc(leadStatusHistoryTable.createdAt)),
+      db.select(contactBootstrapSummarySelection(notesTable, 'notes')).from(notesTable).where(scopedOrgWhere(notesTable, session)).orderBy(desc(notesTable.createdAt)),
+      db.select(contactBootstrapSummarySelection(activityEventsTable, 'activityEvents')).from(activityEventsTable).where(scopedOrgWhere(activityEventsTable, session)).orderBy(desc(activityEventsTable.createdAt)),
+      db.select(contactBootstrapSummarySelection(conversationMessagesTable, 'conversationMessages')).from(conversationMessagesTable).where(scopedOrgWhere(conversationMessagesTable, session)).orderBy(desc(conversationMessagesTable.occurredAt)),
+      db.select(contactBootstrapSummarySelection(contactPeopleTable, 'contactPeople')).from(contactPeopleTable).where(scopedOrgWhere(contactPeopleTable, session)).orderBy(desc(contactPeopleTable.isPrimary), asc(contactPeopleTable.name)),
+      db.select(contactBootstrapSummarySelection(contactCourseRecordsTable, 'courseRecords')).from(contactCourseRecordsTable).where(scopedBusinessUnitWhere(contactCourseRecordsTable, session)).orderBy(desc(contactCourseRecordsTable.createdAt)),
+      db
+        .select(contactBootstrapSummarySelection(leadStatusHistoryTable, 'leadStatusHistory'))
+        .from(leadStatusHistoryTable)
+        .where(and(
+          scopedBusinessUnitWhere(leadStatusHistoryTable, session),
+          inArray(leadStatusHistoryTable.toStatus, ['Enrolled', 'Dropped / Quit']),
+        ))
+        .orderBy(desc(leadStatusHistoryTable.occurredAt), desc(leadStatusHistoryTable.createdAt)),
       db.select().from(usersTable).where(and(
         eq(usersTable.organizationId, session.user.organizationId),
         eq(usersTable.isActive, true),
@@ -722,12 +713,12 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
     const visibleContactRows = filterContactsForSession(contactRows, accessLeadRows || leadRows, session);
 
     if (!visibleContactRows.length && !workOrderRows.length) {
-      return deferBootstrapTasks({
+      return deferBootstrapContactDetails(deferBootstrapTasks({
         ...emptyDbData(businessUnitRows, importStaging),
         currentUser: session.user,
         access,
         employees,
-      });
+      }));
     }
 
     const paymentRowsWithContactLinks = attachPaymentSnapshotContactLinks(paymentRows, eventRows, {
@@ -757,7 +748,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
     ]);
     const workOrders = mapWorkOrders(workOrderRows, contactLookup);
     const financials = mapFinancials(estimateRows, paymentRowsWithContactLinks, contactLookup, financialDocumentRows);
-    return deferBootstrapTasks({
+    return deferBootstrapContactDetails(deferBootstrapTasks({
       ...seedData,
       appVersion,
       dataSource: 'postgres',
@@ -771,14 +762,14 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       workOrders,
       financials,
       importStaging,
-    });
+    }));
   } catch (error) {
     console.warn('Falling back to empty CRM data because Postgres bootstrap failed:', error.message);
-    return {
+    return deferBootstrapContactDetails({
       ...emptyDbData(),
       appVersion,
       currentUser: session.user,
       access: sessionAccess(session),
-    };
+    });
   }
 });
