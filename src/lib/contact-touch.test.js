@@ -209,3 +209,26 @@ test('summarizeContactTouch does not use import timestamps as AIT Signs business
   assert.equal(summary.lastTouch, '2025-10-16');
   assert.equal(summary.latestCommentDate, '2025-10-16');
 });
+
+test('summarizeContactTouch deterministically resolves equal business timestamps', () => {
+  const summary = summarizeContactTouch({
+    contact: {
+      updatedAt: new Date('2026-06-02T15:00:00.000Z'),
+      createdAt: new Date('2026-06-01T15:00:00.000Z'),
+    },
+    businessUnit: { name: 'AIT Signs' },
+    referenceTime: new Date('2026-06-02T20:00:00.000Z').getTime(),
+    activityEvents: [{
+      eventType: 'import_promoted_work_order',
+      message: 'Older import row | 45931.0',
+      createdAt: new Date('2026-05-30T12:59:18.110Z'),
+    }, {
+      eventType: 'import_promoted_work_order',
+      message: 'Newer import row | 45931.0',
+      createdAt: new Date('2026-05-30T13:01:09.012Z'),
+    }],
+  });
+
+  assert.equal(summary.lastTouchText, 'Newer import row · 45931.0');
+  assert.equal(summary.latestComment, 'Newer import row · 45931.0');
+});

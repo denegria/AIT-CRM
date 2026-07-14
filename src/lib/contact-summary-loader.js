@@ -146,12 +146,12 @@ async function latestNoteCandidates(db, contactIds) {
       .selectDistinctOn([notesTable.contactId], selection)
       .from(notesTable)
       .where(baseWhere)
-      .orderBy(notesTable.contactId, desc(notesTable.createdAt)),
+      .orderBy(notesTable.contactId, desc(notesTable.createdAt), desc(notesTable.body)),
     db
       .selectDistinctOn([notesTable.contactId], selection)
       .from(notesTable)
       .where(and(baseWhere, containsFollowUpText(notesTable.body)))
-      .orderBy(notesTable.contactId, desc(notesTable.createdAt)),
+      .orderBy(notesTable.contactId, desc(notesTable.createdAt), desc(notesTable.body)),
   ]);
 
   return mergeContactSummaryCandidateRows(latestRows, followUpRows);
@@ -172,17 +172,17 @@ async function latestActivityCandidates(db, contactIds) {
       .selectDistinctOn([activityEventsTable.contactId], selection)
       .from(activityEventsTable)
       .where(baseWhere)
-      .orderBy(activityEventsTable.contactId, desc(eventTime), desc(activityEventsTable.createdAt)),
+      .orderBy(activityEventsTable.contactId, desc(eventTime), desc(activityEventsTable.createdAt), desc(activityEventsTable.message)),
     db
       .selectDistinctOn([activityEventsTable.contactId], selection)
       .from(activityEventsTable)
       .where(and(baseWhere, isTouchEventType(activityEventsTable.eventType)))
-      .orderBy(activityEventsTable.contactId, desc(eventTime), desc(activityEventsTable.createdAt)),
+      .orderBy(activityEventsTable.contactId, desc(eventTime), desc(activityEventsTable.createdAt), desc(activityEventsTable.message)),
     db
       .selectDistinctOn([activityEventsTable.contactId], selection)
       .from(activityEventsTable)
       .where(and(baseWhere, isFollowUpEvent(activityEventsTable)))
-      .orderBy(activityEventsTable.contactId, desc(eventTime), desc(activityEventsTable.createdAt)),
+      .orderBy(activityEventsTable.contactId, desc(eventTime), desc(activityEventsTable.createdAt), desc(activityEventsTable.message)),
     db
       .selectDistinctOn([activityEventsTable.contactId, activityEventsTable.leadId], selection)
       .from(activityEventsTable)
@@ -216,6 +216,7 @@ async function latestConversationCandidates(db, contactIds) {
       conversationMessagesTable.contactId,
       desc(conversationMessagesTable.occurredAt),
       desc(conversationMessagesTable.createdAt),
+      desc(conversationMessagesTable.textBody),
     );
   return rows.map(withoutRowId);
 }
