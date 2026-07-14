@@ -157,7 +157,7 @@ export default function TimeframeFilterPanel({
               <strong>{option.label}</strong>
               <small>{option.detail}</small>
             </span>
-            <span className="timeframe-filter-option-count">{option.count}</span>
+            {option.count != null && <span className="timeframe-filter-option-count">{option.count}</span>}
           </button>
         ))}
       </div>
@@ -225,7 +225,9 @@ export default function TimeframeFilterPanel({
         </div>
 
         <div className="timeframe-calendar-hint">
-          {isCustom ? `${counts.custom} matching range` : 'Choose dates below to switch to a custom range'}
+          {isCustom && counts.custom != null
+            ? `${counts.custom} matching range`
+            : 'Choose dates below to switch to a custom range'}
         </div>
       </div>
     </div>

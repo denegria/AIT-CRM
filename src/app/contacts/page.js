@@ -9,6 +9,7 @@ import { validateManualContactIdentity } from '@/lib/crm/contact-input';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
 import {
   buildContactDirectoryFacetGroups,
+  CONTACT_DIRECTORY_FACET_GROUPS,
   contactDirectorySignalLabels,
   filterContactsByDirectoryFacet,
 } from '@/lib/contact-directory-facets';
@@ -46,7 +47,7 @@ import {
   lifecycleBucket,
 } from '@/lib/contact-directory-view';
 import { workflowForBusinessUnit } from '@/lib/sales-workflow';
-import { schoolLocationForContact, schoolLocationOptions } from '@/lib/school-locations';
+import { AIT_USA_SCHOOL_LOCATIONS, schoolLocationForContact, schoolLocationOptions } from '@/lib/school-locations';
 import { useToast } from '@/components/Toast';
 import { useDeferredContactDirectory } from '@/lib/contacts/directory-loader.js';
 import DataTable from '@/components/DataTable';
@@ -78,6 +79,13 @@ const CONTACT_FILTER_CHIP_LABELS = {
   location: 'Location',
   facet: 'Segments',
 };
+
+const REMOTE_SOURCE_FILTER_OPTIONS = [
+  'Website Form Submission',
+  'Workbook Import',
+  'Manual / Unknown',
+  'Other Source',
+].map((value) => ({ value, label: value, count: null }));
 
 const CONTACT_SEGMENT_GROUPS = [
   {
@@ -197,7 +205,7 @@ function SegmentTile({ facet, active, onClick }) {
         <strong>{meta.label || facet.label}</strong>
         <small>{meta.description || 'Signal-based contact segment'}</small>
       </span>
-      <span className="contacts-segment-count">{facet.count}</span>
+      {facet.count != null && <span className="contacts-segment-count">{facet.count}</span>}
       <span className="contacts-segment-check" aria-hidden="true" />
     </button>
   );
@@ -599,24 +607,24 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       leadDateTo,
     }));
   }, [directoryRows, effectiveLeadDateScope, leadDateFrom, leadDateTo]);
-  const allDateLeadCount = directoryRows.length;
+  const allDateLeadCount = contactDirectoryIsDeferred ? null : directoryRows.length;
   const currentLeadCount = useMemo(
-    () => directoryRows.filter((contact) => contactMatchesLeadDateScope(contact)).length,
-    [directoryRows],
+    () => contactDirectoryIsDeferred ? null : directoryRows.filter((contact) => contactMatchesLeadDateScope(contact)).length,
+    [contactDirectoryIsDeferred, directoryRows],
   );
   const quarterLeadCount = useMemo(
-    () => directoryRows.filter((contact) => contactMatchesLeadDateScope(contact, {
+    () => contactDirectoryIsDeferred ? null : directoryRows.filter((contact) => contactMatchesLeadDateScope(contact, {
       leadDateScope: CONTACT_LEAD_DATE_SCOPE_QUARTER,
     })).length,
-    [directoryRows],
+    [contactDirectoryIsDeferred, directoryRows],
   );
   const customLeadCount = useMemo(
-    () => directoryRows.filter((contact) => contactMatchesLeadDateScope(contact, {
+    () => contactDirectoryIsDeferred ? null : directoryRows.filter((contact) => contactMatchesLeadDateScope(contact, {
       leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM,
       leadDateFrom,
       leadDateTo,
     })).length,
-    [directoryRows, leadDateFrom, leadDateTo],
+    [contactDirectoryIsDeferred, directoryRows, leadDateFrom, leadDateTo],
   );
   const statusOwnerFilteredContacts = useMemo(() => dateScopedRows.filter((contact) => (
     contactMatchesStatusOwnerCourse(contact, {
@@ -626,15 +634,17 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     })
   )), [dateScopedRows, effectiveOwnerFilter, statusFilter]);
   const sourceFilterOptions = useMemo(
-    () => buildSourceFilterOptions(statusOwnerFilteredContacts),
-    [statusOwnerFilteredContacts],
+    () => contactDirectoryIsDeferred ? REMOTE_SOURCE_FILTER_OPTIONS : buildSourceFilterOptions(statusOwnerFilteredContacts),
+    [contactDirectoryIsDeferred, statusOwnerFilteredContacts],
   );
   const sourceFilteredContacts = useMemo(() => statusOwnerFilteredContacts.filter((contact) => (
     contactMatchesSource(contact, { sourceFilter })
   )), [sourceFilter, statusOwnerFilteredContacts]);
   const courseFilterOptions = useMemo(
-    () => buildCourseFilterOptions(sourceFilteredContacts),
-    [sourceFilteredContacts],
+    () => contactDirectoryIsDeferred
+      ? deferredDirectory.filterMetadata.courseOptions
+      : buildCourseFilterOptions(sourceFilteredContacts),
+    [contactDirectoryIsDeferred, deferredDirectory.filterMetadata.courseOptions, sourceFilteredContacts],
   );
   const courseFilteredContacts = useMemo(() => sourceFilteredContacts.filter((contact) => (
     contactMatchesStatusOwnerCourse(contact, {
@@ -644,15 +654,30 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     })
   )), [courseFilter, sourceFilteredContacts]);
   const locationFilterOptions = useMemo(
-    () => isAitUsaDirectory ? buildSchoolLocationFilterOptions(courseFilteredContacts) : [],
-    [courseFilteredContacts, isAitUsaDirectory],
+    () => isAitUsaDirectory
+      ? (contactDirectoryIsDeferred
+        ? AIT_USA_SCHOOL_LOCATIONS.map((value) => ({ value, label: value, count: null }))
+        : buildSchoolLocationFilterOptions(courseFilteredContacts))
+      : [],
+    [contactDirectoryIsDeferred, courseFilteredContacts, isAitUsaDirectory],
   );
   const baseFilteredContacts = useMemo(() => courseFilteredContacts.filter((contact) => (
     contactMatchesSchoolLocation(contact, { locationFilter: effectiveLocationFilter })
   )), [courseFilteredContacts, effectiveLocationFilter]);
   const facetGroups = useMemo(
-    () => buildContactDirectoryFacetGroups(baseFilteredContacts, facetContext),
-    [baseFilteredContacts, facetContext],
+    () => contactDirectoryIsDeferred
+      ? CONTACT_DIRECTORY_FACET_GROUPS
+        .filter((group) => group.alwaysVisible || group.workflowKey === activeWorkflow?.key)
+        .map((group) => ({
+          ...group,
+          facets: group.facets.map((facet) => ({
+            id: facet.id,
+            label: facet.label,
+            count: facet.id === 'all' ? deferredDirectory.total : null,
+          })),
+        }))
+      : buildContactDirectoryFacetGroups(baseFilteredContacts, facetContext),
+    [activeWorkflow?.key, baseFilteredContacts, contactDirectoryIsDeferred, deferredDirectory.total, facetContext],
   );
   const effectiveDirectoryFacet = directoryFacet || 'all';
   const visibleSegmentGroups = useMemo(
@@ -846,7 +871,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const directoryScopeName = directoryBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`;
   const summaryNoun = pluralLabel.toLowerCase();
   const directoryResultCount = contactDirectoryIsDeferred ? deferredDirectory.total : filteredContacts.length;
-  const directorySummary = `${directoryResultCount.toLocaleString()} matching ${summaryNoun} in ${directoryScopeName}`;
+  const summaryLabel = directoryResultCount === 1 ? singularLabel.toLowerCase() : summaryNoun;
+  const directorySummary = `${directoryResultCount.toLocaleString()} matching ${summaryLabel} in ${directoryScopeName}`;
   const formBusinessUnitId = form.businessUnitId || form.primaryBusinessUnitId || '';
   const formBusinessUnit = businessUnitById.get(formBusinessUnitId) || null;
   const isAitUsaForm = workflowForBusinessUnit(formBusinessUnit).key === WORKFLOW_KEYS.AIT_USA;
@@ -1129,7 +1155,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                               role="option"
                             >
                               <span>All Sources</span>
-                              <strong>{statusOwnerFilteredContacts.length}</strong>
+                              <strong>{contactDirectoryIsDeferred ? deferredDirectory.total : statusOwnerFilteredContacts.length}</strong>
                             </button>
                             {sourceFilterOptions.map((option) => (
                               <button
@@ -1141,7 +1167,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                                 role="option"
                               >
                                 <span>{option.label}</span>
-                                <strong>{option.count}</strong>
+                                {option.count != null && <strong>{option.count}</strong>}
                               </button>
                             ))}
                           </div>
@@ -1160,7 +1186,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                               role="option"
                             >
                               <span>All Courses</span>
-                              <strong>{sourceFilteredContacts.length}</strong>
+                              <strong>{contactDirectoryIsDeferred ? deferredDirectory.total : sourceFilteredContacts.length}</strong>
                             </button>
                             {courseFilterOptions.map((option) => (
                               <button
@@ -1172,7 +1198,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                                 role="option"
                               >
                                 <span>{option.label}</span>
-                                <strong>{option.count}</strong>
+                                {option.count != null && <strong>{option.count}</strong>}
                               </button>
                             ))}
                           </div>
@@ -1191,7 +1217,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                               role="option"
                             >
                               <span>All Locations</span>
-                              <strong>{courseFilteredContacts.length}</strong>
+                              <strong>{contactDirectoryIsDeferred ? deferredDirectory.total : courseFilteredContacts.length}</strong>
                             </button>
                             {locationFilterOptions.map((option) => (
                               <button
@@ -1203,7 +1229,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                                 role="option"
                               >
                                 <span>{option.label}</span>
-                                <strong>{option.count}</strong>
+                                {option.count != null && <strong>{option.count}</strong>}
                               </button>
                             ))}
                           </div>
@@ -1241,7 +1267,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
 
                   <div className="contacts-filter-footer">
                     <div className="contacts-filter-footer-meta">
-                      <span>{filteredContacts.length.toLocaleString()} shown of {dateScopedRows.length.toLocaleString()}</span>
+                      <span>
+                        {filteredContacts.length.toLocaleString()} shown of{' '}
+                        {(contactDirectoryIsDeferred ? deferredDirectory.total : dateScopedRows.length).toLocaleString()}
+                      </span>
                       {hasNonDefaultFilters && (
                         <button className="contacts-filter-reset" type="button" onClick={resetFilters}>
                           <RotateCcw size={13} />

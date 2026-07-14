@@ -58,12 +58,71 @@ function parseDate(value, endOfDay = false) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function dateRangeCondition({ scope, from, to, latestLead, now = new Date() }) {
+function aitSignsSourceDateSql(latestLead) {
+  const excelDateFromText = (column) => sql`(
+    select max(date '1899-12-30' + (match[2])::integer)
+    from regexp_matches(
+      coalesce(${column}, ''),
+      '(^|[^0-9.])([0-9]{5})(\\.0+)?([^0-9]|$)',
+      'g'
+    ) as match
+    where (match[2])::integer between 40000 and 60000
+      and date '1899-12-30' + (match[2])::integer <= current_date + 1
+  )`;
+  return sql`(
+    select max(candidate_date) from (
+      select ${excelDateFromText(latestLead.originalNotes)} as candidate_date
+      union all
+      select ${excelDateFromText(activityEvents.message)}
+        from ${activityEvents}
+        where ${activityEvents.contactId} = ${contacts.id}
+      union all
+      select ${excelDateFromText(sql`n.body`)}
+        from notes n
+        where n.contact_id = ${contacts.id}
+      union all
+      select max(${workOrders.deliveryDate}::timestamp)
+        from ${workOrders}
+        where ${workOrders.contactId} = ${contacts.id}
+      union all
+      select max(greatest(${estimates.approvedAt}, ${estimates.rejectedAt}))
+        from ${estimates}
+        where ${estimates.contactId} = ${contacts.id}
+      union all
+      select max(ps.paid_at::timestamp)
+        from payment_snapshots ps
+        left join estimates pe on pe.id = ps.estimate_id
+        left join work_orders pw on pw.id = ps.work_order_id
+        where pe.contact_id = ${contacts.id} or pw.contact_id = ${contacts.id}
+    ) source_dates
+  )`;
+}
+
+function directoryDateSql(latestLead, workflowKey) {
+  if (workflowKey === WORKFLOW_KEYS.AIT_SIGNS) return aitSignsSourceDateSql(latestLead);
+  return sql`coalesce(
+    (
+      select min(coalesce(${activityEvents.occurredAt}, ${activityEvents.createdAt}))
+      from ${activityEvents}
+      where ${activityEvents.contactId} = ${contacts.id}
+        and lower(${activityEvents.eventType}) = 'website_lead_captured'
+        and (${activityEvents.leadId} is null or ${activityEvents.leadId} = ${latestLead.id})
+    ),
+    ${latestLead.createdAt},
+    ${contacts.createdAt}
+  )`;
+}
+
+function dateRangeCondition({ scope, from, to, latestLead, workflowKey, now = new Date() }) {
   if (!scope || scope === 'all') return undefined;
   let start = null;
   let end = null;
   if (scope === 'current') {
-    start = new Date(Date.UTC(now.getUTCFullYear(), 0, 1));
+    start = new Date(Date.UTC(
+      workflowKey === WORKFLOW_KEYS.AIT_SIGNS ? now.getUTCFullYear() - 1 : now.getUTCFullYear(),
+      0,
+      1,
+    ));
     end = new Date(Date.UTC(now.getUTCFullYear() + 1, 0, 1));
   } else if (scope === 'quarter') {
     const month = Math.floor(now.getUTCMonth() / 3) * 3;
@@ -74,11 +133,18 @@ function dateRangeCondition({ scope, from, to, latestLead, now = new Date() }) {
     const inclusiveEnd = parseDate(to, true);
     end = inclusiveEnd ? new Date(inclusiveEnd.getTime() + 1) : null;
   }
-  const leadDate = sql`coalesce(${latestLead.createdAt}, ${contacts.createdAt})`;
-  if (start && end) return sql`${leadDate} >= ${start} and ${leadDate} < ${end}`;
-  if (start) return sql`${leadDate} >= ${start}`;
-  if (end) return sql`${leadDate} < ${end}`;
-  return undefined;
+  const leadDate = directoryDateSql(latestLead, workflowKey);
+  let dateCondition;
+  if (start && end) dateCondition = sql`${leadDate} >= ${start} and ${leadDate} < ${end}`;
+  else if (start) dateCondition = sql`${leadDate} >= ${start}`;
+  else if (end) dateCondition = sql`${leadDate} < ${end}`;
+  if (!dateCondition) return undefined;
+  if (scope !== 'current' || workflowKey !== WORKFLOW_KEYS.AIT_USA) return dateCondition;
+  const status = normalizedSql(sql`coalesce(${latestLead.currentStage}, ${latestLead.status})`);
+  return and(
+    dateCondition,
+    sql`${status} not in ('retargeting', 'dropped / quit', 'not interested', 'course completed')`,
+  );
 }
 
 function sourceCondition(value, latestLead) {
@@ -184,7 +250,7 @@ function facetCondition(value, latestLead, session) {
   return undefined;
 }
 
-function directoryConditions({ searchParams, latestLead, session }) {
+function directoryConditions({ searchParams, latestLead, session, workflowKey }) {
   const conditions = [scopedContactWhere(contacts, session)];
   const businessUnitId = clean(searchParams.get('businessUnitId'));
   if (businessUnitId === 'unassigned') conditions.push(isNull(contacts.primaryBusinessUnitId));
@@ -232,6 +298,7 @@ function directoryConditions({ searchParams, latestLead, session }) {
     from: searchParams.get('leadDateFrom'),
     to: searchParams.get('leadDateTo'),
     latestLead,
+    workflowKey,
   });
   if (date) conditions.push(date);
   const facet = facetCondition(searchParams.get('facet'), latestLead, session);
@@ -255,11 +322,40 @@ function paymentWhereForPage({ estimateRows, workOrderRows, paymentLinkRows }) {
   return conditions.length ? or(...conditions) : sql`false`;
 }
 
+async function loadCourseOptions({ db, session, businessUnitId }) {
+  const leadScope = and(
+    scopedBusinessUnitWhere(leads, session),
+    businessUnitId && businessUnitId !== 'all' && businessUnitId !== 'unassigned'
+      ? eq(leads.businessUnitId, businessUnitId)
+      : undefined,
+  );
+  const courseScope = and(
+    scopedBusinessUnitWhere(contactCourseRecords, session),
+    businessUnitId && businessUnitId !== 'all' && businessUnitId !== 'unassigned'
+      ? eq(contactCourseRecords.businessUnitId, businessUnitId)
+      : undefined,
+  );
+  const groups = await Promise.all([
+    db.selectDistinct({ value: contactCourseRecords.courseName }).from(contactCourseRecords).where(courseScope),
+    db.selectDistinct({ value: leads.currentCourse }).from(leads).where(leadScope),
+    db.selectDistinct({ value: leads.completedCourse }).from(leads).where(leadScope),
+    db.selectDistinct({ value: leads.endedCourse }).from(leads).where(leadScope),
+  ]);
+  return [...new Set(groups.flat().map((row) => clean(row.value)).filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right))
+    .map((value) => ({ value, label: value, count: null }));
+}
+
 export async function loadContactDirectoryPage({ db, session, searchParams }) {
   const page = positiveInteger(searchParams.get('page'), 1);
   const pageSize = Math.min(
     positiveInteger(searchParams.get('pageSize'), CONTACT_DIRECTORY_PAGE_SIZE),
     CONTACT_DIRECTORY_MAX_PAGE_SIZE,
+  );
+  const businessUnitRows = await db.select().from(businessUnits).where(scopedOrgWhere(businessUnits, session));
+  const requestedBusinessUnitId = clean(searchParams.get('businessUnitId'));
+  const workflowKey = workflowKeyForBusinessUnit(
+    businessUnitRows.find((unit) => unit.id === requestedBusinessUnitId) || null,
   );
   const latestLead = db
     .selectDistinctOn([leads.contactId])
@@ -267,11 +363,11 @@ export async function loadContactDirectoryPage({ db, session, searchParams }) {
     .where(scopedOrgWhere(leads, session))
     .orderBy(leads.contactId, desc(leads.createdAt), desc(leads.id))
     .as('latest_contact_lead');
-  const conditions = directoryConditions({ searchParams, latestLead, session });
+  const conditions = directoryConditions({ searchParams, latestLead, session, workflowKey });
   const where = and(...conditions);
   const offset = (page - 1) * pageSize;
 
-  const [idRows, countRows, businessUnitRows] = await Promise.all([
+  const [idRows, countRows, courseOptions] = await Promise.all([
     db
       .select({ id: contacts.id })
       .from(contacts)
@@ -285,17 +381,26 @@ export async function loadContactDirectoryPage({ db, session, searchParams }) {
       .from(contacts)
       .leftJoin(latestLead, eq(latestLead.contactId, contacts.id))
       .where(where),
-    db.select().from(businessUnits).where(scopedOrgWhere(businessUnits, session)),
+    loadCourseOptions({ db, session, businessUnitId: requestedBusinessUnitId }),
   ]);
   const contactIds = idRows.map((row) => row.id);
   const total = Number(countRows[0]?.value || 0);
   if (!contactIds.length) {
-    return { contacts: [], workOrders: [], financials: [], page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+    return {
+      contacts: [],
+      workOrders: [],
+      financials: [],
+      filterMetadata: { courseOptions },
+      page,
+      pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
+    };
   }
 
   const [contactRows, leadRows, workOrderRows, estimateRows, documentRows] = await Promise.all([
     db.select().from(contacts).where(inArray(contacts.id, contactIds)),
-    db.select().from(leads).where(and(scopedBusinessUnitWhere(leads, session), inArray(leads.contactId, contactIds))).orderBy(desc(leads.createdAt)),
+    db.select().from(leads).where(and(scopedBusinessUnitWhere(leads, session), inArray(leads.contactId, contactIds))).orderBy(desc(leads.createdAt), desc(leads.id)),
     db.select().from(workOrders).where(and(scopedBusinessUnitWhere(workOrders, session), inArray(workOrders.contactId, contactIds))).orderBy(desc(workOrders.createdAt)),
     db.select().from(estimates).where(and(scopedBusinessUnitWhere(estimates, session), inArray(estimates.contactId, contactIds))).orderBy(desc(estimates.createdAt)),
     db.select().from(financialDocuments).where(and(scopedBusinessUnitWhere(financialDocuments, session), inArray(financialDocuments.contactId, contactIds))).orderBy(desc(financialDocuments.createdAt)),
@@ -346,6 +451,7 @@ export async function loadContactDirectoryPage({ db, session, searchParams }) {
     contacts: mappedContacts,
     workOrders: mapWorkOrders(workOrderRows, contactLookup),
     financials: mapFinancials(estimateRows, linkedPaymentRows, contactLookup, documentRows),
+    filterMetadata: { courseOptions },
     page,
     pageSize,
     total,
