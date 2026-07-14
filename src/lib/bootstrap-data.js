@@ -15,7 +15,6 @@ import {
   paymentSnapshots as paymentSnapshotsTable,
   notes as notesTable,
   activityEvents as activityEventsTable,
-  tasks as tasksTable,
   leads as leadsTable,
   roles as rolesTable,
   users as usersTable,
@@ -34,12 +33,10 @@ import {
   scopedBusinessUnitWhere,
   scopedContactWhere,
   scopedOrgWhere,
-  scopedTaskWhere,
   scopedWorkOrderWhere,
 } from './crm/access.js';
 import { toBusinessUnitPayload } from './crm/payloads.js';
 import { isPipelineEligibleContact, workflowFromLead } from './sales-workflow';
-import { TASK_STATUSES } from './tasks/constants.js';
 import { buildContactTimeline, filterTimelineRowsForBusinessUnit } from './timeline/service.js';
 import { latestExcelDateFromText, summarizeContactTouch } from './contact-touch.js';
 import { buildAitUsaEnrollmentSignals } from './ait-usa-enrollment-signals.js';
@@ -48,6 +45,7 @@ import { filterAssignableEmployees } from './crm/assignable-employees.js';
 import { courseRecordPayloadFromRow, deriveCourseSummary } from './crm/course-records.js';
 import { getServerAppVersion } from './app-version.js';
 import { canonicalRoleKeys } from './roles.js';
+import { deferBootstrapTasks } from './bootstrap-contract.js';
 
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const toBootstrapBusinessUnitPayload = (row) => toBusinessUnitPayload(row, { emptyColor: null });
@@ -497,42 +495,6 @@ function mapFinancials(estimateRows, paymentRows, contactLookup, documentRows = 
   return [...documents, ...estimates, ...receipts];
 }
 
-function toDisplayPriority(value) {
-  if (!value) return 'Medium';
-  return value
-    .split(/[_\s-]+/)
-    .filter(Boolean)
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`)
-    .join(' ');
-}
-
-function mapTasks(rows, contactLookup) {
-  return rows.map((row) => ({
-    id: row.id,
-    title: row.title,
-    description: row.description || '',
-    businessUnitId: row.businessUnitId || '',
-    contactId: row.contactId || '',
-    leadId: row.leadId || '',
-    workOrderId: row.workOrderId || '',
-    client: contactLookup.get(row.contactId)?.name || '',
-    ownerUserId: row.ownerUserId || '',
-    assignedTo: row.ownerUserId || '',
-    dueAt: row.dueAt?.toISOString?.() || row.dueAt || '',
-    dueDate: toIsoDate(row.dueAt),
-    completed: Boolean(row.completedAt || row.status === TASK_STATUSES.COMPLETED),
-    completedAt: row.completedAt?.toISOString?.() || row.completedAt || '',
-    priority: toDisplayPriority(row.priority),
-    taskType: row.taskType,
-    status: row.status,
-    taskStatus: row.status,
-    sourceType: row.sourceType || '',
-    sourceLabel: row.sourceLabel || '',
-    createdAt: row.createdAt?.toISOString?.() || row.createdAt || '',
-    updatedAt: row.updatedAt?.toISOString?.() || row.updatedAt || '',
-  }));
-}
-
 function authData({ authRequired = false, authError = '', currentUser = null } = {}) {
   return {
     ...seedData,
@@ -718,7 +680,6 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       contactPeopleRows,
       contactCourseRecordRows,
       leadStatusHistoryRows,
-      taskRows,
       userRows,
       membershipRows,
       userRoleRows,
@@ -738,7 +699,6 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       db.select().from(contactPeopleTable).where(scopedOrgWhere(contactPeopleTable, session)).orderBy(desc(contactPeopleTable.isPrimary), asc(contactPeopleTable.name)),
       db.select().from(contactCourseRecordsTable).where(scopedBusinessUnitWhere(contactCourseRecordsTable, session)).orderBy(desc(contactCourseRecordsTable.createdAt)),
       db.select().from(leadStatusHistoryTable).where(scopedBusinessUnitWhere(leadStatusHistoryTable, session)).orderBy(desc(leadStatusHistoryTable.occurredAt), desc(leadStatusHistoryTable.createdAt)),
-      db.select().from(tasksTable).where(scopedTaskWhere(tasksTable, session)).orderBy(asc(tasksTable.dueAt), desc(tasksTable.createdAt)),
       db.select().from(usersTable).where(and(
         eq(usersTable.organizationId, session.user.organizationId),
         eq(usersTable.isActive, true),
@@ -761,13 +721,13 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
 
     const visibleContactRows = filterContactsForSession(contactRows, accessLeadRows || leadRows, session);
 
-    if (!visibleContactRows.length && !taskRows.length && !workOrderRows.length) {
-      return {
+    if (!visibleContactRows.length && !workOrderRows.length) {
+      return deferBootstrapTasks({
         ...emptyDbData(businessUnitRows, importStaging),
         currentUser: session.user,
         access,
         employees,
-      };
+      });
     }
 
     const paymentRowsWithContactLinks = attachPaymentSnapshotContactLinks(paymentRows, eventRows, {
@@ -797,8 +757,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
     ]);
     const workOrders = mapWorkOrders(workOrderRows, contactLookup);
     const financials = mapFinancials(estimateRows, paymentRowsWithContactLinks, contactLookup, financialDocumentRows);
-    const tasks = mapTasks(taskRows, contactLookup);
-    return {
+    return deferBootstrapTasks({
       ...seedData,
       appVersion,
       dataSource: 'postgres',
@@ -811,9 +770,8 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       contacts,
       workOrders,
       financials,
-      tasks,
       importStaging,
-    };
+    });
   } catch (error) {
     console.warn('Falling back to empty CRM data because Postgres bootstrap failed:', error.message);
     return {

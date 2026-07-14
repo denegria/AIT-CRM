@@ -1,8 +1,10 @@
 'use client';
-import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { AuthWelcomeLobby, LoginGate } from '@/components/AuthExperience';
 import * as defaults from './data';
+import { DEFERRED_BOOTSTRAP_LOADERS, hasDeferredBootstrapLoader } from './bootstrap-contract.js';
+import { loadDeferredTasks } from './tasks/bootstrap.js';
 
 const CRMContext = createContext(null);
 const STORAGE_KEY = 'ait-crm-data';
@@ -126,6 +128,7 @@ function getInitialData(seedData = defaults) {
     tasks: fallback.tasks,
     calendarEvents: fallback.calendarEvents,
     salesLedger: fallback.salesLedger,
+    deferredLoaders: fallback.deferredLoaders || [],
   };
 }
 
@@ -158,6 +161,10 @@ export function CRMProvider({ children, initialData }) {
   const [workOrders, setWorkOrders] = useState(bootstrapData.workOrders);
   const [financials, setFinancials] = useState(bootstrapData.financials);
   const [tasks, setTasks] = useState(bootstrapData.tasks);
+  const tasksAreDeferred = isPostgres && Boolean(bootstrapData.access?.canReadCrm) && hasDeferredBootstrapLoader(bootstrapData, DEFERRED_BOOTSTRAP_LOADERS.TASKS);
+  const [tasksLoadStatus, setTasksLoadStatus] = useState(tasksAreDeferred ? 'idle' : 'ready');
+  const [tasksLoadError, setTasksLoadError] = useState('');
+  const tasksLoadPromiseRef = useRef(null);
   const [calendarEvents, setCalendarEvents] = useState(bootstrapData.calendarEvents);
   const [salesLedger, setSalesLedger] = useState(bootstrapData.salesLedger);
   const [currentBusinessUnitId, setCurrentBusinessUnitIdState] = useState(() => {
@@ -177,6 +184,31 @@ export function CRMProvider({ children, initialData }) {
   });
   const [storageReady, setStorageReady] = useState(isPostgres);
   const loaded = true;
+
+  const loadTasks = useCallback(({ force = false } = {}) => {
+    if (!isPostgres || !tasksAreDeferred) return Promise.resolve(tasks);
+    if (!force && tasksLoadStatus === 'ready') return Promise.resolve(tasks);
+    if (tasksLoadPromiseRef.current) return tasksLoadPromiseRef.current;
+
+    setTasksLoadStatus('loading');
+    setTasksLoadError('');
+    const request = loadDeferredTasks({ contacts })
+      .then((nextTasks) => {
+        setTasks(nextTasks);
+        setTasksLoadStatus('ready');
+        return nextTasks;
+      })
+      .catch((error) => {
+        setTasksLoadStatus('error');
+        setTasksLoadError(error.message || 'Tasks could not load.');
+        throw error;
+      })
+      .finally(() => {
+        tasksLoadPromiseRef.current = null;
+      });
+    tasksLoadPromiseRef.current = request;
+    return request;
+  }, [contacts, isPostgres, tasks, tasksAreDeferred, tasksLoadStatus]);
 
   const accessibleBusinessUnits = useMemo(() => {
     const activeUnits = (businessUnits || []).filter((unit) => unit.isActive !== false);
@@ -598,6 +630,10 @@ export function CRMProvider({ children, initialData }) {
     workOrders: scopedWorkOrders, allWorkOrders: workOrders, addWorkOrder, updateWorkOrder, deleteWorkOrder,
     financials: scopedFinancials, allFinancials: financials, addFinancial, updateFinancial, deleteFinancial, recordPayment,
     tasks: scopedTasks, allTasks: tasks, addTask, updateTask, deleteTask,
+    tasksLoaded: tasksLoadStatus === 'ready',
+    tasksLoading: tasksLoadStatus === 'loading',
+    tasksError: tasksLoadError,
+    loadTasks,
     calendarEvents: scopedCalendarEvents, allCalendarEvents: calendarEvents, addCalendarEvent, deleteCalendarEvent,
     salesLedger: scopedSalesLedger, allSalesLedger: salesLedger, addSalesEntry,
     employees: isPostgres ? employees : defaults.EMPLOYEES,

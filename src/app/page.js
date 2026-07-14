@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { ListTodo, UserPlus } from 'lucide-react';
 import { useCRM } from '@/lib/store';
@@ -78,6 +78,10 @@ export default function Dashboard() {
     workOrders,
     financials,
     tasks,
+    tasksLoaded,
+    tasksLoading,
+    tasksError,
+    loadTasks,
     calendarEvents,
     employees,
     updateTask,
@@ -97,6 +101,11 @@ export default function Dashboard() {
   const isAdminView = canUseTeamMonitor(monitorCurrentUser);
   const canUseTeamMonitorView = isAdminView;
   const canReadFinancials = Boolean(access?.canReadFinancials);
+
+  useEffect(() => {
+    if (dataSource !== 'postgres' || !access.canReadCrm || tasksLoaded || tasksLoading) return;
+    loadTasks().catch(() => null);
+  }, [access.canReadCrm, dataSource, loadTasks, tasksLoaded, tasksLoading]);
 
   const kpis = useMemo(() => {
     const currentContacts = contacts.filter(c => isCurrentLeadDateScope(c));
@@ -298,8 +307,19 @@ export default function Dashboard() {
     toast('Task created');
   }, [access.canWriteCrm, addTask, currentBusinessUnit?.id, currentUser?.id, dataSource, toast]);
 
-  if (!loaded) {
+  if (!loaded || (dataSource === 'postgres' && !tasksLoaded && !tasksError)) {
     return <PageState tone="loading" title="Loading dashboard" copy="Preparing your current tasks, contacts, and division summary." />;
+  }
+
+  if (dataSource === 'postgres' && tasksError) {
+    return (
+      <PageState
+        tone="error"
+        title="Dashboard tasks could not load"
+        copy={tasksError}
+        actions={<button className="btn btn-primary" onClick={() => loadTasks({ force: true }).catch(() => null)}>Try again</button>}
+      />
+    );
   }
 
   const today = new Date();
