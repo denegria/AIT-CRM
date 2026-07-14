@@ -116,6 +116,13 @@ function withoutRowId(row = {}) {
   return payload;
 }
 
+function createdAtTime(row = {}) {
+  const time = row.createdAt instanceof Date
+    ? row.createdAt.getTime()
+    : new Date(row.createdAt || '').getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
 export function mergeContactSummaryCandidateRows(...groups) {
   const rowsById = new Map();
   for (const row of groups.flat()) {
@@ -191,7 +198,8 @@ async function latestActivityCandidates(db, contactIds) {
       ),
   ]);
 
-  return mergeContactSummaryCandidateRows(latestRows, touchRows, followUpRows, submissionRows);
+  return mergeContactSummaryCandidateRows(latestRows, touchRows, followUpRows, submissionRows)
+    .sort((left, right) => createdAtTime(right) - createdAtTime(left));
 }
 
 async function latestConversationCandidates(db, contactIds) {
