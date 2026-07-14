@@ -1245,11 +1245,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         variant="dialog"
         panelClassName="contact-dialog-panel"
         footer={<>
-          {canWrite && drawer && drawer !== 'new' && (
-            <button className="btn btn-danger contact-dialog-archive-action" type="button" onClick={requestDelete}>
-              {coordinatorUiPolicy.canArchiveContactsDirectly ? 'Delete' : 'Request Archive'}
-            </button>
-          )}
           <button className="btn" type="button" onClick={close}>Cancel</button>
           <button className="btn btn-primary" type="submit" form="contact-dialog-form">Save</button>
         </>}>
@@ -1409,6 +1404,23 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
               <div className="contact-dialog-note-help">Editing the latest note. Full timeline available in Contact Details.</div>
             </div>
           </section>
+
+          {canWrite && drawer && drawer !== 'new' && (
+            <section className="contact-dialog-danger-action danger-action-panel">
+              <div className="danger-action-copy">
+                <span className="danger-action-eyebrow">Separate account action</span>
+                <strong>{coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive this ${singularLabel.toLowerCase()}` : 'Request archive approval'}</strong>
+                <p>
+                  {coordinatorUiPolicy.canArchiveContactsDirectly
+                    ? `This is not saved with contact edits. It opens a separate confirmation before removing the ${singularLabel.toLowerCase()} from normal CRM lists.`
+                    : `This is not saved with contact edits. It opens a separate confirmation and the contact stays active unless approved.`}
+                </p>
+              </div>
+              <button className="btn btn-danger" type="button" onClick={requestDelete}>
+                {coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive ${singularLabel}` : 'Request Archive'}
+              </button>
+            </section>
+          )}
         </form>
       </Modal>
       <ConfirmDialog

@@ -2449,6 +2449,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           open={followUpOpen}
           onClose={closeFollowUpModal}
           title="Log Follow-up"
+          variant="dialog"
+          panelClassName="follow-up-dialog-panel"
           footer={(
             <>
               <button className="btn" type="button" onClick={closeFollowUpModal} disabled={followUpBusy}>Cancel</button>
@@ -2463,130 +2465,180 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             </>
           )}
         >
-          <div className="form-group">
-            <div className="form-label">Task Match</div>
-            <div className={s.followUpHint}>
-              {followUpTask
-                ? `Completes oldest open follow-up task: ${followUpTask.title || 'Follow-up'} (${taskDateLabel(followUpTask.dueAt)}).`
-                : 'No open follow-up task was found. This will log follow-up history directly.'}
-            </div>
-          </div>
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Outcome</label>
-              <select
-                className="input select"
-                value={followUpDraft.outcome}
-                disabled={followUpBusy}
-                onChange={(event) => updateFollowUpDraft({ outcome: event.target.value })}
-              >
-                {FOLLOW_UP_OUTCOME_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Channel</label>
-              <select
-                className="input select"
-                value={followUpDraft.channel}
-                disabled={followUpBusy}
-                onChange={(event) => updateFollowUpDraft({ channel: event.target.value })}
-              >
-                <option value="phone">Phone</option>
-                <option value="sms">SMS</option>
-                <option value="whatsapp">WhatsApp</option>
-                <option value="email">Email</option>
-                <option value="in_person">In person</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-          </div>
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Attempted</label>
-              <input
-                className="input"
-                value={followUpDraft.contactMethod}
-                disabled={followUpBusy}
-                placeholder="Phone or email used"
-                onChange={(event) => updateFollowUpDraft({ contactMethod: event.target.value })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Next Due</label>
-              <input
-                className="input"
-                type="date"
-                value={followUpDraft.nextDueDate}
-                disabled={followUpBusy}
-                onChange={(event) => updateFollowUpDraft({ nextDueDate: event.target.value })}
-              />
-            </div>
-          </div>
-          {coordinatorUiPolicy.canManageCoordinatorAssignments && (
-            <div className="form-group">
-              <label className="form-label">Next Owner</label>
-              <select
-                className="input select"
-                value={followUpDraft.nextOwnerUserId}
-                disabled={followUpBusy}
-                onChange={(event) => updateFollowUpDraft({ nextOwnerUserId: event.target.value })}
-              >
-                <option value="" disabled>Select owner</option>
-                {ownerOptions.map((owner) => (
-                  <option key={owner.id} value={owner.id}>{owner.label}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          {isAitUsaContact && (
-            <>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Program</label>
-                  <input className="input" value={followUpDraft.leadProfile?.programInterest || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('programInterest', event.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Location</label>
-                  <input className="input" value={followUpDraft.leadProfile?.locationPreference || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('locationPreference', event.target.value)} />
-                </div>
+          <div className="follow-up-dialog-form">
+            <div className="follow-up-task-match">
+              <div>
+                <strong>Task match</strong>
+                <p>
+                  {followUpTask
+                    ? `Completes oldest open follow-up task: ${followUpTask.title || 'Follow-up'} (${taskDateLabel(followUpTask.dueAt)}).`
+                    : 'No open follow-up task was found. This will log follow-up history directly.'}
+                </p>
               </div>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Preferred Day</label>
-                  <input className="input" value={followUpDraft.leadProfile?.preferredDay || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('preferredDay', event.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Schedule</label>
-                  <input className="input" value={followUpDraft.leadProfile?.preferredSchedule || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('preferredSchedule', event.target.value)} />
-                </div>
+            </div>
+
+            <div className="follow-up-workflow-grid">
+              <div className="follow-up-workflow-stack">
+                <section className="follow-up-dialog-section">
+                  <div className="contact-dialog-section-header">
+                    <span className="contact-dialog-section-index">1</span>
+                    <div>
+                      <h2>What happened?</h2>
+                      <p>Capture the result and the channel used before setting the next action.</p>
+                    </div>
+                  </div>
+                  <div className="grid-2">
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="follow-up-outcome">Outcome</label>
+                      <select
+                        id="follow-up-outcome"
+                        className="input select"
+                        value={followUpDraft.outcome}
+                        disabled={followUpBusy}
+                        onChange={(event) => updateFollowUpDraft({ outcome: event.target.value })}
+                      >
+                        {FOLLOW_UP_OUTCOME_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="follow-up-channel">Channel</label>
+                      <select
+                        id="follow-up-channel"
+                        className="input select"
+                        value={followUpDraft.channel}
+                        disabled={followUpBusy}
+                        onChange={(event) => updateFollowUpDraft({ channel: event.target.value })}
+                      >
+                        <option value="phone">Phone</option>
+                        <option value="sms">SMS</option>
+                        <option value="whatsapp">WhatsApp</option>
+                        <option value="email">Email</option>
+                        <option value="in_person">In person</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="follow-up-attempted">Attempted</label>
+                    <input
+                      id="follow-up-attempted"
+                      className="input"
+                      value={followUpDraft.contactMethod}
+                      disabled={followUpBusy}
+                      placeholder="Phone or email used"
+                      onChange={(event) => updateFollowUpDraft({ contactMethod: event.target.value })}
+                    />
+                  </div>
+                </section>
+
+                <section className="follow-up-dialog-section">
+                  <div className="contact-dialog-section-header">
+                    <span className="contact-dialog-section-index">2</span>
+                    <div>
+                      <h2>What happens next?</h2>
+                      <p>Set the next follow-up date and owner so the work stays accountable.</p>
+                    </div>
+                  </div>
+                  <div className="grid-2">
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="follow-up-next-due">Next Due</label>
+                      <input
+                        id="follow-up-next-due"
+                        className="input"
+                        type="date"
+                        value={followUpDraft.nextDueDate}
+                        disabled={followUpBusy}
+                        onChange={(event) => updateFollowUpDraft({ nextDueDate: event.target.value })}
+                      />
+                    </div>
+                    {coordinatorUiPolicy.canManageCoordinatorAssignments && (
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="follow-up-next-owner">Next Owner</label>
+                        <select
+                          id="follow-up-next-owner"
+                          className="input select"
+                          value={followUpDraft.nextOwnerUserId}
+                          disabled={followUpBusy}
+                          onChange={(event) => updateFollowUpDraft({ nextOwnerUserId: event.target.value })}
+                        >
+                          <option value="" disabled>Select owner</option>
+                          {ownerOptions.map((owner) => (
+                            <option key={owner.id} value={owner.id}>{owner.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                </section>
               </div>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Test</label>
-                  <input className="input" value={followUpDraft.leadProfile?.testInterest || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('testInterest', event.target.value)} />
+
+              <section className="follow-up-dialog-section follow-up-note-section">
+                <div className="contact-dialog-section-header">
+                  <span className="contact-dialog-section-index">3</span>
+                  <div>
+                    <h2>Required note</h2>
+                    <p>Write the operator-readable summary that explains the outcome.</p>
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Level</label>
-                  <input className="input" value={followUpDraft.leadProfile?.educationLevel || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('educationLevel', event.target.value)} />
+                <textarea
+                  id="follow-up-note"
+                  className="textarea follow-up-note-input"
+                  rows={8}
+                  value={followUpDraft.note}
+                  disabled={followUpBusy}
+                  placeholder="Example: Spoke with Maria. Interested in evening ESL, asked for Saturday availability, follow up Friday with schedule options."
+                  onChange={(event) => updateFollowUpDraft({ note: event.target.value })}
+                />
+              </section>
+            </div>
+
+            {isAitUsaContact && (
+              <details className="follow-up-profile-disclosure">
+                <summary>
+                  <span>Update enrollment profile</span>
+                  <small>Optional fields from the conversation</small>
+                </summary>
+                <div className="follow-up-profile-fields">
+                  <div className="grid-2">
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="follow-up-program">Program</label>
+                      <input id="follow-up-program" className="input" value={followUpDraft.leadProfile?.programInterest || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('programInterest', event.target.value)} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="follow-up-location">Location</label>
+                      <input id="follow-up-location" className="input" value={followUpDraft.leadProfile?.locationPreference || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('locationPreference', event.target.value)} />
+                    </div>
+                  </div>
+                  <div className="grid-2">
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="follow-up-preferred-day">Preferred Day</label>
+                      <input id="follow-up-preferred-day" className="input" value={followUpDraft.leadProfile?.preferredDay || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('preferredDay', event.target.value)} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="follow-up-schedule">Schedule</label>
+                      <input id="follow-up-schedule" className="input" value={followUpDraft.leadProfile?.preferredSchedule || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('preferredSchedule', event.target.value)} />
+                    </div>
+                  </div>
+                  <div className="grid-2">
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="follow-up-test">Test</label>
+                      <input id="follow-up-test" className="input" value={followUpDraft.leadProfile?.testInterest || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('testInterest', event.target.value)} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="follow-up-level">Level</label>
+                      <input id="follow-up-level" className="input" value={followUpDraft.leadProfile?.educationLevel || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('educationLevel', event.target.value)} />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="follow-up-school">School</label>
+                    <input id="follow-up-school" className="input" value={followUpDraft.leadProfile?.schoolName || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('schoolName', event.target.value)} />
+                  </div>
                 </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">School</label>
-                <input className="input" value={followUpDraft.leadProfile?.schoolName || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('schoolName', event.target.value)} />
-              </div>
-            </>
-          )}
-          <div className="form-group">
-            <label className="form-label">Note Required</label>
-            <textarea
-              className="textarea"
-              rows={3}
-              value={followUpDraft.note}
-              disabled={followUpBusy}
-              onChange={(event) => updateFollowUpDraft({ note: event.target.value })}
-            />
+              </details>
+            )}
+
+            {followUpError && <div className={s.followUpError}>{followUpError}</div>}
           </div>
-          {followUpError && <div className={s.followUpError}>{followUpError}</div>}
         </Modal>
       )}
 
@@ -2694,13 +2746,16 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   <input type="hidden" value={editForm.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
                 )}
                 {access.canWriteCrm ? (
-                  <div className="profile-editor-account-action">
-                    <div>
-                      <strong>{coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive ${singularLabel}` : 'Request archive approval'}</strong>
+                  <div className="profile-editor-account-action danger-action-panel">
+                    <div className="danger-action-copy">
+                      <span className="danger-action-eyebrow">
+                        <Archive size={14} /> Separate account action
+                      </span>
+                      <strong>{coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive this ${singularLabel.toLowerCase()}` : 'Request archive approval'}</strong>
                       <p>
                         {coordinatorUiPolicy.canArchiveContactsDirectly
-                          ? `Archive removes this ${singularLabel.toLowerCase()} from normal CRM lists. History is retained for audit and recovery.`
-                          : `Request senior approval to archive this ${singularLabel.toLowerCase()}. The contact stays active until approved.`}
+                          ? `This is not saved with profile edits. It opens a separate confirmation before removing the ${singularLabel.toLowerCase()} from normal CRM lists.`
+                          : `This is not saved with profile edits. It opens a separate confirmation and the contact stays active unless approved.`}
                       </p>
                     </div>
                     <button
@@ -2711,7 +2766,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                         setArchiveConfirmOpen(true);
                       }}
                     >
-                      {coordinatorUiPolicy.canArchiveContactsDirectly ? 'Archive' : 'Request Approval'}
+                      {coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive ${singularLabel}` : 'Request Approval'}
                     </button>
                   </div>
                 ) : null}
