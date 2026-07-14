@@ -1274,6 +1274,23 @@ a { color: inherit; text-decoration: none; }
 .contact-dialog-archive-action {
   margin-right: auto;
 }
+.contact-profile-dialog-panel {
+  --modal-dialog-width: 880px;
+}
+.contact-profile-dialog-form {
+  display: grid;
+  gap: 20px;
+}
+.contact-profile-dialog-section {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.contact-profile-dialog-section:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
 .contacts-active-filter-chips {
   display: inline-flex;
   flex-wrap: wrap;
