@@ -404,6 +404,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     if (!coordinatorUiPolicy.ownerScoped || (!searchParams.has('owner') && !searchParams.has('ownerUserId'))) return;
     updateFilterQuery({ ownerFilter: DEFAULT_CONTACT_OWNER_FILTER });
   }, [coordinatorUiPolicy.ownerScoped, searchParams, updateFilterQuery]);
+  useEffect(() => {
+    if (!searchParams.has('location') || locationFilter !== DEFAULT_CONTACT_LOCATION_FILTER) return;
+    updateFilterQuery({ locationFilter: DEFAULT_CONTACT_LOCATION_FILTER });
+  }, [locationFilter, searchParams, updateFilterQuery]);
   const setStatusFilter = useCallback((value) => updateFilterQuery({ statusFilter: value }), [updateFilterQuery]);
   const setOwnerFilter = useCallback((value) => {
     if (coordinatorUiPolicy.ownerScoped) return;

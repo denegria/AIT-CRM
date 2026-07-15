@@ -269,11 +269,13 @@ export default function PipelinePage() {
   useEffect(() => {
     const hasLegacyWorkflowParam = searchParams.has('workflow');
     const hasLockedOwnerParam = coordinatorUiPolicy.ownerScoped && (searchParams.has('owner') || searchParams.has('ownerUserId'));
-    if (!hasLegacyWorkflowParam && !hasLockedOwnerParam) return;
+    const hasStaleLocationParam = searchParams.has('location') && parsedFilters.locationFilter === DEFAULT_PIPELINE_LOCATION_FILTER;
+    if (!hasLegacyWorkflowParam && !hasLockedOwnerParam && !hasStaleLocationParam) return;
     updatePipelineFilterQuery({
       ownerFilter: coordinatorUiPolicy.ownerScoped ? DEFAULT_PIPELINE_OWNER_FILTER : parsedFilters.ownerFilter,
+      locationFilter: parsedFilters.locationFilter,
     });
-  }, [coordinatorUiPolicy.ownerScoped, parsedFilters.ownerFilter, searchParams, updatePipelineFilterQuery]);
+  }, [coordinatorUiPolicy.ownerScoped, parsedFilters.locationFilter, parsedFilters.ownerFilter, searchParams, updatePipelineFilterQuery]);
   const setStatusFilter = (value) => updatePipelineFilterQuery({ statusFilter: value });
   const setOwnerFilter = (value) => {
     if (coordinatorUiPolicy.ownerScoped) return;
