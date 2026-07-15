@@ -112,6 +112,7 @@ async function loadAitUsaDashboardContacts({ db, session, businessUnit, employee
         contactId: contactCourseRecords.contactId,
         courseName: contactCourseRecords.courseName,
         courseLocation: contactCourseRecords.courseLocation,
+        teacher: contactCourseRecords.teacher,
         status: contactCourseRecords.status,
         startDate: contactCourseRecords.startDate,
         endDate: contactCourseRecords.endDate,

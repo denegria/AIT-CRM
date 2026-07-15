@@ -22,6 +22,7 @@ import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
 import { schoolLocationForContact, schoolLocationOptions } from '@/lib/school-locations';
 import {
   COURSE_RECORD_STATUS_OPTIONS,
+  courseNameOptions,
   courseRecordStatusLabel,
   deriveCourseSummary,
   isTerminalCourseRecordStatus,
@@ -74,6 +75,7 @@ const emptyCourseForm = {
   id: '',
   courseName: '',
   courseLocation: '',
+  teacher: '',
   status: 'active',
   startDate: '',
   endDate: '',
@@ -578,7 +580,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         })
       : contactFinancials
   ), [contactFinancials, isAitUsaContact]);
+  const editSourceOptions = [...new Set([
+    ...(sources || []),
+    ...(editForm?.source ? [editForm.source] : []),
+  ])];
   const editSchoolLocationOptions = schoolLocationOptions(editForm?.address);
+  const courseOptions = courseNameOptions(courseForm.courseName);
   const courseLocationOptions = schoolLocationOptions(courseForm.courseLocation);
   const showWorkOrdersTab = detailView.tabs.showWorkOrders;
   const showFinancialsTab = detailView.tabs.showFinancials || (isAitUsaContact && access.canWriteFinancials);
@@ -971,6 +978,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       id: record.id,
       courseName: record.courseName || '',
       courseLocation: record.courseLocation || '',
+      teacher: record.teacher || '',
       status: isComplete ? 'completed' : (isEnd ? 'cancelled' : record.status || 'active'),
       startDate: dateForInput(record.startDate),
       endDate: dateForInput(record.endDate) || (isComplete || isEnd ? todayDate() : ''),
@@ -1887,6 +1895,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                           ? [
                               activeCourseRecord.startDate ? `Started ${activeCourseRecord.startDate}` : '',
                               activeCourseRecord.courseLocation || 'Delivery location not set',
+                              activeCourseRecord.teacher ? `Teacher: ${activeCourseRecord.teacher}` : 'Teacher not assigned',
                               activeCourseRecord.notes || '',
                             ].filter(Boolean).join(' - ') || 'Active course record'
                           : 'Start a new course when the student enrolls again. Older courses stay in history.'}
@@ -1964,6 +1973,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                             <small>
                               {courseRecordStatusLabel(record.status)}
                               {` - ${record.courseLocation || 'Delivery location not set'}`}
+                              {` - ${record.teacher ? `Teacher: ${record.teacher}` : 'Teacher not assigned'}`}
                               {record.startDate ? ` - ${record.startDate}` : ''}
                               {record.endDate ? ` to ${record.endDate}` : ''}
                             </small>
@@ -1990,6 +2000,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                             <div>
                               <span>Delivery location</span>
                               <strong>{selectedCourseRecord.courseLocation || 'Delivery location not set'}</strong>
+                            </div>
+                            <div>
+                              <span>Teacher</span>
+                              <strong>{selectedCourseRecord.teacher || 'Not assigned'}</strong>
                             </div>
                             <div>
                               <span>Ended</span>
@@ -2429,22 +2443,37 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               <div className="contact-dialog-section-header">
                 <div>
                   <h2>Course</h2>
-                  <p>Name and delivery location first, using the actual course record rather than lead-interest labels.</p>
+                  <p>Choose the course, record its teacher, and keep the delivery location tied to this class record.</p>
                 </div>
               </div>
               <div className="grid-2">
                 <div className="form-group">
                   <label className="form-label">Course</label>
-                  <input
-                    className="input"
-                    value={courseForm.courseName}
+                  <select
+                    className="input select"
+                    value={courseForm.courseName || ''}
                     disabled={courseBusy}
-                    placeholder="Forklift, OSHA 30, ESL Level 1..."
                     data-autofocus
                     onChange={(event) => updateCourseForm({ courseName: event.target.value })}
-                  />
+                  >
+                    <option value="">Select a course</option>
+                    {courseOptions.map((course) => (
+                      <option key={course} value={course}>{course}</option>
+                    ))}
+                  </select>
                 </div>
                 <div className="form-group">
+                  <label className="form-label">Teacher</label>
+                  <input
+                    className="input"
+                    value={courseForm.teacher || ''}
+                    disabled={courseBusy}
+                    placeholder="Teacher name"
+                    onChange={(event) => updateCourseForm({ teacher: event.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="form-group">
                   <label className="form-label">Delivery Location</label>
                   <select
                     className="input select"
@@ -2457,7 +2486,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       <option key={location} value={location}>{location}</option>
                     ))}
                   </select>
-                </div>
               </div>
             </section>
 
@@ -2549,7 +2577,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   rows={3}
                   value={courseForm.notes || ''}
                   disabled={courseBusy}
-                  placeholder={courseStatusIsTerminal ? 'Add final outcome context for the timeline.' : 'Add schedule, instructor, or coordination notes.'}
+                  placeholder={courseStatusIsTerminal ? 'Add final outcome context for the timeline.' : 'Add schedule or coordination notes.'}
                   onChange={(event) => updateCourseForm({ notes: event.target.value })}
                 />
               </div>
@@ -2558,7 +2586,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             <aside className="course-editor-summary" aria-label="Course save summary">
               <span>Ready to save</span>
               <strong>{courseForm.courseName || 'Course name required'}</strong>
-              <p>{courseStatusLabel}{courseForm.courseLocation ? ` at ${courseForm.courseLocation}` : ''}</p>
+              <p>
+                {courseStatusLabel}
+                {courseForm.courseLocation ? ` at ${courseForm.courseLocation}` : ''}
+                {courseForm.teacher ? ` - Teacher: ${courseForm.teacher}` : ' - Teacher not assigned'}
+              </p>
               {courseStartDateRequired && !courseForm.startDate && (
                 <small>Current courses need a start date.</small>
               )}
@@ -2918,7 +2950,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-source">Source</label>
                     <select id="profile-edit-source" className="input select" value={editForm.source} onChange={e => setEditForm({...editForm, source: e.target.value})}>
-                      {sources.map(src => <option key={src} value={src}>{src}</option>)}
+                      {editSourceOptions.map(src => <option key={src} value={src}>{src}</option>)}
                     </select>
                   </div>
                   {showSchoolLocationField ? (

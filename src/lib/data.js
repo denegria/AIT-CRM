@@ -30,7 +30,15 @@ export const STATUSES = {
   priority: ['Low', 'Medium', 'High'],
 };
 
-export const SOURCES = ['Facebook Ads', 'Website', 'Referral', 'Cold Call', 'Google Ads'];
+export const SOURCES = [
+  'Wix Historical Import',
+  'Website',
+  'Facebook Ads',
+  'Referral',
+  'Walk-in',
+  'Cold Call',
+  'Google Ads',
+];
 
 export const EMPLOYEES = [
   { id: 'emp-1', name: 'Carlos Rivera', roleKeys: ['admin'] },

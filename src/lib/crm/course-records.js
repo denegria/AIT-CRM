@@ -20,6 +20,18 @@ export const COURSE_RECORD_STATUS_OPTIONS = Object.freeze([
   { value: 'transferred', label: 'Transferred' },
 ]);
 
+export const AIT_USA_COURSE_OPTIONS = Object.freeze([
+  'Intro to English',
+  'English 1',
+  'English 2',
+  'English 3',
+  'English 4',
+  'English 5',
+  'English 6',
+  'GED',
+  'Citizenship Prep',
+]);
+
 function cleanText(value = '') {
   return String(value || '').trim().replace(/\s+/g, ' ');
 }
@@ -74,6 +86,14 @@ export function isTerminalCourseRecordStatus(value = '') {
   return TERMINAL_STATUSES.has(normalizeCourseRecordStatus(value));
 }
 
+export function courseNameOptions(currentValue = '') {
+  const current = cleanText(currentValue);
+  return [...new Set([
+    ...AIT_USA_COURSE_OPTIONS,
+    ...(current ? [current] : []),
+  ])];
+}
+
 export function courseRecordPayloadFromRow(row = {}) {
   return {
     id: row.id || '',
@@ -82,6 +102,7 @@ export function courseRecordPayloadFromRow(row = {}) {
     businessUnitId: row.businessUnitId || '',
     courseName: cleanText(row.courseName),
     courseLocation: courseLocationForPayload(row.courseLocation),
+    teacher: cleanText(row.teacher),
     status: normalizeCourseRecordStatus(row.status),
     statusLabel: courseRecordStatusLabel(row.status),
     startDate: dateForPayload(row.startDate),
@@ -97,6 +118,7 @@ export function courseRecordSummaryPayloadFromRow(row = {}) {
   return {
     courseName: cleanText(row.courseName),
     courseLocation: courseLocationForPayload(row.courseLocation),
+    teacher: cleanText(row.teacher),
     status: normalizeCourseRecordStatus(row.status),
     startDate: dateForPayload(row.startDate),
     endDate: dateForPayload(row.endDate),
@@ -116,6 +138,10 @@ export function courseRecordInputFromPayload(payload = {}, { allowClear = false 
   }
   if (Object.prototype.hasOwnProperty.call(source, 'courseLocation')) {
     input.courseLocation = courseLocationForDb(source.courseLocation, { allowClear });
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'teacher')) {
+    const value = cleanText(source.teacher);
+    input.teacher = value || (allowClear ? null : undefined);
   }
   if (Object.prototype.hasOwnProperty.call(source, 'status')) {
     input.status = normalizeCourseRecordStatus(source.status);
@@ -142,6 +168,7 @@ export function courseRecordValuesFromInput(input = {}, defaults = {}) {
     ...defaults,
     ...(Object.prototype.hasOwnProperty.call(input, 'courseName') ? { courseName: cleanText(input.courseName) } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'courseLocation') ? { courseLocation: courseLocationForPayload(input.courseLocation) || null } : {}),
+    ...(Object.prototype.hasOwnProperty.call(input, 'teacher') ? { teacher: cleanText(input.teacher) || null } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'status') ? { status: normalizeCourseRecordStatus(input.status) } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'startDate') ? { startDate: input.startDate || null } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'endDate') ? { endDate: input.endDate || null } : {}),

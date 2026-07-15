@@ -335,6 +335,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     currentUser,
     canUseConsolidatedScope,
     scopeLabel,
+    sources,
   } = useCRM();
   const { toast } = useToast();
   const router = useRouter();
@@ -1414,7 +1415,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
               <div className="form-group">
                 <label className="form-label">Source</label>
                 <select className="input select" value={form.source} onChange={e => setForm(f => ({...f, source: e.target.value}))}>
-                  {['Wix Historical Import','Website','Facebook Ads','Referral','Cold Call','Google Ads'].map(s => <option key={s} value={s}>{s}</option>)}
+                  {[...new Set([...(sources || []), ...(form.source ? [form.source] : [])])].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
             </div>

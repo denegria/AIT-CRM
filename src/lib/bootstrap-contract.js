@@ -32,6 +32,7 @@ export const CONTACT_BOOTSTRAP_SUMMARY_FIELDS = Object.freeze({
     'contactId',
     'courseName',
     'courseLocation',
+    'teacher',
     'status',
     'startDate',
     'endDate',
@@ -74,6 +75,7 @@ export function toContactListPayload(contact = {}) {
       courseRecords: listPayload.courseRecords.map((record) => ({
         courseName: record.courseName || '',
         courseLocation: record.courseLocation || '',
+        teacher: record.teacher || '',
         status: record.status || '',
         startDate: record.startDate || '',
         endDate: record.endDate || '',

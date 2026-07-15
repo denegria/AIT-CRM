@@ -307,6 +307,7 @@ function deterministicContactDetailFixture() {
       leadId: `lead-${index % contacts.length}`,
       courseName: `Course ${index % 5}`,
       courseLocation: 'Main Campus',
+      teacher: `Teacher ${index % 4}`,
       status: index % 3 ? 'active' : 'completed',
       startDate: '2026-06-01',
       endDate: index % 3 ? null : '2026-06-20',
