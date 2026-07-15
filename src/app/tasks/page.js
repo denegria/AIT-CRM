@@ -33,6 +33,7 @@ import {
   isTaskOpen,
   isTaskOverdue,
   isTaskUpcoming,
+  taskMatchesDueView,
   taskDateKey,
 } from '@/lib/tasks/visibility.js';
 import { useToast } from '@/components/Toast';
@@ -54,7 +55,8 @@ const TASK_TYPE_OPTIONS = [
 ];
 
 const DUE_OPTIONS = [
-  ['work', 'Current Work'],
+  ['open', 'All Open Tasks'],
+  ['work', 'Due Now (Overdue + Today)'],
   ['today', 'Due Today'],
   ['overdue', 'Overdue'],
   ['upcoming', 'Upcoming'],
@@ -235,12 +237,8 @@ function normalizeTask(task, contacts = []) {
 
 function taskMatchesDue(task, dueFilter) {
   const today = todayKey();
-  if (dueFilter === 'all') return true;
   if (dueFilter === 'unassigned') return !task.ownerUserId && isTaskOpen(task);
-  if (dueFilter === 'today') return isTaskDueToday(task, today);
-  if (dueFilter === 'overdue') return isTaskOverdue(task, today);
-  if (dueFilter === 'upcoming') return isTaskUpcoming(task, today);
-  return isTaskCurrentWork(task, today);
+  return taskMatchesDueView(task, dueFilter, today);
 }
 
 function taskBadgeClass(task) {
@@ -322,7 +320,7 @@ export default function FollowUpQueuePage() {
   const [queueTasks, setQueueTasks] = useState([]);
   const [assignees, setAssignees] = useState([]);
   const [filters, setFilters] = useState({
-    due: DUE_OPTION_VALUES.has(searchParams.get('due')) ? searchParams.get('due') : 'work',
+    due: DUE_OPTION_VALUES.has(searchParams.get('due')) ? searchParams.get('due') : 'open',
     ownerUserId: lockedTaskOwnerFilter || searchParams.get('ownerUserId') || (searchParams.get('mine') === 'true' ? '__me' : 'all'),
     businessUnitId: searchParams.get('businessUnitId') || routeBusinessUnitFilterForGlobalScope(currentBusinessUnitId),
     taskType: TASK_TYPE_OPTIONS.some(([value]) => value === searchParams.get('taskType')) ? searchParams.get('taskType') : 'all',
@@ -675,7 +673,7 @@ export default function FollowUpQueuePage() {
 
   const showUnassignedLeadFollowUps = () => setFilters((prev) => ({
     ...prev,
-    due: 'work',
+    due: 'open',
     ownerUserId: coordinatorUiPolicy.ownerScoped ? '__me' : 'unassigned',
     taskType: 'follow_up',
     status: 'open',
@@ -1252,7 +1250,7 @@ export default function FollowUpQueuePage() {
   }
 
   const resetFilters = () => setFilters({
-    due: 'work',
+    due: 'open',
     ownerUserId: lockedTaskOwnerFilter || 'all',
     businessUnitId: routeBusinessUnitFilterForGlobalScope(currentBusinessUnitId),
     taskType: 'all',
@@ -1314,7 +1312,7 @@ export default function FollowUpQueuePage() {
         <div>
           <h1 className="page-title">Tasks</h1>
           <p className="page-subtitle">
-            {currentBusinessUnit?.name || `All ${scopeLabel}`} · {filteredTasks.length} current · {completedTodayTasks.length} done today
+            {currentBusinessUnit?.name || `All ${scopeLabel}`} · {filteredTasks.length} shown · {completedTodayTasks.length} done today
           </p>
         </div>
         <div className="flex-gap">
@@ -1504,7 +1502,7 @@ export default function FollowUpQueuePage() {
       </Modal>
 
       <div className={s.summaryGrid}>
-        <div className={`${s.summaryTile} ${s.summaryTileCurrent}`}><span className={s.summaryValue}>{stats.currentWork}</span><span className={s.summaryLabel}>Current Work</span></div>
+        <div className={`${s.summaryTile} ${s.summaryTileCurrent}`}><span className={s.summaryValue}>{stats.currentWork}</span><span className={s.summaryLabel}>Due Now</span></div>
         <div className={`${s.summaryTile} ${s.summaryTileToday}`}><span className={s.summaryValue}>{stats.dueToday}</span><span className={s.summaryLabel}>Due Today</span></div>
         <div className={`${s.summaryTile} ${s.summaryTileOverdue}`}><span className={s.summaryValue}>{stats.overdue}</span><span className={s.summaryLabel}>Overdue</span></div>
         {!coordinatorUiPolicy.ownerScoped && (
@@ -1535,7 +1533,7 @@ export default function FollowUpQueuePage() {
         <div className={s.queueHeader}>
           <div>
             <span className={s.sectionEyebrow}>Work queue</span>
-            <h2 className={s.queueTitle}>Current tasks</h2>
+            <h2 className={s.queueTitle}>Tasks</h2>
             <p className={s.queueSubtitle}>{activeTaskScope}</p>
           </div>
           <div className={s.queueHeaderActions}>

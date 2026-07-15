@@ -14,7 +14,7 @@ import {
   isCurrentLeadDateScope,
   leadDateForDirectoryScope,
 } from './contact-directory-view.js';
-import { AIT_USA_SCHOOL_LOCATIONS, schoolLocationForContact } from './school-locations.js';
+import { AIT_USA_LOCATION_FILTER_VALUES, contactLocationValues } from './school-locations.js';
 
 export const DEFAULT_CONTACT_STATUS_FILTER = 'All';
 export const DEFAULT_CONTACT_OWNER_FILTER = 'all';
@@ -379,30 +379,35 @@ export function buildSourceFilterOptions(contacts = []) {
   return [...byKey.values()].sort((a, b) => a.label.localeCompare(b.label));
 }
 
-export function contactMatchesSchoolLocation(contact = {}, {
+export function contactMatchesLocation(contact = {}, {
   locationFilter = DEFAULT_CONTACT_LOCATION_FILTER,
 } = {}) {
   return locationFilter === DEFAULT_CONTACT_LOCATION_FILTER ||
-    normalized(schoolLocationForContact(contact)) === normalized(locationFilter);
+    contactLocationValues(contact).some((value) => normalized(value) === normalized(locationFilter));
 }
 
-export function buildSchoolLocationFilterOptions(contacts = []) {
+export function buildLocationFilterOptions(contacts = []) {
   const byKey = new Map(
-    AIT_USA_SCHOOL_LOCATIONS.map((location) => [
+    AIT_USA_LOCATION_FILTER_VALUES.map((location) => [
       normalized(location),
       { value: location, label: location, count: 0 },
     ]),
   );
   for (const contact of contacts) {
-    const label = schoolLocationForContact(contact);
-    const key = normalized(label);
-    if (!key) continue;
-    const existing = byKey.get(key) || { value: label, label, count: 0 };
-    existing.count += 1;
-    byKey.set(key, existing);
+    for (const label of contactLocationValues(contact)) {
+      const key = normalized(label);
+      if (!key) continue;
+      const existing = byKey.get(key) || { value: label, label, count: 0 };
+      existing.count += 1;
+      byKey.set(key, existing);
+    }
   }
   return [...byKey.values()];
 }
+
+// Backward-compatible names for callers outside the directory UI.
+export const contactMatchesSchoolLocation = contactMatchesLocation;
+export const buildSchoolLocationFilterOptions = buildLocationFilterOptions;
 
 export function courseTagsForDirectoryRow(row = {}) {
   if (!isAitUsaCourseStatus(row)) return [];

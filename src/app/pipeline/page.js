@@ -16,9 +16,9 @@ import {
 import { mobilePipelineTriageItems } from '@/lib/pipeline-mobile-triage.js';
 import {
   buildCourseFilterOptions,
-  buildSchoolLocationFilterOptions,
+  buildLocationFilterOptions,
   contactMatchesLeadDateScope,
-  contactMatchesSchoolLocation,
+  contactMatchesLocation,
   contactMatchesStatusOwnerCourse,
   effectiveLeadDateScopeForDirectory,
   CONTACT_LEAD_DATE_SCOPE_ALL,
@@ -407,7 +407,7 @@ export default function PipelinePage() {
     [pipelineScopedRows],
   );
   const locationFilterOptions = useMemo(
-    () => isAitUsaPipeline ? buildSchoolLocationFilterOptions(pipelineScopedRows) : [],
+    () => isAitUsaPipeline ? buildLocationFilterOptions(pipelineScopedRows) : [],
     [isAitUsaPipeline, pipelineScopedRows],
   );
   const ownerOptions = useMemo(() => {
@@ -434,7 +434,7 @@ export default function PipelinePage() {
       courseFilter,
     });
     const sourceMatch = sourceFilter === 'all' || sourceValue(contact) === sourceFilter;
-    const locationMatch = contactMatchesSchoolLocation(contact, { locationFilter: effectiveLocationFilter });
+    const locationMatch = contactMatchesLocation(contact, { locationFilter: effectiveLocationFilter });
     const touchAge = daysSince(contactTouchDate(contact));
     const activityMatch =
       activityFilter === 'all' ||

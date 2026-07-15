@@ -29,7 +29,7 @@ const PROFILE_FIELD_LABELS = Object.freeze({
   testInterest: 'Test',
   educationLevel: 'Level',
   schoolName: 'School',
-  locationPreference: 'Location',
+  locationPreference: 'Market / region',
   profileDetails: 'Details',
   sourceDetail: 'Source detail',
 });

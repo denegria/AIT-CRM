@@ -15,13 +15,13 @@ import {
 } from '@/lib/contact-directory-facets';
 import {
   buildCourseFilterOptions,
-  buildSchoolLocationFilterOptions,
+  buildLocationFilterOptions,
   buildSourceFilterOptions,
   contactLeadDateScopeLabel,
   contactFilterQuery,
   contactFilterStateFromParams,
   contactMatchesLeadDateScope,
-  contactMatchesSchoolLocation,
+  contactMatchesLocation,
   contactMatchesSource,
   contactMatchesStatusOwnerCourse,
   courseTagsForDirectoryRow,
@@ -47,7 +47,13 @@ import {
   lifecycleBucket,
 } from '@/lib/contact-directory-view';
 import { workflowForBusinessUnit } from '@/lib/sales-workflow';
-import { AIT_USA_SCHOOL_LOCATIONS, schoolLocationForContact, schoolLocationOptions } from '@/lib/school-locations';
+import {
+  AIT_USA_LOCATION_FILTER_VALUES,
+  campaignMarketOptions,
+  marketRegionForContact,
+  schoolLocationForContact,
+  schoolLocationOptions,
+} from '@/lib/school-locations';
 import { useToast } from '@/components/Toast';
 import { useDeferredContactDirectory } from '@/lib/contacts/directory-loader.js';
 import DataTable from '@/components/DataTable';
@@ -61,6 +67,7 @@ const empty = {
   email: '',
   phone: '',
   address: '',
+  locationPreference: '',
   status: 'New Lead',
   currentStage: 'New Lead',
   source: 'Wix Historical Import',
@@ -503,6 +510,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         contact.linkedPeoplePreview || '',
       ].filter(Boolean).join(' '),
       enrollmentStage: enrollmentStageText(contact),
+      marketRegion: marketRegionForContact(contact),
       schoolLocation: schoolLocationForContact(contact),
       inquirySource: enrollmentSourceText(contact),
       sourceCategoryText: directorySourceText(contact),
@@ -586,7 +594,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     ] : []),
     ...(columnMode === 'ait_usa' ? [
       { key: 'enrollmentStage', label: 'Enrollment', sortable: true, render: (row) => <EnrollmentCell row={row} /> },
-      { key: 'schoolLocation', label: 'Location', sortable: true },
+      { key: 'marketRegion', label: 'Market / Region', sortable: true },
+      { key: 'schoolLocation', label: 'Learning Location', sortable: true },
       { key: 'inquirySource', label: 'Source', sortable: true, render: (row) => <EnrollmentSourceCell row={row} /> },
     ] : []),
     ...(columnMode !== 'ait_usa' ? [{ key: 'status', label: columnMode === 'ait_signs' ? 'Stage' : 'Status', type: 'badge', sortable: true }] : []),
@@ -656,13 +665,13 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const locationFilterOptions = useMemo(
     () => isAitUsaDirectory
       ? (contactDirectoryIsDeferred
-        ? AIT_USA_SCHOOL_LOCATIONS.map((value) => ({ value, label: value, count: null }))
-        : buildSchoolLocationFilterOptions(courseFilteredContacts))
+        ? AIT_USA_LOCATION_FILTER_VALUES.map((value) => ({ value, label: value, count: null }))
+        : buildLocationFilterOptions(courseFilteredContacts))
       : [],
     [contactDirectoryIsDeferred, courseFilteredContacts, isAitUsaDirectory],
   );
   const baseFilteredContacts = useMemo(() => courseFilteredContacts.filter((contact) => (
-    contactMatchesSchoolLocation(contact, { locationFilter: effectiveLocationFilter })
+    contactMatchesLocation(contact, { locationFilter: effectiveLocationFilter })
   )), [courseFilteredContacts, effectiveLocationFilter]);
   const facetGroups = useMemo(
     () => contactDirectoryIsDeferred
@@ -876,6 +885,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const formBusinessUnitId = form.businessUnitId || form.primaryBusinessUnitId || '';
   const formBusinessUnit = businessUnitById.get(formBusinessUnitId) || null;
   const isAitUsaForm = workflowForBusinessUnit(formBusinessUnit).key === WORKFLOW_KEYS.AIT_USA;
+  const formMarketRegionOptions = campaignMarketOptions(form.locationPreference);
   const formSchoolLocationOptions = schoolLocationOptions(form.address);
 
   if (!loaded) {
@@ -1452,18 +1462,35 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
               </div>
             </div>
             {isAitUsaForm ? (
-              <div className="form-group">
-                <label className="form-label">School Location</label>
-                <select
-                  className="input select"
-                  value={form.address || ''}
-                  onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-                >
-                  <option value="">Select school location</option>
-                  {formSchoolLocationOptions.map((location) => (
-                    <option key={location} value={location}>{location}</option>
-                  ))}
-                </select>
+              <div className="contact-dialog-grid">
+                <div className="form-group">
+                  <label className="form-label">Market / Region</label>
+                  <select
+                    className="input select"
+                    value={form.locationPreference || ''}
+                    onChange={e => setForm(f => ({ ...f, locationPreference: e.target.value }))}
+                  >
+                    <option value="">Not specified</option>
+                    {formMarketRegionOptions.map((market) => (
+                      <option key={market} value={market}>{market}</option>
+                    ))}
+                  </select>
+                  <p className="profile-editor-helper">Where the lead is based or grouped for outreach.</p>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Preferred Learning Location</label>
+                  <select
+                    className="input select"
+                    value={form.address || ''}
+                    onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+                  >
+                    <option value="">Not specified</option>
+                    {formSchoolLocationOptions.map((location) => (
+                      <option key={location} value={location}>{location}</option>
+                    ))}
+                  </select>
+                  <p className="profile-editor-helper">Campus or Online preference before enrollment.</p>
+                </div>
               </div>
             ) : (
               <div className="form-group">

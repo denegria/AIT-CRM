@@ -47,6 +47,15 @@ export function isTaskCurrentWork(task = {}, today = taskDateKey(new Date())) {
   return isTaskOpen(task) && (!due || due <= today);
 }
 
+export function taskMatchesDueView(task = {}, dueView = 'open', today = taskDateKey(new Date())) {
+  if (dueView === 'all') return true;
+  if (dueView === 'today') return isTaskDueToday(task, today);
+  if (dueView === 'overdue') return isTaskOverdue(task, today);
+  if (dueView === 'upcoming') return isTaskUpcoming(task, today);
+  if (dueView === 'work') return isTaskCurrentWork(task, today);
+  return isTaskOpen(task);
+}
+
 export function isTaskCompletedToday(task = {}, today = taskDateKey(new Date())) {
   return (taskStatus(task) === 'completed' || Boolean(task.completed)) && taskCompletedKey(task) === today;
 }

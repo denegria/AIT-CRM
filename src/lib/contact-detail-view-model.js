@@ -6,6 +6,7 @@ import {
   endedAitUsaCourse,
 } from './ait-usa-enrollment-signals.js';
 import { lifecycleBucket } from './contact-directory-view.js';
+import { marketRegionForContact, schoolLocationForContact } from './school-locations.js';
 
 function clean(value) {
   return String(value || '').trim();
@@ -206,7 +207,8 @@ function buildInstituteHighlights(contact = {}) {
     { label: 'Test', value: firstPresent([contact.testInterest, inquiry.testInterest]) },
     { label: 'Level', value: firstPresent([contact.educationLevel, inquiry.level, inquiry.age ? `Age ${inquiry.age}` : '']) },
     { label: 'School', value: firstPresent([contact.schoolName, inquiry.school]) },
-    { label: 'Location', value: firstPresent([contact.locationPreference, inquiry.location, contact.address]) },
+    { label: 'Market / region', value: marketRegionForContact(contact) },
+    { label: 'Preferred learning location', value: schoolLocationForContact(contact) },
     {
       label: 'Enrollment stage',
       value: firstPresent([process.stage, contact.currentStage, contact.status]),

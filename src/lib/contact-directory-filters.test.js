@@ -3,9 +3,9 @@ import test from 'node:test';
 
 import {
   buildCourseFilterOptions,
-  buildSchoolLocationFilterOptions,
+  buildLocationFilterOptions,
   buildSourceFilterOptions,
-  contactMatchesSchoolLocation,
+  contactMatchesLocation,
   contactMatchesLeadDateScope,
   contactLeadDatePanelSummary,
   contactLeadDateScopeLabel,
@@ -219,35 +219,42 @@ test('pipeline filter params preserve date, owner, status, source, course, activ
   );
 });
 
-test('location filters match AIT USA school locations without treating campaign markets as schools', () => {
+test('location filters keep campaign markets and learning locations independently filterable', () => {
   const rows = [
     { id: 'plainfield', address: 'Plainfield' },
     { id: 'piscataway', locationPreference: 'Piscataway' },
     { id: 'online', enrollmentSignals: { inquiry: { location: 'Online' } } },
-    { id: 'madrid', address: 'Madrid, Spain' },
+    { id: 'madrid-online', address: 'Online', locationPreference: 'Madrid, Spain' },
   ];
 
   assert.deepEqual(
-    buildSchoolLocationFilterOptions(rows).map((option) => [option.label, option.count]),
+    buildLocationFilterOptions(rows).map((option) => [option.label, option.count]),
     [
       ['Bound Brook', 0],
       ['Plainfield', 1],
       ['Piscataway', 1],
       ['Flemington', 0],
-      ['Online', 1],
+      ['Online', 2],
+      ['Madrid, Spain', 1],
     ],
   );
   assert.deepEqual(
     rows
-      .filter((contact) => contactMatchesSchoolLocation(contact, { locationFilter: 'Piscataway' }))
+      .filter((contact) => contactMatchesLocation(contact, { locationFilter: 'Piscataway' }))
       .map((contact) => contact.id),
     ['piscataway'],
   );
   assert.deepEqual(
     rows
-      .filter((contact) => contactMatchesSchoolLocation(contact, { locationFilter: DEFAULT_CONTACT_LOCATION_FILTER }))
+      .filter((contact) => contactMatchesLocation(contact, { locationFilter: 'Madrid, Spain' }))
       .map((contact) => contact.id),
-    ['plainfield', 'piscataway', 'online', 'madrid'],
+    ['madrid-online'],
+  );
+  assert.deepEqual(
+    rows
+      .filter((contact) => contactMatchesLocation(contact, { locationFilter: DEFAULT_CONTACT_LOCATION_FILTER }))
+      .map((contact) => contact.id),
+    ['plainfield', 'piscataway', 'online', 'madrid-online'],
   );
 });
 

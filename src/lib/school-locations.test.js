@@ -3,8 +3,12 @@ import test from 'node:test';
 import {
   AIT_USA_CAMPAIGN_MARKETS,
   AIT_USA_SCHOOL_LOCATIONS,
+  AIT_USA_LOCATION_FILTER_VALUES,
   campaignMarketOptions,
+  canonicalAitUsaCampaignMarket,
   canonicalAitUsaSchoolLocation,
+  contactLocationValues,
+  marketRegionForContact,
   schoolLocationOptions,
   schoolLocationForContact,
 } from './school-locations.js';
@@ -38,6 +42,15 @@ test('school location helpers keep Madrid out of campus semantics', () => {
   assert.equal(schoolLocationForContact({ address: 'Madrid, Spain' }), '');
   assert.deepEqual(AIT_USA_CAMPAIGN_MARKETS, ['Madrid, Spain']);
   assert.deepEqual(campaignMarketOptions('Madrid, Spain'), ['Madrid, Spain']);
+  assert.equal(canonicalAitUsaCampaignMarket('madrid, spain'), 'Madrid, Spain');
+  assert.deepEqual(AIT_USA_LOCATION_FILTER_VALUES, [
+    'Bound Brook',
+    'Plainfield',
+    'Piscataway',
+    'Flemington',
+    'Online',
+    'Madrid, Spain',
+  ]);
 });
 
 test('school location matching reads canonical contact location fields only', () => {
@@ -47,4 +60,11 @@ test('school location matching reads canonical contact location fields only', ()
     schoolLocationForContact({ enrollmentSignals: { inquiry: { location: 'Online' } } }),
     'Online',
   );
+});
+
+test('contact market and learning location remain separate', () => {
+  const contact = { address: 'Online', locationPreference: 'Madrid, Spain' };
+  assert.equal(schoolLocationForContact(contact), 'Online');
+  assert.equal(marketRegionForContact(contact), 'Madrid, Spain');
+  assert.deepEqual(contactLocationValues(contact), ['Online', 'Madrid, Spain']);
 });

@@ -278,7 +278,9 @@ function directoryConditions({ searchParams, latestLead, session, workflowKey, e
       ilike(contacts.companyName, pattern),
       ilike(contacts.email, pattern),
       ilike(contacts.phone, pattern),
+      ilike(contacts.address, pattern),
       ilike(latestLead.sourceName, pattern),
+      ilike(latestLead.locationPreference, pattern),
     ));
   }
   const status = clean(searchParams.get('status'));

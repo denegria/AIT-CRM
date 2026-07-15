@@ -19,7 +19,7 @@ import {
 import { PIPELINE_STATUSES, isWorkflowStatusClosed, workflowForBusinessUnit } from '@/lib/sales-workflow';
 import { buildContactDetailViewModel } from '@/lib/contact-detail-view-model';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
-import { schoolLocationForContact, schoolLocationOptions } from '@/lib/school-locations';
+import { campaignMarketOptions, schoolLocationForContact, schoolLocationOptions } from '@/lib/school-locations';
 import {
   COURSE_RECORD_STATUS_OPTIONS,
   courseRecordStatusLabel,
@@ -549,7 +549,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const profileEditTabs = useMemo(() => {
     const tabs = [
       { id: 'general', label: 'General', summary: 'Identity, status, and owner' },
-      { id: 'source', label: 'Source & location', summary: 'Attribution and school context' },
+      { id: 'source', label: 'Source & routing', summary: 'Attribution, market, and learning location' },
     ];
     if (isAitUsaContact) {
       tabs.push({ id: 'enrollment', label: 'Enrollment', summary: 'Program preferences and profile notes' });
@@ -567,6 +567,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       : contactFinancials
   ), [contactFinancials, isAitUsaContact]);
   const editSchoolLocationOptions = schoolLocationOptions(editForm?.address);
+  const editMarketRegionOptions = campaignMarketOptions(editForm?.leadProfile?.locationPreference);
+  const followUpMarketRegionOptions = campaignMarketOptions(followUpDraft?.leadProfile?.locationPreference);
   const courseLocationOptions = schoolLocationOptions(courseForm.courseLocation);
   const showWorkOrdersTab = detailView.tabs.showWorkOrders;
   const showFinancialsTab = detailView.tabs.showFinancials || (isAitUsaContact && access.canWriteFinancials);
@@ -1874,7 +1876,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                         {activeCourseRecord
                           ? [
                               activeCourseRecord.startDate ? `Started ${activeCourseRecord.startDate}` : '',
-                              activeCourseRecord.courseLocation || 'Location not set',
+                              activeCourseRecord.courseLocation || 'Delivery location not set',
                               activeCourseRecord.notes || '',
                             ].filter(Boolean).join(' - ') || 'Active course record'
                           : 'Start a new course when the student enrolls again. Older courses stay in history.'}
@@ -1951,7 +1953,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                             <strong>{record.courseName}</strong>
                             <small>
                               {courseRecordStatusLabel(record.status)}
-                              {` - ${record.courseLocation || 'Location not set'}`}
+                              {` - ${record.courseLocation || 'Delivery location not set'}`}
                               {record.startDate ? ` - ${record.startDate}` : ''}
                               {record.endDate ? ` to ${record.endDate}` : ''}
                             </small>
@@ -1976,8 +1978,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                               <strong>{selectedCourseRecord.startDate || 'Not set'}</strong>
                             </div>
                             <div>
-                              <span>Location</span>
-                              <strong>{selectedCourseRecord.courseLocation || 'Location not set'}</strong>
+                              <span>Delivery location</span>
+                              <strong>{selectedCourseRecord.courseLocation || 'Delivery location not set'}</strong>
                             </div>
                             <div>
                               <span>Ended</span>
@@ -2417,7 +2419,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               <div className="contact-dialog-section-header">
                 <div>
                   <h2>Course</h2>
-                  <p>Name and location first, using the actual course record rather than lead-interest labels.</p>
+                  <p>Name and delivery location first, using the actual course record rather than lead-interest labels.</p>
                 </div>
               </div>
               <div className="grid-2">
@@ -2433,14 +2435,14 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   />
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Location</label>
+                  <label className="form-label">Delivery Location</label>
                   <select
                     className="input select"
                     value={courseForm.courseLocation || ''}
                     disabled={courseBusy}
                     onChange={(event) => updateCourseForm({ courseLocation: event.target.value })}
                   >
-                    <option value="">Location not set</option>
+                    <option value="">Delivery location not set</option>
                     {courseLocationOptions.map((location) => (
                       <option key={location} value={location}>{location}</option>
                     ))}
@@ -2721,8 +2723,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       <input id="follow-up-program" className="input" value={followUpDraft.leadProfile?.programInterest || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('programInterest', event.target.value)} />
                     </div>
                     <div className="form-group">
-                      <label className="form-label" htmlFor="follow-up-location">Location</label>
-                      <input id="follow-up-location" className="input" value={followUpDraft.leadProfile?.locationPreference || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('locationPreference', event.target.value)} />
+                      <label className="form-label" htmlFor="follow-up-location">Market / Region</label>
+                      <select id="follow-up-location" className="input select" value={followUpDraft.leadProfile?.locationPreference || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('locationPreference', event.target.value)}>
+                        <option value="">Not specified</option>
+                        {followUpMarketRegionOptions.map((market) => <option key={market} value={market}>{market}</option>)}
+                      </select>
                     </div>
                   </div>
                   <div className="grid-2">
@@ -2898,8 +2903,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               >
                 <div className="contact-dialog-section-header">
                   <div>
-                    <h2>Source and location</h2>
-                    <p>Keep attribution and school routing clear without mixing it into daily contact edits.</p>
+                    <h2>Source and routing</h2>
+                    <p>Keep campaign geography separate from where the lead prefers to learn.</p>
                   </div>
                 </div>
                 <div className="grid-2">
@@ -2911,13 +2916,28 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   </div>
                   {showSchoolLocationField ? (
                     <div className="form-group">
-                      <label className="form-label" htmlFor="profile-edit-school-location">School Location</label>
+                      <label className="form-label" htmlFor="profile-edit-market-region">Market / Region</label>
+                      <select id="profile-edit-market-region" className="input select" value={editForm.leadProfile?.locationPreference || ''} onChange={e => updateEditLeadProfile('locationPreference', e.target.value)}>
+                        <option value="">Not specified</option>
+                        {editMarketRegionOptions.map((market) => (
+                          <option key={market} value={market}>{market}</option>
+                        ))}
+                      </select>
+                      <div className="profile-editor-helper">Where the lead is based or grouped for outreach.</div>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="grid-2">
+                  {showSchoolLocationField ? (
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="profile-edit-school-location">Preferred Learning Location</label>
                       <select id="profile-edit-school-location" className="input select" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})}>
-                        <option value="">Select school location</option>
+                        <option value="">Not specified</option>
                         {editSchoolLocationOptions.map((location) => (
                           <option key={location} value={location}>{location}</option>
                         ))}
                       </select>
+                      <div className="profile-editor-helper">Campus or Online preference before enrollment.</div>
                     </div>
                   ) : (
                     <div className="form-group">
@@ -2946,10 +2966,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-program-interest">Program Interest</label>
                     <input id="profile-edit-program-interest" className="input" value={editForm.leadProfile?.programInterest || ''} onChange={e => updateEditLeadProfile('programInterest', e.target.value)} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="profile-edit-location-preference">Location Preference</label>
-                    <input id="profile-edit-location-preference" className="input" value={editForm.leadProfile?.locationPreference || ''} onChange={e => updateEditLeadProfile('locationPreference', e.target.value)} />
                   </div>
                 </div>
                 <div className="grid-2">
