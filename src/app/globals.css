@@ -3098,6 +3098,17 @@ a { color: inherit; text-decoration: none; }
     align-items: flex-start;
     flex-direction: column;
   }
+  .course-editor-form {
+    grid-template-columns: 1fr;
+  }
+  .course-editor-summary {
+    grid-column: auto;
+    grid-row: auto;
+    position: static;
+  }
+  .course-status-grid {
+    grid-template-columns: 1fr;
+  }
   .danger-action-panel {
     align-items: stretch;
     flex-direction: column;
