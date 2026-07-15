@@ -28,7 +28,11 @@ export default async function RootLayout({ children }) {
   const pathname = headerStore.get('x-ait-crm-pathname') || '';
   const bootstrapMode = pathname === '/contacts' || pathname === '/clients'
     ? 'contact-directory'
-    : 'full';
+    : pathname === '/'
+      ? 'dashboard'
+      : pathname === '/pipeline'
+        ? 'pipeline'
+        : 'full';
   const bootstrapData = {
     ...(await getBootstrapData(session, bootstrapMode)),
     persistedBusinessUnitScope: cookieStore.get(SCOPE_STORAGE_KEY)?.value || '',

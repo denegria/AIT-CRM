@@ -199,6 +199,12 @@ export default function PipelinePage() {
     currentUser,
     canUseConsolidatedScope,
     scopeLabel,
+    pipelineSummary,
+    pipelineSummaryIsDeferred,
+    pipelineSummaryLoaded,
+    pipelineSummaryLoading,
+    pipelineSummaryError,
+    loadPipelineSummary,
   } = useCRM();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -307,6 +313,40 @@ export default function PipelinePage() {
   });
 
   const selectedBusinessUnitId = resolvedPipelineBusinessUnitId || currentScopedBusinessUnitId;
+  const pipelineSummaryMatches = Boolean(
+    pipelineSummary &&
+    pipelineSummary.businessUnitId === selectedBusinessUnitId &&
+    pipelineSummary.leadDateScope === effectiveLeadDateScope &&
+    (pipelineSummary.leadDateFrom || '') === (leadDateFrom || '') &&
+    (pipelineSummary.leadDateTo || '') === (leadDateTo || '')
+  );
+  const pipelineRequest = useMemo(() => ({
+    businessUnitId: selectedBusinessUnitId,
+    leadDateScope: effectiveLeadDateScope,
+    leadDateFrom,
+    leadDateTo,
+  }), [effectiveLeadDateScope, leadDateFrom, leadDateTo, selectedBusinessUnitId]);
+
+  useEffect(() => {
+    if (!pipelineSummaryIsDeferred || !access.canReadCrm || !selectedBusinessUnitId || pipelineSummaryLoading) return;
+    if (pipelineSummaryLoaded && pipelineSummaryMatches) return;
+    loadPipelineSummary(pipelineRequest).catch(() => null);
+  }, [
+    access.canReadCrm,
+    loadPipelineSummary,
+    pipelineRequest,
+    pipelineSummaryIsDeferred,
+    pipelineSummaryLoaded,
+    pipelineSummaryLoading,
+    pipelineSummaryMatches,
+    selectedBusinessUnitId,
+  ]);
+
+  const refreshPipelineSummary = useCallback(() => (
+    pipelineSummaryIsDeferred
+      ? loadPipelineSummary({ ...pipelineRequest, force: true })
+      : Promise.resolve(null)
+  ), [loadPipelineSummary, pipelineRequest, pipelineSummaryIsDeferred]);
   const isAitUsaPipeline = activeWorkflow?.key === WORKFLOW_KEYS.AIT_USA;
   const effectiveLocationFilter = isAitUsaPipeline ? locationFilter : DEFAULT_PIPELINE_LOCATION_FILTER;
   const scopedRows = useMemo(() => contactRows.filter((contact) => {
@@ -334,18 +374,18 @@ export default function PipelinePage() {
     })),
     [effectiveLeadDateScope, eligibleScopedRows, leadDateFrom, leadDateTo],
   );
-  const allPipelineCount = eligibleScopedRows.length;
-  const currentPipelineCount = useMemo(
+  const legacyAllPipelineCount = eligibleScopedRows.length;
+  const legacyCurrentPipelineCount = useMemo(
     () => eligibleScopedRows.filter((contact) => contactMatchesLeadDateScope(contact)).length,
     [eligibleScopedRows],
   );
-  const quarterPipelineCount = useMemo(
+  const legacyQuarterPipelineCount = useMemo(
     () => eligibleScopedRows.filter((contact) => contactMatchesLeadDateScope(contact, {
       leadDateScope: CONTACT_LEAD_DATE_SCOPE_QUARTER,
     })).length,
     [eligibleScopedRows],
   );
-  const customPipelineCount = useMemo(
+  const legacyCustomPipelineCount = useMemo(
     () => eligibleScopedRows.filter((contact) => contactMatchesLeadDateScope(contact, {
       leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM,
       leadDateFrom,
@@ -353,6 +393,10 @@ export default function PipelinePage() {
     })).length,
     [eligibleScopedRows, leadDateFrom, leadDateTo],
   );
+  const allPipelineCount = pipelineSummary?.timeframeCounts?.all ?? legacyAllPipelineCount;
+  const currentPipelineCount = pipelineSummary?.timeframeCounts?.current ?? legacyCurrentPipelineCount;
+  const quarterPipelineCount = pipelineSummary?.timeframeCounts?.quarter ?? legacyQuarterPipelineCount;
+  const customPipelineCount = pipelineSummary?.timeframeCounts?.custom ?? legacyCustomPipelineCount;
 
   const sourceOptions = useMemo(() => {
     const values = [...new Set(pipelineScopedRows.map(sourceValue).filter(Boolean))];
@@ -403,7 +447,7 @@ export default function PipelinePage() {
     () => normalizedColumns.filter((column) => column.isTerminal && !column.isOperational).sort(closedOutcomeSort),
     [normalizedColumns],
   );
-  const closedOutcomeCounts = useMemo(() => {
+  const legacyClosedOutcomeCounts = useMemo(() => {
     const counts = new Map(closedOutcomeColumns.map((column) => [column.id, 0]));
     for (const contact of scopedRows) {
       if (!counts.has(contact.status)) continue;
@@ -416,6 +460,12 @@ export default function PipelinePage() {
     }
     return counts;
   }, [closedOutcomeColumns, effectiveLeadDateScope, leadDateFrom, leadDateTo, scopedRows]);
+  const closedOutcomeCounts = useMemo(
+    () => pipelineSummary?.closedOutcomeCounts
+      ? new Map(Object.entries(pipelineSummary.closedOutcomeCounts))
+      : legacyClosedOutcomeCounts,
+    [legacyClosedOutcomeCounts, pipelineSummary?.closedOutcomeCounts],
+  );
   const mobileStageRows = mobileStageFilter === 'all'
     ? pipelineRows
     : pipelineRows.filter((contact) => contact.status === mobileStageFilter);
@@ -580,7 +630,8 @@ export default function PipelinePage() {
       return;
     }
     updateContact(id, { status })
-      .then(() => {
+      .then(async () => {
+        await refreshPipelineSummary();
         setMobileMoveCardId('');
         toast('Stage updated');
       })
@@ -589,7 +640,8 @@ export default function PipelinePage() {
   const assignSelectedToMe = () => {
     if (!currentUser?.id || !selectedRows.length || !coordinatorUiPolicy.canManageCoordinatorAssignments) return;
     Promise.all(selectedRows.map((contact) => updateContact(contact.id, { assignedTo: currentUser.id })))
-      .then(() => {
+      .then(async () => {
+        await refreshPipelineSummary();
         setSelectedIds([]);
         setBulkAssignMode(false);
         toast(`Assigned ${selectedRows.length} pipeline cards to you`);
@@ -602,8 +654,19 @@ export default function PipelinePage() {
     setBulkAssignMode(!bulkAssignMode);
   };
 
-  if (!loaded) {
+  if (!loaded || (pipelineSummaryIsDeferred && !pipelineSummaryMatches && !pipelineSummaryError)) {
     return <PageState tone="loading" title="Loading pipeline" copy="Preparing lead stages and workflow filters for your current division." />;
+  }
+
+  if (pipelineSummaryIsDeferred && pipelineSummaryError) {
+    return (
+      <PageState
+        tone="error"
+        title="Pipeline summary could not load"
+        copy={pipelineSummaryError}
+        actions={<button className="btn btn-primary" onClick={() => refreshPipelineSummary().catch(() => null)}>Try again</button>}
+      />
+    );
   }
 
   return (

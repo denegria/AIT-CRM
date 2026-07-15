@@ -93,6 +93,12 @@ export default function Dashboard() {
     access,
     currentBusinessUnit,
     scopeLabel,
+    dashboardSummary,
+    dashboardSummaryIsDeferred,
+    dashboardSummaryLoaded,
+    dashboardSummaryLoading,
+    dashboardSummaryError,
+    loadDashboardSummary,
   } = useCRM();
   const { toast } = useToast();
   const [dashboardNow] = useState(() => Date.now());
@@ -107,7 +113,32 @@ export default function Dashboard() {
     loadTasks().catch(() => null);
   }, [access.canReadCrm, dataSource, loadTasks, tasksLoaded, tasksLoading]);
 
-  const kpis = useMemo(() => {
+  useEffect(() => {
+    if (
+      dataSource !== 'postgres' ||
+      !dashboardSummaryIsDeferred ||
+      !access.canReadCrm ||
+      dashboardSummaryLoading ||
+      !currentBusinessUnit?.id
+    ) return;
+    if (dashboardSummaryLoaded && dashboardSummary?.businessUnitId === currentBusinessUnit.id) return;
+    loadDashboardSummary({
+      businessUnitId: currentBusinessUnit.id,
+      employeeIds: employees.map((employee) => employee.id).filter(Boolean),
+    }).catch(() => null);
+  }, [
+    access.canReadCrm,
+    currentBusinessUnit?.id,
+    dashboardSummary?.businessUnitId,
+    dashboardSummaryIsDeferred,
+    dashboardSummaryLoaded,
+    dashboardSummaryLoading,
+    dataSource,
+    employees,
+    loadDashboardSummary,
+  ]);
+
+  const legacyKpis = useMemo(() => {
     const currentContacts = contacts.filter(c => isCurrentLeadDateScope(c));
     const now = dashboardNow;
     const invoices = financials.filter(f => f.type === 'Invoice');
@@ -171,6 +202,7 @@ export default function Dashboard() {
       usaBadContactChannel,
     };
   }, [contacts, currentUserId, dashboardNow, financials, isAdminView, tasks, workOrders]);
+  const kpis = dashboardSummary?.kpis || legacyKpis;
 
   const myTasks = useMemo(() => {
     if (isAdminView) return tasks;
@@ -219,12 +251,12 @@ export default function Dashboard() {
     return [
       taskCard,
       { label: 'Current Contacts', value: kpis.activeContacts, change: 'Current scope', trend: 'up', href: '/contacts?leadDateScope=current' },
-      { label: 'Open Work Orders', value: kpis.activeWOs, change: `${workOrders.filter(w=>w.status==='In Progress').length} in progress`, trend: 'up', href: '/work-orders?status=open' },
+      { label: 'Open Work Orders', value: kpis.activeWOs, change: `${dashboardSummary?.kpis?.inProgressWorkOrders ?? workOrders.filter(w=>w.status==='In Progress').length} in progress`, trend: 'up', href: '/work-orders?status=open' },
       canReadFinancials
         ? { label: 'Pending Estimates', value: moneyLabel(kpis.pendingEstimateValue), change: `${kpis.pendingEstimates} estimates`, trend: 'up', href: '/financials' }
         : { label: 'New Leads', value: kpis.needsFirstOutreach, change: 'Ready to assign', trend: 'up', href: '/contacts?leadDateScope=current&status=New+Lead' },
     ];
-  }, [canReadFinancials, currentBusinessUnit, isAdminView, kpis, workOrders]);
+  }, [canReadFinancials, currentBusinessUnit, dashboardSummary?.kpis?.inProgressWorkOrders, isAdminView, kpis, workOrders]);
 
   const unassignedLeadFollowUps = useMemo(
     () => (isAdminView ? tasks.filter(isUnassignedInboundLeadFollowUp) : []),
@@ -236,7 +268,7 @@ export default function Dashboard() {
   );
 
   const sourceHealth = useMemo(() => {
-    const websiteLeads = contacts.filter((contact) => /website|web|wix/i.test(`${contact.source || ''} ${contact.sourceLabel || ''}`)).length;
+    const websiteLeads = dashboardSummary?.sourceHealth?.websiteLeads ?? contacts.filter((contact) => /website|web|wix/i.test(`${contact.source || ''} ${contact.sourceLabel || ''}`)).length;
     const facebookTasks = tasks.filter(isFacebookLeadFollowUp).length;
     return [
       { label: 'Website leads', status: websiteLeads ? `${websiteLeads} active` : 'Low data', tone: websiteLeads ? 'success' : 'muted' },
@@ -244,7 +276,7 @@ export default function Dashboard() {
       { label: 'Messenger', status: 'Connected where configured', tone: 'success' },
       { label: 'SMS / 10DLC', status: 'Pending', tone: 'warning' },
     ];
-  }, [contacts, tasks]);
+  }, [contacts, dashboardSummary?.sourceHealth?.websiteLeads, tasks]);
 
   const dashboardDueTodayTasks = useMemo(() => {
     const todayKey = new Date().toISOString().slice(0, 10);
@@ -307,7 +339,11 @@ export default function Dashboard() {
     toast('Task created');
   }, [access.canWriteCrm, addTask, currentBusinessUnit?.id, currentUser?.id, dataSource, toast]);
 
-  if (!loaded || (dataSource === 'postgres' && !tasksLoaded && !tasksError)) {
+  if (
+    !loaded ||
+    (dataSource === 'postgres' && !tasksLoaded && !tasksError) ||
+    (dashboardSummaryIsDeferred && !dashboardSummaryLoaded && !dashboardSummaryError)
+  ) {
     return <PageState tone="loading" title="Loading dashboard" copy="Preparing your current tasks, contacts, and division summary." />;
   }
 
@@ -318,6 +354,21 @@ export default function Dashboard() {
         title="Dashboard tasks could not load"
         copy={tasksError}
         actions={<button className="btn btn-primary" onClick={() => loadTasks({ force: true }).catch(() => null)}>Try again</button>}
+      />
+    );
+  }
+
+  if (dashboardSummaryIsDeferred && dashboardSummaryError) {
+    return (
+      <PageState
+        tone="error"
+        title="Dashboard summary could not load"
+        copy={dashboardSummaryError}
+        actions={<button className="btn btn-primary" onClick={() => loadDashboardSummary({
+          businessUnitId: currentBusinessUnit?.id,
+          employeeIds: employees.map((employee) => employee.id).filter(Boolean),
+          force: true,
+        }).catch(() => null)}>Try again</button>}
       />
     );
   }
@@ -383,7 +434,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {dataSource === 'postgres' && access.canReadImportReview && !importStaging?.latestBatch && contacts.length === 0 && (
+      {dataSource === 'postgres' && access.canReadImportReview && !importStaging?.latestBatch && !dashboardSummaryIsDeferred && contacts.length === 0 && (
         <div className="card" style={{marginBottom:20, padding:16, borderColor:'var(--accent)'}}>
           <div className="card-title" style={{marginBottom:4}}>Getting started with AIT Signs CRM</div>
           <p className="page-subtitle" style={{margin:0, marginBottom:16}}>
@@ -418,6 +469,7 @@ export default function Dashboard() {
               tasks={tasks}
               contacts={contacts}
               currentUser={monitorCurrentUser}
+              businessMovement={dashboardSummary?.businessMovement || null}
             />
             <aside className={monitorStyles.rightRail}>
               <section className={monitorStyles.railCard}>

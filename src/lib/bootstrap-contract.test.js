@@ -5,6 +5,8 @@ import {
   DEFERRED_BOOTSTRAP_LOADERS,
   deferBootstrapContactDirectory,
   deferBootstrapContactDetails,
+  deferBootstrapDashboardSummary,
+  deferBootstrapPipelineSummary,
   deferBootstrapTasks,
   hasDeferredBootstrapLoader,
   projectContactBootstrapSummaryRows,
@@ -92,6 +94,24 @@ test('contact directory shell excludes broad CRM collections before paged loadin
   assert.deepEqual(directoryBootstrap.financials, []);
   assert.equal(hasDeferredBootstrapLoader(directoryBootstrap, DEFERRED_BOOTSTRAP_LOADERS.CONTACT_DIRECTORY), true);
   assert.ok(reductionPercent > 90, `expected lean directory shell to reduce fixture bootstrap by >90%, got ${reductionPercent}%`);
+});
+
+test('dashboard and pipeline shells defer their route-owned data', () => {
+  const { core, tasks } = deterministicFixture();
+  const legacyBootstrap = { ...core, tasks };
+  const dashboardBootstrap = deferBootstrapDashboardSummary(deferBootstrapTasks(legacyBootstrap));
+  const pipelineBootstrap = deferBootstrapPipelineSummary(deferBootstrapTasks(legacyBootstrap));
+
+  for (const [payload, loader] of [
+    [dashboardBootstrap, DEFERRED_BOOTSTRAP_LOADERS.DASHBOARD_SUMMARY],
+    [pipelineBootstrap, DEFERRED_BOOTSTRAP_LOADERS.PIPELINE_SUMMARY],
+  ]) {
+    assert.deepEqual(payload.contacts, []);
+    assert.deepEqual(payload.workOrders, []);
+    assert.deepEqual(payload.financials, []);
+    assert.equal(hasDeferredBootstrapLoader(payload, loader), true);
+    assert.ok(serializedBytes(payload) < serializedBytes(legacyBootstrap) * 0.1);
+  }
 });
 
 test('route task payload maps the existing scoped API contract without changing task semantics', () => {

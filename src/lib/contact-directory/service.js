@@ -113,7 +113,15 @@ function directoryDateSql(latestLead, workflowKey) {
   )`;
 }
 
-function dateRangeCondition({ scope, from, to, latestLead, workflowKey, now = new Date() }) {
+function dateRangeCondition({
+  scope,
+  from,
+  to,
+  latestLead,
+  workflowKey,
+  now = new Date(),
+  excludeClosedCurrent = true,
+}) {
   if (!scope || scope === 'all') return undefined;
   let start = null;
   let end = null;
@@ -139,7 +147,7 @@ function dateRangeCondition({ scope, from, to, latestLead, workflowKey, now = ne
   else if (start) dateCondition = sql`${leadDate} >= ${start}`;
   else if (end) dateCondition = sql`${leadDate} < ${end}`;
   if (!dateCondition) return undefined;
-  if (scope !== 'current' || workflowKey !== WORKFLOW_KEYS.AIT_USA) return dateCondition;
+  if (!excludeClosedCurrent || scope !== 'current' || workflowKey !== WORKFLOW_KEYS.AIT_USA) return dateCondition;
   const status = normalizedSql(sql`coalesce(${latestLead.currentStage}, ${latestLead.status})`);
   const leadStatus = normalizedSql(latestLead.status);
   return and(
@@ -252,7 +260,7 @@ function facetCondition(value, latestLead, session) {
   return undefined;
 }
 
-function directoryConditions({ searchParams, latestLead, session, workflowKey }) {
+function directoryConditions({ searchParams, latestLead, session, workflowKey, excludeClosedCurrent = true }) {
   const conditions = [scopedContactWhere(contacts, session)];
   const businessUnitId = clean(searchParams.get('businessUnitId'));
   if (businessUnitId === 'unassigned') conditions.push(isNull(contacts.primaryBusinessUnitId));
@@ -301,11 +309,62 @@ function directoryConditions({ searchParams, latestLead, session, workflowKey })
     to: searchParams.get('leadDateTo'),
     latestLead,
     workflowKey,
+    excludeClosedCurrent,
   });
   if (date) conditions.push(date);
   const facet = facetCondition(searchParams.get('facet'), latestLead, session);
   if (facet) conditions.push(facet);
   return conditions;
+}
+
+async function contactDirectoryQueryContext({ db, session, searchParams, businessUnitRows = null, excludeClosedCurrent = true }) {
+  const units = businessUnitRows || await db.select().from(businessUnits).where(scopedOrgWhere(businessUnits, session));
+  const requestedBusinessUnitId = clean(searchParams.get('businessUnitId'));
+  const workflowKey = workflowKeyForBusinessUnit(
+    units.find((unit) => unit.id === requestedBusinessUnitId) || null,
+  );
+  const latestLead = db
+    .selectDistinctOn([leads.contactId])
+    .from(leads)
+    .where(scopedOrgWhere(leads, session))
+    .orderBy(leads.contactId, desc(leads.createdAt), desc(leads.id))
+    .as('latest_contact_lead');
+  const conditions = directoryConditions({
+    searchParams,
+    latestLead,
+    session,
+    workflowKey,
+    excludeClosedCurrent,
+  });
+  return {
+    businessUnitRows: units,
+    requestedBusinessUnitId,
+    workflowKey,
+    latestLead,
+    where: and(...conditions),
+  };
+}
+
+export async function countContactDirectoryRows({
+  db,
+  session,
+  searchParams,
+  businessUnitRows = null,
+  excludeClosedCurrent = true,
+}) {
+  const context = await contactDirectoryQueryContext({
+    db,
+    session,
+    searchParams,
+    businessUnitRows,
+    excludeClosedCurrent,
+  });
+  const rows = await db
+    .select({ value: count() })
+    .from(contacts)
+    .leftJoin(context.latestLead, eq(context.latestLead.contactId, contacts.id))
+    .where(context.where);
+  return Number(rows[0]?.value || 0);
 }
 
 function paymentWhereForPage({ estimateRows, workOrderRows, paymentLinkRows }) {
@@ -348,25 +407,24 @@ async function loadCourseOptions({ db, session, businessUnitId }) {
     .map((value) => ({ value, label: value, count: null }));
 }
 
-export async function loadContactDirectoryPage({ db, session, searchParams }) {
+export async function loadContactDirectoryPage({
+  db,
+  session,
+  searchParams,
+  pageSizeLimit = CONTACT_DIRECTORY_MAX_PAGE_SIZE,
+}) {
   const page = positiveInteger(searchParams.get('page'), 1);
   const pageSize = Math.min(
     positiveInteger(searchParams.get('pageSize'), CONTACT_DIRECTORY_PAGE_SIZE),
-    CONTACT_DIRECTORY_MAX_PAGE_SIZE,
+    pageSizeLimit,
   );
-  const businessUnitRows = await db.select().from(businessUnits).where(scopedOrgWhere(businessUnits, session));
-  const requestedBusinessUnitId = clean(searchParams.get('businessUnitId'));
-  const workflowKey = workflowKeyForBusinessUnit(
-    businessUnitRows.find((unit) => unit.id === requestedBusinessUnitId) || null,
-  );
-  const latestLead = db
-    .selectDistinctOn([leads.contactId])
-    .from(leads)
-    .where(scopedOrgWhere(leads, session))
-    .orderBy(leads.contactId, desc(leads.createdAt), desc(leads.id))
-    .as('latest_contact_lead');
-  const conditions = directoryConditions({ searchParams, latestLead, session, workflowKey });
-  const where = and(...conditions);
+  const context = await contactDirectoryQueryContext({ db, session, searchParams });
+  const {
+    businessUnitRows,
+    requestedBusinessUnitId,
+    latestLead,
+    where,
+  } = context;
   const offset = (page - 1) * pageSize;
 
   const [idRows, countRows, courseOptions] = await Promise.all([

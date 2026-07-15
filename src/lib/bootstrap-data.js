@@ -43,6 +43,8 @@ import { canonicalRoleKeys } from './roles.js';
 import {
   deferBootstrapContactDetails,
   deferBootstrapContactDirectory,
+  deferBootstrapDashboardSummary,
+  deferBootstrapPipelineSummary,
   deferBootstrapTasks,
   toContactListPayload,
 } from './bootstrap-contract.js';
@@ -646,7 +648,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
   try {
     const db = getDb();
     const access = sessionAccess(session);
-    if (bootstrapMode === 'contact-directory') {
+    if (['contact-directory', 'dashboard', 'pipeline'].includes(bootstrapMode)) {
       const [businessUnitRows, contactCountRows, userRows, membershipRows, userRoleRows, importStaging] = await Promise.all([
         db.select().from(businessUnitsTable).where(scopedOrgWhere(businessUnitsTable, session)).orderBy(asc(businessUnitsTable.name)),
         db
@@ -669,14 +671,17 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       const defaultBusinessUnitId = contactCountRows
         .filter((row) => row.businessUnitId)
         .sort((left, right) => Number(right.value || 0) - Number(left.value || 0))[0]?.businessUnitId || '';
-      return deferBootstrapContactDirectory(deferBootstrapContactDetails(deferBootstrapTasks({
+      const leanPayload = deferBootstrapContactDetails(deferBootstrapTasks({
         ...emptyDbData(businessUnitRows, importStaging),
         appVersion,
         currentUser: session.user,
         access,
         employees: mapEmployees(userRows, membershipRows, userRoleRows),
         defaultBusinessUnitId,
-      })));
+      }));
+      if (bootstrapMode === 'dashboard') return deferBootstrapDashboardSummary(leanPayload);
+      if (bootstrapMode === 'pipeline') return deferBootstrapPipelineSummary(leanPayload);
+      return deferBootstrapContactDirectory(leanPayload);
     }
     const [
       businessUnitRows,

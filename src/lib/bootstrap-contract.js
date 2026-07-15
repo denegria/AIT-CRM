@@ -2,6 +2,8 @@ export const DEFERRED_BOOTSTRAP_LOADERS = Object.freeze({
   TASKS: 'tasks',
   CONTACT_DETAILS: 'contactDetails',
   CONTACT_DIRECTORY: 'contactDirectory',
+  DASHBOARD_SUMMARY: 'dashboardSummary',
+  PIPELINE_SUMMARY: 'pipelineSummary',
 });
 
 export const CONTACT_BOOTSTRAP_SUMMARY_FIELDS = Object.freeze({
@@ -115,6 +117,27 @@ export function deferBootstrapContactDirectory(payload = {}) {
     financials: [],
     deferredLoaders: [...deferredLoaders],
   };
+}
+
+function deferBootstrapCrmSurface(payload = {}, loader) {
+  const deferredLoaders = new Set(payload.deferredLoaders || []);
+  deferredLoaders.add(loader);
+
+  return {
+    ...payload,
+    contacts: [],
+    workOrders: [],
+    financials: [],
+    deferredLoaders: [...deferredLoaders],
+  };
+}
+
+export function deferBootstrapDashboardSummary(payload = {}) {
+  return deferBootstrapCrmSurface(payload, DEFERRED_BOOTSTRAP_LOADERS.DASHBOARD_SUMMARY);
+}
+
+export function deferBootstrapPipelineSummary(payload = {}) {
+  return deferBootstrapCrmSurface(payload, DEFERRED_BOOTSTRAP_LOADERS.PIPELINE_SUMMARY);
 }
 
 export function hasDeferredBootstrapLoader(payload = {}, loader) {

@@ -139,7 +139,7 @@ function trendLabel(current = 0, previous = 0) {
   return 'Flat vs last week';
 }
 
-function buildBusinessMovement({ contacts = [], employeeIds = [], now = Date.now() } = {}) {
+export function buildBusinessMovement({ contacts = [], employeeIds = [], now = Date.now() } = {}) {
   const todayStart = startOfUtcDay(now);
   const tomorrowStart = todayStart + 24 * 60 * 60 * 1000;
   const weekStart = startOfUtcWeek(now);
@@ -280,10 +280,16 @@ export function buildTeamMonitorViewModel({
   currentUser = null,
   today = taskDateKey(new Date()),
   now = Date.now(),
+  businessMovement: providedBusinessMovement = null,
 } = {}) {
   const normalizedTasks = tasks.map(normalizeMonitorTask);
   const employeeIds = employees.map((employee) => employee.id).filter(Boolean);
-  const businessMovement = buildBusinessMovement({ contacts, employeeIds, now });
+  const businessMovement = providedBusinessMovement
+    ? {
+      byEmployee: new Map(Object.entries(providedBusinessMovement.byEmployee || {})),
+      totals: providedBusinessMovement.totals || {},
+    }
+    : buildBusinessMovement({ contacts, employeeIds, now });
   const tasksByOwner = new Map();
   for (const task of normalizedTasks) {
     if (!task.ownerUserId) continue;

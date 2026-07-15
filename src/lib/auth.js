@@ -15,6 +15,7 @@ import {
   users,
   userSessions,
 } from '@/db/schema.js';
+import { applyBusinessUnitAccessPolicy } from '@/lib/auth/business-unit-policy.js';
 
 export const AUTH_COOKIE_NAME = 'ait_crm_session';
 export const SESSION_SECRET_ENV = 'AIT_CRM_SESSION_SECRET';
@@ -156,7 +157,7 @@ async function loadSession(token) {
 
   if (!sessionRow) return null;
 
-  const [roleRows, permissionRows, membershipRows] = await Promise.all([
+  const [roleRows, permissionRows, membershipRows, allBusinessUnitRows] = await Promise.all([
     db
       .select({ key: roles.key, name: roles.name })
       .from(userRoles)
@@ -178,6 +179,14 @@ async function loadSession(token) {
       .innerJoin(businessUnits, eq(businessUnitMemberships.businessUnitId, businessUnits.id))
       .where(eq(businessUnitMemberships.userId, sessionRow.userId))
       .orderBy(desc(businessUnitMemberships.isPrimary), businessUnitMemberships.createdAt),
+    db
+      .select({
+        id: businessUnits.id,
+        name: businessUnits.name,
+        isActive: businessUnits.isActive,
+      })
+      .from(businessUnits)
+      .where(eq(businessUnits.organizationId, sessionRow.organizationId)),
   ]);
 
   const roleKeys = canonicalRoleKeys(roleRows.map((role) => role.key)).sort((left, right) => {
@@ -187,7 +196,15 @@ async function loadSession(token) {
       || left.localeCompare(right);
   });
   const permissionKeys = [...new Set(permissionRows.map((permission) => permission.key))];
-  const membershipPayload = membershipRows.map((row) => ({
+  const businessUnitAccess = applyBusinessUnitAccessPolicy({
+    roleKeys,
+    permissionKeys,
+    allBusinessUnits: allBusinessUnitRows,
+    membershipRows,
+    businessUnitsAllPermission: PERMISSIONS.BUSINESS_UNITS_ALL,
+  });
+  const allowedMembershipRows = businessUnitAccess.membershipRows;
+  const membershipPayload = allowedMembershipRows.map((row) => ({
     id: row.businessUnitId,
     name: row.businessUnitName || '',
     isPrimary: Boolean(row.isPrimary),
@@ -203,11 +220,12 @@ async function loadSession(token) {
       roleKeys,
       primaryRoleKey: roleKeys.includes(ROLE_KEYS.ADMIN) ? ROLE_KEYS.ADMIN : roleKeys[0] || ROLE_KEYS.ACCOUNT_COORDINATOR,
       permissions: permissionKeys,
-      businessUnitIds: membershipRows.map((row) => row.businessUnitId),
+      businessUnitIds: businessUnitAccess.businessUnitIds,
       businessUnitMemberships: membershipPayload,
       businessUnitNamesById: Object.fromEntries(membershipPayload.map((row) => [row.id, row.name])),
-      primaryBusinessUnitId: membershipRows.find((row) => row.isPrimary)?.businessUnitId || membershipRows[0]?.businessUnitId || null,
-      canAccessAllBusinessUnits: permissionKeys.includes(PERMISSIONS.BUSINESS_UNITS_ALL),
+      primaryBusinessUnitId: allowedMembershipRows.find((row) => row.isPrimary)?.businessUnitId || allowedMembershipRows[0]?.businessUnitId || null,
+      canAccessAllBusinessUnits: businessUnitAccess.canAccessAllBusinessUnits,
+      restrictedBusinessUnitIds: businessUnitAccess.restrictedBusinessUnitIds,
     },
   };
 }
