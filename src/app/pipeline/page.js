@@ -605,7 +605,7 @@ export default function PipelinePage() {
     },
   ].filter(Boolean);
   const pipelineScopeName = pipelineBusinessUnit?.name || currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`;
-  const pipelineSummary = `${pipelineRows.length.toLocaleString()} matching pipeline cards in ${pipelineScopeName}`;
+  const pipelineSummaryCopy = `${pipelineRows.length.toLocaleString()} matching pipeline cards in ${pipelineScopeName}`;
   const showPipelineScopeSelector = !currentScopedBusinessUnitId && accessibleBusinessUnits.length > 1;
   const resetFilters = () => {
     updatePipelineFilterQuery({
@@ -674,7 +674,7 @@ export default function PipelinePage() {
       <div className={`page-header ${s.pipelineHeader}`}>
         <div className={s.headerCopy}>
           <h1 className="page-title">Pipeline</h1>
-          <p className="page-subtitle">{pipelineSummary}</p>
+          <p className="page-subtitle">{pipelineSummaryCopy}</p>
         </div>
       </div>
 
