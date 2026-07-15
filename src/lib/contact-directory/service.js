@@ -35,6 +35,7 @@ import {
 } from '@/lib/crm/access.js';
 import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from '@/lib/crm/lifecycle.js';
 import { searchPattern, searchPhoneDigits } from '@/lib/search/match.js';
+import { canonicalAitUsaSchoolLocation } from '@/lib/school-locations.js';
 
 export const CONTACT_DIRECTORY_PAGE_SIZE = 50;
 export const CONTACT_DIRECTORY_MAX_PAGE_SIZE = 100;
@@ -316,12 +317,9 @@ function directoryConditions({ searchParams, latestLead, session, workflowKey, e
   if (source) conditions.push(source);
   const course = courseCondition(searchParams.get('course'), latestLead);
   if (course) conditions.push(course);
-  const location = clean(searchParams.get('location')).toLowerCase();
-  if (location && location !== 'all') {
-    conditions.push(or(
-      eq(normalizedSql(contacts.address), location),
-      eq(normalizedSql(latestLead.locationPreference), location),
-    ));
+  const location = canonicalAitUsaSchoolLocation(searchParams.get('location')).toLowerCase();
+  if (location) {
+    conditions.push(eq(normalizedSql(contacts.address), location));
   }
   const date = dateRangeCondition({
     scope: searchParams.get('leadDateScope'),

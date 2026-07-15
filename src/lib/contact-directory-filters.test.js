@@ -219,12 +219,13 @@ test('pipeline filter params preserve date, owner, status, source, course, activ
   );
 });
 
-test('location filters keep campaign markets and learning locations independently filterable', () => {
+test('learning location filters use only the approved catalog and ignore student geography', () => {
   const rows = [
     { id: 'plainfield', address: 'Plainfield' },
     { id: 'piscataway', locationPreference: 'Piscataway' },
     { id: 'online', enrollmentSignals: { inquiry: { location: 'Online' } } },
     { id: 'madrid-online', address: 'Online', locationPreference: 'Madrid, Spain' },
+    { id: 'legacy-newark', address: 'Newark', locationPreference: 'Newark' },
   ];
 
   assert.deepEqual(
@@ -232,30 +233,33 @@ test('location filters keep campaign markets and learning locations independentl
     [
       ['Bound Brook', 0],
       ['Plainfield', 1],
-      ['Piscataway', 1],
+      ['Piscataway', 0],
       ['Flemington', 0],
-      ['Online', 2],
-      ['Madrid, Spain', 1],
+      ['Online', 1],
     ],
   );
   assert.deepEqual(
     rows
       .filter((contact) => contactMatchesLocation(contact, { locationFilter: 'Piscataway' }))
       .map((contact) => contact.id),
-    ['piscataway'],
+    [],
   );
   assert.deepEqual(
     rows
       .filter((contact) => contactMatchesLocation(contact, { locationFilter: 'Madrid, Spain' }))
       .map((contact) => contact.id),
-    ['madrid-online'],
+    ['plainfield', 'piscataway', 'online', 'madrid-online', 'legacy-newark'],
   );
   assert.deepEqual(
     rows
       .filter((contact) => contactMatchesLocation(contact, { locationFilter: DEFAULT_CONTACT_LOCATION_FILTER }))
       .map((contact) => contact.id),
-    ['plainfield', 'piscataway', 'online', 'madrid-online'],
+    ['plainfield', 'piscataway', 'online', 'madrid-online', 'legacy-newark'],
   );
+  assert.equal(contactFilterStateFromParams(new URLSearchParams('location=Madrid%2C+Spain')).locationFilter, DEFAULT_CONTACT_LOCATION_FILTER);
+  assert.equal(pipelineFilterStateFromParams(new URLSearchParams('location=Newark')).locationFilter, DEFAULT_CONTACT_LOCATION_FILTER);
+  assert.equal(contactFilterQuery({ locationFilter: 'Newark' }), '');
+  assert.equal(pipelineFilterQuery({ locationFilter: 'Madrid, Spain' }), '');
 });
 
 test('contact source filter options use directory source labels', () => {

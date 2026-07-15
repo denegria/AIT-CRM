@@ -1,3 +1,5 @@
+import { canonicalAitUsaSchoolLocation } from '../school-locations.js';
+
 export const LEAD_PROFILE_FIELDS = Object.freeze([
   'programInterest',
   'preferredDay',
@@ -29,7 +31,7 @@ const PROFILE_FIELD_LABELS = Object.freeze({
   testInterest: 'Test',
   educationLevel: 'Level',
   schoolName: 'School',
-  locationPreference: 'Market / region',
+  locationPreference: 'Student location',
   profileDetails: 'Details',
   sourceDetail: 'Source detail',
 });
@@ -88,8 +90,12 @@ const PROFILE_KEY_ALIASES = Object.freeze({
   ],
   locationPreference: [
     'location_preference',
+    'student_location',
+    'student_city',
+    'home_city',
+    'home_location',
+    'student_address',
     'location',
-    'campus',
     'city',
     'address',
     'ubicacion',
@@ -109,6 +115,15 @@ const PROFILE_KEY_ALIASES = Object.freeze({
     'form_name',
   ],
 });
+
+const INTENDED_LEARNING_LOCATION_ALIASES = Object.freeze([
+  'intended_learning_location',
+  'preferred_learning_location',
+  'learning_location',
+  'school_location',
+  'preferred_school_location',
+  'campus',
+]);
 
 function cleanText(value = '') {
   return String(value || '').trim().replace(/\s+/g, ' ');
@@ -199,6 +214,21 @@ export function leadProfilePatchFromWebsiteLead(lead = {}) {
     profileDetails: firstText(lead.message, valueForAliases(valuesByKey, PROFILE_KEY_ALIASES.profileDetails)),
     sourceDetail: firstText(lead.sourceName, lead.sourceKey),
   });
+}
+
+export function intendedLearningLocationFromWebsiteLead(lead = {}) {
+  const fields = lead.formFields && typeof lead.formFields === 'object' ? lead.formFields : {};
+  const valuesByKey = new Map();
+  Object.entries(fields).forEach(([key, value]) => {
+    const text = Array.isArray(value) ? value.map(cleanText).filter(Boolean).join(', ') : cleanText(value);
+    if (text) valuesByKey.set(normalizeKey(key), text);
+  });
+  return canonicalAitUsaSchoolLocation(
+    firstText(
+      lead.intendedLearningLocation,
+      valueForAliases(valuesByKey, INTENDED_LEARNING_LOCATION_ALIASES),
+    ),
+  );
 }
 
 export function leadProfilePatchFromMetaFieldData(fieldData = []) {

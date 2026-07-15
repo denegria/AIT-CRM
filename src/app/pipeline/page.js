@@ -65,7 +65,7 @@ const PIPELINE_FILTER_CHIP_LABELS = {
   status: 'Status',
   source: 'Source',
   course: 'Course',
-  location: 'Location',
+  location: 'Learning Location',
   activity: 'Activity',
   search: 'Search',
   cards: 'Cards',
@@ -600,8 +600,8 @@ export default function PipelinePage() {
     } : null,
     isAitUsaPipeline ? {
       id: 'location',
-      label: 'Location',
-      summary: selectedLocationLabel || 'All Locations',
+      label: 'Learning Location',
+      summary: selectedLocationLabel || 'All Learning Locations',
     } : null,
     {
       id: 'activity',
@@ -957,8 +957,8 @@ export default function PipelinePage() {
 
                       {activeFilterSection === 'location' && isAitUsaPipeline && (
                         <section className={s.filterBlock}>
-                          <div className={s.filterHeading}>Location</div>
-                          <div className={s.optionList} role="listbox" aria-label="AIT USA pipeline location filters">
+                          <div className={s.filterHeading}>Learning Location</div>
+                          <div className={s.optionList} role="listbox" aria-label="AIT USA pipeline learning location filters">
                             <button
                               type="button"
                               className={`${s.optionTile} ${effectiveLocationFilter === DEFAULT_PIPELINE_LOCATION_FILTER ? s.active : ''}`}
@@ -966,7 +966,7 @@ export default function PipelinePage() {
                               aria-selected={effectiveLocationFilter === DEFAULT_PIPELINE_LOCATION_FILTER}
                               role="option"
                             >
-                              <span>All Locations</span>
+                              <span>All Learning Locations</span>
                               <strong>{pipelineScopedRows.length}</strong>
                             </button>
                             {locationFilterOptions.map((option) => (

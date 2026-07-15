@@ -309,6 +309,37 @@ test('creates a notification after a new website lead is promoted', async () => 
   assert.equal(taskInsert.params[11], 'New lead follow-up');
 });
 
+test('routes Wix student geography to the lead and explicit campus to intended learning location', async () => {
+  const { client, calls } = createWebsitePromotionClient();
+
+  const result = await ingestWebsiteLeadSubmission(client, {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-1',
+    body: {
+      externalId: 'wix-location-contract-001',
+      formName: 'AIT USA Wix',
+      fullName: 'Location Contract Lead',
+      email: 'location-contract@example.test',
+      city: 'Madrid, Spain',
+      campus: 'Online',
+    },
+  });
+
+  assert.equal(result.ok, true);
+  const contactInsert = calls.find((call) => call.sql.startsWith('insert into contacts'));
+  assert.equal(contactInsert.params[6], 'Online');
+
+  const leadInsert = calls.find((call) => call.sql.startsWith('insert into leads'));
+  assert.equal(leadInsert.params[15], 'Madrid, Spain');
+
+  const normalizedInsert = calls.find((call) => call.sql.startsWith('insert into import_normalized_records'));
+  const proposedContact = JSON.parse(normalizedInsert.params[3]);
+  const proposedLead = JSON.parse(normalizedInsert.params[4]);
+  assert.equal(proposedContact.address, 'Online');
+  assert.equal(proposedLead.address, 'Madrid, Spain');
+  assert.equal(proposedLead.lead_profile.locationPreference, 'Madrid, Spain');
+});
+
 test('records refresh-site SMS decline in the consent ledger', async () => {
   const { client, calls } = createWebsitePromotionClient();
 

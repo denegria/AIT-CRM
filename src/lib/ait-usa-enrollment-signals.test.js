@@ -25,7 +25,7 @@ test('buildAitUsaEnrollmentSignals exposes Wix first-outreach fields as structur
     contact: {
       phone: '+19085363081',
       email: 'hilda@example.com',
-      address: 'New jersey',
+      address: 'Online',
     },
     lead: {
       sourceType: 'website_form',
@@ -46,6 +46,7 @@ test('buildAitUsaEnrollmentSignals exposes Wix first-outreach fields as structur
   assert.equal(signals.source.channel, 'Wix Website Form');
   assert.equal(signals.inquiry.age, '36');
   assert.equal(signals.inquiry.location, 'New jersey');
+  assert.equal(signals.inquiry.intendedLearningLocation, 'Online');
   assert.equal(signals.inquiry.programInterest, 'ESL');
   assert.equal(signals.course, undefined);
   assert.equal(signals.contactability.status, 'reachable');

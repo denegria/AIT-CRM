@@ -14,7 +14,11 @@ import {
   isCurrentLeadDateScope,
   leadDateForDirectoryScope,
 } from './contact-directory-view.js';
-import { AIT_USA_LOCATION_FILTER_VALUES, contactLocationValues } from './school-locations.js';
+import {
+  AIT_USA_SCHOOL_LOCATIONS,
+  canonicalAitUsaSchoolLocation,
+  schoolLocationForContact,
+} from './school-locations.js';
 
 export const DEFAULT_CONTACT_STATUS_FILTER = 'All';
 export const DEFAULT_CONTACT_OWNER_FILTER = 'all';
@@ -217,7 +221,7 @@ export function sourceFromContactParams(searchParams) {
 }
 
 export function locationFromContactParams(searchParams) {
-  return clean(paramValue(searchParams, 'location')) || DEFAULT_CONTACT_LOCATION_FILTER;
+  return canonicalAitUsaSchoolLocation(paramValue(searchParams, 'location')) || DEFAULT_CONTACT_LOCATION_FILTER;
 }
 
 export function contactFilterStateFromParams(searchParams) {
@@ -262,7 +266,8 @@ export function contactFilterQuery({
   if (sourceFilter && sourceFilter !== DEFAULT_CONTACT_SOURCE_FILTER) params.set('source', sourceFilter);
   if (directoryFacet && directoryFacet !== DEFAULT_CONTACT_FACET_FILTER) params.set('facet', directoryFacet);
   if (courseFilter && courseFilter !== DEFAULT_CONTACT_COURSE_FILTER) params.set('course', courseFilter);
-  if (locationFilter && locationFilter !== DEFAULT_CONTACT_LOCATION_FILTER) params.set('location', locationFilter);
+  const learningLocation = canonicalAitUsaSchoolLocation(locationFilter);
+  if (learningLocation) params.set('location', learningLocation);
   return params.toString();
 }
 
@@ -382,25 +387,23 @@ export function buildSourceFilterOptions(contacts = []) {
 export function contactMatchesLocation(contact = {}, {
   locationFilter = DEFAULT_CONTACT_LOCATION_FILTER,
 } = {}) {
+  const learningLocation = canonicalAitUsaSchoolLocation(locationFilter);
   return locationFilter === DEFAULT_CONTACT_LOCATION_FILTER ||
-    contactLocationValues(contact).some((value) => normalized(value) === normalized(locationFilter));
+    !learningLocation ||
+    normalized(schoolLocationForContact(contact)) === normalized(learningLocation);
 }
 
 export function buildLocationFilterOptions(contacts = []) {
   const byKey = new Map(
-    AIT_USA_LOCATION_FILTER_VALUES.map((location) => [
+    AIT_USA_SCHOOL_LOCATIONS.map((location) => [
       normalized(location),
       { value: location, label: location, count: 0 },
     ]),
   );
   for (const contact of contacts) {
-    for (const label of contactLocationValues(contact)) {
-      const key = normalized(label);
-      if (!key) continue;
-      const existing = byKey.get(key) || { value: label, label, count: 0 };
-      existing.count += 1;
-      byKey.set(key, existing);
-    }
+    const key = normalized(schoolLocationForContact(contact));
+    const existing = byKey.get(key);
+    if (existing) existing.count += 1;
   }
   return [...byKey.values()];
 }
@@ -468,7 +471,8 @@ export function pipelineFilterQuery({
   if (statusFilter && statusFilter !== DEFAULT_PIPELINE_STATUS_FILTER) params.set('status', statusFilter);
   if (sourceFilter && sourceFilter !== DEFAULT_PIPELINE_SOURCE_FILTER) params.set('source', sourceFilter);
   if (courseFilter && courseFilter !== DEFAULT_PIPELINE_COURSE_FILTER) params.set('course', courseFilter);
-  if (locationFilter && locationFilter !== DEFAULT_PIPELINE_LOCATION_FILTER) params.set('location', locationFilter);
+  const learningLocation = canonicalAitUsaSchoolLocation(locationFilter);
+  if (learningLocation) params.set('location', learningLocation);
   if (activityFilter && activityFilter !== DEFAULT_PIPELINE_ACTIVITY_FILTER) params.set('activity', activityFilter);
   if (search) params.set('q', search);
   if (compactMode !== DEFAULT_PIPELINE_COMPACT_MODE) params.set('compact', compactMode ? '1' : '0');

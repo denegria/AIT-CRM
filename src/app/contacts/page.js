@@ -48,11 +48,10 @@ import {
 } from '@/lib/contact-directory-view';
 import { workflowForBusinessUnit } from '@/lib/sales-workflow';
 import {
-  AIT_USA_LOCATION_FILTER_VALUES,
-  campaignMarketOptions,
-  marketRegionForContact,
+  AIT_USA_SCHOOL_LOCATIONS,
   schoolLocationForContact,
   schoolLocationOptions,
+  studentLocationForContact,
 } from '@/lib/school-locations';
 import { useToast } from '@/components/Toast';
 import { useDeferredContactDirectory } from '@/lib/contacts/directory-loader.js';
@@ -83,7 +82,7 @@ const CONTACT_FILTER_CHIP_LABELS = {
   status: 'Status',
   source: 'Source',
   course: 'Course',
-  location: 'Location',
+  location: 'Learning Location',
   facet: 'Segments',
 };
 
@@ -510,7 +509,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         contact.linkedPeoplePreview || '',
       ].filter(Boolean).join(' '),
       enrollmentStage: enrollmentStageText(contact),
-      marketRegion: marketRegionForContact(contact),
+      studentLocation: studentLocationForContact(contact),
       schoolLocation: schoolLocationForContact(contact),
       inquirySource: enrollmentSourceText(contact),
       sourceCategoryText: directorySourceText(contact),
@@ -594,7 +593,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     ] : []),
     ...(columnMode === 'ait_usa' ? [
       { key: 'enrollmentStage', label: 'Enrollment', sortable: true, render: (row) => <EnrollmentCell row={row} /> },
-      { key: 'marketRegion', label: 'Market / Region', sortable: true },
+      { key: 'studentLocation', label: 'Student Location', sortable: true },
       { key: 'schoolLocation', label: 'Learning Location', sortable: true },
       { key: 'inquirySource', label: 'Source', sortable: true, render: (row) => <EnrollmentSourceCell row={row} /> },
     ] : []),
@@ -665,7 +664,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const locationFilterOptions = useMemo(
     () => isAitUsaDirectory
       ? (contactDirectoryIsDeferred
-        ? AIT_USA_LOCATION_FILTER_VALUES.map((value) => ({ value, label: value, count: null }))
+        ? AIT_USA_SCHOOL_LOCATIONS.map((value) => ({ value, label: value, count: null }))
         : buildLocationFilterOptions(courseFilteredContacts))
       : [],
     [contactDirectoryIsDeferred, courseFilteredContacts, isAitUsaDirectory],
@@ -849,8 +848,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     } : null,
     isAitUsaDirectory ? {
       id: 'location',
-      label: 'Location',
-      summary: selectedLocationLabel || 'All Locations',
+      label: 'Learning Location',
+      summary: selectedLocationLabel || 'All Learning Locations',
     } : null,
     visibleSegmentGroups.groups.length > 0 ? {
       id: 'segments',
@@ -885,7 +884,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const formBusinessUnitId = form.businessUnitId || form.primaryBusinessUnitId || '';
   const formBusinessUnit = businessUnitById.get(formBusinessUnitId) || null;
   const isAitUsaForm = workflowForBusinessUnit(formBusinessUnit).key === WORKFLOW_KEYS.AIT_USA;
-  const formMarketRegionOptions = campaignMarketOptions(form.locationPreference);
   const formSchoolLocationOptions = schoolLocationOptions(form.address);
 
   if (!loaded) {
@@ -1217,8 +1215,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
 
                       {activeFilterSection === 'location' && isAitUsaDirectory && (
                         <section className="contacts-filter-block">
-                          <div className="contacts-filter-heading">Location</div>
-                          <div className="contacts-option-list" role="listbox" aria-label="AIT USA location filters">
+                          <div className="contacts-filter-heading">Learning Location</div>
+                          <div className="contacts-option-list" role="listbox" aria-label="AIT USA learning location filters">
                             <button
                               type="button"
                               className={`contacts-option-tile ${effectiveLocationFilter === DEFAULT_CONTACT_LOCATION_FILTER ? 'active' : ''}`}
@@ -1226,7 +1224,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                               aria-selected={effectiveLocationFilter === DEFAULT_CONTACT_LOCATION_FILTER}
                               role="option"
                             >
-                              <span>All Locations</span>
+                              <span>All Learning Locations</span>
                               <strong>{contactDirectoryIsDeferred ? deferredDirectory.total : courseFilteredContacts.length}</strong>
                             </button>
                             {locationFilterOptions.map((option) => (
@@ -1458,27 +1456,23 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
               <span className="contact-dialog-section-index">3</span>
               <div>
                 <h2>Context</h2>
-                <p>Capture the location and latest information for follow-up.</p>
+                <p>Capture where the student lives and where they intend to learn.</p>
               </div>
             </div>
             {isAitUsaForm ? (
               <div className="contact-dialog-grid">
                 <div className="form-group">
-                  <label className="form-label">Market / Region</label>
-                  <select
-                    className="input select"
+                  <label className="form-label">Student Location</label>
+                  <input
+                    className="input"
                     value={form.locationPreference || ''}
                     onChange={e => setForm(f => ({ ...f, locationPreference: e.target.value }))}
-                  >
-                    <option value="">Not specified</option>
-                    {formMarketRegionOptions.map((market) => (
-                      <option key={market} value={market}>{market}</option>
-                    ))}
-                  </select>
-                  <p className="profile-editor-helper">Where the lead is based or grouped for outreach.</p>
+                    placeholder="City, municipality, or address"
+                  />
+                  <p className="profile-editor-helper">Where the student currently lives.</p>
                 </div>
                 <div className="form-group">
-                  <label className="form-label">Preferred Learning Location</label>
+                  <label className="form-label">Intended Learning Location</label>
                   <select
                     className="input select"
                     value={form.address || ''}

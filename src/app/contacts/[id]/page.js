@@ -19,7 +19,7 @@ import {
 import { PIPELINE_STATUSES, isWorkflowStatusClosed, workflowForBusinessUnit } from '@/lib/sales-workflow';
 import { buildContactDetailViewModel } from '@/lib/contact-detail-view-model';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
-import { campaignMarketOptions, schoolLocationForContact, schoolLocationOptions } from '@/lib/school-locations';
+import { schoolLocationForContact, schoolLocationOptions } from '@/lib/school-locations';
 import {
   COURSE_RECORD_STATUS_OPTIONS,
   courseRecordStatusLabel,
@@ -561,7 +561,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const profileEditTabs = useMemo(() => {
     const tabs = [
       { id: 'general', label: 'General', summary: 'Identity, status, and owner' },
-      { id: 'source', label: 'Source & routing', summary: 'Attribution, market, and learning location' },
+      { id: 'source', label: 'Source & routing', summary: 'Attribution, student location, and learning location' },
     ];
     if (isAitUsaContact) {
       tabs.push({ id: 'enrollment', label: 'Enrollment', summary: 'Program preferences and profile notes' });
@@ -579,8 +579,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       : contactFinancials
   ), [contactFinancials, isAitUsaContact]);
   const editSchoolLocationOptions = schoolLocationOptions(editForm?.address);
-  const editMarketRegionOptions = campaignMarketOptions(editForm?.leadProfile?.locationPreference);
-  const followUpMarketRegionOptions = campaignMarketOptions(followUpDraft?.leadProfile?.locationPreference);
   const courseLocationOptions = schoolLocationOptions(courseForm.courseLocation);
   const showWorkOrdersTab = detailView.tabs.showWorkOrders;
   const showFinancialsTab = detailView.tabs.showFinancials || (isAitUsaContact && access.canWriteFinancials);
@@ -2735,11 +2733,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       <input id="follow-up-program" className="input" value={followUpDraft.leadProfile?.programInterest || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('programInterest', event.target.value)} />
                     </div>
                     <div className="form-group">
-                      <label className="form-label" htmlFor="follow-up-location">Market / Region</label>
-                      <select id="follow-up-location" className="input select" value={followUpDraft.leadProfile?.locationPreference || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('locationPreference', event.target.value)}>
-                        <option value="">Not specified</option>
-                        {followUpMarketRegionOptions.map((market) => <option key={market} value={market}>{market}</option>)}
-                      </select>
+                      <label className="form-label" htmlFor="follow-up-location">Student Location</label>
+                      <input id="follow-up-location" className="input" value={followUpDraft.leadProfile?.locationPreference || ''} disabled={followUpBusy} placeholder="City, municipality, or address" onChange={(event) => updateFollowUpLeadProfile('locationPreference', event.target.value)} />
                     </div>
                   </div>
                   <div className="grid-2">
@@ -2916,7 +2911,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 <div className="contact-dialog-section-header">
                   <div>
                     <h2>Source and routing</h2>
-                    <p>Keep campaign geography separate from where the lead prefers to learn.</p>
+                    <p>Keep acquisition source, student location, and learning intent distinct.</p>
                   </div>
                 </div>
                 <div className="grid-2">
@@ -2928,28 +2923,23 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   </div>
                   {showSchoolLocationField ? (
                     <div className="form-group">
-                      <label className="form-label" htmlFor="profile-edit-market-region">Market / Region</label>
-                      <select id="profile-edit-market-region" className="input select" value={editForm.leadProfile?.locationPreference || ''} onChange={e => updateEditLeadProfile('locationPreference', e.target.value)}>
-                        <option value="">Not specified</option>
-                        {editMarketRegionOptions.map((market) => (
-                          <option key={market} value={market}>{market}</option>
-                        ))}
-                      </select>
-                      <div className="profile-editor-helper">Where the lead is based or grouped for outreach.</div>
+                      <label className="form-label" htmlFor="profile-edit-student-location">Student Location</label>
+                      <input id="profile-edit-student-location" className="input" value={editForm.leadProfile?.locationPreference || ''} placeholder="City, municipality, or address" onChange={e => updateEditLeadProfile('locationPreference', e.target.value)} />
+                      <div className="profile-editor-helper">Where the student lives; free text from Wix or an employee.</div>
                     </div>
                   ) : null}
                 </div>
                 <div className="grid-2">
                   {showSchoolLocationField ? (
                     <div className="form-group">
-                      <label className="form-label" htmlFor="profile-edit-school-location">Preferred Learning Location</label>
+                      <label className="form-label" htmlFor="profile-edit-school-location">Intended Learning Location</label>
                       <select id="profile-edit-school-location" className="input select" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})}>
                         <option value="">Not specified</option>
                         {editSchoolLocationOptions.map((location) => (
                           <option key={location} value={location}>{location}</option>
                         ))}
                       </select>
-                      <div className="profile-editor-helper">Campus or Online preference before enrollment.</div>
+                      <div className="profile-editor-helper">The approved campus or Online option the student intends to use.</div>
                     </div>
                   ) : (
                     <div className="form-group">

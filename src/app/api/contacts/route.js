@@ -25,7 +25,12 @@ import {
   courseMetadataPatchToDrizzleValues,
   validateCourseMetadataForStatus,
 } from '@/lib/crm/course-metadata.js';
-import { evaluateLifecycleTransition, requireLifecycleStatus } from '@/lib/crm/lifecycle.js';
+import {
+  evaluateLifecycleTransition,
+  requireLifecycleStatus,
+  WORKFLOW_KEYS,
+  workflowKeyForBusinessUnit,
+} from '@/lib/crm/lifecycle.js';
 import { isUuid } from '@/lib/crm/validation.js';
 import {
   createContactWithLead,
@@ -38,6 +43,7 @@ import { workflowFromLead } from '@/lib/sales-workflow';
 import { summarizeContactTouch } from '@/lib/contact-touch.js';
 import { buildAitUsaEnrollmentSignals } from '@/lib/ait-usa-enrollment-signals.js';
 import { loadContactDirectoryPage } from '@/lib/contact-directory/service.js';
+import { canonicalAitUsaSchoolLocation } from '@/lib/school-locations.js';
 
 export async function GET(request) {
   const { error, session } = await requirePermission(request, PERMISSIONS.CRM_READ);
@@ -203,6 +209,17 @@ function normalizeFollowUpNoteInput(rawFollowUpNote) {
   };
 }
 
+function contactAddressForWrite(value, businessUnit) {
+  const current = String(value || '').trim();
+  if (workflowKeyForBusinessUnit(businessUnit) !== WORKFLOW_KEYS.AIT_USA) return current || null;
+  if (!current) return null;
+  const learningLocation = canonicalAitUsaSchoolLocation(current);
+  if (!learningLocation) {
+    throw createCrmError('Intended Learning Location must be Bound Brook, Plainfield, Piscataway, Flemington, or Online.');
+  }
+  return learningLocation;
+}
+
 export async function POST(request) {
   const { error, session } = await requirePermission(request, PERMISSIONS.CRM_WRITE);
   if (error) return error;
@@ -237,6 +254,13 @@ export async function POST(request) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
 
+  let contactAddress;
+  try {
+    contactAddress = contactAddressForWrite(body.address, businessUnit);
+  } catch (error) {
+    return crmErrorResponse(error);
+  }
+
   const { contact, lead } = await createContactWithLead({
     db,
     organizationId: session.user.organizationId,
@@ -245,7 +269,7 @@ export async function POST(request) {
       name,
       email: body.email || null,
       phone: body.phone || null,
-      address: body.address || null,
+      address: contactAddress,
       sourceLabel: body.source || null,
     },
     leadValues: businessUnitId ? {
@@ -289,7 +313,6 @@ export async function PATCH(request) {
   if ('name' in body) patch.name = String(body.name || '').trim() || existing.name;
   if ('email' in body) patch.email = body.email || null;
   if ('phone' in body) patch.phone = body.phone || null;
-  if ('address' in body) patch.address = body.address || null;
   if ('source' in body) patch.sourceLabel = body.source || null;
   const hasBusinessUnitPatch = hasBusinessUnitRequest(body);
   if (hasBusinessUnitPatch) {
@@ -319,6 +342,13 @@ export async function PATCH(request) {
     ? patch.primaryBusinessUnitId
     : lead?.businessUnitId || existing.primaryBusinessUnitId;
   const statusBusinessUnit = await loadBusinessUnitForWorkflow(db, session, statusBusinessUnitId);
+  if ('address' in body) {
+    try {
+      patch.address = contactAddressForWrite(body.address, statusBusinessUnit);
+    } catch (error) {
+      return crmErrorResponse(error);
+    }
+  }
   if (hasBusinessUnitPatch && patch.primaryBusinessUnitId === null && lead) {
     return NextResponse.json(
       { error: 'Contacts with leads must stay assigned to a business unit.' },

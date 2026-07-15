@@ -2007,7 +2007,7 @@ export default function FollowUpQueuePage() {
                         />
                       </label>
                       <label className={s.filterGroup}>
-                        <span className="form-label">Location</span>
+                        <span className="form-label">Student Location</span>
                         <input
                           className="input"
                           value={draft.leadProfile?.locationPreference || ''}

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  intendedLearningLocationFromWebsiteLead,
   leadProfilePatchFromMetaFieldData,
   leadProfilePatchFromPayload,
   leadProfilePatchFromWebsiteLead,
@@ -32,6 +33,22 @@ test('extracts structured profile facts from website lead fields', () => {
     profileDetails: 'Needs weekends.',
     sourceDetail: 'WordPress Website Form',
   });
+});
+
+test('keeps student geography separate from an explicit intended learning location', () => {
+  const lead = {
+    address: 'Madrid, Spain',
+    formFields: {
+      campus: 'Online',
+    },
+  };
+
+  assert.equal(leadProfilePatchFromWebsiteLead(lead).locationPreference, 'Madrid, Spain');
+  assert.equal(intendedLearningLocationFromWebsiteLead(lead), 'Online');
+  assert.equal(intendedLearningLocationFromWebsiteLead({
+    address: 'Newark',
+    formFields: { campus: 'Newark' },
+  }), '');
 });
 
 test('extracts structured profile facts from Facebook form field data', () => {

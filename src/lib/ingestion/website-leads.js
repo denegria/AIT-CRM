@@ -5,6 +5,7 @@ import {
 } from '../crm/assignment.js';
 import { normalizeLifecycleStatus } from '../crm/lifecycle.js';
 import {
+  intendedLearningLocationFromWebsiteLead,
   leadProfilePatchFromWebsiteLead,
   leadProfilePatchToDbValues,
 } from '../crm/lead-profile.js';
@@ -909,18 +910,19 @@ async function nextSourceRowNumber(client, batchId) {
 }
 
 async function upsertContact(client, organizationId, businessUnitId, lead) {
+  const intendedLearningLocation = intendedLearningLocationFromWebsiteLead(lead);
   const existing = await findExistingContact(client, organizationId, lead);
   if (existing?.id) {
     await client.query(
       'update contacts set name = coalesce(nullif($2, \'\'), name), company_name = coalesce(nullif($3, \'\'), company_name), phone = coalesce(nullif($4, \'\'), phone), email = coalesce(nullif($5, \'\'), email), address = coalesce(nullif($6, \'\'), address), source_label = $7, primary_business_unit_id = coalesce(primary_business_unit_id, $8), updated_at = now() where id = $1',
-      [existing.id, lead.name, lead.company, lead.phone, lead.email, lead.address, WEBSITE_LEAD_SOURCE_NAME, businessUnitId],
+      [existing.id, lead.name, lead.company, lead.phone, lead.email, intendedLearningLocation, WEBSITE_LEAD_SOURCE_NAME, businessUnitId],
     );
     return existing.id;
   }
 
   const inserted = await client.query(
     'insert into contacts (organization_id, primary_business_unit_id, name, company_name, phone, email, address, source_label) values ($1, $2, $3, nullif($4, \'\'), nullif($5, \'\'), nullif($6, \'\'), nullif($7, \'\'), $8) returning id',
-    [organizationId, businessUnitId, lead.name, lead.company, lead.phone, lead.email, lead.address, WEBSITE_LEAD_SOURCE_NAME],
+    [organizationId, businessUnitId, lead.name, lead.company, lead.phone, lead.email, intendedLearningLocation, WEBSITE_LEAD_SOURCE_NAME],
   );
   return inserted.rows[0]?.id || null;
 }
@@ -1153,7 +1155,7 @@ export async function persistWebsiteLeadImportAudit(
     email: lead.email || null,
     phone: lead.phone || null,
     company_name: lead.company || null,
-    address: lead.address || null,
+    address: intendedLearningLocationFromWebsiteLead(lead) || null,
     source_label: WEBSITE_LEAD_SOURCE_NAME,
     business_unit_id: businessUnitId,
     contact_id: contactId,

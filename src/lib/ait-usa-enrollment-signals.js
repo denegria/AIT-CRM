@@ -1,4 +1,5 @@
 import { WORKFLOW_KEYS } from './crm/lifecycle.js';
+import { canonicalAitUsaSchoolLocation } from './school-locations.js';
 
 function clean(value) {
   return String(value || '').trim();
@@ -263,7 +264,8 @@ export function buildAitUsaEnrollmentSignals({ contact = {}, lead = null, workfl
     inquiry: compactObject({
       service: clean(fields.service),
       programInterest,
-      location: clean(contact.address || fields.address),
+      location: clean(lead?.locationPreference || fields.address),
+      intendedLearningLocation: canonicalAitUsaSchoolLocation(contact.address),
       age: clean(fields.age),
       formFields: clean(fields.form_fields),
       message: clean(fields.message),
