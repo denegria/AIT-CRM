@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowRight, ListFilter, RotateCcw, Search, UserPlus, UserRoundCheck } from 'lucide-react';
+import { ArrowRight, ListFilter, RotateCcw, Search, UserPlus, UserRoundCheck, X } from 'lucide-react';
 import KanbanBoard from '@/components/KanbanBoard';
+import PageState from '@/components/PageState';
 import { useToast } from '@/components/Toast';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
 import { useCRM } from '@/lib/store';
@@ -12,10 +13,15 @@ import {
   isPipelineNewLeadBucket,
   matchesPipelineQuickFilter,
 } from '@/lib/contact-workflow-buckets';
+import { mobilePipelineTriageItems } from '@/lib/pipeline-mobile-triage.js';
 import {
   buildCourseFilterOptions,
+  buildLocationFilterOptions,
   contactMatchesLeadDateScope,
+  contactMatchesLocation,
   contactMatchesStatusOwnerCourse,
+  courseTagsForDirectoryRow,
+  effectiveLeadDateScopeForDirectory,
   CONTACT_LEAD_DATE_SCOPE_ALL,
   CONTACT_LEAD_DATE_SCOPE_CUSTOM,
   CONTACT_LEAD_DATE_SCOPE_QUARTER,
@@ -25,6 +31,7 @@ import {
   DEFAULT_PIPELINE_ACTIVITY_FILTER,
   DEFAULT_PIPELINE_COMPACT_MODE,
   DEFAULT_PIPELINE_COURSE_FILTER,
+  DEFAULT_PIPELINE_LOCATION_FILTER,
   DEFAULT_PIPELINE_OWNER_FILTER,
   DEFAULT_PIPELINE_SEARCH,
   DEFAULT_PIPELINE_SOURCE_FILTER,
@@ -32,6 +39,9 @@ import {
   pipelineFilterQuery,
   pipelineFilterStateFromParams,
 } from '@/lib/contact-directory-filters';
+import { schoolLocationForContact } from '@/lib/school-locations';
+import { matchesSearchValues } from '@/lib/search/match.js';
+import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
 import TimeframeFilterPanel from '@/components/TimeframeFilterPanel';
 import s from './PipelinePage.module.css';
 
@@ -55,6 +65,7 @@ const PIPELINE_FILTER_CHIP_LABELS = {
   status: 'Status',
   source: 'Source',
   course: 'Course',
+  location: 'Location',
   activity: 'Activity',
   search: 'Search',
   cards: 'Cards',
@@ -83,17 +94,21 @@ function matchesOwnerSearch(owner, query) {
 }
 
 function matchesSearch(contact, query) {
-  if (!query) return true;
-  const haystack = [
+  return matchesSearchValues(query, [
     contact.name,
     contact.email,
     contact.phone,
+    schoolLocationForContact(contact),
+    contact.locationPreference,
     contact.source,
+    contact.status,
+    contact.currentStage,
+    contact.programInterest,
+    ...courseTagsForDirectoryRow(contact),
     contact.latestComment,
     contact.assignedLabel,
     contact.divisionLabel,
-  ].join(' ').toLowerCase();
-  return haystack.includes(query);
+  ], [contact.phone]);
 }
 
 function normalizedPipelineColumns(columns = []) {
@@ -129,7 +144,7 @@ function mobileCardMeta(contact) {
   return [
     contact.enrollmentSignals?.inquiry?.programInterest || contact.programInterest,
     contact.enrollmentSignals?.inquiry?.age ? `Age ${contact.enrollmentSignals.inquiry.age}` : '',
-    contact.enrollmentSignals?.inquiry?.location,
+    schoolLocationForContact(contact) || contact.enrollmentSignals?.inquiry?.location,
     contact.phone || contact.email || 'No contact channel',
   ].filter(Boolean).join(' · ');
 }
@@ -189,6 +204,12 @@ export default function PipelinePage() {
     currentUser,
     canUseConsolidatedScope,
     scopeLabel,
+    pipelineSummary,
+    pipelineSummaryIsDeferred,
+    pipelineSummaryLoaded,
+    pipelineSummaryLoading,
+    pipelineSummaryError,
+    loadPipelineSummary,
   } = useCRM();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -209,6 +230,7 @@ export default function PipelinePage() {
     statusFilter,
     sourceFilter,
     courseFilter,
+    locationFilter,
     activityFilter,
     search,
     leadDateScope,
@@ -224,17 +246,26 @@ export default function PipelinePage() {
     !coordinatorUiPolicy.ownerScoped &&
     ownerFilter !== DEFAULT_PIPELINE_OWNER_FILTER &&
     !hasExplicitLeadDateFilter;
-  const effectiveLeadDateScope = (coordinatorUiPolicy.ownerScoped && !hasExplicitLeadDateFilter) || ownerFilterImpliesAllLeadDates
-    ? CONTACT_LEAD_DATE_SCOPE_ALL
-    : leadDateScope;
+  const effectiveLeadDateScope = effectiveLeadDateScopeForDirectory({
+    leadDateScope,
+    hasExplicitLeadDateFilter: hasExplicitLeadDateFilter || ownerFilterImpliesAllLeadDates,
+  });
   const updatePipelineFilterQuery = useCallback((patch) => {
+    const patchHasLeadDateScope =
+      Object.prototype.hasOwnProperty.call(patch, 'leadDateScope') ||
+      Object.prototype.hasOwnProperty.call(patch, 'leadDateFrom') ||
+      Object.prototype.hasOwnProperty.call(patch, 'leadDateTo');
+    const includeLeadDateScope = Object.prototype.hasOwnProperty.call(patch, 'includeLeadDateScope')
+      ? patch.includeLeadDateScope
+      : hasExplicitLeadDateFilter || patchHasLeadDateScope;
     const nextQuery = pipelineFilterQuery({
       ...parsedFilters,
       ownerFilter: coordinatorUiPolicy.ownerScoped ? DEFAULT_PIPELINE_OWNER_FILTER : ownerFilter,
+      includeLeadDateScope,
       ...patch,
     });
     router.replace(nextQuery ? `/pipeline?${nextQuery}` : '/pipeline', { scroll: false });
-  }, [coordinatorUiPolicy.ownerScoped, ownerFilter, parsedFilters, router]);
+  }, [coordinatorUiPolicy.ownerScoped, hasExplicitLeadDateFilter, ownerFilter, parsedFilters, router]);
   useEffect(() => {
     const hasLegacyWorkflowParam = searchParams.has('workflow');
     const hasLockedOwnerParam = coordinatorUiPolicy.ownerScoped && (searchParams.has('owner') || searchParams.has('ownerUserId'));
@@ -257,6 +288,7 @@ export default function PipelinePage() {
   };
   const setSourceFilter = (value) => updatePipelineFilterQuery({ sourceFilter: value });
   const setCourseFilter = (value) => updatePipelineFilterQuery({ courseFilter: value });
+  const setLocationFilter = (value) => updatePipelineFilterQuery({ locationFilter: value });
   const setActivityFilter = (value) => updatePipelineFilterQuery({ activityFilter: value });
   const setSearch = (value) => updatePipelineFilterQuery({ search: value });
   const setCompactMode = (value) => updatePipelineFilterQuery({ compactMode: value });
@@ -286,6 +318,42 @@ export default function PipelinePage() {
   });
 
   const selectedBusinessUnitId = resolvedPipelineBusinessUnitId || currentScopedBusinessUnitId;
+  const pipelineSummaryMatches = Boolean(
+    pipelineSummary &&
+    pipelineSummary.businessUnitId === selectedBusinessUnitId &&
+    pipelineSummary.leadDateScope === effectiveLeadDateScope &&
+    (pipelineSummary.leadDateFrom || '') === (leadDateFrom || '') &&
+    (pipelineSummary.leadDateTo || '') === (leadDateTo || '')
+  );
+  const pipelineRequest = useMemo(() => ({
+    businessUnitId: selectedBusinessUnitId,
+    leadDateScope: effectiveLeadDateScope,
+    leadDateFrom,
+    leadDateTo,
+  }), [effectiveLeadDateScope, leadDateFrom, leadDateTo, selectedBusinessUnitId]);
+
+  useEffect(() => {
+    if (!pipelineSummaryIsDeferred || !access.canReadCrm || !selectedBusinessUnitId || pipelineSummaryLoading) return;
+    if (pipelineSummaryLoaded && pipelineSummaryMatches) return;
+    loadPipelineSummary(pipelineRequest).catch(() => null);
+  }, [
+    access.canReadCrm,
+    loadPipelineSummary,
+    pipelineRequest,
+    pipelineSummaryIsDeferred,
+    pipelineSummaryLoaded,
+    pipelineSummaryLoading,
+    pipelineSummaryMatches,
+    selectedBusinessUnitId,
+  ]);
+
+  const refreshPipelineSummary = useCallback(() => (
+    pipelineSummaryIsDeferred
+      ? loadPipelineSummary({ ...pipelineRequest, force: true })
+      : Promise.resolve(null)
+  ), [loadPipelineSummary, pipelineRequest, pipelineSummaryIsDeferred]);
+  const isAitUsaPipeline = activeWorkflow?.key === WORKFLOW_KEYS.AIT_USA;
+  const effectiveLocationFilter = isAitUsaPipeline ? locationFilter : DEFAULT_PIPELINE_LOCATION_FILTER;
   const scopedRows = useMemo(() => contactRows.filter((contact) => {
     if (!selectedBusinessUnitId) return true;
     return (contact.businessUnitId || contact.primaryBusinessUnitId) === selectedBusinessUnitId;
@@ -311,18 +379,18 @@ export default function PipelinePage() {
     })),
     [effectiveLeadDateScope, eligibleScopedRows, leadDateFrom, leadDateTo],
   );
-  const allPipelineCount = eligibleScopedRows.length;
-  const currentPipelineCount = useMemo(
+  const legacyAllPipelineCount = eligibleScopedRows.length;
+  const legacyCurrentPipelineCount = useMemo(
     () => eligibleScopedRows.filter((contact) => contactMatchesLeadDateScope(contact)).length,
     [eligibleScopedRows],
   );
-  const quarterPipelineCount = useMemo(
+  const legacyQuarterPipelineCount = useMemo(
     () => eligibleScopedRows.filter((contact) => contactMatchesLeadDateScope(contact, {
       leadDateScope: CONTACT_LEAD_DATE_SCOPE_QUARTER,
     })).length,
     [eligibleScopedRows],
   );
-  const customPipelineCount = useMemo(
+  const legacyCustomPipelineCount = useMemo(
     () => eligibleScopedRows.filter((contact) => contactMatchesLeadDateScope(contact, {
       leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM,
       leadDateFrom,
@@ -330,6 +398,10 @@ export default function PipelinePage() {
     })).length,
     [eligibleScopedRows, leadDateFrom, leadDateTo],
   );
+  const allPipelineCount = pipelineSummary?.timeframeCounts?.all ?? legacyAllPipelineCount;
+  const currentPipelineCount = pipelineSummary?.timeframeCounts?.current ?? legacyCurrentPipelineCount;
+  const quarterPipelineCount = pipelineSummary?.timeframeCounts?.quarter ?? legacyQuarterPipelineCount;
+  const customPipelineCount = pipelineSummary?.timeframeCounts?.custom ?? legacyCustomPipelineCount;
 
   const sourceOptions = useMemo(() => {
     const values = [...new Set(pipelineScopedRows.map(sourceValue).filter(Boolean))];
@@ -338,6 +410,10 @@ export default function PipelinePage() {
   const courseFilterOptions = useMemo(
     () => buildCourseFilterOptions(pipelineScopedRows),
     [pipelineScopedRows],
+  );
+  const locationFilterOptions = useMemo(
+    () => isAitUsaPipeline ? buildLocationFilterOptions(pipelineScopedRows) : [],
+    [isAitUsaPipeline, pipelineScopedRows],
   );
   const ownerOptions = useMemo(() => {
     return (employees || [])
@@ -363,19 +439,20 @@ export default function PipelinePage() {
       courseFilter,
     });
     const sourceMatch = sourceFilter === 'all' || sourceValue(contact) === sourceFilter;
+    const locationMatch = contactMatchesLocation(contact, { locationFilter: effectiveLocationFilter });
     const touchAge = daysSince(contactTouchDate(contact));
     const activityMatch =
       activityFilter === 'all' ||
       (activityFilter === 'no_touch' && !contactTouchDate(contact)) ||
       (activityFilter === 'stale_30' && touchAge > 30) ||
       (activityFilter === 'recent_7' && touchAge <= 7);
-    return statusOwnerCourseMatch && sourceMatch && activityMatch && matchesSearch(contact, normalizedSearch);
-  }), [activityFilter, courseFilter, normalizedSearch, ownerFilter, pipelineScopedRows, sourceFilter, statusFilter]);
+    return statusOwnerCourseMatch && sourceMatch && locationMatch && activityMatch && matchesSearch(contact, normalizedSearch);
+  }), [activityFilter, courseFilter, effectiveLocationFilter, normalizedSearch, ownerFilter, pipelineScopedRows, sourceFilter, statusFilter]);
   const closedOutcomeColumns = useMemo(
     () => normalizedColumns.filter((column) => column.isTerminal && !column.isOperational).sort(closedOutcomeSort),
     [normalizedColumns],
   );
-  const closedOutcomeCounts = useMemo(() => {
+  const legacyClosedOutcomeCounts = useMemo(() => {
     const counts = new Map(closedOutcomeColumns.map((column) => [column.id, 0]));
     for (const contact of scopedRows) {
       if (!counts.has(contact.status)) continue;
@@ -388,6 +465,12 @@ export default function PipelinePage() {
     }
     return counts;
   }, [closedOutcomeColumns, effectiveLeadDateScope, leadDateFrom, leadDateTo, scopedRows]);
+  const closedOutcomeCounts = useMemo(
+    () => pipelineSummary?.closedOutcomeCounts
+      ? new Map(Object.entries(pipelineSummary.closedOutcomeCounts))
+      : legacyClosedOutcomeCounts,
+    [legacyClosedOutcomeCounts, pipelineSummary],
+  );
   const mobileStageRows = mobileStageFilter === 'all'
     ? pipelineRows
     : pipelineRows.filter((contact) => contact.status === mobileStageFilter);
@@ -411,25 +494,27 @@ export default function PipelinePage() {
     pipelineStatusOptions.find((option) => option.value === statusFilter)?.label || statusFilter;
   const selectedCourseLabel = courseFilter === DEFAULT_PIPELINE_COURSE_FILTER ? '' :
     courseFilterOptions.find((option) => option.value === courseFilter)?.label || courseFilter;
+  const selectedLocationLabel = !isAitUsaPipeline || effectiveLocationFilter === DEFAULT_PIPELINE_LOCATION_FILTER ? '' :
+    locationFilterOptions.find((option) => option.value === effectiveLocationFilter)?.label || effectiveLocationFilter;
   const selectedDateLabel = dateScopeLabel(effectiveLeadDateScope, leadDateFrom, leadDateTo);
   const implicitLeadDate = (coordinatorUiPolicy.ownerScoped && !hasExplicitLeadDateFilter) || ownerFilterImpliesAllLeadDates;
-  const dateFilterIsDefault = implicitLeadDate ||
-    (
-      leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE &&
-      leadDateFrom === DEFAULT_CONTACT_LEAD_DATE_FROM &&
-      leadDateTo === DEFAULT_CONTACT_LEAD_DATE_TO
-    );
+  const dateFilterIsDefault = !hasExplicitLeadDateFilter || implicitLeadDate;
   const activeFilterChips = [
-    coordinatorUiPolicy.ownerScoped && implicitLeadDate ? null : {
+    !hasExplicitLeadDateFilter || (coordinatorUiPolicy.ownerScoped && implicitLeadDate) ? null : {
       key: 'date',
       label: selectedDateLabel,
       primary: !coordinatorUiPolicy.ownerScoped,
       onRemove: dateFilterIsDefault
-        ? null
-        : () => updatePipelineFilterQuery({
-          leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+        ? () => updatePipelineFilterQuery({
+          leadDateScope: CONTACT_LEAD_DATE_SCOPE_ALL,
           leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
           leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
+        })
+        : () => updatePipelineFilterQuery({
+          leadDateScope: CONTACT_LEAD_DATE_SCOPE_ALL,
+          leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
+          leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
+          includeLeadDateScope: false,
         }),
     },
     selectedOwnerLabel ? {
@@ -453,6 +538,11 @@ export default function PipelinePage() {
       label: selectedCourseLabel,
       onRemove: () => setCourseFilter(DEFAULT_PIPELINE_COURSE_FILTER),
     } : null,
+    selectedLocationLabel ? {
+      key: 'location',
+      label: selectedLocationLabel,
+      onRemove: () => setLocationFilter(DEFAULT_PIPELINE_LOCATION_FILTER),
+    } : null,
     activityFilter !== DEFAULT_PIPELINE_ACTIVITY_FILTER ? {
       key: 'activity',
       label: optionLabel(PIPELINE_ACTIVITY_OPTIONS, activityFilter),
@@ -471,16 +561,14 @@ export default function PipelinePage() {
   ].filter(Boolean);
   const activeFilterCount = activeFilterChips.filter((chip) => chip.onRemove).length;
   const filterSummaryChips = activeFilterChips.filter((chip) => chip.onRemove).slice(0, 3);
-  const hasNonDefaultLeadDateFilter = coordinatorUiPolicy.ownerScoped
-    ? hasExplicitLeadDateFilter
-    : leadDateScope !== DEFAULT_CONTACT_LEAD_DATE_SCOPE ||
-      leadDateFrom !== DEFAULT_CONTACT_LEAD_DATE_FROM ||
-      leadDateTo !== DEFAULT_CONTACT_LEAD_DATE_TO;
+  const visibleActiveFilterChips = activeFilterChips.filter((chip) => chip.onRemove);
+  const hasNonDefaultLeadDateFilter = hasExplicitLeadDateFilter;
   const hasNonDefaultFilters = hasNonDefaultLeadDateFilter ||
     (!coordinatorUiPolicy.ownerScoped && ownerFilter !== DEFAULT_PIPELINE_OWNER_FILTER) ||
     statusFilter !== DEFAULT_PIPELINE_STATUS_FILTER ||
     sourceFilter !== DEFAULT_PIPELINE_SOURCE_FILTER ||
     courseFilter !== DEFAULT_PIPELINE_COURSE_FILTER ||
+    effectiveLocationFilter !== DEFAULT_PIPELINE_LOCATION_FILTER ||
     activityFilter !== DEFAULT_PIPELINE_ACTIVITY_FILTER ||
     search !== DEFAULT_PIPELINE_SEARCH ||
     compactMode !== DEFAULT_PIPELINE_COMPACT_MODE;
@@ -510,6 +598,11 @@ export default function PipelinePage() {
       label: 'Course',
       summary: selectedCourseLabel || 'All Courses',
     } : null,
+    isAitUsaPipeline ? {
+      id: 'location',
+      label: 'Location',
+      summary: selectedLocationLabel || 'All Locations',
+    } : null,
     {
       id: 'activity',
       label: 'Activity',
@@ -517,7 +610,7 @@ export default function PipelinePage() {
     },
   ].filter(Boolean);
   const pipelineScopeName = pipelineBusinessUnit?.name || currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`;
-  const pipelineSummary = `${pipelineRows.length.toLocaleString()} matching pipeline cards in ${pipelineScopeName}`;
+  const pipelineSummaryCopy = `${pipelineRows.length.toLocaleString()} matching pipeline cards in ${pipelineScopeName}`;
   const showPipelineScopeSelector = !currentScopedBusinessUnitId && accessibleBusinessUnits.length > 1;
   const resetFilters = () => {
     updatePipelineFilterQuery({
@@ -525,11 +618,13 @@ export default function PipelinePage() {
       statusFilter: DEFAULT_PIPELINE_STATUS_FILTER,
       sourceFilter: DEFAULT_PIPELINE_SOURCE_FILTER,
       courseFilter: DEFAULT_PIPELINE_COURSE_FILTER,
+      locationFilter: DEFAULT_PIPELINE_LOCATION_FILTER,
       activityFilter: DEFAULT_PIPELINE_ACTIVITY_FILTER,
       search: DEFAULT_PIPELINE_SEARCH,
-      leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+      leadDateScope: CONTACT_LEAD_DATE_SCOPE_ALL,
       leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
       leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
+      includeLeadDateScope: false,
       compactMode: DEFAULT_PIPELINE_COMPACT_MODE,
     });
   };
@@ -540,7 +635,8 @@ export default function PipelinePage() {
       return;
     }
     updateContact(id, { status })
-      .then(() => {
+      .then(async () => {
+        await refreshPipelineSummary();
         setMobileMoveCardId('');
         toast('Stage updated');
       })
@@ -549,7 +645,8 @@ export default function PipelinePage() {
   const assignSelectedToMe = () => {
     if (!currentUser?.id || !selectedRows.length || !coordinatorUiPolicy.canManageCoordinatorAssignments) return;
     Promise.all(selectedRows.map((contact) => updateContact(contact.id, { assignedTo: currentUser.id })))
-      .then(() => {
+      .then(async () => {
+        await refreshPipelineSummary();
         setSelectedIds([]);
         setBulkAssignMode(false);
         toast(`Assigned ${selectedRows.length} pipeline cards to you`);
@@ -562,14 +659,27 @@ export default function PipelinePage() {
     setBulkAssignMode(!bulkAssignMode);
   };
 
-  if (!loaded) return <div className="empty-state">Loading...</div>;
+  if (!loaded || (pipelineSummaryIsDeferred && !pipelineSummaryMatches && !pipelineSummaryError)) {
+    return <PageState tone="loading" title="Loading pipeline" copy="Preparing lead stages and workflow filters for your current division." />;
+  }
+
+  if (pipelineSummaryIsDeferred && pipelineSummaryError) {
+    return (
+      <PageState
+        tone="error"
+        title="Pipeline summary could not load"
+        copy={pipelineSummaryError}
+        actions={<button className="btn btn-primary" onClick={() => refreshPipelineSummary().catch(() => null)}>Try again</button>}
+      />
+    );
+  }
 
   return (
     <div className="fade-in">
       <div className={`page-header ${s.pipelineHeader}`}>
         <div className={s.headerCopy}>
           <h1 className="page-title">Pipeline</h1>
-          <p className="page-subtitle">{pipelineSummary}</p>
+          <p className="page-subtitle">{pipelineSummaryCopy}</p>
         </div>
       </div>
 
@@ -655,7 +765,7 @@ export default function PipelinePage() {
                       ))}
                     </div>
 
-                    <div className={`${s.filterDetail} ${['timeframe', 'owner', 'status', 'source', 'course', 'activity'].includes(activeFilterSection) ? s.filterDetailCompact : ''}`}>
+                    <div className={`${s.filterDetail} ${['timeframe', 'owner', 'status', 'source', 'course', 'location', 'activity'].includes(activeFilterSection) ? s.filterDetailCompact : ''}`}>
                       {activeFilterSection === 'timeframe' && (
                         <section className={s.filterBlock}>
                           <div className={s.filterHeading}>Timeframe</div>
@@ -845,6 +955,37 @@ export default function PipelinePage() {
                         </section>
                       )}
 
+                      {activeFilterSection === 'location' && isAitUsaPipeline && (
+                        <section className={s.filterBlock}>
+                          <div className={s.filterHeading}>Location</div>
+                          <div className={s.optionList} role="listbox" aria-label="AIT USA pipeline location filters">
+                            <button
+                              type="button"
+                              className={`${s.optionTile} ${effectiveLocationFilter === DEFAULT_PIPELINE_LOCATION_FILTER ? s.active : ''}`}
+                              onClick={() => setLocationFilter(DEFAULT_PIPELINE_LOCATION_FILTER)}
+                              aria-selected={effectiveLocationFilter === DEFAULT_PIPELINE_LOCATION_FILTER}
+                              role="option"
+                            >
+                              <span>All Locations</span>
+                              <strong>{pipelineScopedRows.length}</strong>
+                            </button>
+                            {locationFilterOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className={`${s.optionTile} ${effectiveLocationFilter === option.value ? s.active : ''}`}
+                                onClick={() => setLocationFilter(option.value)}
+                                aria-selected={effectiveLocationFilter === option.value}
+                                role="option"
+                              >
+                                <span>{option.label}</span>
+                                <strong>{option.count}</strong>
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+
                       {activeFilterSection === 'activity' && (
                         <section className={s.filterBlock}>
                           <div className={s.filterHeading}>Activity</div>
@@ -888,6 +1029,22 @@ export default function PipelinePage() {
                 </div>
               )}
             </div>
+            {visibleActiveFilterChips.length > 0 && (
+              <div className={s.filterPills} aria-label="Active pipeline filters">
+                {visibleActiveFilterChips.map((chip) => (
+                  <button
+                    key={chip.key}
+                    type="button"
+                    className={s.filterPill}
+                    onClick={chip.onRemove}
+                    aria-label={`Remove ${PIPELINE_FILTER_CHIP_LABELS[chip.key] || 'filter'}: ${chip.label}`}
+                  >
+                    <span>{PIPELINE_FILTER_CHIP_LABELS[chip.key] || 'Filter'}: {chip.label}</span>
+                    <X size={12} />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className={s.pipelineActions}>
             <button className="btn" onClick={() => nextLead ? router.push(`/contacts/${nextLead.id}`) : toast('No lead matches the current filters.', 'error')}>
@@ -1030,7 +1187,20 @@ export default function PipelinePage() {
                   <span className={s.mobileCardStage}>{contact.needsFirstOutreach && contact.status ? contact.status : (contact.currentStage || contact.status)}</span>
                   <strong>{contact.name}</strong>
                   <small>{mobileCardMeta(contact)}</small>
-                  {contact.nextAction && <span className={s.mobileCardAction}>{contact.nextAction}</span>}
+                  <span className={s.mobileTriageGrid} aria-label={`Triage context for ${contact.name}`}>
+                    {mobilePipelineTriageItems(contact).map((item) => (
+                      <span key={item.label} className={`${s.mobileTriageItem} ${item.tone === 'stale' ? s.mobileTriageStale : ''}`}>
+                        <span>{item.label}</span>
+                        <strong>{item.value}</strong>
+                      </span>
+                    ))}
+                  </span>
+                  {contact.nextAction && (
+                    <span className={s.mobileCardAction}>
+                      <span>Next</span>
+                      <strong>{contact.nextAction}</strong>
+                    </span>
+                  )}
                 </button>
                 {canWrite && (
                   <div className={s.mobileCardTools}>
@@ -1040,7 +1210,7 @@ export default function PipelinePage() {
                       onClick={() => setMobileMoveCardId(isMoving ? '' : contact.id)}
                       aria-expanded={isMoving}
                     >
-                      <ArrowRight size={14} /> Move
+                      <ArrowRight size={14} /> Change Stage
                     </button>
                     {isMoving && (
                       <select

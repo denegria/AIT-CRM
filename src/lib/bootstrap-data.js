@@ -1,31 +1,25 @@
 import { cache } from 'react';
-import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import * as seedData from './data';
 import { getDb } from '../db/index.js';
 import { hasPermission, isAuthEnabled, PERMISSIONS, SESSION_SECRET_ENV } from './auth';
+import { sessionHasAdminRole } from './auth/admin-policy.js';
 import {
   businessUnits as businessUnitsTable,
   contacts as contactsTable,
-  contactPeople as contactPeopleTable,
-  leadStatusHistory as leadStatusHistoryTable,
   workOrders as workOrdersTable,
   estimates as estimatesTable,
   financialDocuments as financialDocumentsTable,
   paymentSnapshots as paymentSnapshotsTable,
-  notes as notesTable,
-  activityEvents as activityEventsTable,
-  tasks as tasksTable,
   leads as leadsTable,
   roles as rolesTable,
   users as usersTable,
   userRoles as userRolesTable,
   businessUnitMemberships as businessUnitMembershipsTable,
-  contactCourseRecords as contactCourseRecordsTable,
   importBatches as importBatchesTable,
   importSourceRows as importSourceRowsTable,
   importNormalizedRecords as importNormalizedRecordsTable,
   importReviewItems as importReviewItemsTable,
-  conversationMessages as conversationMessagesTable,
 } from '../db/schema.js';
 import {
   filterContactsForSession,
@@ -33,18 +27,29 @@ import {
   scopedBusinessUnitWhere,
   scopedContactWhere,
   scopedOrgWhere,
-  scopedTaskWhere,
   scopedWorkOrderWhere,
 } from './crm/access.js';
 import { toBusinessUnitPayload } from './crm/payloads.js';
 import { isPipelineEligibleContact, workflowFromLead } from './sales-workflow';
-import { TASK_STATUSES } from './tasks/constants.js';
-import { buildContactTimeline, filterTimelineRowsForBusinessUnit } from './timeline/service.js';
+import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from './crm/lifecycle.js';
+import { filterTimelineRowsForBusinessUnit } from './timeline/service.js';
 import { latestExcelDateFromText, summarizeContactTouch } from './contact-touch.js';
 import { buildAitUsaEnrollmentSignals } from './ait-usa-enrollment-signals.js';
 import { attachPaymentSnapshotContactLinks } from './financial-linkage.js';
 import { filterAssignableEmployees } from './crm/assignable-employees.js';
-import { courseRecordPayloadFromRow, deriveCourseSummary } from './crm/course-records.js';
+import { courseRecordSummaryPayloadFromRow, deriveCourseSummary } from './crm/course-records.js';
+import { getServerAppVersion } from './app-version.js';
+import { canonicalRoleKeys } from './roles.js';
+import {
+  deferBootstrapContactDetails,
+  deferBootstrapContactDirectory,
+  deferBootstrapDashboardSummary,
+  deferBootstrapLeanShell,
+  deferBootstrapPipelineSummary,
+  deferBootstrapTasks,
+  toContactListPayload,
+} from './bootstrap-contract.js';
+import { loadContactBootstrapSummaryRows } from './contact-summary-loader.js';
 
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const toBootstrapBusinessUnitPayload = (row) => toBusinessUnitPayload(row, { emptyColor: null });
@@ -187,12 +192,12 @@ function mapEmployees(userRows = [], membershipRows = [], roleRows = []) {
     email: user.email || '',
     phone: user.phone || '',
     isActive: user.isActive,
-    roleKeys: roleKeysByUserId.get(user.id) || [],
+    roleKeys: canonicalRoleKeys(roleKeysByUserId.get(user.id) || []),
     businessUnitIds: membershipsByUserId.get(user.id) || [],
   })));
 }
 
-function mapContacts(
+export function mapContacts(
   contactRows,
   leadRows,
   noteRows,
@@ -241,7 +246,7 @@ function mapContacts(
     const contactPeople = (peopleByContactId.get(contact.id) || [])
       .slice()
       .sort((left, right) => Number(right.isPrimary) - Number(left.isPrimary) || clean(left.name).localeCompare(clean(right.name)));
-    const courseRecords = (courseRecordsByContactId.get(contact.id) || []).map(courseRecordPayloadFromRow);
+    const courseRecords = (courseRecordsByContactId.get(contact.id) || []).map(courseRecordSummaryPayloadFromRow);
     const courseSummary = deriveCourseSummary(courseRecords);
     const workflow = workflowFromLead(lead, {
       businessUnit,
@@ -309,31 +314,13 @@ function mapContacts(
       lastTouch: touchSummary.lastTouch,
       lastFollowUpTouch: touchSummary.lastFollowUpTouch,
     });
-    const noteItems = contactNotes.map((note) => ({
-      id: note.id,
-      text: note.body,
-      createdAt: note.createdAt?.toISOString?.() || '',
-      timestamp: note.createdAt?.toISOString?.() || '',
-      date: toIsoDate(note.createdAt),
-    }));
-    const eventItems = contactEvents.map((event) => ({
-      id: event.id,
-      text: event.message || event.eventType,
-      date: toIsoDate(event.occurredAt || event.createdAt),
-    }));
-    const timelineItems = buildContactTimeline({
-      notes: contactNotes,
-      activityEvents: contactEvents,
-      leads: lead ? [lead] : [],
-      businessUnits: businessUnitRows,
-    });
     const enrollmentSignals = buildAitUsaEnrollmentSignals({
       contact,
       lead,
       workflow,
     });
 
-    return {
+    return toContactListPayload({
       id: contact.id,
       name: contact.name,
       companyName: contact.companyName || '',
@@ -370,7 +357,6 @@ function mapContacts(
         courseOutcome: courseSummary.latestEndedCourse?.outcomeReason || lead?.courseOutcome || '',
       },
       courseRecords: courseSummary.records,
-      courseSummary,
       enrollmentStatusChangedAt: latestStatusTransitionDate(contactLeadStatusHistory, 'Enrolled'),
       droppedStatusChangedAt: latestStatusTransitionDate(contactLeadStatusHistory, 'Dropped / Quit'),
       sourceActivityDate,
@@ -399,13 +385,11 @@ function mapContacts(
       linkedPeopleCount: contactPeople.length,
       linkedPeoplePreview: contactPeople.slice(0, 3).map((person) => person.name).filter(Boolean).join(', '),
       primaryLinkedPerson: contactPeople.find((person) => person.isPrimary)?.name || contactPeople[0]?.name || '',
-      notes: noteItems.length ? noteItems : eventItems,
-      timeline: timelineItems,
-    };
+    });
   });
 }
 
-function mapWorkOrders(rows, contactLookup) {
+export function mapWorkOrders(rows, contactLookup) {
   return rows.map((row, index) => ({
     id: row.id,
     number: row.workOrderNumber || `WO-${String(index + 1).padStart(3, '0')}`,
@@ -423,7 +407,7 @@ function mapWorkOrders(rows, contactLookup) {
   }));
 }
 
-function mapFinancials(estimateRows, paymentRows, contactLookup, documentRows = []) {
+export function mapFinancials(estimateRows, paymentRows, contactLookup, documentRows = []) {
   const estimates = estimateRows.map((row, index) => ({
     id: row.id,
     number: row.estimateNumber || `EST-${String(index + 1).padStart(3, '0')}`,
@@ -494,45 +478,10 @@ function mapFinancials(estimateRows, paymentRows, contactLookup, documentRows = 
   return [...documents, ...estimates, ...receipts];
 }
 
-function toDisplayPriority(value) {
-  if (!value) return 'Medium';
-  return value
-    .split(/[_\s-]+/)
-    .filter(Boolean)
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1).toLowerCase()}`)
-    .join(' ');
-}
-
-function mapTasks(rows, contactLookup) {
-  return rows.map((row) => ({
-    id: row.id,
-    title: row.title,
-    description: row.description || '',
-    businessUnitId: row.businessUnitId || '',
-    contactId: row.contactId || '',
-    leadId: row.leadId || '',
-    workOrderId: row.workOrderId || '',
-    client: contactLookup.get(row.contactId)?.name || '',
-    ownerUserId: row.ownerUserId || '',
-    assignedTo: row.ownerUserId || '',
-    dueAt: row.dueAt?.toISOString?.() || row.dueAt || '',
-    dueDate: toIsoDate(row.dueAt),
-    completed: Boolean(row.completedAt || row.status === TASK_STATUSES.COMPLETED),
-    completedAt: row.completedAt?.toISOString?.() || row.completedAt || '',
-    priority: toDisplayPriority(row.priority),
-    taskType: row.taskType,
-    status: row.status,
-    taskStatus: row.status,
-    sourceType: row.sourceType || '',
-    sourceLabel: row.sourceLabel || '',
-    createdAt: row.createdAt?.toISOString?.() || row.createdAt || '',
-    updatedAt: row.updatedAt?.toISOString?.() || row.updatedAt || '',
-  }));
-}
-
 function authData({ authRequired = false, authError = '', currentUser = null } = {}) {
   return {
     ...seedData,
+    appVersion: getServerAppVersion(),
     dataSource: process.env.DATABASE_URL ? 'postgres' : 'local',
     authRequired,
     authError,
@@ -548,6 +497,9 @@ function authData({ authRequired = false, authError = '', currentUser = null } =
       canReadFinancials: false,
       canWriteFinancials: false,
       canWriteWorkOrders: false,
+      canReadMessagingInbox: false,
+      canManageSmsCampaigns: false,
+      canSendOutboundMessages: false,
     },
     importStaging: null,
     contacts: [],
@@ -560,6 +512,7 @@ function authData({ authRequired = false, authError = '', currentUser = null } =
 }
 
 function sessionAccess(session) {
+  const isAdmin = sessionHasAdminRole(session);
   return {
     canReadCrm: hasPermission(session, PERMISSIONS.CRM_READ),
     canWriteCrm: hasPermission(session, PERMISSIONS.CRM_WRITE),
@@ -571,6 +524,9 @@ function sessionAccess(session) {
     canReadFinancials: hasPermission(session, PERMISSIONS.FINANCIALS_READ),
     canWriteFinancials: hasPermission(session, PERMISSIONS.FINANCIALS_WRITE),
     canWriteWorkOrders: hasPermission(session, PERMISSIONS.WORK_ORDERS_WRITE),
+    canReadMessagingInbox: isAdmin,
+    canManageSmsCampaigns: isAdmin,
+    canSendOutboundMessages: isAdmin,
   };
 }
 
@@ -629,6 +585,7 @@ async function getImportStagingSummary(db) {
 function emptyDbData(businessUnitRows = [], importStaging = null) {
   return {
     ...seedData,
+    appVersion: getServerAppVersion(),
     dataSource: 'postgres',
     authRequired: false,
     authError: '',
@@ -646,10 +603,12 @@ function emptyDbData(businessUnitRows = [], importStaging = null) {
   };
 }
 
-export const getBootstrapData = cache(async function getBootstrapData(session = null) {
+export const getBootstrapData = cache(async function getBootstrapData(session = null, bootstrapMode = 'full') {
+  const appVersion = getServerAppVersion();
   if (!process.env.DATABASE_URL) {
     return {
       ...seedData,
+      appVersion,
       authRequired: false,
       currentUser: {
         id: 'local-admin',
@@ -672,6 +631,9 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
         canReadFinancials: true,
         canWriteFinancials: true,
         canWriteWorkOrders: true,
+        canReadMessagingInbox: true,
+        canManageSmsCampaigns: true,
+        canSendOutboundMessages: true,
       },
     };
   }
@@ -690,6 +652,42 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
   try {
     const db = getDb();
     const access = sessionAccess(session);
+    if (['contact-directory', 'dashboard', 'pipeline', 'lean-shell'].includes(bootstrapMode)) {
+      const [businessUnitRows, contactCountRows, userRows, membershipRows, userRoleRows, importStaging] = await Promise.all([
+        db.select().from(businessUnitsTable).where(scopedOrgWhere(businessUnitsTable, session)).orderBy(asc(businessUnitsTable.name)),
+        db
+          .select({ businessUnitId: contactsTable.primaryBusinessUnitId, value: count() })
+          .from(contactsTable)
+          .where(scopedContactWhere(contactsTable, session))
+          .groupBy(contactsTable.primaryBusinessUnitId),
+        db.select().from(usersTable).where(and(
+          eq(usersTable.organizationId, session.user.organizationId),
+          eq(usersTable.isActive, true),
+        )).orderBy(asc(usersTable.name), asc(usersTable.email)),
+        db.select().from(businessUnitMembershipsTable),
+        db
+          .select({ userId: userRolesTable.userId, roleKey: rolesTable.key })
+          .from(userRolesTable)
+          .innerJoin(rolesTable, eq(userRolesTable.roleId, rolesTable.id))
+          .where(eq(rolesTable.organizationId, session.user.organizationId)),
+        access.canReadImportReview ? getImportStagingSummary(db) : Promise.resolve(null),
+      ]);
+      const defaultBusinessUnitId = contactCountRows
+        .filter((row) => row.businessUnitId)
+        .sort((left, right) => Number(right.value || 0) - Number(left.value || 0))[0]?.businessUnitId || '';
+      const leanPayload = deferBootstrapContactDetails(deferBootstrapTasks({
+        ...emptyDbData(businessUnitRows, importStaging),
+        appVersion,
+        currentUser: session.user,
+        access,
+        employees: mapEmployees(userRows, membershipRows, userRoleRows),
+        defaultBusinessUnitId,
+      }));
+      if (bootstrapMode === 'dashboard') return deferBootstrapDashboardSummary(leanPayload);
+      if (bootstrapMode === 'pipeline') return deferBootstrapPipelineSummary(leanPayload);
+      if (bootstrapMode === 'lean-shell') return deferBootstrapLeanShell(leanPayload);
+      return deferBootstrapContactDirectory(leanPayload);
+    }
     const [
       businessUnitRows,
       contactRows,
@@ -698,13 +696,6 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       estimateRows,
       financialDocumentRows,
       paymentRows,
-      noteRows,
-      eventRows,
-      conversationMessageRows,
-      contactPeopleRows,
-      contactCourseRecordRows,
-      leadStatusHistoryRows,
-      taskRows,
       userRows,
       membershipRows,
       userRoleRows,
@@ -718,13 +709,6 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       db.select().from(estimatesTable).where(scopedBusinessUnitWhere(estimatesTable, session)).orderBy(desc(estimatesTable.createdAt)),
       db.select().from(financialDocumentsTable).where(scopedBusinessUnitWhere(financialDocumentsTable, session)).orderBy(desc(financialDocumentsTable.createdAt)),
       db.select().from(paymentSnapshotsTable).where(scopedBusinessUnitWhere(paymentSnapshotsTable, session)).orderBy(desc(paymentSnapshotsTable.createdAt)),
-      db.select().from(notesTable).where(scopedOrgWhere(notesTable, session)).orderBy(desc(notesTable.createdAt)),
-      db.select().from(activityEventsTable).where(scopedOrgWhere(activityEventsTable, session)).orderBy(desc(activityEventsTable.createdAt)),
-      db.select().from(conversationMessagesTable).where(scopedOrgWhere(conversationMessagesTable, session)).orderBy(desc(conversationMessagesTable.occurredAt)),
-      db.select().from(contactPeopleTable).where(scopedOrgWhere(contactPeopleTable, session)).orderBy(desc(contactPeopleTable.isPrimary), asc(contactPeopleTable.name)),
-      db.select().from(contactCourseRecordsTable).where(scopedBusinessUnitWhere(contactCourseRecordsTable, session)).orderBy(desc(contactCourseRecordsTable.createdAt)),
-      db.select().from(leadStatusHistoryTable).where(scopedBusinessUnitWhere(leadStatusHistoryTable, session)).orderBy(desc(leadStatusHistoryTable.occurredAt), desc(leadStatusHistoryTable.createdAt)),
-      db.select().from(tasksTable).where(scopedTaskWhere(tasksTable, session)).orderBy(asc(tasksTable.dueAt), desc(tasksTable.createdAt)),
       db.select().from(usersTable).where(and(
         eq(usersTable.organizationId, session.user.organizationId),
         eq(usersTable.isActive, true),
@@ -747,16 +731,39 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
 
     const visibleContactRows = filterContactsForSession(contactRows, accessLeadRows || leadRows, session);
 
-    if (!visibleContactRows.length && !taskRows.length && !workOrderRows.length) {
-      return {
+    if (!visibleContactRows.length && !workOrderRows.length) {
+      return deferBootstrapContactDetails(deferBootstrapTasks({
         ...emptyDbData(businessUnitRows, importStaging),
         currentUser: session.user,
         access,
         employees,
-      };
+      }));
     }
 
-    const paymentRowsWithContactLinks = attachPaymentSnapshotContactLinks(paymentRows, eventRows, {
+    const visibleContactIds = visibleContactRows.map((contact) => contact.id);
+    const signsBusinessUnitIds = new Set(
+      businessUnitRows
+        .filter((unit) => workflowKeyForBusinessUnit(unit) === WORKFLOW_KEYS.AIT_SIGNS)
+        .map((unit) => unit.id),
+    );
+    const signsContactIds = visibleContactRows
+      .filter((contact) => signsBusinessUnitIds.has(contact.primaryBusinessUnitId))
+      .map((contact) => contact.id);
+    const {
+      noteRows,
+      eventRows,
+      conversationMessageRows,
+      contactPeopleRows,
+      contactCourseRecordRows,
+      leadStatusHistoryRows,
+      paymentLinkRows,
+    } = await loadContactBootstrapSummaryRows({
+      db,
+      visibleContactIds,
+      signsContactIds,
+    });
+
+    const paymentRowsWithContactLinks = attachPaymentSnapshotContactLinks(paymentRows, paymentLinkRows, {
       estimateRows,
       workOrderRows,
     });
@@ -783,9 +790,9 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
     ]);
     const workOrders = mapWorkOrders(workOrderRows, contactLookup);
     const financials = mapFinancials(estimateRows, paymentRowsWithContactLinks, contactLookup, financialDocumentRows);
-    const tasks = mapTasks(taskRows, contactLookup);
-    return {
+    return deferBootstrapContactDetails(deferBootstrapTasks({
       ...seedData,
+      appVersion,
       dataSource: 'postgres',
       authRequired: false,
       authError: '',
@@ -796,15 +803,15 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       contacts,
       workOrders,
       financials,
-      tasks,
       importStaging,
-    };
+    }));
   } catch (error) {
     console.warn('Falling back to empty CRM data because Postgres bootstrap failed:', error.message);
-    return {
+    return deferBootstrapContactDetails({
       ...emptyDbData(),
+      appVersion,
       currentUser: session.user,
       access: sessionAccess(session),
-    };
+    });
   }
 });

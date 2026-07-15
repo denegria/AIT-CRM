@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
+import PageState, { PageStateAction } from '@/components/PageState';
 import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import { generateInvoicePDF, generateEstimatePDF, generateReceiptPDF, generateAitUsaReceiptPDF } from '@/lib/pdf';
 import s from './ContactDetail.module.css';
@@ -18,13 +19,14 @@ import {
 import { PIPELINE_STATUSES, isWorkflowStatusClosed, workflowForBusinessUnit } from '@/lib/sales-workflow';
 import { buildContactDetailViewModel } from '@/lib/contact-detail-view-model';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
-import { schoolLocationOptions } from '@/lib/school-locations';
+import { campaignMarketOptions, schoolLocationForContact, schoolLocationOptions } from '@/lib/school-locations';
 import {
   COURSE_RECORD_STATUS_OPTIONS,
   courseRecordStatusLabel,
   deriveCourseSummary,
   isTerminalCourseRecordStatus,
 } from '@/lib/crm/course-records.js';
+import { appendContactNote, contactDetailPageState, loadContactTimeline } from '@/lib/contacts/detail-loader.js';
 
 const SNAPSHOT_ICONS = {
   estimate: BriefcaseBusiness,
@@ -71,11 +73,21 @@ const emptyPaymentForm = {
 const emptyCourseForm = {
   id: '',
   courseName: '',
+  courseLocation: '',
   status: 'active',
   startDate: '',
   endDate: '',
   outcomeReason: '',
   notes: '',
+};
+
+const COURSE_STATUS_HELP = {
+  planned: 'Use when the student is expected to start later.',
+  active: 'Use for the one course currently in progress.',
+  completed: 'Use when the course ended successfully.',
+  dropped: 'Use when the student left or quit before finishing.',
+  cancelled: 'Use when the course never moved forward.',
+  transferred: 'Use when the student moved into another class or location.',
 };
 
 const FOLLOW_UP_OUTCOME_OPTIONS = [
@@ -298,6 +310,12 @@ function cleanText(value = '') {
   return String(value || '').trim();
 }
 
+function compactReviewText(value = '', maxLength = 82) {
+  const cleaned = cleanText(value).replace(/\s+/g, ' ');
+  if (cleaned.length <= maxLength) return cleaned;
+  return `${cleaned.slice(0, Math.max(0, maxLength - 3)).trim()}...`;
+}
+
 function phoneHref(value = '') {
   const digits = cleanText(value).replace(/[^\d+]/g, '');
   return digits ? `tel:${digits}` : '';
@@ -379,6 +397,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     allWorkOrders,
     financials,
     allFinancials,
+    contactDirectoryIsDeferred,
+    dashboardSummaryIsDeferred,
+    pipelineSummaryIsDeferred,
+    leanShellIsDeferred,
     updateContact,
     deleteContact,
     addFinancial,
@@ -401,6 +423,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [linkedPeople, setLinkedPeople] = useState({ contactId: '', items: [], loading: false, error: '' });
   const [personModal, setPersonModal] = useState(null);
   const [personForm, setPersonForm] = useState(emptyPersonForm);
+  const [personDeleteTarget, setPersonDeleteTarget] = useState(null);
+  const [personDeleteBusy, setPersonDeleteBusy] = useState(false);
   const [manualSend, setManualSend] = useState({
     channel: 'messenger',
     templateId: '',
@@ -435,6 +459,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState(null);
+  const [activeProfileEditTab, setActiveProfileEditTab] = useState('general');
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
   const [archiveReason, setArchiveReason] = useState('');
   const [archiveBusy, setArchiveBusy] = useState(false);
@@ -455,6 +480,14 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const contact = useMemo(() => (
     scopedContact || allAccessibleContacts.find(c => c.id === params.id)
   ), [allAccessibleContacts, params.id, scopedContact]);
+  const detailPageState = contactDetailPageState({
+    loaded,
+    contact,
+    deferredBootstrapActive: contactDirectoryIsDeferred ||
+      dashboardSummaryIsDeferred ||
+      pipelineSummaryIsDeferred ||
+      leanShellIsDeferred,
+  });
   const useAllLinkedRecords = isClientMode || Boolean(contact && !scopedContact);
   const workOrderSource = useAllLinkedRecords ? (allWorkOrders || workOrders) : workOrders;
   const financialSource = useAllLinkedRecords ? (allFinancials || financials) : financials;
@@ -481,6 +514,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     estimate: contactFinancialCounts.estimate || 0,
     payment: contactFinancialCounts.payment || 0,
   }), [contactFinancialCounts, contactWorkOrders.length]);
+  const assignedOwnerId = contact?.assignedTo || contact?.ownerUserId || '';
+  const assignedEmployee = useMemo(() => (
+    ownerOptions.find((owner) => owner.id === assignedOwnerId) || null
+  ), [assignedOwnerId, ownerOptions]);
   const contactBusinessUnit = businessUnits.find((unit) => unit.id === contact?.businessUnitId || unit.id === contact?.primaryBusinessUnitId);
   const financialContext = useMemo(() => ({ contact, businessUnit: contactBusinessUnit }), [contact, contactBusinessUnit]);
   const estimateTotal = useMemo(() => estimateForm.items.reduce((sum, item) => (
@@ -521,6 +558,16 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const canGenerateStudentReceipt = !isAitUsaContact || isEnrolledStudent(contact);
   const hasWorkOrders = contactWorkOrders.length > 0;
   const hasInvoices = contactInvoices.length > 0;
+  const profileEditTabs = useMemo(() => {
+    const tabs = [
+      { id: 'general', label: 'General', summary: 'Identity, status, and owner' },
+      { id: 'source', label: 'Source & routing', summary: 'Attribution, market, and learning location' },
+    ];
+    if (isAitUsaContact) {
+      tabs.push({ id: 'enrollment', label: 'Enrollment', summary: 'Program preferences and profile notes' });
+    }
+    return tabs;
+  }, [isAitUsaContact]);
   const selectedInvoiceWorkOrder = contactWorkOrders.find((workOrder) => workOrder.id === invoiceWorkOrderId) || null;
   const workOrdersHref = `/work-orders${contact?.id ? `?contactId=${encodeURIComponent(contact.id)}` : ''}`;
   const visibleFinancials = useMemo(() => (
@@ -532,6 +579,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       : contactFinancials
   ), [contactFinancials, isAitUsaContact]);
   const editSchoolLocationOptions = schoolLocationOptions(editForm?.address);
+  const editMarketRegionOptions = campaignMarketOptions(editForm?.leadProfile?.locationPreference);
+  const followUpMarketRegionOptions = campaignMarketOptions(followUpDraft?.leadProfile?.locationPreference);
+  const courseLocationOptions = schoolLocationOptions(courseForm.courseLocation);
   const showWorkOrdersTab = detailView.tabs.showWorkOrders;
   const showFinancialsTab = detailView.tabs.showFinancials || (isAitUsaContact && access.canWriteFinancials);
   const showCoursesTab = isAitUsaContact;
@@ -549,6 +599,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     null
   ), [activeCourseRecord, currentCourseRecords, selectedCourseRecordId]);
   const courseStartDateRequired = courseForm.status === 'active';
+  const courseStatusIsTerminal = isTerminalCourseRecordStatus(courseForm.status);
+  const courseStatusLabel = courseRecordStatusLabel(courseForm.status);
+  const courseModeLabel = courseForm.id
+    ? 'Edit saved record'
+    : (courseModal === 'history' ? 'Backfill history' : 'Start current course');
   const canSaveCourseForm = Boolean(cleanText(courseForm.courseName)) &&
     (!courseStartDateRequired || Boolean(courseForm.startDate));
   const financialNotice = isAitUsaContact
@@ -567,7 +622,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     (!showCoursesTab && activeTab === 'courses')
       ? 'timeline'
       : activeTab;
-  const assignedEmployee = null;
   const fallbackTimeline = useMemo(() => {
     if (!contact) return [];
     if (Array.isArray(contact.timeline) && contact.timeline.length) return contact.timeline;
@@ -579,7 +633,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     : hasMatchingServerTimeline && serverTimeline.error
       ? 'error'
       : 'idle';
-  const timelineSource = hasMatchingServerTimeline && serverTimeline.items ? serverTimeline.items : fallbackTimeline;
+  const timelineSource = useMemo(() => (
+    dataSource === 'postgres'
+      ? (hasMatchingServerTimeline && serverTimeline.items ? serverTimeline.items : [])
+      : fallbackTimeline
+  ), [dataSource, fallbackTimeline, hasMatchingServerTimeline, serverTimeline.items]);
   const cleanupAudits = useMemo(() => timelineSource.map(timelineCleanupAudit).filter(Boolean).slice(0, 3), [timelineSource]);
   const timelineCounts = useMemo(() => timelineSource.reduce((counts, item) => {
     const category = timelineFilterCategory(item);
@@ -592,6 +650,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     if (renderedTimelineFilter === 'all') return timelineSource.filter((item) => !isSourceDetailTimelineItem(item));
     return timelineSource.filter((item) => timelineFilterCategory(item) === renderedTimelineFilter);
   }, [renderedTimelineFilter, timelineSource]);
+  const latestReviewActivity = useMemo(() => (
+    timelineSource.find((item) => !isSourceDetailTimelineItem(item)) || null
+  ), [timelineSource]);
   const hasMatchingServerConversations = serverConversations.contactId === contact?.id && serverConversations.reloadKey === conversationReloadKey;
   const conversationMessages = hasMatchingServerConversations && serverConversations.items ? serverConversations.items : [];
   const linkedSnapshotCounts = {
@@ -611,6 +672,39 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       detail: snapshotDetail(timelineSource, item.key, linkedCount, item.empty),
     };
   });
+  const reviewSummary = [
+    {
+      label: 'Status',
+      value: detailView.workflowTitle || contact?.status || contact?.currentStage || 'No status set',
+      detail: detailView.sourceEyebrow || contactBusinessUnit?.name || '',
+    },
+    {
+      label: 'Owner',
+      value: assignedEmployee?.label || 'Unassigned',
+      detail: assignedEmployee ? 'Assigned coordinator' : 'No coordinator assigned',
+      tone: assignedEmployee ? '' : 'warning',
+    },
+    {
+      label: 'Contactability',
+      value: detailView.contactability?.label || 'Reachable',
+      detail: detailView.contactability?.reason || [
+        cleanText(contact?.phone) ? 'Phone on file' : '',
+        cleanText(contact?.email) ? 'Email on file' : '',
+      ].filter(Boolean).join(' and ') || 'No contact channel on file',
+      tone: detailView.contactability?.canFollowUp === false ? 'warning' : '',
+    },
+    {
+      label: 'Latest activity',
+      value: latestReviewActivity ? compactReviewText(latestReviewActivity.title || latestReviewActivity.text || timelineCategoryLabel(latestReviewActivity)) : 'No activity recorded',
+      detail: latestReviewActivity ? [timelineCategoryLabel(latestReviewActivity), dateLabel(latestReviewActivity)].filter(Boolean).join(' - ') : 'Timeline is empty',
+    },
+    {
+      label: 'Next context',
+      value: detailView.workflowNext ? compactReviewText(detailView.workflowNext) : 'No next follow-up recorded',
+      detail: detailView.workflowChips?.length ? detailView.workflowChips.join(' - ') : '',
+      tone: detailView.workflowNext || detailView.workflowChips?.length ? '' : 'muted',
+    },
+  ];
   const conversationStatus = dataSource === 'postgres' && contact?.id && !hasMatchingServerConversations
     ? 'loading'
     : hasMatchingServerConversations && serverConversations.error
@@ -625,15 +719,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     let cancelled = false;
     const requestContactId = contact.id;
     const requestReloadKey = timelineReloadKey;
-    fetch(`/api/contacts/${contact.id}/timeline`, { cache: 'no-store' })
-      .then(async (response) => {
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.error || 'Timeline load failed.');
+    loadContactTimeline(contact.id)
+      .then((items) => {
         if (!cancelled) {
           setServerTimeline({
             contactId: requestContactId,
             reloadKey: requestReloadKey,
-            items: Array.isArray(payload.timeline) ? payload.timeline : [],
+            items,
             error: false,
           });
         }
@@ -766,7 +858,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   }, [contact?.id, dataSource, conversationReloadKey]);
 
   useEffect(() => {
-    if (!access.canWriteCrm || !access.canReadSettings || dataSource !== 'postgres') return undefined;
+    if (!access.canSendOutboundMessages || !access.canReadSettings || dataSource !== 'postgres') return undefined;
     let cancelled = false;
     fetch('/api/message-templates?purpose=manual_follow_up&status=active', { cache: 'no-store' })
       .then(async (response) => {
@@ -783,7 +875,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [access.canReadSettings, access.canWriteCrm, dataSource]);
+  }, [access.canReadSettings, access.canSendOutboundMessages, dataSource]);
 
   const channelTemplates = useMemo(() => messageTemplates.filter((template) => (
     template.channel === manualSend.channel || template.channel === 'all'
@@ -791,6 +883,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
   const openEditModal = () => {
     if (!access.canWriteCrm) return;
+    setActiveProfileEditTab('general');
     setEditForm({
       ...contact,
       assignedTo: contact?.assignedTo || '',
@@ -844,25 +937,31 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       .catch((error) => toast(error.message || 'Linked person save failed.', 'error'));
   };
 
-  const deletePerson = (person) => {
+  const deletePerson = async () => {
+    const person = personDeleteTarget;
     if (!contact?.id || !person?.id || !access.canWriteCrm) return;
-    fetch(`/api/contacts/${contact.id}/people`, {
-      method: 'DELETE',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ id: person.id }),
-    })
-      .then(async (response) => {
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.error || 'Linked person delete failed.');
-        setLinkedPeople({
-          contactId: contact.id,
-          items: Array.isArray(payload.people) ? payload.people : [],
-          loading: false,
-          error: '',
-        });
-        toast('Linked person removed', 'error');
-      })
-      .catch((error) => toast(error.message || 'Linked person delete failed.', 'error'));
+    setPersonDeleteBusy(true);
+    try {
+      const response = await fetch(`/api/contacts/${contact.id}/people`, {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: person.id }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Linked person delete failed.');
+      setLinkedPeople({
+        contactId: contact.id,
+        items: Array.isArray(payload.people) ? payload.people : [],
+        loading: false,
+        error: '',
+      });
+      setPersonDeleteTarget(null);
+      toast('Linked person removed', 'error');
+    } catch (error) {
+      toast(error.message || 'Linked person delete failed.', 'error');
+    } finally {
+      setPersonDeleteBusy(false);
+    }
   };
 
   const openCourseModal = (mode = 'new', record = null) => {
@@ -873,6 +972,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     setCourseForm(isEdit || isComplete || isEnd ? {
       id: record.id,
       courseName: record.courseName || '',
+      courseLocation: record.courseLocation || '',
       status: isComplete ? 'completed' : (isEnd ? 'cancelled' : record.status || 'active'),
       startDate: dateForInput(record.startDate),
       endDate: dateForInput(record.endDate) || (isComplete || isEnd ? todayDate() : ''),
@@ -880,6 +980,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       notes: record.notes || '',
     } : {
       ...emptyCourseForm,
+      courseLocation: mode === 'history' ? '' : schoolLocationForContact(contact),
       status: mode === 'history' ? 'completed' : 'active',
       startDate: mode === 'enrollment' ? todayDate() : '',
       endDate: mode === 'history' ? todayDate() : '',
@@ -950,6 +1051,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
   const handleEditSave = () => {
     if (isClosedStatusReopen && !editForm.statusChangeReason) {
+      setActiveProfileEditTab('general');
       toast('Choose why this closed status is being reopened.', 'error');
       return;
     }
@@ -1329,8 +1431,19 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       });
   };
 
-  if (loaded && !contact) {
-    return <div className="empty-state">{singularLabel} not found</div>;
+  if (detailPageState === 'loading') {
+    return <PageState tone="loading" title={`Loading ${singularLabel.toLowerCase()}`} copy="Preparing profile, timeline, linked records, and communication history." />;
+  }
+
+  if (detailPageState === 'not-found') {
+    return (
+      <PageState
+        tone="not-found"
+        title={`${singularLabel} not found`}
+        copy={`This ${singularLabel.toLowerCase()} may be outside your current scope or no longer available.`}
+        actions={<PageStateAction href="/contacts">Back to Contacts</PageStateAction>}
+      />
+    );
   }
 
   const addNote = () => {
@@ -1341,8 +1454,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       createdAt: new Date().toISOString(),
       id: crypto.randomUUID()
     };
-    const updatedNotes = Array.isArray(contact.notes) ? [...contact.notes, newNote] : [newNote];
-    updateContact(contact.id, { notes: updatedNotes })
+    const save = dataSource === 'postgres'
+      ? appendContactNote(contact.id, newNote.text)
+      : updateContact(contact.id, {
+          notes: Array.isArray(contact.notes) ? [...contact.notes, newNote] : [newNote],
+        });
+    save
       .then(() => {
         setNoteInput('');
         setTimelineReloadKey((key) => key + 1);
@@ -1354,7 +1471,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   };
 
   const submitManualSend = () => {
-    if (!access.canWriteCrm || !contact?.id || manualSend.sending) return;
+    if (!access.canSendOutboundMessages || !contact?.id || manualSend.sending) return;
     const requestId = manualSend.requestId || newManualSendRequestId();
     setManualSend((current) => ({ ...current, sending: true, blockedReasons: [], error: '' }));
     fetch(`/api/contacts/${contact.id}/conversations`, {
@@ -1400,7 +1517,133 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       });
   };
 
-  if (!loaded) return <div className="empty-state">Loading...</div>;
+  const profileSidebar = (
+    <div className={s.profileCard}>
+      <div className={s.profileHeader}>
+        <div className={s.profileAvatarLarge}>{contact.name.charAt(0)}</div>
+        <div className={s.profileTitleBlock}>
+          <div className={s.profileNameRow}>
+            <h1 className={s.profileName}>{contact.name}</h1>
+            <span className={`badge badge-${contact.status.toLowerCase().replace(' ', '')}`}>{contact.status}</span>
+          </div>
+          <div className={s.profileRole}>{detailView.profileTitle}</div>
+          {detailView.sourceEyebrow && <div className={s.profileSource}>{detailView.sourceEyebrow}</div>}
+        </div>
+      </div>
+
+      {(detailView.workflowTitle || detailView.workflowNext || detailView.workflowChips?.length) && (
+        <div className={s.workflowCard}>
+          <div className={s.workflowHeader}>
+            <AlertCircle size={15} />
+            <span>{detailView.workflowTitle}</span>
+          </div>
+          {detailView.workflowNext && <div className={s.workflowNext}>{detailView.workflowNext}</div>}
+          {!!detailView.workflowChips?.length && (
+            <div className={s.workflowTags}>
+              {detailView.workflowChips.map((tag) => (
+                <span key={tag} className={s.workflowTag}><Tag size={11} /> {tag.replaceAll('_', ' ')}</span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {access.canReadImportReview && !!cleanupAudits.length && (
+        <div className={s.cleanupSummary} aria-label="Cleanup provenance">
+          <div className={s.cleanupSummaryHeader}>
+            <Archive size={15} />
+            <span>Cleanup provenance</span>
+          </div>
+          {cleanupAudits.map((audit) => (
+            <div key={audit.id} className={s.cleanupSummaryItem}>
+              <strong>{audit.title}</strong>
+              <span>{audit.detail}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className={s.profileInfo}>
+        <div className={s.infoItem}>
+          <Mail size={16} />
+          {cleanText(contact.email) ? (
+            <a className={s.infoLink} href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a>
+          ) : (
+            <span className={s.missingInfo}>Missing email</span>
+          )}
+        </div>
+        <div className={s.infoItem}>
+          <Phone size={16} />
+          {cleanText(contact.phone) ? (
+            <a className={s.infoLink} href={phoneHref(contact.phone)}>{contact.phone}</a>
+          ) : (
+            <span className={s.missingInfo}>Missing phone</span>
+          )}
+        </div>
+        {contact.address && <div className={s.infoItem}><MapPin size={16} /> <span>{contact.address}</span></div>}
+        <div className={s.infoItem}><Calendar size={16} /> <span>Last touch: {contact.lastTouch || contact.lastContact || 'None'}</span></div>
+        <div className={s.infoItem}><Edit3 size={16} /> <span>Last edited: {contact.lastEdited || 'None'}</span></div>
+        {detailView.contactability?.status && detailView.contactability.status !== 'reachable' && (
+          <div className={s.infoItem}>
+            <AlertCircle size={16} />
+            <span>{detailView.contactability.reason || detailView.contactability.label}</span>
+          </div>
+        )}
+      </div>
+
+      {!!detailView.highlights?.length && (
+        <div className={s.highlightGrid} aria-label={`${detailView.profileTitle} summary`}>
+          {detailView.highlights.map((item) => (
+            <div key={`${item.label}-${item.value}`} className={`${s.highlightItem} ${item.tone ? s[`highlight_${item.tone}`] || '' : ''}`}>
+              <span>{item.label}</span>
+              <strong>{item.value}</strong>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className={s.profileAssignment}>
+        <div className={s.assignmentLabel}>Assigned To</div>
+        <div className={s.assignmentUser}>
+          <div className={s.userAvatarSmall}>{(assignedEmployee?.label || 'U').charAt(0)}</div>
+          <span>{assignedEmployee?.label || 'Unassigned'}</span>
+        </div>
+      </div>
+
+      {access.canWriteCrm && (
+        <div className={s.actionPanel} aria-label={`${detailView.profileTitle} actions`}>
+          <div className={s.actionPanelHeader}>Actions</div>
+          {nextStatus && (
+            <button
+              className={`${s.statusStepButton} btn btn-block`}
+              type="button"
+              onClick={moveToNextStatus}
+              disabled={statusUpdating}
+            >
+              <ArrowRight size={16} style={{marginRight: 8}} /> {statusUpdating ? 'Updating...' : `Move to ${nextStatus}`}
+            </button>
+          )}
+          <Link
+            className="btn btn-block btn-primary"
+            href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}
+          >
+            <CheckSquare size={16} style={{marginRight: 8}} /> Create Follow-up
+          </Link>
+          {showWorkOrdersTab && access.canWriteWorkOrders && (
+            <Link
+              className="btn btn-block"
+              href={`/work-orders?contactId=${encodeURIComponent(contact.id)}`}
+            >
+              <ClipboardList size={16} style={{marginRight: 8}} /> Create Work Order
+            </Link>
+          )}
+          <button className="btn btn-block" onClick={openEditModal}>
+            <Edit3 size={16} style={{marginRight: 8}} /> Edit Profile
+          </button>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className={s.detailPage + " fade-in"}>
@@ -1411,137 +1654,27 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       </div>
 
       <div className={s.detailLayout}>
-        {/* Left Sidebar: Profile */}
-        <div className={s.profileCard}>
-          <div className={s.profileHeader}>
-            <div className={s.profileAvatarLarge}>{contact.name.charAt(0)}</div>
-            <div className={s.profileTitleBlock}>
-              <div className={s.profileNameRow}>
-                <h1 className={s.profileName}>{contact.name}</h1>
-                <span className={`badge badge-${contact.status.toLowerCase().replace(' ', '')}`}>{contact.status}</span>
+        {/* Main Section: Review content */}
+        <div className={s.contentSection}>
+          <section className={s.reviewContext} aria-label={`${detailView.profileTitle} review context`}>
+            <div className={s.reviewContextHeader}>
+              <div>
+                <span>Review context</span>
+                <strong>{contact.name}</strong>
               </div>
-              <div className={s.profileRole}>{detailView.profileTitle}</div>
-              {detailView.sourceEyebrow && <div className={s.profileSource}>{detailView.sourceEyebrow}</div>}
+              <small>{detailView.profileTitle}</small>
             </div>
-          </div>
-
-          {(detailView.workflowTitle || detailView.workflowNext || detailView.workflowChips?.length) && (
-            <div className={s.workflowCard}>
-              <div className={s.workflowHeader}>
-                <AlertCircle size={15} />
-                <span>{detailView.workflowTitle}</span>
-              </div>
-              {detailView.workflowNext && <div className={s.workflowNext}>{detailView.workflowNext}</div>}
-              {!!detailView.workflowChips?.length && (
-                <div className={s.workflowTags}>
-                  {detailView.workflowChips.map((tag) => (
-                    <span key={tag} className={s.workflowTag}><Tag size={11} /> {tag.replaceAll('_', ' ')}</span>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-
-          {access.canReadImportReview && !!cleanupAudits.length && (
-            <div className={s.cleanupSummary} aria-label="Cleanup provenance">
-              <div className={s.cleanupSummaryHeader}>
-                <Archive size={15} />
-                <span>Cleanup provenance</span>
-              </div>
-              {cleanupAudits.map((audit) => (
-                <div key={audit.id} className={s.cleanupSummaryItem}>
-                  <strong>{audit.title}</strong>
-                  <span>{audit.detail}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div className={s.profileInfo}>
-            <div className={s.infoItem}>
-              <Mail size={16} />
-              {cleanText(contact.email) ? (
-                <a className={s.infoLink} href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a>
-              ) : (
-                <span className={s.missingInfo}>Missing email</span>
-              )}
-            </div>
-            <div className={s.infoItem}>
-              <Phone size={16} />
-              {cleanText(contact.phone) ? (
-                <a className={s.infoLink} href={phoneHref(contact.phone)}>{contact.phone}</a>
-              ) : (
-                <span className={s.missingInfo}>Missing phone</span>
-              )}
-            </div>
-            {contact.address && <div className={s.infoItem}><MapPin size={16} /> <span>{contact.address}</span></div>}
-            <div className={s.infoItem}><Calendar size={16} /> <span>Last touch: {contact.lastTouch || contact.lastContact || 'None'}</span></div>
-            <div className={s.infoItem}><Edit3 size={16} /> <span>Last edited: {contact.lastEdited || 'None'}</span></div>
-            {detailView.contactability?.status && detailView.contactability.status !== 'reachable' && (
-              <div className={s.infoItem}>
-                <AlertCircle size={16} />
-                <span>{detailView.contactability.reason || detailView.contactability.label}</span>
-              </div>
-            )}
-          </div>
-
-          {!!detailView.highlights?.length && (
-            <div className={s.highlightGrid} aria-label={`${detailView.profileTitle} summary`}>
-              {detailView.highlights.map((item) => (
-                <div key={`${item.label}-${item.value}`} className={`${s.highlightItem} ${item.tone ? s[`highlight_${item.tone}`] || '' : ''}`}>
+            <div className={s.reviewGrid}>
+              {reviewSummary.map((item) => (
+                <div key={item.label} className={`${s.reviewItem} ${item.tone ? s[`review_${item.tone}`] || '' : ''}`}>
                   <span>{item.label}</span>
                   <strong>{item.value}</strong>
+                  {item.detail && <small>{item.detail}</small>}
                 </div>
               ))}
             </div>
-          )}
+          </section>
 
-          <div className={s.profileAssignment}>
-            <div className={s.assignmentLabel}>Assigned To</div>
-            <div className={s.assignmentUser}>
-              <div className={s.userAvatarSmall}>{assignedEmployee?.name?.charAt(0)}</div>
-              <span>{assignedEmployee?.name || 'Unassigned'}</span>
-            </div>
-          </div>
-          
-          {access.canWriteCrm && (
-            <>
-              {nextStatus && (
-                <button
-                  className={`${s.statusStepButton} btn btn-block`}
-                  style={{marginTop: 20}}
-                  type="button"
-                  onClick={moveToNextStatus}
-                  disabled={statusUpdating}
-                >
-                  <ArrowRight size={16} style={{marginRight: 8}} /> {statusUpdating ? 'Updating...' : `Move to ${nextStatus}`}
-                </button>
-              )}
-              <Link
-                className="btn btn-block btn-primary"
-                style={{marginTop: nextStatus ? 8 : 20}}
-                href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}
-              >
-                <CheckSquare size={16} style={{marginRight: 8}} /> Create Follow-up
-              </Link>
-              {showWorkOrdersTab && access.canWriteWorkOrders && (
-                <Link
-                  className="btn btn-block"
-                  style={{marginTop: 8}}
-                  href={`/work-orders?contactId=${encodeURIComponent(contact.id)}`}
-                >
-                  <ClipboardList size={16} style={{marginRight: 8}} /> Create Work Order
-                </Link>
-              )}
-              <button className="btn btn-block" style={{marginTop: 8}} onClick={openEditModal}>
-                <Edit3 size={16} style={{marginRight: 8}} /> Edit Profile
-              </button>
-            </>
-          )}
-        </div>
-
-        {/* Right Section: Content */}
-        <div className={s.contentSection}>
           <div className={s.contentTabs}>
             <button className={`${s.contentTab} ${renderedActiveTab === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')}>Timeline</button>
             <button className={`${s.contentTab} ${renderedActiveTab === 'conversations' ? s.active : ''}`} onClick={() => setActiveTab('conversations')}>Conversations ({conversationMessages.length})</button>
@@ -1562,23 +1695,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           <div className={s.tabContent}>
             {renderedActiveTab === 'timeline' && (
               <div className={s.timelineView}>
-                <div className={s.noteBox}>
-                  <textarea 
-                    placeholder="Type an internal note..."
-                    value={noteInput}
-                    onChange={e => setNoteInput(e.target.value)}
-                    disabled={!access.canWriteCrm}
-                  />
-                  <div className={s.noteBoxFooter}>
-                    <button className="btn btn-primary btn-sm" onClick={addNote} disabled={!access.canWriteCrm}>
-                      <Plus size={14} /> Add Note
-                    </button>
-                    <button className="btn btn-sm" type="button" onClick={openFollowUpModal} disabled={!access.canWriteCrm}>
-                      <AlertCircle size={14} /> Log Follow-up
-                    </button>
-                  </div>
-                </div>
-
                 <div className={s.snapshotStrip} aria-label={`Current ${singularLabel.toLowerCase()} snapshot`}>
                   {timelineSnapshot.map((item) => {
                     const Icon = SNAPSHOT_ICONS[item.icon] || Activity;
@@ -1619,10 +1735,26 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     ))}
                   </div>
                   {timelineStatus === 'loading' && <div className={s.timelineStatus}>Syncing</div>}
-                  {timelineStatus === 'error' && <div className={s.timelineStatus}>Using cached timeline</div>}
                 </div>
 
-                <div className={s.timeline}>
+                {timelineStatus === 'loading' && (
+                  <PageState
+                    tone="loading"
+                    size="compact"
+                    title="Loading timeline"
+                    copy="Fetching activity for this contact."
+                  />
+                )}
+                {timelineStatus === 'error' && (
+                  <PageState
+                    tone="error"
+                    size="compact"
+                    title="Timeline unavailable"
+                    copy="Activity could not be loaded for this contact."
+                    actions={<PageStateAction onClick={() => setTimelineReloadKey((key) => key + 1)}>Try Again</PageStateAction>}
+                  />
+                )}
+                {timelineStatus === 'idle' && <div className={s.timeline}>
                   {timeline.map((item) => {
                     const dateParts = timelineDateParts(item);
                     const provenance = item.presentation?.provenance;
@@ -1723,6 +1855,23 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   {timeline.length === 0 && (
                     <div className={s.timelineEmpty}>{timelineEmptyText(renderedTimelineFilter, detailView.timelineFilters)}</div>
                   )}
+                </div>}
+
+                <div className={s.noteBox}>
+                  <textarea
+                    placeholder="Type an internal note..."
+                    value={noteInput}
+                    onChange={e => setNoteInput(e.target.value)}
+                    disabled={!access.canWriteCrm}
+                  />
+                  <div className={s.noteBoxFooter}>
+                    <button className="btn btn-primary btn-sm" onClick={addNote} disabled={!access.canWriteCrm}>
+                      <Plus size={14} /> Add Note
+                    </button>
+                    <button className="btn btn-sm" type="button" onClick={openFollowUpModal} disabled={!access.canWriteCrm}>
+                      <AlertCircle size={14} /> Log Follow-up
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -1739,6 +1888,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                         {activeCourseRecord
                           ? [
                               activeCourseRecord.startDate ? `Started ${activeCourseRecord.startDate}` : '',
+                              activeCourseRecord.courseLocation || 'Delivery location not set',
                               activeCourseRecord.notes || '',
                             ].filter(Boolean).join(' - ') || 'Active course record'
                           : 'Start a new course when the student enrolls again. Older courses stay in history.'}
@@ -1815,6 +1965,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                             <strong>{record.courseName}</strong>
                             <small>
                               {courseRecordStatusLabel(record.status)}
+                              {` - ${record.courseLocation || 'Delivery location not set'}`}
                               {record.startDate ? ` - ${record.startDate}` : ''}
                               {record.endDate ? ` to ${record.endDate}` : ''}
                             </small>
@@ -1837,6 +1988,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                             <div>
                               <span>Started</span>
                               <strong>{selectedCourseRecord.startDate || 'Not set'}</strong>
+                            </div>
+                            <div>
+                              <span>Delivery location</span>
+                              <strong>{selectedCourseRecord.courseLocation || 'Delivery location not set'}</strong>
                             </div>
                             <div>
                               <span>Ended</span>
@@ -1911,7 +2066,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       {access.canWriteCrm && (
                         <div className={s.personActions}>
                           <button type="button" onClick={() => openPersonModal(person)}>Edit</button>
-                          <button type="button" onClick={() => deletePerson(person)}>Remove</button>
+                          <button type="button" onClick={() => setPersonDeleteTarget(person)}>Remove</button>
                         </div>
                       )}
                     </div>
@@ -1931,7 +2086,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   {conversationStatus === 'error' && <div className={s.timelineStatus}>Conversation sync unavailable</div>}
                 </div>
 
-                {access.canWriteCrm && dataSource === 'postgres' && (
+                {access.canSendOutboundMessages && dataSource === 'postgres' && (
                   <div className={s.manualSendBox}>
                     <div className={s.manualSendControls}>
                       <label className={s.manualSendField}>
@@ -2242,6 +2397,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             )}
           </div>
         </div>
+        {profileSidebar}
       </div>
 
       {courseModal && (
@@ -2249,6 +2405,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           open={Boolean(courseModal)}
           onClose={closeCourseModal}
           title={courseForm.id ? 'Edit Course' : (courseModal === 'history' ? 'Add Course History' : 'Start Course')}
+          variant="dialog"
+          panelClassName="course-editor-dialog-panel"
           footer={(
             <>
               <button className="btn" type="button" onClick={closeCourseModal} disabled={courseBusy}>Cancel</button>
@@ -2263,83 +2421,156 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             </>
           )}
         >
-          <div className="form-group">
-            <label className="form-label">Course</label>
-            <input
-              className="input"
-              value={courseForm.courseName}
-              disabled={courseBusy}
-              placeholder="Forklift, OSHA 30, ESL Level 1..."
-              onChange={(event) => updateCourseForm({ courseName: event.target.value })}
-            />
-          </div>
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Status</label>
-              <select
-                className="input select"
-                value={courseForm.status}
-                disabled={courseBusy}
-                onChange={(event) => updateCourseForm({
-                  status: event.target.value,
-                  endDate: isTerminalCourseRecordStatus(event.target.value) && !courseForm.endDate
-                    ? todayDate()
-                    : courseForm.endDate,
+          <div className="course-editor-form">
+            <div className="contact-dialog-intro">
+              <p>Record the course exactly as the student moved through it. Status changes which dates and outcome details matter.</p>
+              <span>{courseModeLabel}</span>
+            </div>
+
+            <section className="course-editor-section course-editor-course">
+              <div className="contact-dialog-section-header">
+                <div>
+                  <h2>Course</h2>
+                  <p>Name and delivery location first, using the actual course record rather than lead-interest labels.</p>
+                </div>
+              </div>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">Course</label>
+                  <input
+                    className="input"
+                    value={courseForm.courseName}
+                    disabled={courseBusy}
+                    placeholder="Forklift, OSHA 30, ESL Level 1..."
+                    data-autofocus
+                    onChange={(event) => updateCourseForm({ courseName: event.target.value })}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Delivery Location</label>
+                  <select
+                    className="input select"
+                    value={courseForm.courseLocation || ''}
+                    disabled={courseBusy}
+                    onChange={(event) => updateCourseForm({ courseLocation: event.target.value })}
+                  >
+                    <option value="">Delivery location not set</option>
+                    {courseLocationOptions.map((location) => (
+                      <option key={location} value={location}>{location}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            <section className="course-editor-section course-editor-status">
+              <div className="contact-dialog-section-header">
+                <div>
+                  <h2>Status</h2>
+                  <p>Pick the student course state. The form below adapts to what that state needs.</p>
+                </div>
+              </div>
+              <div className="course-status-grid" role="radiogroup" aria-label="Course status">
+                {COURSE_RECORD_STATUS_OPTIONS.map((option) => {
+                  const selected = courseForm.status === option.value;
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      className={`course-status-card ${selected ? 'is-active' : ''}`}
+                      aria-pressed={selected}
+                      disabled={courseBusy}
+                      onClick={() => updateCourseForm({
+                        status: option.value,
+                        endDate: isTerminalCourseRecordStatus(option.value) && !courseForm.endDate
+                          ? todayDate()
+                          : courseForm.endDate,
+                      })}
+                    >
+                      <strong>{option.label}</strong>
+                      <span>{COURSE_STATUS_HELP[option.value] || 'Use when this status best matches the course record.'}</span>
+                    </button>
+                  );
                 })}
-              >
-                {COURSE_RECORD_STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Start Date</label>
-              <input
-                className="input"
-                type="date"
-                required={courseStartDateRequired}
-                value={courseForm.startDate || ''}
-                disabled={courseBusy}
-                onChange={(event) => updateCourseForm({ startDate: event.target.value })}
-              />
-            </div>
+              </div>
+            </section>
+
+            <section className="course-editor-section course-editor-details">
+              <div className="contact-dialog-section-header">
+                <div>
+                  <h2>{courseStatusLabel} details</h2>
+                  <p>{courseStatusIsTerminal ? 'Capture when it ended and why.' : 'Capture the planned or current start point.'}</p>
+                </div>
+              </div>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">{courseStartDateRequired ? 'Start Date Required' : 'Start Date'}</label>
+                  <input
+                    className="input"
+                    type="date"
+                    required={courseStartDateRequired}
+                    value={courseForm.startDate || ''}
+                    disabled={courseBusy}
+                    onChange={(event) => updateCourseForm({ startDate: event.target.value })}
+                  />
+                </div>
+                {courseStatusIsTerminal ? (
+                  <div className="form-group">
+                    <label className="form-label">End Date</label>
+                    <input
+                      className="input"
+                      type="date"
+                      value={courseForm.endDate || ''}
+                      disabled={courseBusy}
+                      onChange={(event) => updateCourseForm({ endDate: event.target.value })}
+                    />
+                  </div>
+                ) : (
+                  <div className="course-editor-state-note">
+                    <strong>{courseForm.status === 'planned' ? 'End date hidden' : 'Current course'}</strong>
+                    <span>{courseForm.status === 'planned' ? 'Set an end date after the student completes, drops, cancels, or transfers.' : 'Only one course can be current at a time for this student.'}</span>
+                  </div>
+                )}
+              </div>
+              {courseStatusIsTerminal && (
+                <div className="form-group">
+                  <label className="form-label">Outcome / Reason</label>
+                  <input
+                    className="input"
+                    value={courseForm.outcomeReason || ''}
+                    disabled={courseBusy}
+                    placeholder="Completed, cancelled halfway, transferred..."
+                    onChange={(event) => updateCourseForm({ outcomeReason: event.target.value })}
+                  />
+                </div>
+              )}
+              <div className="form-group">
+                <label className="form-label">Notes</label>
+                <textarea
+                  className="textarea course-editor-notes"
+                  rows={3}
+                  value={courseForm.notes || ''}
+                  disabled={courseBusy}
+                  placeholder={courseStatusIsTerminal ? 'Add final outcome context for the timeline.' : 'Add schedule, instructor, or coordination notes.'}
+                  onChange={(event) => updateCourseForm({ notes: event.target.value })}
+                />
+              </div>
+            </section>
+
+            <aside className="course-editor-summary" aria-label="Course save summary">
+              <span>Ready to save</span>
+              <strong>{courseForm.courseName || 'Course name required'}</strong>
+              <p>{courseStatusLabel}{courseForm.courseLocation ? ` at ${courseForm.courseLocation}` : ''}</p>
+              {courseStartDateRequired && !courseForm.startDate && (
+                <small>Current courses need a start date.</small>
+              )}
+            </aside>
+
+            {courseForm.status === 'active' && activeCourseRecord && activeCourseRecord.id !== courseForm.id && (
+              <div className={s.courseError}>End the current course before starting another current course.</div>
+            )}
+            {courseError && <div className={s.courseError}>{courseError}</div>}
           </div>
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">End Date</label>
-              <input
-                className="input"
-                type="date"
-                value={courseForm.endDate || ''}
-                disabled={courseBusy}
-                onChange={(event) => updateCourseForm({ endDate: event.target.value })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Outcome / Reason</label>
-              <input
-                className="input"
-                value={courseForm.outcomeReason || ''}
-                disabled={courseBusy}
-                placeholder="Completed, cancelled halfway, transferred..."
-                onChange={(event) => updateCourseForm({ outcomeReason: event.target.value })}
-              />
-            </div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Notes</label>
-            <textarea
-              className="textarea"
-              rows={3}
-              value={courseForm.notes || ''}
-              disabled={courseBusy}
-              onChange={(event) => updateCourseForm({ notes: event.target.value })}
-            />
-          </div>
-          {courseForm.status === 'active' && activeCourseRecord && activeCourseRecord.id !== courseForm.id && (
-            <div className={s.courseError}>End the current course before starting another current course.</div>
-          )}
-          {courseError && <div className={s.courseError}>{courseError}</div>}
         </Modal>
       )}
 
@@ -2348,6 +2579,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           open={followUpOpen}
           onClose={closeFollowUpModal}
           title="Log Follow-up"
+          variant="dialog"
+          panelClassName="follow-up-dialog-panel"
           footer={(
             <>
               <button className="btn" type="button" onClick={closeFollowUpModal} disabled={followUpBusy}>Cancel</button>
@@ -2362,283 +2595,428 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             </>
           )}
         >
-          <div className="form-group">
-            <div className="form-label">Task Match</div>
-            <div className={s.followUpHint}>
-              {followUpTask
-                ? `Completes oldest open follow-up task: ${followUpTask.title || 'Follow-up'} (${taskDateLabel(followUpTask.dueAt)}).`
-                : 'No open follow-up task was found. This will log follow-up history directly.'}
-            </div>
-          </div>
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Outcome</label>
-              <select
-                className="input select"
-                value={followUpDraft.outcome}
-                disabled={followUpBusy}
-                onChange={(event) => updateFollowUpDraft({ outcome: event.target.value })}
-              >
-                {FOLLOW_UP_OUTCOME_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label">Channel</label>
-              <select
-                className="input select"
-                value={followUpDraft.channel}
-                disabled={followUpBusy}
-                onChange={(event) => updateFollowUpDraft({ channel: event.target.value })}
-              >
-                <option value="phone">Phone</option>
-                <option value="sms">SMS</option>
-                <option value="whatsapp">WhatsApp</option>
-                <option value="email">Email</option>
-                <option value="in_person">In person</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-          </div>
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Attempted</label>
-              <input
-                className="input"
-                value={followUpDraft.contactMethod}
-                disabled={followUpBusy}
-                placeholder="Phone or email used"
-                onChange={(event) => updateFollowUpDraft({ contactMethod: event.target.value })}
-              />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Next Due</label>
-              <input
-                className="input"
-                type="date"
-                value={followUpDraft.nextDueDate}
-                disabled={followUpBusy}
-                onChange={(event) => updateFollowUpDraft({ nextDueDate: event.target.value })}
-              />
-            </div>
-          </div>
-          {coordinatorUiPolicy.canManageCoordinatorAssignments && (
-            <div className="form-group">
-              <label className="form-label">Next Owner</label>
-              <select
-                className="input select"
-                value={followUpDraft.nextOwnerUserId}
-                disabled={followUpBusy}
-                onChange={(event) => updateFollowUpDraft({ nextOwnerUserId: event.target.value })}
-              >
-                <option value="" disabled>Select owner</option>
-                {ownerOptions.map((owner) => (
-                  <option key={owner.id} value={owner.id}>{owner.label}</option>
-                ))}
-              </select>
-            </div>
-          )}
-          {isAitUsaContact && (
-            <>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Program</label>
-                  <input className="input" value={followUpDraft.leadProfile?.programInterest || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('programInterest', event.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Location</label>
-                  <input className="input" value={followUpDraft.leadProfile?.locationPreference || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('locationPreference', event.target.value)} />
-                </div>
+          <div className="follow-up-dialog-form">
+            <div className="follow-up-task-match">
+              <div>
+                <strong>Task match</strong>
+                <p>
+                  {followUpTask
+                    ? `Completes oldest open follow-up task: ${followUpTask.title || 'Follow-up'} (${taskDateLabel(followUpTask.dueAt)}).`
+                    : 'No open follow-up task was found. This will log follow-up history directly.'}
+                </p>
               </div>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Preferred Day</label>
-                  <input className="input" value={followUpDraft.leadProfile?.preferredDay || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('preferredDay', event.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Schedule</label>
-                  <input className="input" value={followUpDraft.leadProfile?.preferredSchedule || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('preferredSchedule', event.target.value)} />
-                </div>
+            </div>
+
+            <div className="follow-up-workflow-grid">
+              <div className="follow-up-workflow-stack">
+                <section className="follow-up-dialog-section">
+                  <div className="contact-dialog-section-header">
+                    <span className="contact-dialog-section-index">1</span>
+                    <div>
+                      <h2>What happened?</h2>
+                      <p>Capture the result and the channel used before setting the next action.</p>
+                    </div>
+                  </div>
+                  <div className="grid-2">
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="follow-up-outcome">Outcome</label>
+                      <select
+                        id="follow-up-outcome"
+                        className="input select"
+                        value={followUpDraft.outcome}
+                        disabled={followUpBusy}
+                        onChange={(event) => updateFollowUpDraft({ outcome: event.target.value })}
+                      >
+                        {FOLLOW_UP_OUTCOME_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="follow-up-channel">Channel</label>
+                      <select
+                        id="follow-up-channel"
+                        className="input select"
+                        value={followUpDraft.channel}
+                        disabled={followUpBusy}
+                        onChange={(event) => updateFollowUpDraft({ channel: event.target.value })}
+                      >
+                        <option value="phone">Phone</option>
+                        <option value="sms">SMS</option>
+                        <option value="whatsapp">WhatsApp</option>
+                        <option value="email">Email</option>
+                        <option value="in_person">In person</option>
+                        <option value="other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="follow-up-attempted">Attempted</label>
+                    <input
+                      id="follow-up-attempted"
+                      className="input"
+                      value={followUpDraft.contactMethod}
+                      disabled={followUpBusy}
+                      placeholder="Phone or email used"
+                      onChange={(event) => updateFollowUpDraft({ contactMethod: event.target.value })}
+                    />
+                  </div>
+                </section>
+
+                <section className="follow-up-dialog-section">
+                  <div className="contact-dialog-section-header">
+                    <span className="contact-dialog-section-index">2</span>
+                    <div>
+                      <h2>What happens next?</h2>
+                      <p>Set the next follow-up date and owner so the work stays accountable.</p>
+                    </div>
+                  </div>
+                  <div className="grid-2">
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="follow-up-next-due">Next Due</label>
+                      <input
+                        id="follow-up-next-due"
+                        className="input"
+                        type="date"
+                        value={followUpDraft.nextDueDate}
+                        disabled={followUpBusy}
+                        onChange={(event) => updateFollowUpDraft({ nextDueDate: event.target.value })}
+                      />
+                    </div>
+                    {coordinatorUiPolicy.canManageCoordinatorAssignments && (
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="follow-up-next-owner">Next Owner</label>
+                        <select
+                          id="follow-up-next-owner"
+                          className="input select"
+                          value={followUpDraft.nextOwnerUserId}
+                          disabled={followUpBusy}
+                          onChange={(event) => updateFollowUpDraft({ nextOwnerUserId: event.target.value })}
+                        >
+                          <option value="" disabled>Select owner</option>
+                          {ownerOptions.map((owner) => (
+                            <option key={owner.id} value={owner.id}>{owner.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                </section>
               </div>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Test</label>
-                  <input className="input" value={followUpDraft.leadProfile?.testInterest || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('testInterest', event.target.value)} />
+
+              <section className="follow-up-dialog-section follow-up-note-section">
+                <div className="contact-dialog-section-header">
+                  <span className="contact-dialog-section-index">3</span>
+                  <div>
+                    <h2>Required note</h2>
+                    <p>Write the operator-readable summary that explains the outcome.</p>
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Level</label>
-                  <input className="input" value={followUpDraft.leadProfile?.educationLevel || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('educationLevel', event.target.value)} />
+                <textarea
+                  id="follow-up-note"
+                  className="textarea follow-up-note-input"
+                  rows={8}
+                  value={followUpDraft.note}
+                  disabled={followUpBusy}
+                  placeholder="Example: Spoke with Maria. Interested in evening ESL, asked for Saturday availability, follow up Friday with schedule options."
+                  onChange={(event) => updateFollowUpDraft({ note: event.target.value })}
+                />
+              </section>
+            </div>
+
+            {isAitUsaContact && (
+              <details className="follow-up-profile-disclosure">
+                <summary>
+                  <span>Update enrollment profile</span>
+                  <small>Optional fields from the conversation</small>
+                </summary>
+                <div className="follow-up-profile-fields">
+                  <div className="grid-2">
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="follow-up-program">Program</label>
+                      <input id="follow-up-program" className="input" value={followUpDraft.leadProfile?.programInterest || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('programInterest', event.target.value)} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="follow-up-location">Market / Region</label>
+                      <select id="follow-up-location" className="input select" value={followUpDraft.leadProfile?.locationPreference || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('locationPreference', event.target.value)}>
+                        <option value="">Not specified</option>
+                        {followUpMarketRegionOptions.map((market) => <option key={market} value={market}>{market}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="grid-2">
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="follow-up-preferred-day">Preferred Day</label>
+                      <input id="follow-up-preferred-day" className="input" value={followUpDraft.leadProfile?.preferredDay || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('preferredDay', event.target.value)} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="follow-up-schedule">Schedule</label>
+                      <input id="follow-up-schedule" className="input" value={followUpDraft.leadProfile?.preferredSchedule || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('preferredSchedule', event.target.value)} />
+                    </div>
+                  </div>
+                  <div className="grid-2">
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="follow-up-test">Test</label>
+                      <input id="follow-up-test" className="input" value={followUpDraft.leadProfile?.testInterest || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('testInterest', event.target.value)} />
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="follow-up-level">Level</label>
+                      <input id="follow-up-level" className="input" value={followUpDraft.leadProfile?.educationLevel || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('educationLevel', event.target.value)} />
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="follow-up-school">School</label>
+                    <input id="follow-up-school" className="input" value={followUpDraft.leadProfile?.schoolName || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('schoolName', event.target.value)} />
+                  </div>
                 </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">School</label>
-                <input className="input" value={followUpDraft.leadProfile?.schoolName || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('schoolName', event.target.value)} />
-              </div>
-            </>
-          )}
-          <div className="form-group">
-            <label className="form-label">Note Required</label>
-            <textarea
-              className="textarea"
-              rows={3}
-              value={followUpDraft.note}
-              disabled={followUpBusy}
-              onChange={(event) => updateFollowUpDraft({ note: event.target.value })}
-            />
+              </details>
+            )}
+
+            {followUpError && <div className={s.followUpError}>{followUpError}</div>}
           </div>
-          {followUpError && <div className={s.followUpError}>{followUpError}</div>}
         </Modal>
       )}
 
-      {/* Edit Profile Modal */}
+      {/* Edit Profile Dialog */}
       {isEditModalOpen && editForm && (
-        <Modal 
-          open={isEditModalOpen} 
-          onClose={() => setIsEditModalOpen(false)} 
+        <Modal
+          open={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
           title="Edit Profile"
-          footer={<><button className="btn" onClick={() => setIsEditModalOpen(false)}>Cancel</button><button className="btn btn-primary" onClick={handleEditSave}>Save Changes</button></>}
+          variant="dialog"
+          panelClassName="contact-profile-dialog-panel"
+          footer={<><button className="btn" type="button" onClick={() => setIsEditModalOpen(false)}>Cancel</button><button className="btn btn-primary" type="button" onClick={handleEditSave}>Save Changes</button></>}
         >
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Full Name</label>
-              <input className="input" value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} />
+          <div className="contact-profile-dialog-form">
+            <div className="contact-dialog-intro">
+              <p>Update {contact?.name || singularLabel.toLowerCase()} without leaving the contact record.</p>
+              <span>Profile and routing details</span>
             </div>
-            <div className="form-group">
-              <label className="form-label">Email</label>
-              <input className="input" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} />
+
+            <div className="profile-editor-tabs" role="tablist" aria-label="Profile edit sections">
+              {profileEditTabs.map((tab) => {
+                const selected = activeProfileEditTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={selected}
+                    aria-controls={`profile-edit-panel-${tab.id}`}
+                    id={`profile-edit-tab-${tab.id}`}
+                    className={`profile-editor-tab ${selected ? 'is-active' : ''}`}
+                    onClick={() => setActiveProfileEditTab(tab.id)}
+                  >
+                    <span>{tab.label}</span>
+                    <small>{tab.summary}</small>
+                  </button>
+                );
+              })}
             </div>
-          </div>
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Phone</label>
-              <input className="input" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Source</label>
-              <select className="input select" value={editForm.source} onChange={e => setEditForm({...editForm, source: e.target.value})}>
-                {sources.map(src => <option key={src} value={src}>{src}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Status</label>
-            <select className="input select" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}>
-              {[...new Set([...(contactStatusOptions || PIPELINE_STATUSES), ...(editForm.status ? [editForm.status] : [])])].map(st => <option key={st} value={st}>{st}</option>)}
-            </select>
-          </div>
-          {isClosedStatusReopen && (
-            <div className="form-group">
-              <label className="form-label">Reopen reason</label>
-              <select
-                className="input select"
-                value={editForm.statusChangeReason || ''}
-                onChange={e => setEditForm({...editForm, statusChangeReason: e.target.value})}
+
+            {activeProfileEditTab === 'general' && (
+              <section
+                className="contact-profile-dialog-section"
+                role="tabpanel"
+                id="profile-edit-panel-general"
+                aria-labelledby="profile-edit-tab-general"
               >
-                <option value="">Choose why this closed status is changing</option>
-                <option value="correction">Correction - closed status was entered by mistake</option>
-                <option value="new_course_follow_up">New course follow-up - previous student is active again</option>
-              </select>
-              <div className="empty-state" style={{padding: 10, marginTop: 8}}>
-                Use correction only for data-entry mistakes. For a new class or program, choose new course follow-up so history shows this is re-engagement, not an erased completion.
-              </div>
-            </div>
-          )}
-          {showSchoolLocationField ? (
-            <div className="form-group">
-              <label className="form-label">School Location</label>
-              <select className="input select" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})}>
-                <option value="">Select school location</option>
-                {editSchoolLocationOptions.map((location) => (
-                  <option key={location} value={location}>{location}</option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <div className="form-group">
-              <label className="form-label">Address</label>
-              <input className="input" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})} />
-            </div>
-          )}
-          {isAitUsaContact && (
-            <>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Program Interest</label>
-                  <input className="input" value={editForm.leadProfile?.programInterest || ''} onChange={e => updateEditLeadProfile('programInterest', e.target.value)} />
+                <div className="contact-dialog-section-header">
+                  <div>
+                    <h2>General profile</h2>
+                    <p>Update the fields employees reach for most: contact info, status, and ownership.</p>
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Location Preference</label>
-                  <input className="input" value={editForm.leadProfile?.locationPreference || ''} onChange={e => updateEditLeadProfile('locationPreference', e.target.value)} />
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-name">Full Name</label>
+                    <input id="profile-edit-name" className="input" value={editForm.name} autoFocus onChange={e => setEditForm({...editForm, name: e.target.value})} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-email">Email</label>
+                    <input id="profile-edit-email" className="input" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} />
+                  </div>
                 </div>
-              </div>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Preferred Day</label>
-                  <input className="input" value={editForm.leadProfile?.preferredDay || ''} onChange={e => updateEditLeadProfile('preferredDay', e.target.value)} />
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-phone">Phone</label>
+                    <input id="profile-edit-phone" className="input" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-status">Status</label>
+                    <select id="profile-edit-status" className="input select" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}>
+                      {[...new Set([...(contactStatusOptions || PIPELINE_STATUSES), ...(editForm.status ? [editForm.status] : [])])].map(st => <option key={st} value={st}>{st}</option>)}
+                    </select>
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label className="form-label">Preferred Schedule</label>
-                  <input className="input" value={editForm.leadProfile?.preferredSchedule || ''} onChange={e => updateEditLeadProfile('preferredSchedule', e.target.value)} />
-                </div>
-              </div>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">Test</label>
-                  <input className="input" value={editForm.leadProfile?.testInterest || ''} onChange={e => updateEditLeadProfile('testInterest', e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Level</label>
-                  <input className="input" value={editForm.leadProfile?.educationLevel || ''} onChange={e => updateEditLeadProfile('educationLevel', e.target.value)} />
-                </div>
-              </div>
-              <div className="grid-2">
-                <div className="form-group">
-                  <label className="form-label">School</label>
-                  <input className="input" value={editForm.leadProfile?.schoolName || ''} onChange={e => updateEditLeadProfile('schoolName', e.target.value)} />
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Source Detail</label>
-                  <input className="input" value={editForm.leadProfile?.sourceDetail || ''} onChange={e => updateEditLeadProfile('sourceDetail', e.target.value)} />
-                </div>
-              </div>
-              <div className="form-group">
-                <label className="form-label">Profile Details</label>
-                <textarea className="textarea" rows={2} value={editForm.leadProfile?.profileDetails || ''} onChange={e => updateEditLeadProfile('profileDetails', e.target.value)} />
-              </div>
-            </>
-          )}
-          {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
-            <div className="form-group">
-              <label className="form-label">Assigned To</label>
-              <select className="input select" value={editForm.assignedTo || ''} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
-                <option value="">Unassigned</option>
-                {ownerOptions.map((owner) => (
-                  <option key={owner.id} value={owner.id}>{owner.label}</option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <input type="hidden" value={editForm.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
-          )}
-          {access.canWriteCrm ? (
-            <div className="empty-state" style={{padding: 12, marginTop: 12, borderColor: 'var(--danger-muted)'}}>
-              <div style={{fontWeight: 700, color: 'var(--danger)', marginBottom: 4}}>Danger zone</div>
-              <div style={{fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', marginBottom: 10}}>
-                {coordinatorUiPolicy.canArchiveContactsDirectly
-                  ? `Archive removes this ${singularLabel.toLowerCase()} from normal CRM lists. History is retained for audit and recovery.`
-                  : `Request senior approval to archive this ${singularLabel.toLowerCase()}. The contact stays active until approved.`}
-              </div>
-              <button
-                className="btn btn-danger"
-                type="button"
-                onClick={() => {
-                  setArchiveReason('');
-                  setArchiveConfirmOpen(true);
-                }}
+                {isClosedStatusReopen && (
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-reopen-reason">Reopen reason</label>
+                    <select
+                      id="profile-edit-reopen-reason"
+                      className="input select"
+                      value={editForm.statusChangeReason || ''}
+                      onChange={e => setEditForm({...editForm, statusChangeReason: e.target.value})}
+                    >
+                      <option value="">Choose why this closed status is changing</option>
+                      <option value="correction">Correction - closed status was entered by mistake</option>
+                      <option value="new_course_follow_up">New course follow-up - previous student is active again</option>
+                    </select>
+                    <div className="profile-editor-helper">
+                      Use correction only for data-entry mistakes. For a new class or program, choose new course follow-up so history shows this is re-engagement, not an erased completion.
+                    </div>
+                  </div>
+                )}
+                {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-owner">Assigned To</label>
+                    <select id="profile-edit-owner" className="input select" value={editForm.assignedTo || ''} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
+                      <option value="">Unassigned</option>
+                      {ownerOptions.map((owner) => (
+                        <option key={owner.id} value={owner.id}>{owner.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <input type="hidden" value={editForm.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
+                )}
+                {access.canWriteCrm ? (
+                  <div className="profile-editor-account-action danger-action-panel">
+                    <div className="danger-action-copy">
+                      <span className="danger-action-eyebrow">
+                        <Archive size={14} /> Separate account action
+                      </span>
+                      <strong>{coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive this ${singularLabel.toLowerCase()}` : 'Request archive approval'}</strong>
+                      <p>
+                        {coordinatorUiPolicy.canArchiveContactsDirectly
+                          ? `This is not saved with profile edits. It opens a separate confirmation before removing the ${singularLabel.toLowerCase()} from normal CRM lists.`
+                          : `This is not saved with profile edits. It opens a separate confirmation and the contact stays active unless approved.`}
+                      </p>
+                    </div>
+                    <button
+                      className="btn btn-danger"
+                      type="button"
+                      onClick={() => {
+                        setArchiveReason('');
+                        setArchiveConfirmOpen(true);
+                      }}
+                    >
+                      {coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive ${singularLabel}` : 'Request Approval'}
+                    </button>
+                  </div>
+                ) : null}
+              </section>
+            )}
+
+            {activeProfileEditTab === 'source' && (
+              <section
+                className="contact-profile-dialog-section"
+                role="tabpanel"
+                id="profile-edit-panel-source"
+                aria-labelledby="profile-edit-tab-source"
               >
-                {coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive ${singularLabel}` : 'Request Archive Approval'}
-              </button>
-            </div>
-          ) : null}
+                <div className="contact-dialog-section-header">
+                  <div>
+                    <h2>Source and routing</h2>
+                    <p>Keep campaign geography separate from where the lead prefers to learn.</p>
+                  </div>
+                </div>
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-source">Source</label>
+                    <select id="profile-edit-source" className="input select" value={editForm.source} onChange={e => setEditForm({...editForm, source: e.target.value})}>
+                      {sources.map(src => <option key={src} value={src}>{src}</option>)}
+                    </select>
+                  </div>
+                  {showSchoolLocationField ? (
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="profile-edit-market-region">Market / Region</label>
+                      <select id="profile-edit-market-region" className="input select" value={editForm.leadProfile?.locationPreference || ''} onChange={e => updateEditLeadProfile('locationPreference', e.target.value)}>
+                        <option value="">Not specified</option>
+                        {editMarketRegionOptions.map((market) => (
+                          <option key={market} value={market}>{market}</option>
+                        ))}
+                      </select>
+                      <div className="profile-editor-helper">Where the lead is based or grouped for outreach.</div>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="grid-2">
+                  {showSchoolLocationField ? (
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="profile-edit-school-location">Preferred Learning Location</label>
+                      <select id="profile-edit-school-location" className="input select" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})}>
+                        <option value="">Not specified</option>
+                        {editSchoolLocationOptions.map((location) => (
+                          <option key={location} value={location}>{location}</option>
+                        ))}
+                      </select>
+                      <div className="profile-editor-helper">Campus or Online preference before enrollment.</div>
+                    </div>
+                  ) : (
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="profile-edit-address">Address</label>
+                      <input id="profile-edit-address" className="input" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})} />
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {activeProfileEditTab === 'enrollment' && isAitUsaContact && (
+              <section
+                className="contact-profile-dialog-section"
+                role="tabpanel"
+                id="profile-edit-panel-enrollment"
+                aria-labelledby="profile-edit-tab-enrollment"
+              >
+                <div className="contact-dialog-section-header">
+                  <div>
+                    <h2>Enrollment profile</h2>
+                    <p>Capture program preferences and background details when they matter for follow-up.</p>
+                  </div>
+                </div>
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-program-interest">Program Interest</label>
+                    <input id="profile-edit-program-interest" className="input" value={editForm.leadProfile?.programInterest || ''} onChange={e => updateEditLeadProfile('programInterest', e.target.value)} />
+                  </div>
+                </div>
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-preferred-day">Preferred Day</label>
+                    <input id="profile-edit-preferred-day" className="input" value={editForm.leadProfile?.preferredDay || ''} onChange={e => updateEditLeadProfile('preferredDay', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-preferred-schedule">Preferred Schedule</label>
+                    <input id="profile-edit-preferred-schedule" className="input" value={editForm.leadProfile?.preferredSchedule || ''} onChange={e => updateEditLeadProfile('preferredSchedule', e.target.value)} />
+                  </div>
+                </div>
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-test-interest">Test</label>
+                    <input id="profile-edit-test-interest" className="input" value={editForm.leadProfile?.testInterest || ''} onChange={e => updateEditLeadProfile('testInterest', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-education-level">Level</label>
+                    <input id="profile-edit-education-level" className="input" value={editForm.leadProfile?.educationLevel || ''} onChange={e => updateEditLeadProfile('educationLevel', e.target.value)} />
+                  </div>
+                </div>
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-school-name">School</label>
+                    <input id="profile-edit-school-name" className="input" value={editForm.leadProfile?.schoolName || ''} onChange={e => updateEditLeadProfile('schoolName', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-source-detail">Source Detail</label>
+                    <input id="profile-edit-source-detail" className="input" value={editForm.leadProfile?.sourceDetail || ''} onChange={e => updateEditLeadProfile('sourceDetail', e.target.value)} />
+                  </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="profile-edit-profile-details">Profile Details</label>
+                  <textarea id="profile-edit-profile-details" className="textarea" rows={3} value={editForm.leadProfile?.profileDetails || ''} onChange={e => updateEditLeadProfile('profileDetails', e.target.value)} />
+                </div>
+              </section>
+            )}
+          </div>
         </Modal>
       )}
 
@@ -2647,6 +3025,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           open={archiveConfirmOpen}
           onClose={() => !archiveBusy && setArchiveConfirmOpen(false)}
           title={coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive ${singularLabel}` : 'Request archive approval'}
+          variant="dialog"
+          panelClassName="archive-confirm-dialog-panel"
           footer={(
             <>
               <button className="btn" type="button" disabled={archiveBusy} onClick={() => setArchiveConfirmOpen(false)}>Cancel</button>
@@ -2790,36 +3170,93 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           open={!!personModal}
           onClose={closePersonModal}
           title={personModal === 'new' ? 'Add Linked Person' : 'Edit Linked Person'}
-          footer={<><button className="btn" onClick={closePersonModal}>Cancel</button><button className="btn btn-primary" onClick={savePerson}>Save</button></>}
+          variant="dialog"
+          panelClassName="linked-person-dialog-panel"
+          footer={<><button className="btn" onClick={closePersonModal}>Cancel</button><button className="btn btn-primary" onClick={savePerson}>Save Person</button></>}
         >
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Name</label>
-              <input className="input" value={personForm.name} onChange={e => setPersonForm({...personForm, name: e.target.value})} />
+          <div className="linked-person-dialog-form">
+            <div className="contact-dialog-intro">
+              <p>Capture who this person is and the safest way to reach them.</p>
+              <span>{personForm.isPrimary ? 'Primary contact' : 'Linked contact'}</span>
             </div>
-            <div className="form-group">
-              <label className="form-label">Role</label>
-              <input className="input" value={personForm.role} onChange={e => setPersonForm({...personForm, role: e.target.value})} />
+            <section className="linked-person-section">
+              <div className="contact-dialog-section-header">
+                <div>
+                  <h2>Relationship</h2>
+                  <p>Name, role, and whether staff should treat this as the main person.</p>
+                </div>
+              </div>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">Name</label>
+                  <input className="input" value={personForm.name} data-autofocus onChange={e => setPersonForm({...personForm, name: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Role</label>
+                  <input className="input" value={personForm.role} placeholder="Parent, spouse, assistant..." onChange={e => setPersonForm({...personForm, role: e.target.value})} />
+                </div>
+              </div>
+              <label className="linked-person-primary-toggle">
+                <input type="checkbox" checked={personForm.isPrimary} onChange={e => setPersonForm({...personForm, isPrimary: e.target.checked})} />
+                <span>
+                  <strong>Primary person for this client</strong>
+                  <small>Use when staff should call or email this person first.</small>
+                </span>
+              </label>
+            </section>
+            <section className="linked-person-section">
+              <div className="contact-dialog-section-header">
+                <div>
+                  <h2>Contact methods</h2>
+                  <p>Add whichever channel is reliable. Leave unknown fields blank.</p>
+                </div>
+              </div>
+              <div className="grid-2">
+                <div className="form-group">
+                  <label className="form-label">Phone</label>
+                  <input className="input" value={personForm.phone} onChange={e => setPersonForm({...personForm, phone: e.target.value})} />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Email</label>
+                  <input className="input" value={personForm.email} onChange={e => setPersonForm({...personForm, email: e.target.value})} />
+                </div>
+              </div>
+            </section>
+            <section className="linked-person-section linked-person-notes">
+              <div className="form-group">
+                <label className="form-label">Notes</label>
+                <textarea className="textarea" rows={3} value={personForm.notes} placeholder="Relationship context, call preferences, permissions..." onChange={e => setPersonForm({...personForm, notes: e.target.value})} />
+              </div>
+            </section>
+          </div>
+        </Modal>
+      )}
+
+      {personDeleteTarget && (
+        <Modal
+          open={Boolean(personDeleteTarget)}
+          onClose={() => !personDeleteBusy && setPersonDeleteTarget(null)}
+          title="Remove Linked Person"
+          variant="dialog"
+          panelClassName="linked-person-remove-dialog-panel"
+          footer={(
+            <>
+              <button className="btn" type="button" disabled={personDeleteBusy} onClick={() => setPersonDeleteTarget(null)}>Cancel</button>
+              <button className="btn btn-danger" type="button" disabled={personDeleteBusy} onClick={deletePerson}>
+                {personDeleteBusy ? 'Removing...' : 'Remove Person'}
+              </button>
+            </>
+          )}
+        >
+          <div className="danger-action-panel">
+            <div className="danger-action-copy">
+              <span className="danger-action-eyebrow">
+                <AlertCircle size={14} /> Confirm removal
+              </span>
+              <strong>Remove {personDeleteTarget.name || 'this linked person'} from this contact?</strong>
+              <p>This does not delete the main contact, but it removes this saved relationship from the contact detail page.</p>
             </div>
           </div>
-          <div className="grid-2">
-            <div className="form-group">
-              <label className="form-label">Phone</label>
-              <input className="input" value={personForm.phone} onChange={e => setPersonForm({...personForm, phone: e.target.value})} />
-            </div>
-            <div className="form-group">
-              <label className="form-label">Email</label>
-              <input className="input" value={personForm.email} onChange={e => setPersonForm({...personForm, email: e.target.value})} />
-            </div>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Notes</label>
-            <textarea className="input" rows={3} value={personForm.notes} onChange={e => setPersonForm({...personForm, notes: e.target.value})} />
-          </div>
-          <label className={s.primaryToggle}>
-            <input type="checkbox" checked={personForm.isPrimary} onChange={e => setPersonForm({...personForm, isPrimary: e.target.checked})} />
-            Primary person for this client
-          </label>
         </Modal>
       )}
     </div>

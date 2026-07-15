@@ -1,20 +1,11 @@
-export const ROLE_KEYS = Object.freeze({
-  ADMIN: 'admin',
-  SENIOR_COORDINATOR: 'senior_coordinator',
-  ACCOUNT_MANAGER: 'account_manager',
-  SALES_MANAGER: 'sales_manager',
-});
+import {
+  ROLE_KEYS,
+  isRegularCoordinatorRoleKey,
+  roleKeysForUser,
+  userHasRole,
+} from '../roles.js';
 
-export function roleKeysForUser(user = {}) {
-  return [
-    user?.primaryRoleKey,
-    ...(Array.isArray(user?.roleKeys) ? user.roleKeys : []),
-  ].filter(Boolean);
-}
-
-export function userHasRole(user = {}, roleKey) {
-  return roleKeysForUser(user).includes(roleKey);
-}
+export { ROLE_KEYS, roleKeysForUser, userHasRole };
 
 export function isSeniorCoordinatorSession(session = {}) {
   return userHasRole(session.user, ROLE_KEYS.SENIOR_COORDINATOR);
@@ -22,12 +13,12 @@ export function isSeniorCoordinatorSession(session = {}) {
 
 export function isRegularCoordinatorSession(session = {}) {
   const roleKeys = roleKeysForUser(session?.user);
-  if (!roleKeys.includes(ROLE_KEYS.ACCOUNT_MANAGER)) return false;
+  if (!roleKeys.some(isRegularCoordinatorRoleKey)) return false;
   return ![
     ROLE_KEYS.ADMIN,
     ROLE_KEYS.SENIOR_COORDINATOR,
     ROLE_KEYS.SALES_MANAGER,
-  ].some((roleKey) => roleKeys.includes(roleKey));
+  ].some((roleKey) => userHasRole(session?.user, roleKey));
 }
 
 export function canManageCoordinatorAssignments(session = {}) {
@@ -47,7 +38,7 @@ export function isWorkOrderSelfScopedSession(session = {}) {
   ].some((roleKey) => roleKeys.includes(roleKey))) {
     return false;
   }
-  return roleKeys.includes(ROLE_KEYS.ACCOUNT_MANAGER) || roleKeys.includes('designer');
+  return roleKeys.some(isRegularCoordinatorRoleKey) || roleKeys.includes(ROLE_KEYS.DESIGNER);
 }
 
 export function isWorkOrdersBusinessUnit(unit = {}) {

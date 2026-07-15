@@ -115,6 +115,14 @@ function createClient({ batchSourceType = 'facebook_messenger', batchBusinessUni
           return { rows: [] };
         }
 
+        if (normalized.startsWith('insert into notifications')) {
+          return { rows: [{ id: 'notification-1' }] };
+        }
+
+        if (normalized.startsWith('with new_task as')) {
+          return { rows: [{ id: 'task-activity-1' }] };
+        }
+
         if (normalized.startsWith('update import_normalized_records set proposed_contact_json')) {
           return { rows: [], rowCount: 1 };
         }
@@ -379,13 +387,14 @@ test('approving staged Facebook leads promotes them into CRM records', async () 
   ]);
 
   const leadInsert = calls.find((call) => call.sql.startsWith('insert into leads'));
-  assert.deepEqual(leadInsert.params, [
+  assert.deepEqual(leadInsert.params.slice(0, 5), [
     'org-1',
     'bu-1',
     'contact-1',
     'Facebook leadgen_id=leadgen-1 source_row_id=source-row-1',
-    'owner-1',
+    null,
   ]);
+  assert.equal(leadInsert.params.at(-1), 'Facebook Ads');
 
   const promotionUpdate = calls.find((call) => (
     call.sql.startsWith('update import_normalized_records set proposed_contact_json')

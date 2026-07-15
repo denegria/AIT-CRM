@@ -1,9 +1,10 @@
 'use client';
 import { useState, useMemo } from 'react';
 import ConfirmDialog from './ConfirmDialog';
+import PageState from './PageState';
 import s from './DataTable.module.css';
 
-import { Search, ArrowUp, ArrowDown, FileQuestion, Columns3 } from 'lucide-react';
+import { Search, ArrowUp, ArrowDown, Columns3 } from 'lucide-react';
 
 function badgeClass(val) {
   if (!val) return '';
@@ -18,6 +19,8 @@ export default function DataTable({
   actions,
   onEdit,
   searchPlaceholder,
+  searchValue,
+  onSearchChange,
   toolbarAfterSearch,
   toolbarMeta,
   toolbarBeforeColumns,
@@ -30,7 +33,9 @@ export default function DataTable({
   mobileFields,
   mobileBadges,
 }) {
-  const [search, setSearch] = useState('');
+  const [localSearch, setLocalSearch] = useState('');
+  const search = searchValue === undefined ? localSearch : searchValue;
+  const setSearch = onSearchChange || setLocalSearch;
   const [sortKey, setSortKey] = useState(null);
   const [sortDir, setSortDir] = useState('asc');
   const [editCell, setEditCell] = useState(null); // {rowId, key}
@@ -52,7 +57,7 @@ export default function DataTable({
 
   const filtered = useMemo(() => {
     let rows = data;
-    if (search) {
+    if (search && onSearchChange === undefined) {
       const q = search.toLowerCase();
       rows = rows.filter(r => columns.some(c => String(r[c.key] || '').toLowerCase().includes(q)));
     }
@@ -64,7 +69,7 @@ export default function DataTable({
       });
     }
     return rows;
-  }, [data, search, sortKey, sortDir, columns]);
+  }, [data, search, sortKey, sortDir, columns, onSearchChange]);
 
   const toggleSort = (key) => {
     if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
@@ -183,10 +188,13 @@ export default function DataTable({
           search,
           clearSearch: () => setSearch(''),
         }) : (
-          <div className={s.empty}>
-            <FileQuestion size={32} style={{opacity:0.5, marginBottom: 8}} />
-            <div>No records found</div>
-          </div>
+          <PageState
+            className={s.empty}
+            size="compact"
+            tone={search.trim() ? 'not-found' : 'empty'}
+            title={search.trim() ? 'No records match this search' : 'No records yet'}
+            copy={search.trim() ? 'Try a different search term or clear the search field.' : 'Records will appear here once this workspace has data.'}
+          />
         )
       ) : (
         <>

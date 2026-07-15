@@ -7,6 +7,11 @@ import {
   sanitizeWebhookBodyForAudit,
   verifyWebsiteLeadSecret,
 } from './website-leads.js';
+import {
+  SMS_CONSENT_EVENT_TYPES,
+  SMS_CONSENT_SOURCE_TYPES,
+  SMS_CONSENT_STATUSES,
+} from '../communication-consent/sms-consent.js';
 
 test('normalizes plain website lead JSON and preserves non-core form fields', () => {
   const { payload, lead } = normalizeWebsiteLeadSubmission({
@@ -28,6 +33,102 @@ test('normalizes plain website lead JSON and preserves non-core form fields', ()
   assert.deepEqual(lead.tags, ['hot', 'needs_first_outreach']);
   assert.deepEqual(lead.formFields, {
     customQuestion: 'Needs install next week',
+  });
+});
+
+test('normalizes refresh-site contact CTA consent and communication preference metadata', () => {
+  const { lead } = normalizeWebsiteLeadSubmission({
+    submissionType: 'contact_cta',
+    sourceName: 'AIT USA Refresh Site',
+    firstName: 'Maria',
+    lastName: 'Lopez',
+    email: 'maria.lopez@example.test',
+    phone: '(555) 010-9911',
+    message: 'Please contact me about English classes.',
+    communication: {
+      consent: {
+        contact: 'I agree',
+        whatsapp: 'yes',
+        sms: 'no',
+      },
+      preference: 'WhatsApp',
+    },
+    customQuestion: 'Morning classes',
+  });
+
+  assert.equal(lead.submissionType, 'contact_cta');
+  assert.deepEqual(lead.communicationConsent, {
+    contact: true,
+    whatsapp: true,
+    sms: false,
+  });
+  assert.equal(lead.communicationPreference, 'whatsapp');
+  assert.deepEqual(lead.formFields, {
+    customQuestion: 'Morning classes',
+  });
+});
+
+test('normalizes refresh-site placement result metadata without assuming absent consent', () => {
+  const { lead } = normalizeWebsiteLeadSubmission({
+    submissionType: 'placement_test',
+    sourceName: 'AIT USA Refresh Site',
+    fullName: 'Carlos Gomez',
+    email: 'carlos.gomez@example.test',
+    smsConsent: 'no',
+    preferredContactMethod: 'text message',
+    placement: {
+      recommendation: 'Intermediate English',
+      score: '82',
+      scoreBand: 'B1',
+      selectedGoals: ['Conversation', 'Career growth'],
+      selectedAnswers: {
+        listening: 'most',
+        grammar: 'some',
+        webhookSecret: 'do-not-store',
+      },
+      advisorConfirmation: 'Advisor confirms final placement before enrollment.',
+    },
+  });
+
+  assert.equal(lead.submissionType, 'placement_test');
+  assert.equal(lead.service, 'Placement test');
+  assert.deepEqual(lead.communicationConsent, {
+    contact: null,
+    whatsapp: null,
+    sms: false,
+  });
+  assert.equal(lead.communicationPreference, 'sms');
+  assert.deepEqual(lead.placement, {
+    recommendation: 'Intermediate English',
+    score: 82,
+    scoreBand: 'B1',
+    selectedGoals: ['Conversation', 'Career growth'],
+    selectedAnswers: {
+      listening: 'most',
+      grammar: 'some',
+      webhookSecret: '[redacted]',
+    },
+    advisorConfirmation: 'Advisor confirms final placement before enrollment.',
+  });
+  assert.deepEqual(lead.formFields, {});
+});
+
+test('does not infer placement-test metadata from generic lead score fields', () => {
+  const { lead } = normalizeWebsiteLeadSubmission({
+    sourceName: 'Generic Website Form',
+    fullName: 'Scored Lead',
+    email: 'scored.lead@example.test',
+    score: '92',
+    recommendation: 'Call tomorrow morning',
+    answers: 'Asked for evening classes',
+  });
+
+  assert.equal(lead.submissionType, 'website_lead');
+  assert.deepEqual(lead.placement, {});
+  assert.deepEqual(lead.formFields, {
+    score: '92',
+    recommendation: 'Call tomorrow morning',
+    answers: 'Asked for evening classes',
   });
 });
 
@@ -208,6 +309,153 @@ test('creates a notification after a new website lead is promoted', async () => 
   assert.equal(taskInsert.params[11], 'New lead follow-up');
 });
 
+test('records refresh-site SMS decline in the consent ledger', async () => {
+  const { client, calls } = createWebsitePromotionClient();
+
+  const result = await ingestWebsiteLeadSubmission(client, {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-1',
+    body: {
+      externalId: 'refresh-contact-no-sms',
+      submissionType: 'contact_cta',
+      sourceName: 'AIT USA Refresh Site',
+      firstName: 'Maria',
+      lastName: 'Lopez',
+      phone: '(555) 010-9911',
+      communication: {
+        consent: {
+          contact: 'yes',
+          whatsapp: 'yes',
+          sms: 'no',
+        },
+        preference: 'WhatsApp',
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.duplicate, false);
+
+  const consentUpsert = calls.find((call) => call.sql.startsWith('insert into contact_channel_consents'));
+  assert.equal(consentUpsert.params[0], 'org-1');
+  assert.equal(consentUpsert.params[1], 'contact-1');
+  assert.equal(consentUpsert.params[2], 'bu-1');
+  assert.equal(consentUpsert.params[3], 'business_unit:bu-1');
+  assert.equal(consentUpsert.params[5], SMS_CONSENT_STATUSES.OPTED_OUT);
+  assert.equal(consentUpsert.params[6], SMS_CONSENT_SOURCE_TYPES.WEBSITE_FORM);
+  assert.equal(consentUpsert.params[7], 'website-lead:refresh-contact-no-sms');
+  assert.equal(consentUpsert.params[10], 'website_form_sms_declined');
+
+  const auditInsert = calls.find((call) => call.sql.startsWith('insert into contact_channel_consent_events'));
+  assert.equal(auditInsert.params[5], SMS_CONSENT_EVENT_TYPES.OPT_OUT);
+  assert.equal(auditInsert.params[6], SMS_CONSENT_STATUSES.OPTED_OUT);
+  assert.equal(auditInsert.params[12], 'website-lead:org-1:refresh-contact-no-sms:sms-consent');
+  const auditMetadata = JSON.parse(auditInsert.params[14]);
+  assert.deepEqual(auditMetadata.communicationConsent, {
+    contact: true,
+    whatsapp: true,
+    sms: false,
+  });
+  assert.equal(auditMetadata.communicationPreference, 'whatsapp');
+});
+
+test('persists refresh-site placement consent contract in audit and task metadata', async () => {
+  const { client, calls } = createWebsitePromotionClient();
+
+  const result = await ingestWebsiteLeadSubmission(client, {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-1',
+    body: {
+      externalId: 'refresh-placement-001',
+      submissionType: 'placement_test',
+      sourceName: 'AIT USA Refresh Site',
+      firstName: 'Lucia',
+      lastName: 'Perez',
+      email: 'lucia.perez@example.test',
+      phone: '(555) 010-9922',
+      consent: {
+        contact: 'yes',
+        whatsapp: 'no',
+        sms: 'yes',
+      },
+      communicationPreference: 'SMS',
+      placement: {
+        recommendation: 'Start with Level 3',
+        score: 74,
+        scoreBand: 'A2-B1',
+        selectedGoals: ['Travel', 'Work'],
+        selectedAnswers: {
+          grammar: 'A2',
+          speaking: 'B1',
+          webhookSecret: 'do-not-store',
+        },
+        advisorConfirmation: 'Advisor will confirm the level before enrollment.',
+      },
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.duplicate, false);
+
+  const auditInsert = calls.find((call) => call.sql.startsWith('insert into import_source_rows'));
+  const rawValues = JSON.parse(auditInsert.params[3]);
+  assert.equal(rawValues.submission_type, 'placement_test');
+  assert.deepEqual(rawValues.communication_consent, {
+    contact: true,
+    whatsapp: false,
+    sms: true,
+  });
+  assert.equal(rawValues.communication_preference, 'sms');
+  assert.equal(rawValues.placement.recommendation, 'Start with Level 3');
+  assert.equal(rawValues.raw.placement.selectedAnswers.webhookSecret, '[redacted]');
+
+  const normalizedInsert = calls.find((call) => call.sql.startsWith('insert into import_normalized_records'));
+  const proposedLead = JSON.parse(normalizedInsert.params[4]);
+  assert.equal(proposedLead.submission_type, 'placement_test');
+  assert.deepEqual(proposedLead.communication_consent, {
+    contact: true,
+    whatsapp: false,
+    sms: true,
+  });
+  assert.equal(proposedLead.communication_preference, 'sms');
+  assert.deepEqual(proposedLead.placement.selectedGoals, ['Travel', 'Work']);
+  assert.equal(proposedLead.placement.selectedAnswers.webhookSecret, '[redacted]');
+
+  const leadInsert = calls.find((call) => call.sql.startsWith('insert into leads'));
+  assert.match(leadInsert.params[7], /communication=contact:yes,whatsapp:no,sms:yes,preference:sms/);
+  assert.match(leadInsert.params[7], /placement=recommendation:Start with Level 3,score:74,score_band:A2-B1/);
+
+  const consentUpsert = calls.find((call) => call.sql.startsWith('insert into contact_channel_consents'));
+  assert.equal(consentUpsert.params[3], 'business_unit:bu-1');
+  assert.equal(consentUpsert.params[5], SMS_CONSENT_STATUSES.OPTED_IN);
+  assert.equal(consentUpsert.params[6], SMS_CONSENT_SOURCE_TYPES.WEBSITE_FORM);
+  assert.equal(consentUpsert.params[7], 'website-lead:refresh-placement-001');
+
+  const consentAuditInsert = calls.find((call) => call.sql.startsWith('insert into contact_channel_consent_events'));
+  assert.equal(consentAuditInsert.params[5], SMS_CONSENT_EVENT_TYPES.OPT_IN);
+  assert.equal(consentAuditInsert.params[6], SMS_CONSENT_STATUSES.OPTED_IN);
+  assert.equal(consentAuditInsert.params[12], 'website-lead:org-1:refresh-placement-001:sms-consent');
+  const consentAuditMetadata = JSON.parse(consentAuditInsert.params[14]);
+  assert.equal(consentAuditMetadata.submissionType, 'placement_test');
+  assert.equal(consentAuditMetadata.placement.scoreBand, 'A2-B1');
+
+  const notificationInsert = calls.find((call) => call.sql.startsWith('insert into notifications'));
+  const notificationMetadata = JSON.parse(notificationInsert.params[10]);
+  assert.equal(notificationMetadata.submissionType, 'placement_test');
+  assert.deepEqual(notificationMetadata.communicationConsent, {
+    contact: true,
+    whatsapp: false,
+    sms: true,
+  });
+  assert.equal(notificationMetadata.communicationPreference, 'sms');
+  assert.equal(notificationMetadata.placement.advisorConfirmation, 'Advisor will confirm the level before enrollment.');
+
+  const taskInsert = calls.find((call) => call.sql.startsWith('with new_task as'));
+  const taskMetadata = JSON.parse(taskInsert.params[12]);
+  assert.equal(taskMetadata.submissionType, 'placement_test');
+  assert.equal(taskMetadata.placement.scoreBand, 'A2-B1');
+});
+
 function createDuplicateClient() {
   const calls = [];
   return {
@@ -301,6 +549,15 @@ function createWebsitePromotionClient() {
         }
         if (normalizedSql.startsWith('insert into import_review_items')) {
           return { rows: [] };
+        }
+        if (normalizedSql.startsWith('select id from contact_channel_consent_events')) {
+          return { rows: [] };
+        }
+        if (normalizedSql.startsWith('insert into contact_channel_consents')) {
+          return { rows: [{ id: 'sms-consent-1', consent_status: params[5] }] };
+        }
+        if (normalizedSql.startsWith('insert into contact_channel_consent_events')) {
+          return { rows: [{ id: 'sms-consent-event-1' }] };
         }
         if (normalizedSql.startsWith('insert into notifications')) {
           return { rows: [{ id: 'notification-1' }] };

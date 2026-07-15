@@ -90,6 +90,24 @@ test('AIT USA contact detail uses enrollment grammar and hides empty Signs finan
   assert.ok(model.highlights.some((item) => item.label === 'Contactability' && item.value === 'Missing Email'));
 });
 
+test('AIT USA contact detail keeps market and learning location separate', () => {
+  const model = buildContactDetailViewModel({
+    businessUnit: { name: 'AIT USA Institute' },
+    contact: {
+      id: 'contact-madrid-online',
+      name: 'Madrid Online Lead',
+      workflowKey: 'ait_usa',
+      status: 'New Lead',
+      currentStage: 'New Lead',
+      address: 'Online',
+      locationPreference: 'Madrid, Spain',
+    },
+  });
+
+  assert.ok(model.highlights.some((item) => item.label === 'Market / region' && item.value === 'Madrid, Spain'));
+  assert.ok(model.highlights.some((item) => item.label === 'Preferred learning location' && item.value === 'Online'));
+});
+
 test('AIT USA contact detail keeps Wix source tags out of the top action row', () => {
   const model = buildContactDetailViewModel({
     businessUnit: { name: 'AIT USA Institute' },

@@ -37,6 +37,23 @@ import { toTaskPayload } from '@/lib/tasks/service.js';
 import { workflowFromLead } from '@/lib/sales-workflow';
 import { summarizeContactTouch } from '@/lib/contact-touch.js';
 import { buildAitUsaEnrollmentSignals } from '@/lib/ait-usa-enrollment-signals.js';
+import { loadContactDirectoryPage } from '@/lib/contact-directory/service.js';
+
+export async function GET(request) {
+  const { error, session } = await requirePermission(request, PERMISSIONS.CRM_READ);
+  if (error) return error;
+  const searchParams = new URL(request.url).searchParams;
+  if (searchParams.get('view') !== 'directory') {
+    return NextResponse.json({ error: 'A supported contacts view is required.' }, { status: 400 });
+  }
+  try {
+    const payload = await loadContactDirectoryPage({ db: getDb(), session, searchParams });
+    return NextResponse.json(payload);
+  } catch (error) {
+    console.error('Contact directory load failed:', error);
+    return NextResponse.json({ error: 'Contact directory could not load.' }, { status: 500 });
+  }
+}
 
 async function loadBusinessUnitForWorkflow(db, session, businessUnitId) {
   if (!businessUnitId) return null;

@@ -13,6 +13,7 @@ import {
   History,
   User,
 } from 'lucide-react';
+import PageState, { PageStateAction } from '@/components/PageState';
 import { useCRM } from '@/lib/store';
 import { taskDateKey } from '@/lib/tasks/visibility.js';
 import s from './TaskDetail.module.css';
@@ -176,16 +177,19 @@ export default function TaskDetailPage() {
   }, [context.businessUnit?.name, ownerLabel, scopeLabel, task]);
 
   if (loading && access.canReadCrm) {
-    return <div className={s.loadingState}>Loading task...</div>;
+    return <PageState tone="loading" title="Loading task" copy="Preparing task details, linked records, and activity history." />;
   }
 
   if (renderError || !task) {
     return (
       <div className={s.detailShell}>
         <Link className={s.backLink} href="/tasks"><ArrowLeft size={16} /> Back to tasks</Link>
-        <div className={s.errorState}>
-          {renderError || 'Task not found.'}
-        </div>
+        <PageState
+          tone={renderError ? 'error' : 'not-found'}
+          title={renderError ? 'Task cannot be opened' : 'Task not found'}
+          copy={renderError || 'This task may be outside your current scope or no longer available.'}
+          actions={<PageStateAction href="/tasks">Open Task Queue</PageStateAction>}
+        />
       </div>
     );
   }

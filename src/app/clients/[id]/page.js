@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import ContactDetailPage from '@/app/contacts/[id]/page';
+import PageState from '@/components/PageState';
 import { useCRM } from '@/lib/store';
 import { isClientAccountBusinessUnit } from '@/lib/crm/lifecycle';
 
@@ -17,9 +18,11 @@ export default function ClientDetailPage() {
     }
   }, [canUseClientLanguage, loaded, router]);
 
-  if (!loaded) return <div className="empty-state">Loading...</div>;
+  if (!loaded) {
+    return <PageState tone="loading" title="Loading client" copy="Checking whether this division uses client account language." />;
+  }
   if (!canUseClientLanguage) {
-    return <div className="empty-state">Opening contacts...</div>;
+    return <PageState tone="loading" title="Opening contact profile" copy="This division uses the contacts workflow. Redirecting now." />;
   }
 
   return <ContactDetailPage mode="clients" />;

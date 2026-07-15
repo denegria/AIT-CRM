@@ -6,6 +6,7 @@ import { ArrowLeft, Calendar, ClipboardList, DollarSign, Edit3, FileText, Printe
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
+import PageState, { PageStateAction } from '@/components/PageState';
 import { generateWorkOrderPDF } from '@/lib/pdf';
 import { buildAitSignsDocument, formatAitSignsMoney } from '@/lib/ait-signs-document';
 import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
@@ -163,8 +164,19 @@ export default function WorkOrderDetailPage() {
     requestAnimationFrame(() => window.print());
   }
 
-  if (!loaded) return <div className="empty-state">Loading...</div>;
-  if (!workOrder) return <div className="empty-state">Work order not found</div>;
+  if (!loaded) {
+    return <PageState tone="loading" title="Loading work order" copy="Preparing the work order details and linked payment context." />;
+  }
+  if (!workOrder) {
+    return (
+      <PageState
+        tone="not-found"
+        title="Work order not found"
+        copy="This work order may be outside your current division scope or no longer available."
+        actions={<PageStateAction href="/work-orders">Back to Work Orders</PageStateAction>}
+      />
+    );
+  }
 
   return (
     <div className={s.detailPage + ' fade-in'}>

@@ -1,6 +1,6 @@
 .summaryGrid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
   gap: 12px;
   margin-bottom: 16px;
 }
@@ -12,6 +12,22 @@
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
+}
+
+.summaryTileCurrent {
+  border-top: 3px solid var(--accent);
+}
+
+.summaryTileToday {
+  border-top: 3px solid var(--warning);
+}
+
+.summaryTileOverdue {
+  border-top: 3px solid var(--danger);
+}
+
+.summaryTileCompleted {
+  border-top: 3px solid var(--success);
 }
 
 .summaryButton {
@@ -44,22 +60,71 @@
 
 .toolbar {
   display: grid;
-  grid-template-columns: repeat(7, minmax(120px, 1fr)) auto;
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
   gap: 10px;
   align-items: end;
-  margin-bottom: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .filterGroup {
   min-width: 0;
 }
 
-.mobileFilterSummary {
-  display: none;
+.queueSurface {
+  display: grid;
+  gap: 14px;
 }
 
-.mobileFilterText {
-  min-width: 0;
+.queueHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.sectionEyebrow {
+  display: block;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 760;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.queueTitle {
+  margin: 3px 0 0;
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+  font-weight: 760;
+  line-height: 1.2;
+}
+
+.queueSubtitle {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.35;
+}
+
+.queueHeaderActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.queueCount {
+  padding: 5px 8px;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 720;
+  line-height: 1.2;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  background: var(--bg-primary);
 }
 
 .intakeAlert {
@@ -91,33 +156,6 @@
   color: var(--text-secondary);
   font-size: var(--text-xs);
   line-height: 1.35;
-}
-
-.mobileFilterLabel {
-  display: block;
-  color: var(--text-muted);
-  font-size: var(--text-xs);
-  font-weight: 700;
-  line-height: 1.2;
-  text-transform: uppercase;
-  letter-spacing: 0;
-}
-
-.mobileFilterScope {
-  display: block;
-  margin-top: 2px;
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-weight: 720;
-  line-height: 1.25;
-}
-
-.mobileFilterCount {
-  display: block;
-  margin-top: 3px;
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  line-height: 1.25;
 }
 
 .createPanel {
@@ -167,7 +205,7 @@
 }
 
 .contactHint {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: var(--text-xs);
   line-height: 1.3;
 }
@@ -181,6 +219,13 @@
   background: color-mix(in srgb, var(--danger) 8%, var(--bg-secondary));
 }
 
+.createDiscardCopy {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
 .createActions {
   display: flex;
   justify-content: flex-end;
@@ -188,35 +233,28 @@
   flex-wrap: wrap;
 }
 
-.createDrawer {
-  width: 540px;
-  max-width: min(94vw, 540px);
+.createDialog {
+  --modal-dialog-width: 952px;
+  min-height: 0;
 }
 
 .createForm {
   display: grid;
-  gap: 16px;
+  grid-template-columns: minmax(0, 1.08fr) minmax(300px, 0.92fr);
+  gap: 18px 26px;
 }
 
 .createIntro {
+  grid-column: 1 / -1;
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
   justify-content: space-between;
   gap: 14px;
-  padding: 2px 2px 4px;
-}
-
-.createIntroLabel {
-  display: block;
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  font-weight: 760;
-  line-height: 1.2;
+  padding: 0 2px;
 }
 
 .createIntro p {
-  max-width: 350px;
-  margin: 4px 0 0;
+  margin: 0;
   color: var(--text-secondary);
   font-size: var(--text-sm);
   line-height: 1.4;
@@ -225,23 +263,36 @@
 .createRequired {
   flex: 0 0 auto;
   margin-top: 1px;
-  padding: 3px 7px;
+  padding: 0;
   color: var(--text-secondary);
   font-size: var(--text-xs);
   font-weight: 700;
   line-height: 1.2;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  background: var(--bg-primary);
 }
 
 .createSection {
   display: grid;
   gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-primary) 84%, var(--bg-secondary));
+  padding: 0 0 18px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.createWhen,
+.createContext {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.createContext {
+  grid-column: 2;
+  grid-row: 2 / span 3;
+  align-content: start;
+  border-left: 1px solid var(--border-subtle);
+  padding-left: 26px;
+}
+
+.createForm > .createError {
+  grid-column: 1 / -1;
 }
 
 .createSectionHeader {
@@ -252,18 +303,14 @@
 }
 
 .createSectionIndex {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
   flex: 0 0 auto;
-  width: 22px;
-  height: 22px;
+  width: auto;
+  padding-top: 2px;
   color: var(--accent);
   font-size: var(--text-xs);
   font-weight: 800;
   line-height: 1;
-  border-radius: 999px;
-  background: var(--accent-muted);
 }
 
 .createSectionTitle {
@@ -313,7 +360,7 @@
 .createTextarea {
   width: 100%;
   min-width: 0;
-  min-height: 86px;
+  min-height: 170px;
   resize: vertical;
   padding: 9px 11px;
   font-family: var(--font-sans);
@@ -445,6 +492,17 @@
   font-size: var(--text-xs);
 }
 
+.taskSchedule {
+  display: grid;
+  gap: 2px;
+}
+
+.taskContext {
+  display: grid;
+  gap: 2px;
+  margin-top: 7px;
+}
+
 .recurrenceText {
   display: inline-flex;
   align-items: center;
@@ -467,14 +525,43 @@
   flex-wrap: wrap;
 }
 
+.taskActionsPanel {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-primary) 76%, var(--bg-secondary));
+}
+
+.taskActionHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.taskActionButtons {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .completionPanel {
   grid-column: 1 / -1;
   display: grid;
   grid-template-columns: minmax(180px, 0.8fr) minmax(150px, 0.6fr) minmax(150px, 0.75fr) minmax(240px, 1.2fr) auto;
   gap: 10px;
   align-items: end;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-subtle);
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-primary) 76%, var(--bg-secondary));
 }
 
 .editPanel {
@@ -483,8 +570,10 @@
   grid-template-columns: minmax(220px, 1.3fr) repeat(3, minmax(140px, 0.75fr));
   gap: 10px;
   align-items: end;
-  padding-top: 12px;
-  border-top: 1px solid var(--border-subtle);
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-primary) 76%, var(--bg-secondary));
 }
 
 .completionNote {
@@ -503,6 +592,74 @@
   justify-content: flex-end;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.dangerDecisionDialog {
+  --modal-dialog-width: 560px;
+}
+
+.dangerDecisionBody {
+  display: grid;
+  gap: 14px;
+}
+
+.dangerDecisionNotice {
+  display: grid;
+  gap: 6px;
+  padding: 14px;
+  border: 1px solid color-mix(in srgb, var(--danger) 32%, var(--border-subtle));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--danger-muted) 48%, var(--bg-secondary));
+}
+
+.dangerDecisionNotice strong {
+  color: var(--text-primary);
+  font-size: var(--text-md);
+  line-height: 1.3;
+}
+
+.dangerDecisionNotice p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.dangerDecisionEyebrow {
+  color: var(--danger);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.dangerDecisionRequest {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-tertiary) 68%, var(--bg-secondary));
+}
+
+.dangerDecisionRequest span {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.dangerDecisionRequest p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.dangerDecisionField {
+  display: grid;
+  gap: 6px;
 }
 
 .editError {
@@ -602,7 +759,7 @@
   }
 
   .toolbar {
-    grid-template-columns: repeat(4, minmax(130px, 1fr));
+    grid-template-columns: repeat(3, minmax(130px, 1fr));
   }
 
   .queueItem {
@@ -647,6 +804,25 @@
   }
 }
 
+@media (max-width: 900px) {
+  .createForm {
+    grid-template-columns: 1fr;
+  }
+
+  .createContext {
+    grid-column: auto;
+    grid-row: auto;
+    padding-left: 0;
+    border-left: 0;
+    border-bottom: 0;
+  }
+
+  .createWhen {
+    padding-bottom: 18px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+}
+
 @media (max-width: 760px) {
   .summaryGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -668,16 +844,13 @@
     line-height: 1.2;
   }
 
-  .mobileFilterSummary {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+  .queueHeader {
+    flex-direction: column;
     gap: 10px;
-    margin-bottom: 10px;
-    padding: 10px 10px 10px 12px;
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-md);
-    background: color-mix(in srgb, var(--bg-secondary) 85%, var(--bg-tertiary));
+  }
+
+  .queueHeaderActions {
+    justify-content: flex-start;
   }
 
   .intakeAlert {
@@ -689,14 +862,10 @@
     width: 100%;
   }
 
-  .mobileFilterSummary button {
-    flex: 0 0 auto;
-  }
-
   .toolbar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
-    margin-bottom: 12px;
+    padding-top: 10px;
   }
 
   .filterGroup {
@@ -705,10 +874,6 @@
 
   .filterGroup:nth-child(3) {
     grid-column: 1 / -1;
-  }
-
-  .toolbar > button {
-    display: none;
   }
 
   .toolbar :global(.form-label) {
@@ -738,9 +903,12 @@
     grid-template-columns: 1fr;
   }
 
-  .createDrawer {
-    width: 100vw;
-    max-width: 100vw;
+  .createDialog {
+    min-height: 100dvh;
+  }
+
+  .createTextarea {
+    min-height: 86px;
   }
 
   .createIntro {
@@ -776,16 +944,47 @@
   }
 
   .actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     justify-content: stretch;
+    gap: 8px;
   }
 
   .actions .iconButton,
   .actions a,
-  .actions button,
+  .actions button {
+    width: 100%;
+    min-width: 0;
+    min-height: 38px;
+    justify-content: center;
+  }
+
+  .actions a:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .taskActionButtons button,
   .completionActions button,
   .editActions button {
-    flex: 1 1 44px;
+    flex: 1 1 100%;
+    min-height: 38px;
     justify-content: center;
+  }
+
+  .taskActionHeader {
+    display: grid;
+    gap: 3px;
+  }
+
+  .taskActionsPanel {
+    grid-template-columns: 1fr;
+  }
+
+  .taskActionButtons {
+    display: grid;
+    grid-template-columns: 1fr;
+    justify-content: stretch;
+    gap: 8px;
   }
 
   .completionPanel {

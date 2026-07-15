@@ -5,6 +5,7 @@ import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
+import PageState, { PageStateAction } from '@/components/PageState';
 import { generateWorkOrderPDF } from '@/lib/pdf';
 import { canUseWorkOrdersForBusinessUnit, coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 
@@ -222,9 +223,18 @@ export default function WorkOrdersPage() {
     toast(`Exported ${selected.length} work orders`);
   };
 
-  if (!loaded) return <div className="empty-state">Loading...</div>;
+  if (!loaded) {
+    return <PageState tone="loading" title="Loading work orders" copy="Preparing AIT Signs work orders and linked customer context." />;
+  }
   if (!canUseCurrentWorkOrders) {
-    return <div className="empty-state">Work Orders are available from the AIT Signs division.</div>;
+    return (
+      <PageState
+        tone="denied"
+        title="Switch to AIT Signs to use Work Orders"
+        copy="Work Orders are only available inside the AIT Signs division. Change your division scope or return to your dashboard."
+        actions={<PageStateAction href="/">Back to Dashboard</PageStateAction>}
+      />
+    );
   }
 
   return (
@@ -243,38 +253,38 @@ export default function WorkOrdersPage() {
           data={filtered.map(w => ({ ...w, assignedLabel: empName(w.assignedTo), divisionLabel: unitName(w.businessUnitId) }))}
           searchPlaceholder="Search work orders..."
           emptyState={({ hasRows, hasSearch, clearSearch }) => (
-            <div className="empty-state">
-              <div className="empty-state-title">
-                {hasSearch || statusFilter !== 'All' ? 'No work orders match this view' : 'No work orders in this scope'}
-              </div>
-              <p className="empty-state-copy">
-                {hasSearch || statusFilter !== 'All'
-                  ? `Search or status filters are hiding work orders in ${currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}.`
-                  : `No work orders have been created for ${currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`} yet. Work orders usually start from a contact/client record.`}
-              </p>
-              <div className="empty-state-actions">
+            <PageState
+              tone={hasSearch || statusFilter !== 'All' ? 'not-found' : 'empty'}
+              size="compact"
+              title={hasSearch || statusFilter !== 'All' ? 'No work orders match this view' : 'No work orders in this scope'}
+              copy={hasSearch || statusFilter !== 'All'
+                ? `Search or status filters are hiding work orders in ${currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`}.`
+                : `No work orders have been created for ${currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`} yet. Work orders usually start from a contact/client record.`}
+              actions={(
+                <>
                 {hasSearch && (
-                  <button className="btn btn-primary" type="button" onClick={clearSearch}>
+                  <button className="btn btn-sm btn-primary" type="button" onClick={clearSearch}>
                     Clear Search
                   </button>
                 )}
                 {!hasSearch && statusFilter !== 'All' && (
-                  <button className="btn btn-primary" type="button" onClick={() => setStatusFilter('All')}>
+                  <button className="btn btn-sm btn-primary" type="button" onClick={() => setStatusFilter('All')}>
                     Reset Status
                   </button>
                 )}
                 {workOrders.length === 0 && canWriteWorkOrders && (
-                  <button className={`btn ${hasSearch || statusFilter !== 'All' ? '' : 'btn-primary'}`} type="button" onClick={() => router.push('/contacts')}>
+                  <button className={`btn btn-sm ${hasSearch || statusFilter !== 'All' ? '' : 'btn-primary'}`} type="button" onClick={() => router.push('/contacts')}>
                     Create From Contact
                   </button>
                 )}
                 {workOrders.length === 0 && !canWriteWorkOrders && (
-                  <button className="btn btn-primary" type="button" onClick={() => router.push('/contacts')}>
+                  <button className="btn btn-sm btn-primary" type="button" onClick={() => router.push('/contacts')}>
                     Open Contacts
                   </button>
                 )}
-              </div>
-            </div>
+                </>
+              )}
+            />
           )}
           onEdit={canWriteWorkOrders ? ((id, u) => {
             updateWorkOrder(id, u)

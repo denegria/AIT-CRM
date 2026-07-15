@@ -2,24 +2,30 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCRM } from '@/lib/store';
+import PageState from '@/components/PageState';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
 import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import { validateManualContactIdentity } from '@/lib/crm/contact-input';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
 import {
   buildContactDirectoryFacetGroups,
+  CONTACT_DIRECTORY_FACET_GROUPS,
   contactDirectorySignalLabels,
   filterContactsByDirectoryFacet,
 } from '@/lib/contact-directory-facets';
 import {
   buildCourseFilterOptions,
+  buildLocationFilterOptions,
   buildSourceFilterOptions,
+  contactLeadDateScopeLabel,
   contactFilterQuery,
   contactFilterStateFromParams,
   contactMatchesLeadDateScope,
+  contactMatchesLocation,
   contactMatchesSource,
   contactMatchesStatusOwnerCourse,
   courseTagsForDirectoryRow,
+  effectiveLeadDateScopeForDirectory,
   CONTACT_LEAD_DATE_SCOPE_ALL,
   CONTACT_LEAD_DATE_SCOPE_CUSTOM,
   CONTACT_LEAD_DATE_SCOPE_QUARTER,
@@ -28,6 +34,7 @@ import {
   DEFAULT_CONTACT_LEAD_DATE_FROM,
   DEFAULT_CONTACT_LEAD_DATE_SCOPE,
   DEFAULT_CONTACT_LEAD_DATE_TO,
+  DEFAULT_CONTACT_LOCATION_FILTER,
   DEFAULT_CONTACT_OWNER_FILTER,
   DEFAULT_CONTACT_SOURCE_FILTER,
   DEFAULT_CONTACT_STATUS_FILTER,
@@ -40,19 +47,27 @@ import {
   lifecycleBucket,
 } from '@/lib/contact-directory-view';
 import { workflowForBusinessUnit } from '@/lib/sales-workflow';
-import { schoolLocationOptions } from '@/lib/school-locations';
+import {
+  AIT_USA_LOCATION_FILTER_VALUES,
+  campaignMarketOptions,
+  marketRegionForContact,
+  schoolLocationForContact,
+  schoolLocationOptions,
+} from '@/lib/school-locations';
 import { useToast } from '@/components/Toast';
+import { useDeferredContactDirectory } from '@/lib/contacts/directory-loader.js';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import TimeframeFilterPanel from '@/components/TimeframeFilterPanel';
-import { Activity, AlertCircle, BadgeDollarSign, Clock3, ListFilter, PhoneOff, RotateCcw, UserRoundCheck, UsersRound } from 'lucide-react';
+import { Activity, AlertCircle, BadgeDollarSign, Check, Clock3, ListFilter, PhoneOff, RotateCcw, UserRoundCheck, UsersRound, X } from 'lucide-react';
 
 const empty = {
   name: '',
   email: '',
   phone: '',
   address: '',
+  locationPreference: '',
   status: 'New Lead',
   currentStage: 'New Lead',
   source: 'Wix Historical Import',
@@ -68,8 +83,16 @@ const CONTACT_FILTER_CHIP_LABELS = {
   status: 'Status',
   source: 'Source',
   course: 'Course',
+  location: 'Location',
   facet: 'Segments',
 };
+
+const REMOTE_SOURCE_FILTER_OPTIONS = [
+  'Website Form Submission',
+  'Workbook Import',
+  'Manual / Unknown',
+  'Other Source',
+].map((value) => ({ value, label: value, count: null }));
 
 const CONTACT_SEGMENT_GROUPS = [
   {
@@ -189,7 +212,7 @@ function SegmentTile({ facet, active, onClick }) {
         <strong>{meta.label || facet.label}</strong>
         <small>{meta.description || 'Signal-based contact segment'}</small>
       </span>
-      <span className="contacts-segment-count">{facet.count}</span>
+      {facet.count != null && <span className="contacts-segment-count">{facet.count}</span>}
       <span className="contacts-segment-check" aria-hidden="true" />
     </button>
   );
@@ -295,23 +318,12 @@ function BucketCell({ row }) {
   );
 }
 
-function dateScopeLabel(scope = DEFAULT_CONTACT_LEAD_DATE_SCOPE, from = '', to = '') {
-  if (scope === CONTACT_LEAD_DATE_SCOPE_QUARTER) return 'This Quarter';
-  if (scope === CONTACT_LEAD_DATE_SCOPE_ALL) return 'All Leads';
-  if (scope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
-    if (from && to) return `${from} to ${to}`;
-    if (from) return `From ${from}`;
-    if (to) return `Through ${to}`;
-    return 'Custom time frame';
-  }
-  return 'Current Year';
-}
-
 export default function ContactsPage({ mode = 'contacts' } = {}) {
   const {
     contacts,
     workOrders,
     financials,
+    contactDirectoryIsDeferred,
     addContact,
     updateContact,
     deleteContact,
@@ -336,6 +348,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const [activeFilterSection, setActiveFilterSection] = useState('timeframe');
   const [ownerSearch, setOwnerSearch] = useState('');
+  const [directoryRefreshKey, setDirectoryRefreshKey] = useState(0);
   const isClientsMode = mode === 'clients';
   const singularLabel = isClientsMode ? 'Client' : 'Contact';
   const pluralLabel = isClientsMode ? 'Clients' : 'Contacts';
@@ -349,6 +362,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     leadDateTo,
     courseFilter,
     sourceFilter,
+    locationFilter,
   } = contactFilterStateFromParams(searchParams);
   const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
   const effectiveOwnerFilter = coordinatorUiPolicy.lockedOwnerUserId || ownerFilter;
@@ -360,10 +374,18 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     !coordinatorUiPolicy.ownerScoped &&
     effectiveOwnerFilter !== DEFAULT_CONTACT_OWNER_FILTER &&
     !hasExplicitLeadDateFilter;
-  const effectiveLeadDateScope = (coordinatorUiPolicy.ownerScoped && !hasExplicitLeadDateFilter) || ownerFilterImpliesAllLeadDates
-    ? CONTACT_LEAD_DATE_SCOPE_ALL
-    : leadDateScope;
+  const effectiveLeadDateScope = effectiveLeadDateScopeForDirectory({
+    leadDateScope,
+    hasExplicitLeadDateFilter: hasExplicitLeadDateFilter || ownerFilterImpliesAllLeadDates,
+  });
   const updateFilterQuery = useCallback((patch) => {
+    const patchHasLeadDateScope =
+      Object.prototype.hasOwnProperty.call(patch, 'leadDateScope') ||
+      Object.prototype.hasOwnProperty.call(patch, 'leadDateFrom') ||
+      Object.prototype.hasOwnProperty.call(patch, 'leadDateTo');
+    const includeLeadDateScope = Object.prototype.hasOwnProperty.call(patch, 'includeLeadDateScope')
+      ? patch.includeLeadDateScope
+      : hasExplicitLeadDateFilter || patchHasLeadDateScope;
     const nextQuery = contactFilterQuery({
       statusFilter,
       ownerFilter: coordinatorUiPolicy.ownerScoped ? DEFAULT_CONTACT_OWNER_FILTER : ownerFilter,
@@ -371,12 +393,14 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       leadDateScope,
       leadDateFrom,
       leadDateTo,
+      includeLeadDateScope,
       courseFilter,
       sourceFilter,
+      locationFilter,
       ...patch,
     });
     router.replace(nextQuery ? `${routeBase}?${nextQuery}` : routeBase, { scroll: false });
-  }, [coordinatorUiPolicy.ownerScoped, courseFilter, directoryFacet, leadDateFrom, leadDateScope, leadDateTo, ownerFilter, routeBase, router, sourceFilter, statusFilter]);
+  }, [coordinatorUiPolicy.ownerScoped, courseFilter, directoryFacet, hasExplicitLeadDateFilter, leadDateFrom, leadDateScope, leadDateTo, locationFilter, ownerFilter, routeBase, router, sourceFilter, statusFilter]);
   useEffect(() => {
     if (!coordinatorUiPolicy.ownerScoped || (!searchParams.has('owner') && !searchParams.has('ownerUserId'))) return;
     updateFilterQuery({ ownerFilter: DEFAULT_CONTACT_OWNER_FILTER });
@@ -402,16 +426,27 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   }), [updateFilterQuery]);
   const setCourseFilter = useCallback((value) => updateFilterQuery({ courseFilter: value }), [updateFilterQuery]);
   const setSourceFilter = useCallback((value) => updateFilterQuery({ sourceFilter: value }), [updateFilterQuery]);
+  const setLocationFilter = useCallback((value) => updateFilterQuery({ locationFilter: value }), [updateFilterQuery]);
+
+  const deferredDirectory = useDeferredContactDirectory({
+    enabled: contactDirectoryIsDeferred,
+    searchParams,
+    businessUnitId: currentBusinessUnitId,
+    refreshKey: directoryRefreshKey,
+  });
+  const refreshDirectory = useCallback(() => {
+    if (contactDirectoryIsDeferred) setDirectoryRefreshKey((value) => value + 1);
+  }, [contactDirectoryIsDeferred]);
 
   const directoryContacts = useMemo(() => {
-    return contacts;
-  }, [contacts]);
+    return contactDirectoryIsDeferred ? deferredDirectory.contacts : contacts;
+  }, [contactDirectoryIsDeferred, contacts, deferredDirectory.contacts]);
   const directoryWorkOrders = useMemo(() => {
-    return workOrders;
-  }, [workOrders]);
+    return contactDirectoryIsDeferred ? deferredDirectory.workOrders : workOrders;
+  }, [contactDirectoryIsDeferred, deferredDirectory.workOrders, workOrders]);
   const directoryFinancials = useMemo(() => {
-    return financials;
-  }, [financials]);
+    return contactDirectoryIsDeferred ? deferredDirectory.financials : financials;
+  }, [contactDirectoryIsDeferred, deferredDirectory.financials, financials]);
   const directoryBusinessUnitId = currentBusinessUnitId;
   const directoryBusinessUnit = currentBusinessUnit;
 
@@ -438,6 +473,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     workflowKey: activeWorkflow?.key,
     isSingleDivisionScope: Boolean(currentScopedBusinessUnitId),
   });
+  const isAitUsaDirectory = activeWorkflow?.key === WORKFLOW_KEYS.AIT_USA;
+  const effectiveLocationFilter = isAitUsaDirectory ? locationFilter : DEFAULT_CONTACT_LOCATION_FILTER;
   const ownerOptions = useMemo(() => {
     return (employees || [])
       .filter((employee) => employee?.id)
@@ -473,6 +510,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         contact.linkedPeoplePreview || '',
       ].filter(Boolean).join(' '),
       enrollmentStage: enrollmentStageText(contact),
+      marketRegion: marketRegionForContact(contact),
+      schoolLocation: schoolLocationForContact(contact),
       inquirySource: enrollmentSourceText(contact),
       sourceCategoryText: directorySourceText(contact),
       signalLabels,
@@ -508,6 +547,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           : `${singularLabel} archived`);
         setDeleteTarget(null);
         if (!result?.approvalRequested) close();
+        refreshDirectory();
       })
       .catch((error) => toast(error?.message || 'Archive failed.', 'error'));
   };
@@ -529,6 +569,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         .then(() => {
           toast(`${singularLabel} created successfully`);
           close();
+          refreshDirectory();
         })
         .catch((error) => toast(error?.message || `${singularLabel} create failed.`, 'error'));
     } else {
@@ -536,6 +577,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         .then(() => {
           toast(`${singularLabel} updated successfully`);
           close();
+          refreshDirectory();
         })
         .catch((error) => toast(error?.message || `${singularLabel} update failed.`, 'error'));
     }
@@ -552,6 +594,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     ] : []),
     ...(columnMode === 'ait_usa' ? [
       { key: 'enrollmentStage', label: 'Enrollment', sortable: true, render: (row) => <EnrollmentCell row={row} /> },
+      { key: 'marketRegion', label: 'Market / Region', sortable: true },
+      { key: 'schoolLocation', label: 'Learning Location', sortable: true },
       { key: 'inquirySource', label: 'Source', sortable: true, render: (row) => <EnrollmentSourceCell row={row} /> },
     ] : []),
     ...(columnMode !== 'ait_usa' ? [{ key: 'status', label: columnMode === 'ait_signs' ? 'Stage' : 'Status', type: 'badge', sortable: true }] : []),
@@ -572,24 +616,24 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       leadDateTo,
     }));
   }, [directoryRows, effectiveLeadDateScope, leadDateFrom, leadDateTo]);
-  const allDateLeadCount = directoryRows.length;
+  const allDateLeadCount = contactDirectoryIsDeferred ? null : directoryRows.length;
   const currentLeadCount = useMemo(
-    () => directoryRows.filter((contact) => contactMatchesLeadDateScope(contact)).length,
-    [directoryRows],
+    () => contactDirectoryIsDeferred ? null : directoryRows.filter((contact) => contactMatchesLeadDateScope(contact)).length,
+    [contactDirectoryIsDeferred, directoryRows],
   );
   const quarterLeadCount = useMemo(
-    () => directoryRows.filter((contact) => contactMatchesLeadDateScope(contact, {
+    () => contactDirectoryIsDeferred ? null : directoryRows.filter((contact) => contactMatchesLeadDateScope(contact, {
       leadDateScope: CONTACT_LEAD_DATE_SCOPE_QUARTER,
     })).length,
-    [directoryRows],
+    [contactDirectoryIsDeferred, directoryRows],
   );
   const customLeadCount = useMemo(
-    () => directoryRows.filter((contact) => contactMatchesLeadDateScope(contact, {
+    () => contactDirectoryIsDeferred ? null : directoryRows.filter((contact) => contactMatchesLeadDateScope(contact, {
       leadDateScope: CONTACT_LEAD_DATE_SCOPE_CUSTOM,
       leadDateFrom,
       leadDateTo,
     })).length,
-    [directoryRows, leadDateFrom, leadDateTo],
+    [contactDirectoryIsDeferred, directoryRows, leadDateFrom, leadDateTo],
   );
   const statusOwnerFilteredContacts = useMemo(() => dateScopedRows.filter((contact) => (
     contactMatchesStatusOwnerCourse(contact, {
@@ -599,26 +643,50 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     })
   )), [dateScopedRows, effectiveOwnerFilter, statusFilter]);
   const sourceFilterOptions = useMemo(
-    () => buildSourceFilterOptions(statusOwnerFilteredContacts),
-    [statusOwnerFilteredContacts],
+    () => contactDirectoryIsDeferred ? REMOTE_SOURCE_FILTER_OPTIONS : buildSourceFilterOptions(statusOwnerFilteredContacts),
+    [contactDirectoryIsDeferred, statusOwnerFilteredContacts],
   );
   const sourceFilteredContacts = useMemo(() => statusOwnerFilteredContacts.filter((contact) => (
     contactMatchesSource(contact, { sourceFilter })
   )), [sourceFilter, statusOwnerFilteredContacts]);
   const courseFilterOptions = useMemo(
-    () => buildCourseFilterOptions(sourceFilteredContacts),
-    [sourceFilteredContacts],
+    () => contactDirectoryIsDeferred
+      ? deferredDirectory.filterMetadata.courseOptions
+      : buildCourseFilterOptions(sourceFilteredContacts),
+    [contactDirectoryIsDeferred, deferredDirectory.filterMetadata.courseOptions, sourceFilteredContacts],
   );
-  const baseFilteredContacts = useMemo(() => sourceFilteredContacts.filter((contact) => (
+  const courseFilteredContacts = useMemo(() => sourceFilteredContacts.filter((contact) => (
     contactMatchesStatusOwnerCourse(contact, {
       statusFilter: DEFAULT_CONTACT_STATUS_FILTER,
       ownerFilter: DEFAULT_CONTACT_OWNER_FILTER,
       courseFilter,
     })
   )), [courseFilter, sourceFilteredContacts]);
+  const locationFilterOptions = useMemo(
+    () => isAitUsaDirectory
+      ? (contactDirectoryIsDeferred
+        ? AIT_USA_LOCATION_FILTER_VALUES.map((value) => ({ value, label: value, count: null }))
+        : buildLocationFilterOptions(courseFilteredContacts))
+      : [],
+    [contactDirectoryIsDeferred, courseFilteredContacts, isAitUsaDirectory],
+  );
+  const baseFilteredContacts = useMemo(() => courseFilteredContacts.filter((contact) => (
+    contactMatchesLocation(contact, { locationFilter: effectiveLocationFilter })
+  )), [courseFilteredContacts, effectiveLocationFilter]);
   const facetGroups = useMemo(
-    () => buildContactDirectoryFacetGroups(baseFilteredContacts, facetContext),
-    [baseFilteredContacts, facetContext],
+    () => contactDirectoryIsDeferred
+      ? CONTACT_DIRECTORY_FACET_GROUPS
+        .filter((group) => group.alwaysVisible || group.workflowKey === activeWorkflow?.key)
+        .map((group) => ({
+          ...group,
+          facets: group.facets.map((facet) => ({
+            id: facet.id,
+            label: facet.label,
+            count: facet.id === 'all' ? deferredDirectory.total : null,
+          })),
+        }))
+      : buildContactDirectoryFacetGroups(baseFilteredContacts, facetContext),
+    [activeWorkflow?.key, baseFilteredContacts, contactDirectoryIsDeferred, deferredDirectory.total, facetContext],
   );
   const effectiveDirectoryFacet = directoryFacet || 'all';
   const visibleSegmentGroups = useMemo(
@@ -656,32 +724,36 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     if (courseFilter === DEFAULT_CONTACT_COURSE_FILTER) return '';
     return courseFilterOptions.find((option) => option.value === courseFilter)?.label || courseFilter;
   }, [courseFilter, courseFilterOptions]);
+  const selectedLocationLabel = useMemo(() => {
+    if (!isAitUsaDirectory || effectiveLocationFilter === DEFAULT_CONTACT_LOCATION_FILTER) return '';
+    return locationFilterOptions.find((option) => option.value === effectiveLocationFilter)?.label || effectiveLocationFilter;
+  }, [effectiveLocationFilter, isAitUsaDirectory, locationFilterOptions]);
   const selectedSourceLabel = useMemo(() => {
     if (sourceFilter === DEFAULT_CONTACT_SOURCE_FILTER) return '';
     return sourceFilterOptions.find((option) => option.value === sourceFilter)?.label || sourceFilter;
   }, [sourceFilter, sourceFilterOptions]);
   const selectedDateLabel = useMemo(
-    () => dateScopeLabel(effectiveLeadDateScope, leadDateFrom, leadDateTo),
+    () => contactLeadDateScopeLabel(effectiveLeadDateScope, leadDateFrom, leadDateTo),
     [effectiveLeadDateScope, leadDateFrom, leadDateTo],
   );
   const implicitLeadDate = (coordinatorUiPolicy.ownerScoped && !hasExplicitLeadDateFilter) || ownerFilterImpliesAllLeadDates;
-  const dateFilterIsDefault = implicitLeadDate ||
-    (
-      leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE &&
-      leadDateFrom === DEFAULT_CONTACT_LEAD_DATE_FROM &&
-      leadDateTo === DEFAULT_CONTACT_LEAD_DATE_TO
-    );
+  const dateFilterIsDefault = !hasExplicitLeadDateFilter || implicitLeadDate;
   const activeFilterChips = useMemo(() => [
-    coordinatorUiPolicy.ownerScoped && implicitLeadDate ? null : {
+    !hasExplicitLeadDateFilter || (coordinatorUiPolicy.ownerScoped && implicitLeadDate) ? null : {
       key: 'leadDateScope',
       label: selectedDateLabel,
       primary: !coordinatorUiPolicy.ownerScoped,
       onRemove: dateFilterIsDefault
-        ? null
-        : () => updateFilterQuery({
-          leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+        ? () => updateFilterQuery({
+          leadDateScope: CONTACT_LEAD_DATE_SCOPE_ALL,
           leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
           leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
+        })
+        : () => updateFilterQuery({
+          leadDateScope: CONTACT_LEAD_DATE_SCOPE_ALL,
+          leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
+          leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
+          includeLeadDateScope: false,
         }),
     },
     selectedOwnerLabel ? {
@@ -705,6 +777,11 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       label: selectedCourseLabel,
       onRemove: () => setCourseFilter(DEFAULT_CONTACT_COURSE_FILTER),
     } : null,
+    selectedLocationLabel ? {
+      key: 'location',
+      label: selectedLocationLabel,
+      onRemove: () => setLocationFilter(DEFAULT_CONTACT_LOCATION_FILTER),
+    } : null,
     selectedFacetLabel ? {
       key: 'facet',
       label: selectedFacetLabel,
@@ -715,30 +792,34 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     selectedCourseLabel,
     selectedDateLabel,
     selectedFacetLabel,
+    selectedLocationLabel,
     selectedOwnerLabel,
     selectedSourceLabel,
     setCourseFilter,
     setDirectoryFacet,
+    setLocationFilter,
     setOwnerFilter,
     coordinatorUiPolicy.ownerScoped,
     setStatusFilter,
     setSourceFilter,
     statusFilter,
+    hasExplicitLeadDateFilter,
     implicitLeadDate,
     updateFilterQuery,
   ]);
   const activeFilterCount = activeFilterChips.filter((chip) => chip.onRemove).length;
   const filterSummaryChips = activeFilterChips.filter((chip) => chip.onRemove).slice(0, 3);
-  const hasNonDefaultLeadDateFilter = coordinatorUiPolicy.ownerScoped
-    ? hasExplicitLeadDateFilter
-    : leadDateScope !== DEFAULT_CONTACT_LEAD_DATE_SCOPE ||
-      leadDateFrom !== DEFAULT_CONTACT_LEAD_DATE_FROM ||
-      leadDateTo !== DEFAULT_CONTACT_LEAD_DATE_TO;
+  const visibleActiveFilterChips = activeFilterChips.filter((chip) => (
+    chip.onRemove ||
+    (chip.key === 'owner' && selectedOwnerLabel)
+  ));
+  const hasNonDefaultLeadDateFilter = hasExplicitLeadDateFilter;
   const hasNonDefaultFilters = hasNonDefaultLeadDateFilter ||
     statusFilter !== DEFAULT_CONTACT_STATUS_FILTER ||
     (!coordinatorUiPolicy.ownerScoped && ownerFilter !== DEFAULT_CONTACT_OWNER_FILTER) ||
     sourceFilter !== DEFAULT_CONTACT_SOURCE_FILTER ||
     courseFilter !== DEFAULT_CONTACT_COURSE_FILTER ||
+    effectiveLocationFilter !== DEFAULT_CONTACT_LOCATION_FILTER ||
     effectiveDirectoryFacet !== DEFAULT_CONTACT_FACET_FILTER;
   const filterSections = [
     {
@@ -766,6 +847,11 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       label: 'Course',
       summary: selectedCourseLabel || 'All Courses',
     } : null,
+    isAitUsaDirectory ? {
+      id: 'location',
+      label: 'Location',
+      summary: selectedLocationLabel || 'All Locations',
+    } : null,
     visibleSegmentGroups.groups.length > 0 ? {
       id: 'segments',
       label: 'Segments',
@@ -774,14 +860,16 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   ].filter(Boolean);
   const resetFilters = () => {
     updateFilterQuery({
-      leadDateScope: DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+      leadDateScope: CONTACT_LEAD_DATE_SCOPE_ALL,
       leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
       leadDateTo: DEFAULT_CONTACT_LEAD_DATE_TO,
+      includeLeadDateScope: false,
       statusFilter: DEFAULT_CONTACT_STATUS_FILTER,
       ownerFilter: DEFAULT_CONTACT_OWNER_FILTER,
       sourceFilter: DEFAULT_CONTACT_SOURCE_FILTER,
       directoryFacet: DEFAULT_CONTACT_FACET_FILTER,
       courseFilter: DEFAULT_CONTACT_COURSE_FILTER,
+      locationFilter: DEFAULT_CONTACT_LOCATION_FILTER,
     });
   };
   const mobileFieldKeys = columnMode === 'ait_signs'
@@ -791,13 +879,31 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       : ['phone', 'workflow', 'signalText', 'assignedLabel', 'divisionLabel', 'lastTouch', 'lastEdited'];
   const directoryScopeName = directoryBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`;
   const summaryNoun = pluralLabel.toLowerCase();
-  const directorySummary = `${filteredContacts.length.toLocaleString()} matching ${summaryNoun} in ${directoryScopeName}`;
+  const directoryResultCount = contactDirectoryIsDeferred ? deferredDirectory.total : filteredContacts.length;
+  const summaryLabel = directoryResultCount === 1 ? singularLabel.toLowerCase() : summaryNoun;
+  const directorySummary = `${directoryResultCount.toLocaleString()} matching ${summaryLabel} in ${directoryScopeName}`;
   const formBusinessUnitId = form.businessUnitId || form.primaryBusinessUnitId || '';
   const formBusinessUnit = businessUnitById.get(formBusinessUnitId) || null;
   const isAitUsaForm = workflowForBusinessUnit(formBusinessUnit).key === WORKFLOW_KEYS.AIT_USA;
+  const formMarketRegionOptions = campaignMarketOptions(form.locationPreference);
   const formSchoolLocationOptions = schoolLocationOptions(form.address);
 
-  if (!loaded) return <div className="empty-state">Loading...</div>;
+  if (!loaded) {
+    return <PageState tone="loading" title={`Loading ${pluralLabel.toLowerCase()}`} copy="Preparing the contact directory for your current division scope." />;
+  }
+  if (contactDirectoryIsDeferred && deferredDirectory.loading && !deferredDirectory.ready) {
+    return <PageState tone="loading" title={`Loading ${pluralLabel.toLowerCase()}`} copy="Loading the first 50 matching records for this division." />;
+  }
+  if (contactDirectoryIsDeferred && deferredDirectory.error && !deferredDirectory.ready) {
+    return (
+      <PageState
+        tone="error"
+        title={`${pluralLabel} could not load`}
+        copy={deferredDirectory.error}
+        actions={<button className="btn btn-primary" type="button" onClick={deferredDirectory.retry}>Try again</button>}
+      />
+    );
+  }
 
   return (
     <div className="fade-in">
@@ -812,7 +918,9 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         <DataTable
           columns={columns}
           data={filteredContacts}
-          searchPlaceholder={`Search ${pluralLabel.toLowerCase()}...`}
+          searchPlaceholder={`Search ${pluralLabel.toLowerCase()} by name, phone, source, location, or course`}
+          searchValue={contactDirectoryIsDeferred ? deferredDirectory.search : undefined}
+          onSearchChange={contactDirectoryIsDeferred ? deferredDirectory.setSearch : undefined}
           toolbarAfterSearch={(
             <div className="contacts-filter-popover-anchor">
               <button
@@ -826,8 +934,61 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                 {hasNonDefaultFilters && <strong>{activeFilterCount}</strong>}
               </button>
 
+              {visibleActiveFilterChips.length > 0 && (
+                <div className="contacts-active-filter-chips" aria-label="Active contact filters">
+                  {visibleActiveFilterChips.map((chip) => (
+                    <span key={chip.key} className="contacts-active-filter-chip">
+                      <small>{CONTACT_FILTER_CHIP_LABELS[chip.key] || 'Filter'}</small>
+                      <strong>{chip.label}</strong>
+                      {chip.onRemove ? (
+                        <button
+                          type="button"
+                          className="contacts-active-filter-chip-remove"
+                          onClick={chip.onRemove}
+                          aria-label={`Remove ${CONTACT_FILTER_CHIP_LABELS[chip.key] || 'filter'}: ${chip.label}`}
+                        >
+                          <X size={12} />
+                        </button>
+                      ) : (
+                        <span className="contacts-active-filter-chip-lock" aria-hidden="true">
+                          <Check size={12} />
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                  {hasNonDefaultFilters && (
+                    <button className="contacts-filter-reset contacts-filter-reset-inline" type="button" onClick={resetFilters}>
+                      <RotateCcw size={13} />
+                      Clear all
+                    </button>
+                  )}
+                </div>
+              )}
+
               {filterMenuOpen && (
                 <div className="contacts-filter-menu" role="dialog" aria-label="Contact filters">
+                  <div className="contacts-filter-menu-header">
+                    <div className="contacts-filter-title">
+                      <span>Contact filters</span>
+                      {hasNonDefaultFilters ? <em>{activeFilterCount}</em> : null}
+                    </div>
+                    <div className="contacts-filter-menu-actions">
+                      {hasNonDefaultFilters && (
+                        <button className="contacts-filter-reset contacts-filter-reset-inline" type="button" onClick={resetFilters}>
+                          <RotateCcw size={13} />
+                          Clear all
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="contacts-filter-done"
+                        onClick={() => setFilterMenuOpen(false)}
+                      >
+                        Done
+                      </button>
+                    </div>
+                  </div>
+
                   <div className="contacts-filter-summary-strip" aria-label="Selected contact filters">
                     {filterSummaryChips.length > 0 ? (
                       <>
@@ -864,7 +1025,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                       ))}
                     </div>
 
-                    <div className={`contacts-filter-detail ${['timeframe', 'owner', 'status', 'source', 'course'].includes(activeFilterSection) ? 'contacts-filter-detail-compact' : ''}`}>
+                    <div className={`contacts-filter-detail ${['timeframe', 'owner', 'status', 'source', 'course', 'location'].includes(activeFilterSection) ? 'contacts-filter-detail-compact' : ''}`}>
                       {activeFilterSection === 'timeframe' && (
                         <section className="contacts-filter-block">
                           <div className="contacts-filter-heading">Timeframe</div>
@@ -1004,7 +1165,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                               role="option"
                             >
                               <span>All Sources</span>
-                              <strong>{statusOwnerFilteredContacts.length}</strong>
+                              <strong>{contactDirectoryIsDeferred ? deferredDirectory.total : statusOwnerFilteredContacts.length}</strong>
                             </button>
                             {sourceFilterOptions.map((option) => (
                               <button
@@ -1016,7 +1177,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                                 role="option"
                               >
                                 <span>{option.label}</span>
-                                <strong>{option.count}</strong>
+                                {option.count != null && <strong>{option.count}</strong>}
                               </button>
                             ))}
                           </div>
@@ -1035,7 +1196,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                               role="option"
                             >
                               <span>All Courses</span>
-                              <strong>{sourceFilteredContacts.length}</strong>
+                              <strong>{contactDirectoryIsDeferred ? deferredDirectory.total : sourceFilteredContacts.length}</strong>
                             </button>
                             {courseFilterOptions.map((option) => (
                               <button
@@ -1047,7 +1208,38 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                                 role="option"
                               >
                                 <span>{option.label}</span>
-                                <strong>{option.count}</strong>
+                                {option.count != null && <strong>{option.count}</strong>}
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+                      )}
+
+                      {activeFilterSection === 'location' && isAitUsaDirectory && (
+                        <section className="contacts-filter-block">
+                          <div className="contacts-filter-heading">Location</div>
+                          <div className="contacts-option-list" role="listbox" aria-label="AIT USA location filters">
+                            <button
+                              type="button"
+                              className={`contacts-option-tile ${effectiveLocationFilter === DEFAULT_CONTACT_LOCATION_FILTER ? 'active' : ''}`}
+                              onClick={() => setLocationFilter(DEFAULT_CONTACT_LOCATION_FILTER)}
+                              aria-selected={effectiveLocationFilter === DEFAULT_CONTACT_LOCATION_FILTER}
+                              role="option"
+                            >
+                              <span>All Locations</span>
+                              <strong>{contactDirectoryIsDeferred ? deferredDirectory.total : courseFilteredContacts.length}</strong>
+                            </button>
+                            {locationFilterOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                type="button"
+                                className={`contacts-option-tile ${effectiveLocationFilter === option.value ? 'active' : ''}`}
+                                onClick={() => setLocationFilter(option.value)}
+                                aria-selected={effectiveLocationFilter === option.value}
+                                role="option"
+                              >
+                                <span>{option.label}</span>
+                                {option.count != null && <strong>{option.count}</strong>}
                               </button>
                             ))}
                           </div>
@@ -1085,7 +1277,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
 
                   <div className="contacts-filter-footer">
                     <div className="contacts-filter-footer-meta">
-                      <span>{filteredContacts.length.toLocaleString()} shown of {dateScopedRows.length.toLocaleString()}</span>
+                      <span>
+                        {filteredContacts.length.toLocaleString()} shown of{' '}
+                        {(contactDirectoryIsDeferred ? deferredDirectory.total : dateScopedRows.length).toLocaleString()}
+                      </span>
                       {hasNonDefaultFilters && (
                         <button className="contacts-filter-reset" type="button" onClick={resetFilters}>
                           <RotateCcw size={13} />
@@ -1103,7 +1298,10 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           ) : null}
           onEdit={canWrite ? (id, u) => {
             updateContact(id, u)
-              .then(() => toast('Field updated'))
+              .then(() => {
+                toast('Field updated');
+                refreshDirectory();
+              })
               .catch((error) => toast(error?.message || 'Update failed.', 'error'));
           } : undefined}
           actions={[
@@ -1115,146 +1313,233 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           mobileBadges={['status']}
           mobileFields={mobileFieldKeys}
         />
+        {contactDirectoryIsDeferred && deferredDirectory.totalPages > 1 && (
+          <div className="contacts-directory-pagination" aria-label="Contact directory pages">
+            <button
+              className="btn btn-sm"
+              type="button"
+              disabled={deferredDirectory.page <= 1 || deferredDirectory.loading}
+              onClick={() => deferredDirectory.setPage((page) => Math.max(1, page - 1))}
+            >
+              Previous
+            </button>
+            <span>
+              Page {deferredDirectory.page.toLocaleString()} of {deferredDirectory.totalPages.toLocaleString()}
+              {' · '}{deferredDirectory.total.toLocaleString()} records
+            </span>
+            <button
+              className="btn btn-sm"
+              type="button"
+              disabled={deferredDirectory.page >= deferredDirectory.totalPages || deferredDirectory.loading}
+              onClick={() => deferredDirectory.setPage((page) => Math.min(deferredDirectory.totalPages, page + 1))}
+            >
+              Next
+            </button>
+          </div>
+        )}
       </div>
 
-      <Modal open={!!drawer} onClose={close} title={drawer === 'new' ? `New ${singularLabel}` : `Edit ${singularLabel}`}
+      <Modal
+        open={!!drawer}
+        onClose={close}
+        title={drawer === 'new' ? `New ${singularLabel}` : `Edit ${singularLabel}`}
+        variant="dialog"
+        panelClassName="contact-dialog-panel"
         footer={<>
-          {canWrite && drawer && drawer !== 'new' && (
-            <button className="btn btn-danger" type="button" onClick={requestDelete}>
-              {coordinatorUiPolicy.canArchiveContactsDirectly ? 'Delete' : 'Request Archive'}
-            </button>
-          )}
-          <button className="btn" onClick={close}>Cancel</button>
-          <button className="btn btn-primary" onClick={save}>Save</button>
+          <button className="btn" type="button" onClick={close}>Cancel</button>
+          <button className="btn btn-primary" type="submit" form="contact-dialog-form">Save</button>
         </>}>
-        {formError && (
-          <div
-            role="alert"
-            style={{
-              marginBottom: 12,
-              padding: '8px 10px',
-              border: '1px solid var(--danger)',
-              borderRadius: 'var(--radius-md)',
-              color: 'var(--danger)',
-              background: 'color-mix(in srgb, var(--danger) 8%, transparent)',
-              fontSize: 'var(--text-sm)',
-            }}
-          >
-            {formError}
+        <form
+          id="contact-dialog-form"
+          className="contact-dialog-form"
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            save();
+          }}
+        >
+          <div className="contact-dialog-intro">
+            <p>{drawer === 'new' ? 'Start with identity, then set the current routing and context.' : 'Update this contact’s identity, routing, and current context.'}</p>
+            {drawer === 'new' && <span>Name and one contact method are required.</span>}
           </div>
-        )}
-        <div className="form-group">
-          <label className="form-label">Name</label>
-          <input className="input" value={form.name} required onChange={e => setForm(f => ({...f, name: e.target.value}))} />
-        </div>
-        <div className="grid-2">
-          <div className="form-group">
-            <label className="form-label">Email</label>
-            <input className="input" type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
-          </div>
-          <div className="form-group">
-            <label className="form-label">Phone</label>
-            <input className="input" type="tel" value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} />
-          </div>
-        </div>
-        <div className="grid-2">
-          <div className="form-group">
-            <label className="form-label">Status</label>
-            <select className="input select" value={form.status} onChange={e => setForm(f => ({...f, status: e.target.value}))}>
-              {[
-                ...new Set([
-                  ...(statusOptionsForBusinessUnitId(form.businessUnitId || form.primaryBusinessUnitId) || []),
-                  ...(form.status ? [form.status] : []),
-                ]),
-              ].map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          <div className="form-group">
-            <label className="form-label">Source</label>
-            <select className="input select" value={form.source} onChange={e => setForm(f => ({...f, source: e.target.value}))}>
-              {['Wix Historical Import','Website','Facebook Ads','Referral','Cold Call','Google Ads'].map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-        </div>
-        {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
-          <div className="form-group">
-            <label className="form-label">Assigned To</label>
-            <select className="input select" value={form.assignedTo || ''} onChange={e => setForm(f => ({...f, assignedTo: e.target.value}))}>
-              <option value="">Unassigned</option>
-              {ownerOptions.map((owner) => (
-                <option key={owner.id} value={owner.id}>{owner.label}</option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <input type="hidden" value={form.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
-        )}
-        <div className="form-group">
-          <label className="form-label">{scopeLabel}</label>
-          <select
-            className="input select"
-            value={form.businessUnitId || form.primaryBusinessUnitId || ''}
-            onChange={e => {
-              const nextBusinessUnitId = e.target.value;
-              const nextStatuses = statusOptionsForBusinessUnitId(nextBusinessUnitId);
-              setForm(f => ({
-                ...f,
-                businessUnitId: nextBusinessUnitId,
-                primaryBusinessUnitId: nextBusinessUnitId,
-                status: nextStatuses.includes(f.status) ? f.status : nextStatuses[0] || f.status,
-              }));
-            }}
-          >
-            {canUseConsolidatedScope && <option value="">Unassigned</option>}
-            {accessibleBusinessUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
-          </select>
-        </div>
-        {isAitUsaForm ? (
-          <div className="form-group">
-            <label className="form-label">School Location</label>
-            <select
-              className="input select"
-              value={form.address || ''}
-              onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-            >
-              <option value="">Select school location</option>
-              {formSchoolLocationOptions.map((location) => (
-                <option key={location} value={location}>{location}</option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          <div className="form-group">
-            <label className="form-label">Address</label>
-            <input
-              className="input"
-              value={form.address || ''}
-              onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
-            />
-          </div>
-        )}
-        <div className="form-group">
-          <label className="form-label">Notes</label>
-          <textarea className="input" rows={3} 
-            value={Array.isArray(form.notes) ? (form.notes[form.notes.length - 1]?.text || '') : form.notes} 
-            onChange={e => {
-              const text = e.target.value;
-              setForm(f => {
-                const newNotes = Array.isArray(f.notes) ? [...f.notes] : [{ text: f.notes, date: new Date().toISOString().slice(0,10) }];
-                if (newNotes.length > 0) {
-                  newNotes[newNotes.length - 1] = { ...newNotes[newNotes.length - 1], text, date: new Date().toISOString().slice(0,10) };
-                } else {
-                  newNotes.push({ text, date: new Date().toISOString().slice(0,10) });
-                }
-                return { ...f, notes: newNotes };
-              });
-            }} 
-            style={{resize:'vertical'}} 
-          />
-          <div style={{fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginTop: 4}}>
-            Editing the latest note. Full timeline available in Contact Details.
-          </div>
-        </div>
+
+          {formError && <div className="contact-dialog-error" role="alert">{formError}</div>}
+
+          <section className="contact-dialog-section contact-dialog-identity">
+            <div className="contact-dialog-section-header">
+              <span className="contact-dialog-section-index">1</span>
+              <div>
+                <h2>Identity</h2>
+                <p>Keep the person and their preferred contact details clear.</p>
+              </div>
+            </div>
+            <div className="form-group">
+              <label className="form-label">Name</label>
+              <input className="input" value={form.name} required autoFocus onChange={e => setForm(f => ({...f, name: e.target.value}))} />
+            </div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label className="form-label">Email</label>
+                <input className="input" type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Phone</label>
+                <input className="input" type="tel" value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} />
+              </div>
+            </div>
+          </section>
+
+          <section className="contact-dialog-section contact-dialog-routing">
+            <div className="contact-dialog-section-header">
+              <span className="contact-dialog-section-index">2</span>
+              <div>
+                <h2>Routing</h2>
+                <p>Place this contact in the right workflow and scope.</p>
+              </div>
+            </div>
+            <div className="grid-2">
+              <div className="form-group">
+                <label className="form-label">Status</label>
+                <select className="input select" value={form.status} onChange={e => setForm(f => ({...f, status: e.target.value}))}>
+                  {[
+                    ...new Set([
+                      ...(statusOptionsForBusinessUnitId(form.businessUnitId || form.primaryBusinessUnitId) || []),
+                      ...(form.status ? [form.status] : []),
+                    ]),
+                  ].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Source</label>
+                <select className="input select" value={form.source} onChange={e => setForm(f => ({...f, source: e.target.value}))}>
+                  {['Wix Historical Import','Website','Facebook Ads','Referral','Cold Call','Google Ads'].map(s => <option key={s} value={s}>{s}</option>)}
+                </select>
+              </div>
+            </div>
+            <div className="contact-dialog-routing-details">
+              {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
+                <div className="form-group">
+                  <label className="form-label">Assigned To</label>
+                  <select className="input select" value={form.assignedTo || ''} onChange={e => setForm(f => ({...f, assignedTo: e.target.value}))}>
+                    <option value="">Unassigned</option>
+                    {ownerOptions.map((owner) => (
+                      <option key={owner.id} value={owner.id}>{owner.label}</option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <input type="hidden" value={form.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
+              )}
+              <div className="form-group">
+                <label className="form-label">{scopeLabel}</label>
+                <select
+                  className="input select"
+                  value={form.businessUnitId || form.primaryBusinessUnitId || ''}
+                  onChange={e => {
+                    const nextBusinessUnitId = e.target.value;
+                    const nextStatuses = statusOptionsForBusinessUnitId(nextBusinessUnitId);
+                    setForm(f => ({
+                      ...f,
+                      businessUnitId: nextBusinessUnitId,
+                      primaryBusinessUnitId: nextBusinessUnitId,
+                      status: nextStatuses.includes(f.status) ? f.status : nextStatuses[0] || f.status,
+                    }));
+                  }}
+                >
+                  {canUseConsolidatedScope && <option value="">Unassigned</option>}
+                  {accessibleBusinessUnits.map(unit => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+                </select>
+              </div>
+            </div>
+          </section>
+
+          <section className="contact-dialog-section contact-dialog-context">
+            <div className="contact-dialog-section-header">
+              <span className="contact-dialog-section-index">3</span>
+              <div>
+                <h2>Context</h2>
+                <p>Capture the location and latest information for follow-up.</p>
+              </div>
+            </div>
+            {isAitUsaForm ? (
+              <div className="contact-dialog-grid">
+                <div className="form-group">
+                  <label className="form-label">Market / Region</label>
+                  <select
+                    className="input select"
+                    value={form.locationPreference || ''}
+                    onChange={e => setForm(f => ({ ...f, locationPreference: e.target.value }))}
+                  >
+                    <option value="">Not specified</option>
+                    {formMarketRegionOptions.map((market) => (
+                      <option key={market} value={market}>{market}</option>
+                    ))}
+                  </select>
+                  <p className="profile-editor-helper">Where the lead is based or grouped for outreach.</p>
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Preferred Learning Location</label>
+                  <select
+                    className="input select"
+                    value={form.address || ''}
+                    onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+                  >
+                    <option value="">Not specified</option>
+                    {formSchoolLocationOptions.map((location) => (
+                      <option key={location} value={location}>{location}</option>
+                    ))}
+                  </select>
+                  <p className="profile-editor-helper">Campus or Online preference before enrollment.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="form-group">
+                <label className="form-label">Address</label>
+                <input
+                  className="input"
+                  value={form.address || ''}
+                  onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+                />
+              </div>
+            )}
+            <div className="form-group">
+              <label className="form-label">Notes</label>
+              <textarea className="input contact-dialog-notes" rows={3}
+                value={Array.isArray(form.notes) ? (form.notes[form.notes.length - 1]?.text || '') : form.notes}
+                onChange={e => {
+                  const text = e.target.value;
+                  setForm(f => {
+                    const newNotes = Array.isArray(f.notes) ? [...f.notes] : [{ text: f.notes, date: new Date().toISOString().slice(0,10) }];
+                    if (newNotes.length > 0) {
+                      newNotes[newNotes.length - 1] = { ...newNotes[newNotes.length - 1], text, date: new Date().toISOString().slice(0,10) };
+                    } else {
+                      newNotes.push({ text, date: new Date().toISOString().slice(0,10) });
+                    }
+                    return { ...f, notes: newNotes };
+                  });
+                }}
+              />
+              <div className="contact-dialog-note-help">Editing the latest note. Full timeline available in Contact Details.</div>
+            </div>
+          </section>
+
+          {canWrite && drawer && drawer !== 'new' && (
+            <section className="contact-dialog-danger-action danger-action-panel">
+              <div className="danger-action-copy">
+                <span className="danger-action-eyebrow">Separate account action</span>
+                <strong>{coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive this ${singularLabel.toLowerCase()}` : 'Request archive approval'}</strong>
+                <p>
+                  {coordinatorUiPolicy.canArchiveContactsDirectly
+                    ? `This is not saved with contact edits. It opens a separate confirmation before removing the ${singularLabel.toLowerCase()} from normal CRM lists.`
+                    : `This is not saved with contact edits. It opens a separate confirmation and the contact stays active unless approved.`}
+                </p>
+              </div>
+              <button className="btn btn-danger" type="button" onClick={requestDelete}>
+                {coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive ${singularLabel}` : 'Request Archive'}
+              </button>
+            </section>
+          )}
+        </form>
       </Modal>
       <ConfirmDialog
         open={!!deleteTarget}

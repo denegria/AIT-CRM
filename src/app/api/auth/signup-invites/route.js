@@ -4,8 +4,13 @@ import { getDb } from '@/db/index.js';
 import { businessUnits, roles } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import { createSignupInviteToken } from '@/lib/signup-invites';
+import {
+  INVITE_ROLE_KEYS,
+  compatibleRoleLookupKeys,
+  normalizeRoleKey as normalizeKnownRoleKey,
+  preferredRoleRowForKey,
+} from '@/lib/roles.js';
 
-const INVITE_ROLE_KEYS = ['account_manager', 'senior_coordinator', 'designer', 'sales_manager'];
 const DEFAULT_EXPIRES_IN_SECONDS = 2 * 60 * 60;
 const MAX_EXPIRES_IN_SECONDS = 24 * 60 * 60;
 
@@ -15,8 +20,7 @@ function normalizeBusinessUnitIds(input) {
 }
 
 function normalizeRoleKey(value) {
-  const roleKey = String(value || '').trim();
-  return INVITE_ROLE_KEYS.includes(roleKey) ? roleKey : '';
+  return normalizeKnownRoleKey(value, INVITE_ROLE_KEYS);
 }
 
 function normalizeExpiry(value) {
@@ -50,15 +54,16 @@ export async function POST(request) {
   }
 
   const db = getDb();
-  const [roleRow, unitRows] = await Promise.all([
+  const roleLookupKeys = compatibleRoleLookupKeys(roleKey);
+  const [roleRows, unitRows] = await Promise.all([
     db
-      .select({ id: roles.id })
+      .select({ id: roles.id, key: roles.key })
       .from(roles)
       .where(and(
         eq(roles.organizationId, session.user.organizationId),
-        eq(roles.key, roleKey),
+        inArray(roles.key, roleLookupKeys),
       ))
-      .limit(1),
+      .limit(roleLookupKeys.length),
     db
       .select({ id: businessUnits.id, name: businessUnits.name })
       .from(businessUnits)
@@ -69,7 +74,8 @@ export async function POST(request) {
       )),
   ]);
 
-  if (!roleRow.length) {
+  const roleRow = preferredRoleRowForKey(roleRows, roleKey);
+  if (!roleRow) {
     return NextResponse.json({ error: 'Invite role is not available.' }, { status: 400 });
   }
   if (unitRows.length !== businessUnitIds.length) {

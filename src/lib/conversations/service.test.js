@@ -15,6 +15,7 @@ import {
   messengerConversationMessageInput,
   normalizeConversationMessageInput,
   recordConversationMessage,
+  summarizeInboxConversations,
   updateConversationMessageDeliveryStatus,
   whatsappConversationMessageInput,
 } from './service.js';
@@ -112,7 +113,7 @@ test('builds stable conversation and idempotency keys', () => {
 test('rejects unsupported channels, directions, and statuses before persistence', () => {
   assert.throws(() => normalizeConversationMessageInput({
     organizationId: 'org-1',
-    channel: 'sms',
+    channel: 'email',
     providerAccountId: 'phone-1',
     providerThreadId: 'thread-1',
     externalParticipantId: 'customer-1',
@@ -379,4 +380,109 @@ test('filters and orders conversation rows for business-unit scoped reads', () =
     filterConversationRowsForBusinessUnit(rows, []).map((row) => row.message.id),
     ['unassigned-visible'],
   );
+});
+
+test('summarizes inbox threads with derived owner and attention labels', () => {
+  const messages = [
+    {
+      id: 'message-1',
+      conversationId: 'conversation-1',
+      channel: 'whatsapp',
+      channelLabel: 'WhatsApp',
+      providerLabel: 'Meta',
+      direction: 'inbound',
+      directionLabel: 'Inbound',
+      deliveryStatus: 'received',
+      deliveryStatusLabel: 'Received',
+      text: 'Can I get updated pricing?',
+      timestamp: '2026-06-29T16:00:00.000Z',
+      createdAt: '2026-06-29T16:00:00.000Z',
+      identities: { participant: '15551230001', sender: '15551230001', recipient: 'page-1' },
+      conversation: { status: 'open', statusLabel: 'Open' },
+      channelConfig: { label: 'AIT Signs WhatsApp' },
+      contact: { id: 'contact-1', name: 'Ada Lovelace' },
+      lead: { id: 'lead-1', status: 'Qualified', sourceName: 'Website Form', assignedUserId: 'user-2' },
+      businessUnit: { id: 'bu-1', name: 'AIT Signs' },
+    },
+    {
+      id: 'message-2',
+      conversationId: 'conversation-2',
+      channel: 'messenger',
+      channelLabel: 'Messenger',
+      providerLabel: 'Meta',
+      direction: 'outbound',
+      directionLabel: 'Outbound',
+      deliveryStatus: 'failed',
+      deliveryStatusLabel: 'Failed',
+      text: 'Following up on your proof approval.',
+      timestamp: '2026-06-29T14:00:00.000Z',
+      createdAt: '2026-06-29T14:00:00.000Z',
+      identities: { participant: 'fb-user-1', sender: 'page-1', recipient: 'fb-user-1' },
+      conversation: { status: 'open', statusLabel: 'Open' },
+      channelConfig: { label: 'AIT Signs Facebook' },
+      contact: { id: 'contact-2', name: 'Grace Hopper' },
+      lead: { id: 'lead-2', status: 'Proposal Sent', sourceName: 'Facebook Lead Ad', assignedUserId: 'user-1' },
+      businessUnit: { id: 'bu-1', name: 'AIT Signs' },
+    },
+    {
+      id: 'message-3',
+      conversationId: 'conversation-3',
+      channel: 'whatsapp',
+      channelLabel: 'WhatsApp',
+      providerLabel: 'Meta',
+      direction: 'outbound',
+      directionLabel: 'Outbound',
+      deliveryStatus: 'delivered',
+      deliveryStatusLabel: 'Delivered',
+      text: 'We received your placement request.',
+      timestamp: '2026-06-29T13:00:00.000Z',
+      createdAt: '2026-06-29T13:00:00.000Z',
+      identities: { participant: '15551230003', sender: 'page-1', recipient: '15551230003' },
+      conversation: { status: 'open', statusLabel: 'Open' },
+      channelConfig: { label: 'AIT USA WhatsApp' },
+      contact: { id: 'contact-3', name: 'Katherine Johnson' },
+      lead: { id: 'lead-3', status: 'New Lead', sourceName: 'Placement Test', assignedUserId: 'user-2' },
+      businessUnit: { id: 'bu-2', name: 'AIT USA Institute' },
+    },
+  ];
+  const tasks = [
+    {
+      id: 'task-1',
+      contactId: 'contact-1',
+      leadId: 'lead-1',
+      title: 'Return pricing call',
+      status: 'open',
+      priority: 'high',
+      dueAt: '2099-06-29T17:00:00.000Z',
+      ownerUserId: 'user-1',
+    },
+    {
+      id: 'task-2',
+      contactId: null,
+      leadId: 'lead-3',
+      title: 'Review placement result',
+      status: 'open',
+      priority: 'high',
+      dueAt: '2099-06-29T18:00:00.000Z',
+      ownerUserId: 'user-1',
+    },
+  ];
+  const users = [
+    { id: 'user-1', name: 'Carlos Rivera', email: 'carlos@example.com' },
+    { id: 'user-2', name: 'Dana Kim', email: 'dana@example.com' },
+  ];
+
+  const inbox = summarizeInboxConversations(messages, { tasks, users });
+
+  assert.equal(inbox.length, 3);
+  assert.equal(inbox[0].id, 'conversation-1');
+  assert.equal(inbox[0].owner.label, 'Task owner: Carlos Rivera');
+  assert.match(inbox[0].owner.reason, /Return pricing call/);
+  assert.equal(inbox[0].attention.code, 'needs_reply');
+  assert.equal(inbox[0].contact.href, '/contacts/contact-1');
+  assert.equal(inbox[0].status.label, 'Open · Lead Qualified');
+  assert.equal(inbox[1].owner.label, 'Lead owner: Carlos Rivera');
+  assert.equal(inbox[1].attention.code, 'delivery_issue');
+  assert.equal(inbox[2].owner.label, 'Task owner: Carlos Rivera');
+  assert.match(inbox[2].owner.reason, /Review placement result/);
 });

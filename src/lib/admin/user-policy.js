@@ -1,12 +1,14 @@
-export const MANAGED_ROLE_KEYS = Object.freeze(['admin', 'senior_coordinator', 'designer', 'account_manager', 'sales_manager']);
+import {
+  MANAGED_ROLE_KEYS,
+  MANAGED_ROLE_LOOKUP_KEYS,
+  ROLE_KEYS,
+  ROLE_LABELS,
+  canonicalRoleKey,
+  normalizeRoleKey,
+  roleLabel,
+} from '../roles.js';
 
-export const ROLE_LABELS = Object.freeze({
-  admin: 'Administrator',
-  senior_coordinator: 'Senior Coordinator',
-  designer: 'Designer',
-  account_manager: 'Account Coordinator',
-  sales_manager: 'Sales Manager',
-});
+export { MANAGED_ROLE_KEYS, MANAGED_ROLE_LOOKUP_KEYS, ROLE_LABELS };
 
 export function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
@@ -17,8 +19,7 @@ export function normalizeName(value) {
 }
 
 export function normalizeManagedRoleKey(value, managedRoleKeys = MANAGED_ROLE_KEYS) {
-  const roleKey = String(value || '').trim();
-  return managedRoleKeys.includes(roleKey) ? roleKey : '';
+  return normalizeRoleKey(value, managedRoleKeys);
 }
 
 export function normalizeBusinessUnitIds(input) {
@@ -27,7 +28,7 @@ export function normalizeBusinessUnitIds(input) {
 }
 
 export function requiresBusinessUnitMembership(roleKey) {
-  return roleKey !== 'admin';
+  return canonicalRoleKey(roleKey) !== ROLE_KEYS.ADMIN;
 }
 
 export function validateUserAccessDraft({
@@ -46,22 +47,24 @@ export function validateUserAccessDraft({
   if (password && password.length < 8) {
     return { ok: false, error: 'Password must be at least 8 characters.', status: 400 };
   }
-  if (!managedRoleKeys.includes(roleKey)) {
+  const normalizedRoleKey = normalizeManagedRoleKey(roleKey, managedRoleKeys);
+  if (!normalizedRoleKey) {
     return {
       ok: false,
       error: `Role must be one of: ${managedRoleKeys.join(', ')}.`,
       status: 400,
     };
   }
-  if (requiresBusinessUnitMembership(roleKey) && !businessUnitIds.length) {
+  if (requiresBusinessUnitMembership(normalizedRoleKey) && !businessUnitIds.length) {
     return { ok: false, error: 'At least one active division is required for non-admin users.', status: 400 };
   }
   return { ok: true, error: '', status: 200 };
 }
 
 export function toRoleOption(roleKey) {
+  const key = canonicalRoleKey(roleKey);
   return {
-    key: roleKey,
-    label: ROLE_LABELS[roleKey] || roleKey.replace(/_/g, ' '),
+    key,
+    label: roleLabel(key),
   };
 }

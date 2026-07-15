@@ -14,12 +14,14 @@ import {
   isCurrentLeadDateScope,
   leadDateForDirectoryScope,
 } from './contact-directory-view.js';
+import { AIT_USA_LOCATION_FILTER_VALUES, contactLocationValues } from './school-locations.js';
 
 export const DEFAULT_CONTACT_STATUS_FILTER = 'All';
 export const DEFAULT_CONTACT_OWNER_FILTER = 'all';
 export const DEFAULT_CONTACT_FACET_FILTER = 'all';
 export const DEFAULT_CONTACT_COURSE_FILTER = 'all';
 export const DEFAULT_CONTACT_SOURCE_FILTER = 'all';
+export const DEFAULT_CONTACT_LOCATION_FILTER = 'all';
 export const DEFAULT_CONTACT_LEAD_DATE_SCOPE = 'current';
 export const CONTACT_LEAD_DATE_SCOPE_QUARTER = 'quarter';
 export const CONTACT_LEAD_DATE_SCOPE_ALL = 'all';
@@ -32,12 +34,60 @@ export const DEFAULT_PIPELINE_STATUS_FILTER = DEFAULT_CONTACT_STATUS_FILTER;
 export const DEFAULT_PIPELINE_OWNER_FILTER = 'all';
 export const DEFAULT_PIPELINE_SOURCE_FILTER = 'all';
 export const DEFAULT_PIPELINE_COURSE_FILTER = DEFAULT_CONTACT_COURSE_FILTER;
+export const DEFAULT_PIPELINE_LOCATION_FILTER = DEFAULT_CONTACT_LOCATION_FILTER;
 export const DEFAULT_PIPELINE_ACTIVITY_FILTER = 'all';
 export const DEFAULT_PIPELINE_SEARCH = '';
 export const DEFAULT_PIPELINE_COMPACT_MODE = true;
 
 function clean(value = '') {
   return String(value || '').trim();
+}
+
+export function contactLeadDateScopeLabel(scope = DEFAULT_CONTACT_LEAD_DATE_SCOPE, from = '', to = '') {
+  if (scope === CONTACT_LEAD_DATE_SCOPE_QUARTER) return 'This Quarter';
+  if (scope === CONTACT_LEAD_DATE_SCOPE_ALL) return 'All Leads';
+  if (scope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
+    if (from && to) return `${from} to ${to}`;
+    if (from) return `From ${from}`;
+    if (to) return `Through ${to}`;
+    return 'Custom time frame';
+  }
+  return 'Current Year';
+}
+
+export function contactLeadDatePanelSummary(scope = DEFAULT_CONTACT_LEAD_DATE_SCOPE, from = '', to = '') {
+  if (scope === CONTACT_LEAD_DATE_SCOPE_QUARTER) {
+    return {
+      mode: 'preset',
+      label: 'Timeframe',
+      value: 'Quarter-to-date',
+      detail: 'Dates are applied automatically for the current quarter.',
+    };
+  }
+  if (scope === CONTACT_LEAD_DATE_SCOPE_ALL) {
+    return {
+      mode: 'preset',
+      label: 'Timeframe',
+      value: 'No date limit',
+      detail: 'All contacts stay visible until you choose a narrower range.',
+    };
+  }
+  if (scope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
+    return {
+      mode: 'custom',
+      label: 'Custom range',
+      value: contactLeadDateScopeLabel(scope, from, to),
+      detail: from || to
+        ? 'Selected dates are applied to the contact list.'
+        : 'Select dates below to narrow the contact list.',
+    };
+  }
+  return {
+    mode: 'preset',
+    label: 'Timeframe',
+    value: 'Year-to-date',
+    detail: 'Dates are applied automatically for the current calendar year.',
+  };
 }
 
 function normalized(value = '') {
@@ -166,6 +216,10 @@ export function sourceFromContactParams(searchParams) {
   return clean(paramValue(searchParams, 'source')) || DEFAULT_CONTACT_SOURCE_FILTER;
 }
 
+export function locationFromContactParams(searchParams) {
+  return clean(paramValue(searchParams, 'location')) || DEFAULT_CONTACT_LOCATION_FILTER;
+}
+
 export function contactFilterStateFromParams(searchParams) {
   return {
     statusFilter: statusFromContactParams(searchParams),
@@ -176,6 +230,7 @@ export function contactFilterStateFromParams(searchParams) {
     leadDateTo: leadDateToContactParams(searchParams),
     courseFilter: courseFromContactParams(searchParams),
     sourceFilter: sourceFromContactParams(searchParams),
+    locationFilter: locationFromContactParams(searchParams),
   };
 }
 
@@ -186,16 +241,18 @@ export function contactFilterQuery({
   leadDateScope = DEFAULT_CONTACT_LEAD_DATE_SCOPE,
   leadDateFrom = DEFAULT_CONTACT_LEAD_DATE_FROM,
   leadDateTo = DEFAULT_CONTACT_LEAD_DATE_TO,
+  includeLeadDateScope = false,
   courseFilter = DEFAULT_CONTACT_COURSE_FILTER,
   sourceFilter = DEFAULT_CONTACT_SOURCE_FILTER,
+  locationFilter = DEFAULT_CONTACT_LOCATION_FILTER,
 } = {}) {
   const params = new URLSearchParams();
-  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_ALL);
-  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_QUARTER) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_QUARTER);
-  if (leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE && ownerFilter && ownerFilter !== DEFAULT_CONTACT_OWNER_FILTER) {
+  if (includeLeadDateScope && leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_ALL);
+  if (includeLeadDateScope && leadDateScope === CONTACT_LEAD_DATE_SCOPE_QUARTER) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_QUARTER);
+  if (includeLeadDateScope && leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE) {
     params.set('leadDateScope', DEFAULT_CONTACT_LEAD_DATE_SCOPE);
   }
-  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
+  if (includeLeadDateScope && leadDateScope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
     params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_CUSTOM);
     if (leadDateFrom) params.set('leadDateFrom', leadDateFrom);
     if (leadDateTo) params.set('leadDateTo', leadDateTo);
@@ -205,7 +262,15 @@ export function contactFilterQuery({
   if (sourceFilter && sourceFilter !== DEFAULT_CONTACT_SOURCE_FILTER) params.set('source', sourceFilter);
   if (directoryFacet && directoryFacet !== DEFAULT_CONTACT_FACET_FILTER) params.set('facet', directoryFacet);
   if (courseFilter && courseFilter !== DEFAULT_CONTACT_COURSE_FILTER) params.set('course', courseFilter);
+  if (locationFilter && locationFilter !== DEFAULT_CONTACT_LOCATION_FILTER) params.set('location', locationFilter);
   return params.toString();
+}
+
+export function effectiveLeadDateScopeForDirectory({
+  leadDateScope = DEFAULT_CONTACT_LEAD_DATE_SCOPE,
+  hasExplicitLeadDateFilter = false,
+} = {}) {
+  return hasExplicitLeadDateFilter ? leadDateScope : CONTACT_LEAD_DATE_SCOPE_ALL;
 }
 
 export function contactMatchesLeadDateScope(contact = {}, {
@@ -314,6 +379,36 @@ export function buildSourceFilterOptions(contacts = []) {
   return [...byKey.values()].sort((a, b) => a.label.localeCompare(b.label));
 }
 
+export function contactMatchesLocation(contact = {}, {
+  locationFilter = DEFAULT_CONTACT_LOCATION_FILTER,
+} = {}) {
+  return locationFilter === DEFAULT_CONTACT_LOCATION_FILTER ||
+    contactLocationValues(contact).some((value) => normalized(value) === normalized(locationFilter));
+}
+
+export function buildLocationFilterOptions(contacts = []) {
+  const byKey = new Map(
+    AIT_USA_LOCATION_FILTER_VALUES.map((location) => [
+      normalized(location),
+      { value: location, label: location, count: 0 },
+    ]),
+  );
+  for (const contact of contacts) {
+    for (const label of contactLocationValues(contact)) {
+      const key = normalized(label);
+      if (!key) continue;
+      const existing = byKey.get(key) || { value: label, label, count: 0 };
+      existing.count += 1;
+      byKey.set(key, existing);
+    }
+  }
+  return [...byKey.values()];
+}
+
+// Backward-compatible names for callers outside the directory UI.
+export const contactMatchesSchoolLocation = contactMatchesLocation;
+export const buildSchoolLocationFilterOptions = buildLocationFilterOptions;
+
 export function courseTagsForDirectoryRow(row = {}) {
   if (!isAitUsaCourseStatus(row)) return [];
   const course = courseForContactDirectoryFilter(row);
@@ -334,6 +429,7 @@ export function pipelineFilterStateFromParams(searchParams) {
     ownerFilter: ownerFromContactParams(searchParams) || DEFAULT_PIPELINE_OWNER_FILTER,
     sourceFilter: clean(paramValue(searchParams, 'source')) || DEFAULT_PIPELINE_SOURCE_FILTER,
     courseFilter: courseFromContactParams(searchParams) || DEFAULT_PIPELINE_COURSE_FILTER,
+    locationFilter: locationFromContactParams(searchParams) || DEFAULT_PIPELINE_LOCATION_FILTER,
     activityFilter: clean(paramValue(searchParams, 'activity')) || DEFAULT_PIPELINE_ACTIVITY_FILTER,
     search: clean(paramValue(searchParams, 'q')) || DEFAULT_PIPELINE_SEARCH,
     leadDateScope: leadDateScopeFromContactParams(searchParams),
@@ -348,20 +444,22 @@ export function pipelineFilterQuery({
   ownerFilter = DEFAULT_PIPELINE_OWNER_FILTER,
   sourceFilter = DEFAULT_PIPELINE_SOURCE_FILTER,
   courseFilter = DEFAULT_PIPELINE_COURSE_FILTER,
+  locationFilter = DEFAULT_PIPELINE_LOCATION_FILTER,
   activityFilter = DEFAULT_PIPELINE_ACTIVITY_FILTER,
   search = DEFAULT_PIPELINE_SEARCH,
   leadDateScope = DEFAULT_CONTACT_LEAD_DATE_SCOPE,
   leadDateFrom = DEFAULT_CONTACT_LEAD_DATE_FROM,
   leadDateTo = DEFAULT_CONTACT_LEAD_DATE_TO,
+  includeLeadDateScope = false,
   compactMode = DEFAULT_PIPELINE_COMPACT_MODE,
 } = {}) {
   const params = new URLSearchParams();
-  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_ALL);
-  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_QUARTER) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_QUARTER);
-  if (leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE && ownerFilter && ownerFilter !== DEFAULT_PIPELINE_OWNER_FILTER) {
+  if (includeLeadDateScope && leadDateScope === CONTACT_LEAD_DATE_SCOPE_ALL) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_ALL);
+  if (includeLeadDateScope && leadDateScope === CONTACT_LEAD_DATE_SCOPE_QUARTER) params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_QUARTER);
+  if (includeLeadDateScope && leadDateScope === DEFAULT_CONTACT_LEAD_DATE_SCOPE) {
     params.set('leadDateScope', DEFAULT_CONTACT_LEAD_DATE_SCOPE);
   }
-  if (leadDateScope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
+  if (includeLeadDateScope && leadDateScope === CONTACT_LEAD_DATE_SCOPE_CUSTOM) {
     params.set('leadDateScope', CONTACT_LEAD_DATE_SCOPE_CUSTOM);
     if (leadDateFrom) params.set('leadDateFrom', leadDateFrom);
     if (leadDateTo) params.set('leadDateTo', leadDateTo);
@@ -370,6 +468,7 @@ export function pipelineFilterQuery({
   if (statusFilter && statusFilter !== DEFAULT_PIPELINE_STATUS_FILTER) params.set('status', statusFilter);
   if (sourceFilter && sourceFilter !== DEFAULT_PIPELINE_SOURCE_FILTER) params.set('source', sourceFilter);
   if (courseFilter && courseFilter !== DEFAULT_PIPELINE_COURSE_FILTER) params.set('course', courseFilter);
+  if (locationFilter && locationFilter !== DEFAULT_PIPELINE_LOCATION_FILTER) params.set('location', locationFilter);
   if (activityFilter && activityFilter !== DEFAULT_PIPELINE_ACTIVITY_FILTER) params.set('activity', activityFilter);
   if (search) params.set('q', search);
   if (compactMode !== DEFAULT_PIPELINE_COMPACT_MODE) params.set('compact', compactMode ? '1' : '0');

@@ -3,6 +3,7 @@ import { cookies } from 'next/headers';
 import { and, desc, eq, gt, isNull } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 import { getDb } from '@/db/index.js';
+import { MANAGED_ROLE_KEYS, ROLE_KEYS, canonicalRoleKeys } from '@/lib/roles.js';
 import {
   businessUnits,
   businessUnitMemberships,
@@ -14,6 +15,7 @@ import {
   users,
   userSessions,
 } from '@/db/schema.js';
+import { applyBusinessUnitAccessPolicy } from '@/lib/auth/business-unit-policy.js';
 
 export const AUTH_COOKIE_NAME = 'ait_crm_session';
 export const SESSION_SECRET_ENV = 'AIT_CRM_SESSION_SECRET';
@@ -37,26 +39,26 @@ export const PERMISSIONS = {
 };
 
 export const DEFAULT_ROLE_PERMISSIONS = {
-  admin: Object.values(PERMISSIONS),
-  designer: [
+  [ROLE_KEYS.ADMIN]: Object.values(PERMISSIONS),
+  [ROLE_KEYS.DESIGNER]: [
     PERMISSIONS.CRM_READ,
     PERMISSIONS.WORK_ORDERS_WRITE,
   ],
-  account_manager: [
-    PERMISSIONS.CRM_READ,
-    PERMISSIONS.CRM_WRITE,
-    PERMISSIONS.FINANCIALS_READ,
-    PERMISSIONS.FINANCIALS_WRITE,
-    PERMISSIONS.WORK_ORDERS_WRITE,
-  ],
-  senior_coordinator: [
+  [ROLE_KEYS.ACCOUNT_COORDINATOR]: [
     PERMISSIONS.CRM_READ,
     PERMISSIONS.CRM_WRITE,
     PERMISSIONS.FINANCIALS_READ,
     PERMISSIONS.FINANCIALS_WRITE,
     PERMISSIONS.WORK_ORDERS_WRITE,
   ],
-  sales_manager: [
+  [ROLE_KEYS.SENIOR_COORDINATOR]: [
+    PERMISSIONS.CRM_READ,
+    PERMISSIONS.CRM_WRITE,
+    PERMISSIONS.FINANCIALS_READ,
+    PERMISSIONS.FINANCIALS_WRITE,
+    PERMISSIONS.WORK_ORDERS_WRITE,
+  ],
+  [ROLE_KEYS.SALES_MANAGER]: [
     PERMISSIONS.CRM_READ,
     PERMISSIONS.CRM_WRITE,
     PERMISSIONS.REPORTS_READ,
@@ -155,7 +157,7 @@ async function loadSession(token) {
 
   if (!sessionRow) return null;
 
-  const [roleRows, permissionRows, membershipRows] = await Promise.all([
+  const [roleRows, permissionRows, membershipRows, allBusinessUnitRows] = await Promise.all([
     db
       .select({ key: roles.key, name: roles.name })
       .from(userRoles)
@@ -177,11 +179,32 @@ async function loadSession(token) {
       .innerJoin(businessUnits, eq(businessUnitMemberships.businessUnitId, businessUnits.id))
       .where(eq(businessUnitMemberships.userId, sessionRow.userId))
       .orderBy(desc(businessUnitMemberships.isPrimary), businessUnitMemberships.createdAt),
+    db
+      .select({
+        id: businessUnits.id,
+        name: businessUnits.name,
+        isActive: businessUnits.isActive,
+      })
+      .from(businessUnits)
+      .where(eq(businessUnits.organizationId, sessionRow.organizationId)),
   ]);
 
-  const roleKeys = [...new Set(roleRows.map((role) => role.key))];
+  const roleKeys = canonicalRoleKeys(roleRows.map((role) => role.key)).sort((left, right) => {
+    const leftIndex = MANAGED_ROLE_KEYS.indexOf(left);
+    const rightIndex = MANAGED_ROLE_KEYS.indexOf(right);
+    return (leftIndex === -1 ? 99 : leftIndex) - (rightIndex === -1 ? 99 : rightIndex)
+      || left.localeCompare(right);
+  });
   const permissionKeys = [...new Set(permissionRows.map((permission) => permission.key))];
-  const membershipPayload = membershipRows.map((row) => ({
+  const businessUnitAccess = applyBusinessUnitAccessPolicy({
+    roleKeys,
+    permissionKeys,
+    allBusinessUnits: allBusinessUnitRows,
+    membershipRows,
+    businessUnitsAllPermission: PERMISSIONS.BUSINESS_UNITS_ALL,
+  });
+  const allowedMembershipRows = businessUnitAccess.membershipRows;
+  const membershipPayload = allowedMembershipRows.map((row) => ({
     id: row.businessUnitId,
     name: row.businessUnitName || '',
     isPrimary: Boolean(row.isPrimary),
@@ -195,13 +218,14 @@ async function loadSession(token) {
       name: sessionRow.name,
       email: sessionRow.email,
       roleKeys,
-      primaryRoleKey: roleKeys.includes('admin') ? 'admin' : roleKeys[0] || 'account_manager',
+      primaryRoleKey: roleKeys.includes(ROLE_KEYS.ADMIN) ? ROLE_KEYS.ADMIN : roleKeys[0] || ROLE_KEYS.ACCOUNT_COORDINATOR,
       permissions: permissionKeys,
-      businessUnitIds: membershipRows.map((row) => row.businessUnitId),
+      businessUnitIds: businessUnitAccess.businessUnitIds,
       businessUnitMemberships: membershipPayload,
       businessUnitNamesById: Object.fromEntries(membershipPayload.map((row) => [row.id, row.name])),
-      primaryBusinessUnitId: membershipRows.find((row) => row.isPrimary)?.businessUnitId || membershipRows[0]?.businessUnitId || null,
-      canAccessAllBusinessUnits: permissionKeys.includes(PERMISSIONS.BUSINESS_UNITS_ALL),
+      primaryBusinessUnitId: allowedMembershipRows.find((row) => row.isPrimary)?.businessUnitId || allowedMembershipRows[0]?.businessUnitId || null,
+      canAccessAllBusinessUnits: businessUnitAccess.canAccessAllBusinessUnits,
+      restrictedBusinessUnitIds: businessUnitAccess.restrictedBusinessUnitIds,
     },
   };
 }

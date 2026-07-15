@@ -22,8 +22,14 @@ const CONVERSATION_STATUS_LABELS = Object.freeze({
   [CONVERSATION_STATUSES.ARCHIVED]: 'Archived',
 });
 
+const OPEN_TASK_STATUSES = new Set(['open', 'in_progress', 'snoozed']);
+const HIGH_PRIORITY_TASKS = new Set(['high', 'urgent']);
+
 const PROVIDER_LABELS = Object.freeze({
+  [CONVERSATION_PROVIDERS.BANDWIDTH]: 'Bandwidth',
   [CONVERSATION_PROVIDERS.META]: 'Meta',
+  [CONVERSATION_PROVIDERS.TELNYX]: 'Telnyx',
+  [CONVERSATION_PROVIDERS.TWILIO]: 'Twilio',
 });
 
 function cleanText(value) {
@@ -194,6 +200,7 @@ export function formatConversationMessageRow(row = {}) {
       status: lead.status || '',
       sourceName: lead.sourceName || '',
       sourceType: lead.sourceType || '',
+      assignedUserId: lead.assignedUserId || '',
     }) : message.leadId ? { id: message.leadId } : null,
     businessUnit: businessUnit ? compactObject({
       id: businessUnit.id,
@@ -212,6 +219,249 @@ export function formatConversationMessages(rows = [], { businessUnitIds = null }
   return filterConversationRowsForBusinessUnit(rows, businessUnitIds)
     .map(formatConversationMessageRow)
     .sort((left, right) => (right.timestamp || '').localeCompare(left.timestamp || ''));
+}
+
+function dateValue(value) {
+  if (!value) return 0;
+  const date = value instanceof Date ? value : new Date(value);
+  const time = date.getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+function fallbackIdentityLabel(message = {}) {
+  return (
+    message.contact?.name ||
+    message.identities?.participant ||
+    message.identities?.sender ||
+    message.identities?.recipient ||
+    'Unknown contact'
+  );
+}
+
+function taskStatusLabel(task = {}) {
+  return titleCaseValue(task.status || 'open', 'Open');
+}
+
+function taskPriorityLabel(task = {}) {
+  return titleCaseValue(task.priority || 'medium', 'Medium');
+}
+
+function deriveConversationAttention(message, conversation, openTask) {
+  const status = cleanText(conversation?.status).toLowerCase();
+  if (status === CONVERSATION_STATUSES.CLOSED || status === CONVERSATION_STATUSES.ARCHIVED) {
+    return {
+      code: status,
+      label: statusLabel(status, CONVERSATION_STATUS_LABELS, 'Status'),
+      tone: 'muted',
+      reason: `Derived from conversation status: ${statusLabel(status, CONVERSATION_STATUS_LABELS, 'Status')}.`,
+    };
+  }
+
+  if (cleanText(message?.deliveryStatus).toLowerCase() === MESSAGE_DELIVERY_STATUSES.FAILED) {
+    return {
+      code: 'delivery_issue',
+      label: 'Delivery issue',
+      tone: 'danger',
+      reason: 'Derived from the latest message delivery status: Failed.',
+    };
+  }
+
+  if (openTask) {
+    const dueAt = openTask.dueAt || null;
+    const dueDate = dueAt ? new Date(dueAt) : null;
+    const dueKey = dueDate && !Number.isNaN(dueDate.getTime()) ? dueDate.toISOString().slice(0, 10) : '';
+    const todayKey = new Date().toISOString().slice(0, 10);
+    if (dueKey && dueKey < todayKey) {
+      return {
+        code: 'overdue_task',
+        label: 'Overdue task',
+        tone: 'danger',
+        reason: `Derived from open task "${openTask.title || 'Untitled task'}" due ${dueKey}.`,
+      };
+    }
+    if (dueKey && dueKey === todayKey) {
+      return {
+        code: 'due_today',
+        label: 'Due today',
+        tone: 'warning',
+        reason: `Derived from open task "${openTask.title || 'Untitled task'}" due today.`,
+      };
+    }
+  }
+
+  if (cleanText(message?.direction).toLowerCase() === MESSAGE_DIRECTIONS.INBOUND) {
+    return {
+      code: 'needs_reply',
+      label: 'Needs reply',
+      tone: 'warning',
+      reason: 'Derived because the latest message is inbound on an open conversation.',
+    };
+  }
+
+  return {
+    code: 'monitoring',
+    label: 'Monitoring',
+    tone: 'neutral',
+    reason: 'Derived because the conversation is open without a delivery issue, urgent task, or newer inbound reply.',
+  };
+}
+
+function deriveConversationOwner({ openTask, lead = null, userById = new Map() }) {
+  const taskOwnerId = cleanText(openTask?.ownerUserId);
+  if (taskOwnerId) {
+    const owner = userById.get(taskOwnerId);
+    return {
+      id: taskOwnerId,
+      name: owner?.name || owner?.email || 'Assigned owner',
+      source: 'task',
+      label: `Task owner: ${owner?.name || owner?.email || 'Assigned owner'}`,
+      reason: `Derived from open task "${openTask.title || 'Untitled task'}".`,
+    };
+  }
+
+  const leadOwnerId = cleanText(lead?.assignedUserId);
+  if (leadOwnerId) {
+    const owner = userById.get(leadOwnerId);
+    return {
+      id: leadOwnerId,
+      name: owner?.name || owner?.email || 'Assigned owner',
+      source: 'lead',
+      label: `Lead owner: ${owner?.name || owner?.email || 'Assigned owner'}`,
+      reason: 'Derived from the linked lead assignment.',
+    };
+  }
+
+  return {
+    id: '',
+    name: '',
+    source: 'unassigned',
+    label: 'Unassigned',
+    reason: 'No open task owner or lead assignee is linked to this conversation.',
+  };
+}
+
+function deriveStatusSummary({ conversation = {}, lead = null }) {
+  const conversationLabel = conversation.statusLabel || statusLabel(conversation.status, CONVERSATION_STATUS_LABELS, 'Status');
+  const leadStatus = cleanText(lead?.status);
+  return {
+    code: cleanText(conversation.status).toLowerCase() || CONVERSATION_STATUSES.OPEN,
+    label: leadStatus ? `${conversationLabel} · Lead ${leadStatus}` : conversationLabel,
+    sourceLabel: lead?.sourceName || lead?.sourceType || '',
+  };
+}
+
+function buildTaskLookup(tasks = []) {
+  const lookup = new Map();
+  for (const task of tasks) {
+    const keys = [
+      cleanText(task.contactId),
+      cleanText(task.leadId) ? `lead:${cleanText(task.leadId)}` : '',
+    ].filter(Boolean);
+    if (!keys.length) continue;
+    for (const key of keys) {
+      const current = lookup.get(key);
+      const currentDue = dateValue(current?.dueAt) || Number.MAX_SAFE_INTEGER;
+      const nextDue = dateValue(task.dueAt) || Number.MAX_SAFE_INTEGER;
+      const currentPriority = HIGH_PRIORITY_TASKS.has(cleanText(current?.priority).toLowerCase()) ? 1 : 0;
+      const nextPriority = HIGH_PRIORITY_TASKS.has(cleanText(task.priority).toLowerCase()) ? 1 : 0;
+      if (!current || nextDue < currentDue || (nextDue === currentDue && nextPriority > currentPriority)) {
+        lookup.set(key, task);
+      }
+    }
+  }
+  return lookup;
+}
+
+function conversationTaskKeys(message = {}) {
+  const contactId = cleanText(message.contact?.id);
+  const leadId = cleanText(message.lead?.id);
+  return [
+    contactId,
+    leadId ? `lead:${leadId}` : '',
+  ].filter(Boolean);
+}
+
+function openTaskForMessage(taskLookup, message = {}) {
+  for (const key of conversationTaskKeys(message)) {
+    const task = taskLookup.get(key);
+    if (task) return task;
+  }
+  return null;
+}
+
+export function summarizeInboxConversations(messages = [], { tasks = [], users = [] } = {}) {
+  const grouped = new Map();
+  for (const message of messages || []) {
+    const conversationId = cleanText(message.conversationId);
+    if (!conversationId) continue;
+    const list = grouped.get(conversationId) || [];
+    list.push(message);
+    grouped.set(conversationId, list);
+  }
+
+  const openTasks = (tasks || []).filter((task) => OPEN_TASK_STATUSES.has(cleanText(task.status).toLowerCase()));
+  const taskLookup = buildTaskLookup(openTasks);
+  const userById = new Map((users || []).map((user) => [user.id, user]));
+
+  return [...grouped.values()]
+    .map((threadMessages) => threadMessages.slice().sort((left, right) => (right.timestamp || '').localeCompare(left.timestamp || '')))
+    .map((threadMessages) => {
+      const latestMessage = threadMessages[0];
+      const openTask = openTaskForMessage(taskLookup, latestMessage);
+      const owner = deriveConversationOwner({
+        openTask,
+        lead: latestMessage.lead,
+        userById,
+      });
+      const attention = deriveConversationAttention(latestMessage, latestMessage.conversation, openTask);
+      const status = deriveStatusSummary({
+        conversation: latestMessage.conversation,
+        lead: latestMessage.lead,
+      });
+
+      return {
+        id: latestMessage.conversationId,
+        channel: latestMessage.channel,
+        channelLabel: latestMessage.channelLabel,
+        providerLabel: latestMessage.providerLabel,
+        businessUnit: latestMessage.businessUnit || null,
+        contact: latestMessage.contact ? {
+          ...latestMessage.contact,
+          href: latestMessage.contact.id ? `/contacts/${latestMessage.contact.id}` : '',
+        } : null,
+        lead: latestMessage.lead || null,
+        identityLabel: fallbackIdentityLabel(latestMessage),
+        lastMessage: {
+          id: latestMessage.id,
+          preview: latestMessage.text || 'No message body captured.',
+          direction: latestMessage.direction,
+          directionLabel: latestMessage.directionLabel,
+          deliveryStatus: latestMessage.deliveryStatus,
+          deliveryStatusLabel: latestMessage.deliveryStatusLabel,
+          timestamp: latestMessage.timestamp || latestMessage.createdAt || '',
+          sourceLabel: latestMessage.channelConfig?.label || `${latestMessage.providerLabel} ${latestMessage.channelLabel}`,
+        },
+        status,
+        owner,
+        attention,
+        task: openTask ? {
+          id: openTask.id,
+          title: openTask.title || '',
+          dueAt: openTask.dueAt || '',
+          status: openTask.status || '',
+          statusLabel: taskStatusLabel(openTask),
+          priority: openTask.priority || '',
+          priorityLabel: taskPriorityLabel(openTask),
+        } : null,
+        thread: {
+          participant: latestMessage.identities?.participant || '',
+          messageCount: threadMessages.length,
+          conversationStatus: latestMessage.conversation?.status || '',
+          conversationStatusLabel: latestMessage.conversation?.statusLabel || '',
+        },
+      };
+    })
+    .sort((left, right) => (right.lastMessage.timestamp || '').localeCompare(left.lastMessage.timestamp || ''));
 }
 
 export function messageIdempotencyKey({
@@ -378,12 +628,49 @@ export function whatsappConversationMessageInput({
   });
 }
 
+export function smsConversationMessageInput({
+  organizationId,
+  businessUnitId = null,
+  contactId = null,
+  leadId = null,
+  channelId = null,
+  provider,
+  providerAccountId,
+  participantPhone,
+  messageId,
+  text = null,
+  timestamp = null,
+  raw = {},
+}) {
+  return normalizeConversationMessageInput({
+    organizationId,
+    businessUnitId,
+    contactId,
+    leadId,
+    channelId,
+    provider,
+    channel: CONVERSATION_CHANNELS.SMS,
+    direction: MESSAGE_DIRECTIONS.INBOUND,
+    deliveryStatus: MESSAGE_DELIVERY_STATUSES.RECEIVED,
+    providerAccountId,
+    providerThreadId: participantPhone,
+    externalParticipantId: participantPhone,
+    externalMessageId: messageId,
+    senderIdentity: participantPhone,
+    recipientIdentity: providerAccountId,
+    textBody: text,
+    rawPayloadJson: raw,
+    occurredAt: timestamp ? new Date(timestamp) : new Date(),
+  });
+}
+
 export function manualOutboundConversationMessageInput({
   organizationId,
   businessUnitId = null,
   contactId = null,
   leadId = null,
   channelId = null,
+  provider = CONVERSATION_PROVIDERS.META,
   channel,
   providerAccountId,
   providerThreadId,
@@ -396,8 +683,9 @@ export function manualOutboundConversationMessageInput({
   occurredAt = new Date(),
 }) {
   const normalizedChannel = cleanText(channel).toLowerCase();
+  const normalizedProvider = cleanText(provider).toLowerCase() || CONVERSATION_PROVIDERS.META;
   const idempotencyKey = [
-    normalizeKeyPart(CONVERSATION_PROVIDERS.META),
+    normalizeKeyPart(normalizedProvider),
     normalizeKeyPart(normalizedChannel),
     normalizeKeyPart(providerAccountId),
     'manual',
@@ -410,7 +698,7 @@ export function manualOutboundConversationMessageInput({
     contactId,
     leadId,
     channelId,
-    provider: CONVERSATION_PROVIDERS.META,
+    provider: normalizedProvider,
     channel: normalizedChannel,
     direction: MESSAGE_DIRECTIONS.OUTBOUND,
     deliveryStatus: MESSAGE_DELIVERY_STATUSES.PENDING,
@@ -687,4 +975,217 @@ export async function listContactConversationMessages({
     .limit(pageLimit);
 
   return formatConversationMessages(rows, { businessUnitIds });
+}
+
+export async function listConversationThreadMessages({
+  db,
+  organizationId,
+  conversationId,
+  businessUnitIds = null,
+  limit = 100,
+}) {
+  const [
+    { and, desc, eq, inArray, isNull, or, sql },
+    {
+      businessUnits,
+      contacts,
+      conversationChannels,
+      conversationMessages,
+      conversations,
+      leads,
+    },
+  ] = await Promise.all([
+    import('drizzle-orm'),
+    import('../../db/schema.js'),
+  ]);
+  const pageLimit = Math.max(1, Math.min(Number(limit) || 100, 200));
+  const effectiveBusinessUnitId = sql`coalesce(${conversationMessages.businessUnitId}, ${conversations.businessUnitId})`;
+  const effectiveContactId = sql`coalesce(${conversationMessages.contactId}, ${conversations.contactId})`;
+  const effectiveLeadId = sql`coalesce(${conversationMessages.leadId}, ${conversations.leadId})`;
+  const conditions = [
+    eq(conversationMessages.organizationId, organizationId),
+    eq(conversations.organizationId, organizationId),
+    eq(conversationMessages.conversationId, conversationId),
+  ];
+
+  if (Array.isArray(businessUnitIds)) {
+    conditions.push(
+      businessUnitIds.length
+        ? or(isNull(effectiveBusinessUnitId), inArray(effectiveBusinessUnitId, businessUnitIds))
+        : isNull(effectiveBusinessUnitId),
+    );
+  }
+
+  const rows = await db
+    .select({
+      message: conversationMessages,
+      conversation: conversations,
+      channelConfig: conversationChannels,
+      contact: {
+        id: contacts.id,
+        name: contacts.name,
+        email: contacts.email,
+        phone: contacts.phone,
+      },
+      lead: {
+        id: leads.id,
+        status: leads.status,
+        sourceName: leads.sourceName,
+        sourceType: leads.sourceType,
+        assignedUserId: leads.assignedUserId,
+      },
+      businessUnit: {
+        id: businessUnits.id,
+        name: businessUnits.name,
+        label: businessUnits.label,
+        color: businessUnits.color,
+      },
+    })
+    .from(conversationMessages)
+    .innerJoin(conversations, eq(conversationMessages.conversationId, conversations.id))
+    .leftJoin(conversationChannels, eq(conversations.channelId, conversationChannels.id))
+    .leftJoin(contacts, eq(effectiveContactId, contacts.id))
+    .leftJoin(leads, eq(effectiveLeadId, leads.id))
+    .leftJoin(businessUnits, eq(effectiveBusinessUnitId, businessUnits.id))
+    .where(and(...conditions))
+    .orderBy(desc(conversationMessages.occurredAt), desc(conversationMessages.createdAt))
+    .limit(pageLimit);
+
+  return formatConversationMessages(rows, { businessUnitIds });
+}
+
+export async function listInboxConversations({
+  db,
+  organizationId,
+  businessUnitIds = null,
+  limit = 100,
+  scanLimit = 1000,
+}) {
+  const [
+    { and, asc, desc, eq, inArray, isNull, or, sql },
+    {
+      businessUnits,
+      contacts,
+      conversationChannels,
+      conversationMessages,
+      conversations,
+      leads,
+      tasks,
+      users,
+    },
+  ] = await Promise.all([
+    import('drizzle-orm'),
+    import('../../db/schema.js'),
+  ]);
+  const messageLimit = Math.max(50, Math.min(Number(scanLimit) || 1000, 2000));
+  const pageLimit = Math.max(1, Math.min(Number(limit) || 100, 200));
+  const effectiveBusinessUnitId = sql`coalesce(${conversationMessages.businessUnitId}, ${conversations.businessUnitId})`;
+  const effectiveContactId = sql`coalesce(${conversationMessages.contactId}, ${conversations.contactId})`;
+  const effectiveLeadId = sql`coalesce(${conversationMessages.leadId}, ${conversations.leadId})`;
+  const conditions = [
+    eq(conversationMessages.organizationId, organizationId),
+    eq(conversations.organizationId, organizationId),
+  ];
+
+  if (Array.isArray(businessUnitIds)) {
+    conditions.push(
+      businessUnitIds.length
+        ? or(isNull(effectiveBusinessUnitId), inArray(effectiveBusinessUnitId, businessUnitIds))
+        : isNull(effectiveBusinessUnitId),
+    );
+  }
+
+  const rows = await db
+    .select({
+      message: conversationMessages,
+      conversation: conversations,
+      channelConfig: conversationChannels,
+      contact: {
+        id: contacts.id,
+        name: contacts.name,
+        email: contacts.email,
+        phone: contacts.phone,
+      },
+      lead: {
+        id: leads.id,
+        status: leads.status,
+        sourceName: leads.sourceName,
+        sourceType: leads.sourceType,
+        assignedUserId: leads.assignedUserId,
+      },
+      businessUnit: {
+        id: businessUnits.id,
+        name: businessUnits.name,
+        label: businessUnits.label,
+        color: businessUnits.color,
+      },
+    })
+    .from(conversationMessages)
+    .innerJoin(conversations, eq(conversationMessages.conversationId, conversations.id))
+    .leftJoin(conversationChannels, eq(conversations.channelId, conversationChannels.id))
+    .leftJoin(contacts, eq(effectiveContactId, contacts.id))
+    .leftJoin(leads, eq(effectiveLeadId, leads.id))
+    .leftJoin(businessUnits, eq(effectiveBusinessUnitId, businessUnits.id))
+    .where(and(...conditions))
+    .orderBy(desc(conversationMessages.occurredAt), desc(conversationMessages.createdAt))
+    .limit(messageLimit);
+
+  const messages = formatConversationMessages(rows, { businessUnitIds });
+  const contactIds = [...new Set(messages.map((message) => message.contact?.id).filter(Boolean))];
+  const leadIds = [...new Set(messages.map((message) => message.lead?.id).filter(Boolean))];
+  const assignedUserIds = [...new Set(messages.map((message) => message.lead?.assignedUserId).filter(Boolean))];
+
+  const taskConditions = [
+    eq(tasks.organizationId, organizationId),
+    inArray(tasks.status, [...OPEN_TASK_STATUSES]),
+  ];
+  if (Array.isArray(businessUnitIds)) {
+    taskConditions.push(
+      businessUnitIds.length
+        ? inArray(tasks.businessUnitId, businessUnitIds)
+        : isNull(tasks.businessUnitId),
+    );
+  }
+  if (contactIds.length || leadIds.length) {
+    const scopedTaskLinks = [];
+    if (contactIds.length) scopedTaskLinks.push(inArray(tasks.contactId, contactIds));
+    if (leadIds.length) scopedTaskLinks.push(inArray(tasks.leadId, leadIds));
+    taskConditions.push(or(...scopedTaskLinks));
+  }
+
+  const taskRows = contactIds.length || leadIds.length
+    ? await db
+      .select({
+        id: tasks.id,
+        contactId: tasks.contactId,
+        leadId: tasks.leadId,
+        title: tasks.title,
+        status: tasks.status,
+        priority: tasks.priority,
+        dueAt: tasks.dueAt,
+        ownerUserId: tasks.ownerUserId,
+      })
+      .from(tasks)
+      .where(and(...taskConditions))
+      .orderBy(asc(tasks.dueAt), desc(tasks.priority), desc(tasks.createdAt))
+    : [];
+  const userIds = [...new Set([
+    ...assignedUserIds,
+    ...taskRows.map((task) => task.ownerUserId).filter(Boolean),
+  ])];
+  const userRows = userIds.length
+    ? await db
+      .select({
+        id: users.id,
+        name: users.name,
+        email: users.email,
+      })
+      .from(users)
+      .where(inArray(users.id, userIds))
+    : [];
+
+  return summarizeInboxConversations(messages, {
+    tasks: taskRows,
+    users: userRows,
+  }).slice(0, pageLimit);
 }

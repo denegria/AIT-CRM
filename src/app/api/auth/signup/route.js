@@ -11,9 +11,13 @@ import {
 } from '@/db/schema.js';
 import { createUserSession, hashPassword, setAuthCookie } from '@/lib/auth';
 import { verifySignupInviteToken } from '@/lib/signup-invites';
-
-const INVITE_ROLE_KEYS = ['account_manager', 'senior_coordinator', 'designer', 'sales_manager'];
-const MANAGED_ROLE_KEYS = ['admin', ...INVITE_ROLE_KEYS];
+import {
+  INVITE_ROLE_KEYS,
+  MANAGED_ROLE_LOOKUP_KEYS,
+  compatibleRoleLookupKeys,
+  normalizeRoleKey,
+  preferredRoleRowForKey,
+} from '@/lib/roles.js';
 
 function normalizeEmail(value) {
   return String(value || '').trim().toLowerCase();
@@ -38,7 +42,7 @@ export async function POST(request) {
   const email = normalizeEmail(body.email);
   const name = normalizeName(body.name);
   const password = String(body.password || '');
-  const roleKey = String(invite.payload.roleKey || '');
+  const roleKey = normalizeRoleKey(invite.payload.roleKey, INVITE_ROLE_KEYS);
   const organizationId = String(invite.payload.organizationId || '');
   const businessUnitIds = normalizeBusinessUnitIds(invite.payload.businessUnitIds);
 
@@ -47,7 +51,7 @@ export async function POST(request) {
   if (password.length < 8) {
     return NextResponse.json({ error: 'Password must be at least 8 characters.' }, { status: 400 });
   }
-  if (!organizationId || !INVITE_ROLE_KEYS.includes(roleKey) || !businessUnitIds.length) {
+  if (!organizationId || !roleKey || !businessUnitIds.length) {
     return NextResponse.json({ error: 'Signup link is not valid for employee registration.' }, { status: 403 });
   }
 
@@ -57,18 +61,20 @@ export async function POST(request) {
     let signedInUserId = null;
 
     await db.transaction(async (tx) => {
-      const [roleRow] = await tx
-        .select({ id: roles.id })
+      const roleLookupKeys = compatibleRoleLookupKeys(roleKey);
+      const roleRows = await tx
+        .select({ id: roles.id, key: roles.key })
         .from(roles)
-        .where(and(eq(roles.organizationId, organizationId), eq(roles.key, roleKey)))
-        .limit(1);
+        .where(and(eq(roles.organizationId, organizationId), inArray(roles.key, roleLookupKeys)))
+        .limit(roleLookupKeys.length);
 
+      const roleRow = preferredRoleRowForKey(roleRows, roleKey);
       if (!roleRow) throw new Error('Employee role is not available.');
 
       const managedRoleRows = await tx
         .select({ id: roles.id })
         .from(roles)
-        .where(and(eq(roles.organizationId, organizationId), inArray(roles.key, MANAGED_ROLE_KEYS)));
+        .where(and(eq(roles.organizationId, organizationId), inArray(roles.key, MANAGED_ROLE_LOOKUP_KEYS)));
       const managedRoleIds = managedRoleRows.map((row) => row.id);
       if (!managedRoleIds.length) throw new Error('Employee roles are not available.');
 

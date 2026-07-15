@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   CONVERSATION_CHANNELS,
+  CONVERSATION_PROVIDERS,
   MESSAGE_DELIVERY_STATUSES,
 } from './constants.js';
 import {
@@ -12,11 +13,22 @@ import {
   renderManualTemplateBody,
   sendManualOutboundMessage,
 } from './manual-outbound.js';
+import {
+  SMS_CONSENT_STATUSES,
+} from '../communication-consent/sms-consent.js';
 
 const NOW = new Date('2026-05-26T15:00:00.000Z');
 const META_CONFIG = {
   defaultPageAccessToken: 'page-token',
   defaultWhatsAppAccessToken: 'wa-token',
+};
+const SMS_CONFIG = {
+  liveSendEnabled: true,
+  testSendMode: true,
+  recipientAllowlist: ['+15550001111'],
+  telnyxApiKey: 'redacted',
+  telnyxMessagingProfileId: 'profile-1',
+  telnyxFromNumber: '+15552223333',
 };
 
 function baseContact(overrides = {}) {
@@ -39,6 +51,16 @@ function baseConversation(overrides = {}) {
     last_inbound_at: '2026-05-26T14:30:00.000Z',
     ...overrides,
   };
+}
+
+function baseSmsConversation(overrides = {}) {
+  return baseConversation({
+    provider: CONVERSATION_PROVIDERS.TELNYX,
+    provider_account_id: '+15552223333',
+    provider_thread_id: '+15550001111',
+    external_participant_id: '+15550001111',
+    ...overrides,
+  });
 }
 
 function baseSetting(overrides = {}) {
@@ -165,6 +187,176 @@ test('allows a configured Messenger send inside the service window', () => {
 
   assert.equal(result.ok, true);
   assert.equal(result.serviceWindowOpen, true);
+});
+
+test('allows a configured SMS send through a Telnyx conversation', () => {
+  const result = evaluateManualOutboundGuardrails({
+    contact: baseContact(),
+    conversation: baseSmsConversation(),
+    channelSetting: baseSetting(),
+    smsConfig: SMS_CONFIG,
+    request: normalizeManualOutboundRequest({
+      channel: CONVERSATION_CHANNELS.SMS,
+      text: 'Thanks for reaching out',
+      requestId: 'request-1',
+    }),
+    now: NOW,
+  });
+
+  assert.equal(result.ok, true);
+});
+
+test('allows SMS sends with configured Telnyx sender fallback', () => {
+  const result = evaluateManualOutboundGuardrails({
+    contact: baseContact(),
+    conversation: baseSmsConversation({ provider_account_id: '' }),
+    channelSetting: baseSetting(),
+    smsConfig: SMS_CONFIG,
+    request: normalizeManualOutboundRequest({
+      channel: CONVERSATION_CHANNELS.SMS,
+      text: 'Thanks for reaching out',
+      requestId: 'request-1',
+    }),
+    now: NOW,
+  });
+
+  assert.equal(result.ok, true);
+});
+
+test('blocks SMS sends without Telnyx provider config', () => {
+  const result = evaluateManualOutboundGuardrails({
+    contact: baseContact(),
+    conversation: baseSmsConversation(),
+    channelSetting: baseSetting(),
+    smsConfig: {},
+    request: normalizeManualOutboundRequest({
+      channel: CONVERSATION_CHANNELS.SMS,
+      text: 'Thanks for reaching out',
+      requestId: 'request-1',
+    }),
+    now: NOW,
+  });
+  const codes = result.reasons.map((reason) => reason.code);
+
+  assert.equal(result.ok, false);
+  assert.equal(codes.includes(MANUAL_OUTBOUND_BLOCK_CODES.PROVIDER_CONFIG_MISSING), true);
+});
+
+test('blocks SMS sends unless live or test send mode is enabled', () => {
+  const result = evaluateManualOutboundGuardrails({
+    contact: baseContact(),
+    conversation: baseSmsConversation(),
+    channelSetting: baseSetting(),
+    smsConfig: {
+      ...SMS_CONFIG,
+      liveSendEnabled: false,
+      testSendMode: false,
+    },
+    request: normalizeManualOutboundRequest({
+      channel: CONVERSATION_CHANNELS.SMS,
+      text: 'Thanks for reaching out',
+      requestId: 'request-1',
+    }),
+    now: NOW,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(
+    result.reasons.some((reason) => reason.code === MANUAL_OUTBOUND_BLOCK_CODES.SMS_SEND_DISABLED),
+    true,
+  );
+});
+
+test('blocks SMS sends when the recipient is outside the staging allowlist', () => {
+  const result = evaluateManualOutboundGuardrails({
+    contact: baseContact(),
+    conversation: baseSmsConversation({ external_participant_id: '+15550009999', provider_thread_id: '+15550009999' }),
+    channelSetting: baseSetting(),
+    smsConfig: SMS_CONFIG,
+    request: normalizeManualOutboundRequest({
+      channel: CONVERSATION_CHANNELS.SMS,
+      text: 'Thanks for reaching out',
+      requestId: 'request-1',
+    }),
+    now: NOW,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(
+    result.reasons.some((reason) => reason.code === MANUAL_OUTBOUND_BLOCK_CODES.SMS_RECIPIENT_NOT_ALLOWLISTED),
+    true,
+  );
+});
+
+test('blocks SMS manual sends after provider STOP opt-out is recorded', () => {
+  const result = evaluateManualOutboundGuardrails({
+    contact: baseContact(),
+    conversation: baseSmsConversation(),
+    channelSetting: baseSetting(),
+    context: {
+      smsConsent: {
+        consent_status: SMS_CONSENT_STATUSES.OPTED_OUT,
+        opt_out_source: 'provider_webhook',
+        opt_out_reference: 'telnyx-message-1',
+      },
+    },
+    smsConfig: SMS_CONFIG,
+    request: normalizeManualOutboundRequest({
+      channel: CONVERSATION_CHANNELS.SMS,
+      text: 'Thanks for reaching out',
+      requestId: 'request-1',
+    }),
+    now: NOW,
+  });
+
+  assert.equal(result.ok, false);
+  assert.deepEqual(result.reasons.filter((reason) => reason.code === MANUAL_OUTBOUND_BLOCK_CODES.SMS_OPTED_OUT), [{
+    code: MANUAL_OUTBOUND_BLOCK_CODES.SMS_OPTED_OUT,
+    message: 'Contact has opted out of SMS.',
+  }]);
+});
+
+test('blocks SMS sends without recipient identity', () => {
+  const result = evaluateManualOutboundGuardrails({
+    contact: baseContact(),
+    conversation: baseSmsConversation({
+      provider_thread_id: '',
+      external_participant_id: '',
+    }),
+    channelSetting: baseSetting(),
+    smsConfig: SMS_CONFIG,
+    request: normalizeManualOutboundRequest({
+      channel: CONVERSATION_CHANNELS.SMS,
+      text: 'Thanks for reaching out',
+      requestId: 'request-1',
+    }),
+    now: NOW,
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(
+    result.reasons.some((reason) => reason.code === MANUAL_OUTBOUND_BLOCK_CODES.RECIPIENT_MISSING),
+    true,
+  );
+});
+
+test('blocks SMS sends without throwing when no conversation is available', () => {
+  const result = evaluateManualOutboundGuardrails({
+    contact: baseContact(),
+    conversation: null,
+    channelSetting: baseSetting(),
+    smsConfig: SMS_CONFIG,
+    request: normalizeManualOutboundRequest({
+      channel: CONVERSATION_CHANNELS.SMS,
+      text: 'Thanks for reaching out',
+      requestId: 'request-1',
+    }),
+    now: NOW,
+  });
+  const codes = result.reasons.map((reason) => reason.code);
+
+  assert.equal(result.ok, false);
+  assert.equal(codes.includes(MANUAL_OUTBOUND_BLOCK_CODES.RECIPIENT_MISSING), true);
 });
 
 test('blocks by default when channel config, recipient identity, or consent posture is unsafe', () => {
@@ -355,4 +547,53 @@ test('surfaces audit update failures after provider send without hiding provider
     code: 'audit_update_failed',
     message: 'database unavailable',
   });
+});
+
+test('sends SMS through Telnyx and records the outbound audit row as telnyx', async () => {
+  const { client, calls } = createManualSendClient();
+  const requests = [];
+
+  const result = await sendManualOutboundMessage(client, {
+    organizationId: 'org-1',
+    actorUserId: 'user-1',
+    contact: baseContact(),
+    request: normalizeManualOutboundRequest({
+      channel: CONVERSATION_CHANNELS.SMS,
+      text: 'Thanks for reaching out',
+      requestId: 'request-1',
+    }),
+    context: baseSendContext({ conversation: { ...baseSmsConversation(), business_unit_id: 'bu-1', lead_id: 'lead-1' } }),
+    metaConfig: META_CONFIG,
+    smsConfig: SMS_CONFIG,
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return {
+        ok: true,
+        json: async () => ({
+          data: {
+            id: 'telnyx-message-1',
+            to: [{ phone_number: '+15550001111', status: 'queued' }],
+          },
+        }),
+      };
+    },
+    now: NOW,
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.status, MESSAGE_DELIVERY_STATUSES.SENT);
+  assert.equal(result.providerMessageId, 'telnyx-message-1');
+  assert.equal(requests[0].url, 'https://api.telnyx.com/v2/messages');
+  assert.equal(requests[0].options.headers['Idempotency-Key'], 'request-1');
+  assert.deepEqual(JSON.parse(requests[0].options.body), {
+    from: '+15552223333',
+    to: '+15550001111',
+    text: 'Thanks for reaching out',
+    messaging_profile_id: 'profile-1',
+  });
+
+  const messageInsert = calls.find((call) => call.sql.startsWith('insert into conversation_messages'));
+  assert.equal(messageInsert.params[5], CONVERSATION_CHANNELS.SMS);
+  assert.equal(messageInsert.params[6], CONVERSATION_PROVIDERS.TELNYX);
+  assert.equal(messageInsert.params[12], 'telnyx:sms:+15552223333:manual:request-1');
 });

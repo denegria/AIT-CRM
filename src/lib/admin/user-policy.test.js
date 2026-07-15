@@ -13,12 +13,17 @@ test('managed role input only accepts first-party role keys', () => {
   assert.equal(normalizeManagedRoleKey('admin'), 'admin');
   assert.equal(normalizeManagedRoleKey('owner'), '');
   assert.equal(normalizeManagedRoleKey('senior_coordinator'), 'senior_coordinator');
-  assert.equal(normalizeManagedRoleKey(' account_manager '), 'account_manager');
+  assert.equal(normalizeManagedRoleKey(' account_coordinator '), 'account_coordinator');
+  assert.equal(normalizeManagedRoleKey(' account_manager '), 'account_coordinator');
 });
 
-test('account manager role displays as account coordinator', () => {
+test('account coordinator role displays with the employee-facing label', () => {
+  assert.deepEqual(toRoleOption('account_coordinator'), {
+    key: 'account_coordinator',
+    label: 'Account Coordinator',
+  });
   assert.deepEqual(toRoleOption('account_manager'), {
-    key: 'account_manager',
+    key: 'account_coordinator',
     label: 'Account Coordinator',
   });
 });

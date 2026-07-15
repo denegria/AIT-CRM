@@ -14,7 +14,7 @@ const EXPECTED_ROLE_PERMISSIONS = {
     'settings:write',
     'work_orders:write',
   ],
-  account_manager: ['crm:read', 'crm:write', 'financials:read', 'financials:write', 'work_orders:write'],
+  account_coordinator: ['crm:read', 'crm:write', 'financials:read', 'financials:write', 'work_orders:write'],
   senior_coordinator: ['crm:read', 'crm:write', 'financials:read', 'financials:write', 'work_orders:write'],
   designer: ['crm:read', 'work_orders:write'],
   sales_manager: ['crm:read', 'crm:write', 'financials:read', 'reports:read'],

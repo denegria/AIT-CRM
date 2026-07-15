@@ -8,6 +8,7 @@ import {
   ShieldCheck,
   Workflow,
 } from 'lucide-react';
+import PageState, { PageStateAction } from '@/components/PageState';
 import { useCRM } from '@/lib/store';
 
 function titleCase(value) {
@@ -306,8 +307,28 @@ export default function CommsOpsPage() {
     return { providerBlockers, contactBlockers, templateBlockers, followUpBlockers };
   }, [snapshot]);
 
-  if (!loaded || !access.canReadSettings) return <div className="empty-state">Loading...</div>;
-  if (dataSource !== 'postgres') return <div className="empty-state">Comms observability requires the Postgres-backed app.</div>;
+  if (!loaded) {
+    return <PageState tone="loading" title="Loading comms diagnostics" copy="Checking provider state, delivery queues, and your admin access." />;
+  }
+  if (!access.canReadSettings) {
+    return (
+      <PageState
+        tone="denied"
+        title="Comms diagnostics require administrator access"
+        copy="This surface exposes provider readiness and delivery diagnostics. Ask an administrator if you need access."
+        actions={<PageStateAction href="/">Back to Dashboard</PageStateAction>}
+      />
+    );
+  }
+  if (dataSource !== 'postgres') {
+    return (
+      <PageState
+        tone="denied"
+        title="Comms diagnostics require Postgres"
+        copy="Provider readiness and delivery diagnostics are only available in the Postgres-backed CRM runtime."
+      />
+    );
+  }
 
   return (
     <div className="fade-in">
@@ -322,7 +343,15 @@ export default function CommsOpsPage() {
         </button>
       </div>
 
-      {error && <div className="card" style={{borderColor:'var(--danger)',color:'var(--danger)',marginBottom:16}}>{error}</div>}
+      {error && (
+        <PageState
+          tone="error"
+          size="compact"
+          title="Comms diagnostics could not load"
+          copy={error}
+          actions={<PageStateAction onClick={refresh}>Try Again</PageStateAction>}
+        />
+      )}
 
       <div className="grid-4" style={{marginBottom:16}}>
         <MetricCard icon={ShieldCheck} label="Provider Blockers" value={topLine.providerBlockers} state={topLine.providerBlockers ? 'bad' : 'good'} />
@@ -332,7 +361,7 @@ export default function CommsOpsPage() {
       </div>
 
       {loading && !snapshot ? (
-        <div className="empty-state">Loading comms diagnostics...</div>
+        <PageState tone="loading" title="Loading comms diagnostics" copy="Refreshing provider readiness and delivery queue health." />
       ) : (
         <>
           <div className="grid-3" style={{marginBottom:16}}>

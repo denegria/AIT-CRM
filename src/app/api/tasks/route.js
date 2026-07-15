@@ -65,6 +65,7 @@ import {
   decideTaskRemovalApprovalTask,
 } from '@/lib/tasks/removal-approvals.js';
 import { filterAssignableEmployees } from '@/lib/crm/assignable-employees.js';
+import { loadTaskContactOptions } from '@/lib/tasks/contact-options.js';
 
 function stringParam(value) {
   return String(value || '').trim();
@@ -385,10 +386,21 @@ export async function GET(request) {
       businessUnitIds,
       filters,
     });
-    const assignableUsers = await listAssignableUsers(db, session);
+    const taskContactIds = rows.map((row) => row.contactId).filter(Boolean);
+    const [assignableUsers, taskContacts] = await Promise.all([
+      listAssignableUsers(db, session),
+      taskContactIds.length
+        ? loadTaskContactOptions({ db, session, contactIds: taskContactIds })
+        : Promise.resolve([]),
+    ]);
+    const contactNameById = new Map(taskContacts.map((contact) => [contact.id, contact.name]));
     return NextResponse.json({
-      tasks: rows.map(toTaskPayload),
+      tasks: rows.map((row) => toTaskPayload({
+        ...row,
+        contactName: contactNameById.get(row.contactId) || '',
+      })),
       users: assignableUsers,
+      contacts: taskContacts,
     });
   } catch (err) {
     return crmErrorResponse(err);

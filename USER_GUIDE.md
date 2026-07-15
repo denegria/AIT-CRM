@@ -98,7 +98,7 @@ Professional documents are just one click away:
 
 Roles are account-based (not a sidebar toggle in database-backed sessions):
 - **Administrators**: See global revenue, track all employee progress, and have full access to Reports, Settings, and Data Exports.
-- **Account Managers / Sales Managers / Designers**: Focused on their specific operational tasks. Settings, high-level financial reports, and data exports are restricted.
+- **Account Coordinators / Sales Managers / Designers**: Focused on their specific operational tasks. Settings, high-level financial reports, and data exports are restricted.
 
 ---
 

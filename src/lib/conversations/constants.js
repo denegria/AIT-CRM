@@ -1,10 +1,14 @@
 export const CONVERSATION_CHANNELS = Object.freeze({
   MESSENGER: 'messenger',
+  SMS: 'sms',
   WHATSAPP: 'whatsapp',
 });
 
 export const CONVERSATION_PROVIDERS = Object.freeze({
+  BANDWIDTH: 'bandwidth',
   META: 'meta',
+  TELNYX: 'telnyx',
+  TWILIO: 'twilio',
 });
 
 export const MESSAGE_DIRECTIONS = Object.freeze({
@@ -30,6 +34,7 @@ export const CONVERSATION_STATUSES = Object.freeze({
 
 export const CONVERSATION_CHANNEL_LABELS = Object.freeze({
   [CONVERSATION_CHANNELS.MESSENGER]: 'Messenger',
+  [CONVERSATION_CHANNELS.SMS]: 'SMS',
   [CONVERSATION_CHANNELS.WHATSAPP]: 'WhatsApp',
 });
 

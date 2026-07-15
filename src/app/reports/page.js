@@ -3,6 +3,7 @@ import { useState, useMemo } from 'react';
 import { useCRM } from '@/lib/store';
 import KPICard from '@/components/KPICard';
 import { BarChart, PieChart, ChartLegend } from '@/components/Charts';
+import PageState, { PageStateAction } from '@/components/PageState';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 const SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -73,8 +74,19 @@ export default function ReportsPage() {
     URL.revokeObjectURL(url);
   };
 
-  if (!loaded) return <div className="empty-state">Loading...</div>;
-  if (!access.canReadReports) return <div className="empty-state">Reports access is required.</div>;
+  if (!loaded) {
+    return <PageState tone="loading" title="Loading reports" copy="Preparing dashboard metrics for your current division scope." />;
+  }
+  if (!access.canReadReports) {
+    return (
+      <PageState
+        tone="denied"
+        title="Reports require reporting access"
+        copy="Your account can keep using the CRM workspaces assigned to your role. Ask an administrator if you need reports access."
+        actions={<PageStateAction href="/">Back to Dashboard</PageStateAction>}
+      />
+    );
+  }
 
   return (
     <div className="fade-in">
@@ -136,7 +148,12 @@ export default function ReportsPage() {
               <ChartLegend data={divisionBreakdown} />
             </div>
           ) : (
-            <div className="empty-state">No {scopeLabel.toLowerCase()} data in the selected scope.</div>
+            <PageState
+              tone="empty"
+              size="compact"
+              title={`No ${scopeLabel.toLowerCase()} data in this scope`}
+              copy="Try a different division scope or date range once more operational data is available."
+            />
           )}
         </div>
       </div>

@@ -68,7 +68,7 @@ V1 should keep the role set aligned with the current CRM prototype:
 
 - `admin`
 - `designer`
-- `account_manager`
+- `account_coordinator`
 - `sales_manager`
 
 Permissions should be granular and composable. Access checks should consider organization, business unit, role, assignment, record ownership, and sensitive field permissions.

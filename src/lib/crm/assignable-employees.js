@@ -1,9 +1,11 @@
+import { ROLE_KEYS, roleKeyMatches } from '../roles.js';
+
 export const ASSIGNABLE_EMPLOYEE_ROLE_KEYS = Object.freeze([
-  'admin',
-  'senior_coordinator',
-  'account_manager',
-  'designer',
-  'sales_manager',
+  ROLE_KEYS.ADMIN,
+  ROLE_KEYS.SENIOR_COORDINATOR,
+  ROLE_KEYS.ACCOUNT_COORDINATOR,
+  ROLE_KEYS.DESIGNER,
+  ROLE_KEYS.SALES_MANAGER,
 ]);
 
 const NON_ASSIGNABLE_ACCOUNT_EMAILS = new Set([
@@ -37,7 +39,7 @@ export function isAssignableEmployee(user = {}) {
 
   const roleKeys = Array.isArray(user.roleKeys) ? user.roleKeys.filter(Boolean) : [];
   if (!roleKeys.length) return true;
-  return roleKeys.some((roleKey) => ASSIGNABLE_EMPLOYEE_ROLE_KEYS.includes(roleKey));
+  return roleKeys.some((roleKey) => ASSIGNABLE_EMPLOYEE_ROLE_KEYS.some((allowedRoleKey) => roleKeyMatches(roleKey, allowedRoleKey)));
 }
 
 export function filterAssignableEmployees(users = []) {

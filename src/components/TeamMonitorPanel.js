@@ -355,8 +355,11 @@ function TaskScopePreview({ tasks, employees, currentUser, showScopeControls = t
   );
 }
 
-export function TeamMonitorPreview({ employees, tasks, contacts, currentUser }) {
-  const viewModel = useMemo(() => buildTeamMonitorViewModel({ employees, tasks, contacts, currentUser }), [contacts, currentUser, employees, tasks]);
+export function TeamMonitorPreview({ employees, tasks, contacts, currentUser, businessMovement = null }) {
+  const viewModel = useMemo(
+    () => buildTeamMonitorViewModel({ employees, tasks, contacts, currentUser, businessMovement }),
+    [businessMovement, contacts, currentUser, employees, tasks],
+  );
 
   return (
     <section className={s.previewCard}>

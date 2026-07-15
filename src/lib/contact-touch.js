@@ -164,6 +164,7 @@ export function summarizeContactTouch({
     const time = dateTime(message.occurredAt || message.createdAt);
     const candidate = {
       time,
+      tieTime: dateTime(message.createdAt),
       text,
       kind: 'message',
       label: 'Message',
@@ -188,6 +189,7 @@ export function summarizeContactTouch({
         : 'Activity';
     const candidate = {
       time: eventTime,
+      tieTime: dateTime(event.createdAt),
       text,
       kind: 'activity',
       label,
@@ -215,6 +217,7 @@ export function summarizeContactTouch({
       : dateTime(note.createdAt);
     const candidate = {
       time: noteTime,
+      tieTime: dateTime(note.createdAt),
       text,
       kind: 'note',
       label: 'Note',
@@ -239,12 +242,14 @@ export function summarizeContactTouch({
       });
       addCandidate(touchCandidates, {
         time: orderTime,
+        tieTime: dateTime(order.createdAt || order.updatedAt),
         text: order.title || order.description || order.workOrderNumber || 'Work order',
         kind: 'work_order',
         label: 'Job',
       }, referenceTime);
       addCandidate(latestCommentCandidates, {
         time: orderTime,
+        tieTime: dateTime(order.createdAt || order.updatedAt),
         text: order.title || order.description || order.workOrderNumber || 'Work order',
         kind: 'work_order',
         label: 'Job',
@@ -256,12 +261,14 @@ export function summarizeContactTouch({
       const text = [estimate.estimateNumber || 'Estimate', estimate.status, amount].filter(Boolean).join(' · ');
       addCandidate(touchCandidates, {
         time: dateTime(estimate.approvedAt || estimate.rejectedAt),
+        tieTime: dateTime(estimate.createdAt || estimate.updatedAt),
         text,
         kind: 'estimate',
         label: 'Estimate',
       }, referenceTime);
       addCandidate(latestCommentCandidates, {
         time: dateTime(estimate.approvedAt || estimate.rejectedAt),
+        tieTime: dateTime(estimate.createdAt || estimate.updatedAt),
         text,
         kind: 'estimate',
         label: 'Estimate',
@@ -273,12 +280,14 @@ export function summarizeContactTouch({
       const text = [amount || 'Payment', payment.sourceSheet, payment.sourceRow ? `row ${payment.sourceRow}` : ''].filter(Boolean).join(' · ');
       addCandidate(touchCandidates, {
         time: dateTime(payment.paidAt),
+        tieTime: dateTime(payment.createdAt || payment.updatedAt),
         text,
         kind: 'payment',
         label: 'Payment',
       }, referenceTime);
       addCandidate(latestCommentCandidates, {
         time: dateTime(payment.paidAt),
+        tieTime: dateTime(payment.createdAt || payment.updatedAt),
         text,
         kind: 'payment',
         label: 'Payment',
@@ -286,9 +295,13 @@ export function summarizeContactTouch({
     }
   }
 
-  latestCommentCandidates.sort((a, b) => b.time - a.time);
-  touchCandidates.sort((a, b) => b.time - a.time);
-  followUpCandidates.sort((a, b) => b.time - a.time);
+  const newestCandidateFirst = (left, right) =>
+    right.time - left.time ||
+    (right.tieTime || 0) - (left.tieTime || 0) ||
+    String(right.text || '').localeCompare(String(left.text || ''));
+  latestCommentCandidates.sort(newestCandidateFirst);
+  touchCandidates.sort(newestCandidateFirst);
+  followUpCandidates.sort(newestCandidateFirst);
 
   const latestComment = latestCommentCandidates[0] || null;
   const lastFollowUpTouch = followUpCandidates[0] || null;

@@ -1,7 +1,8 @@
 'use client';
 
-import Link from 'next/link';
+import { useEffect } from 'react';
 import { TeamMonitorPageSurface } from '@/components/TeamMonitorPanel';
+import PageState, { PageStateAction } from '@/components/PageState';
 import { canUseTeamMonitor } from '@/lib/team-monitor.js';
 import { useCRM } from '@/lib/store';
 
@@ -11,19 +12,46 @@ export default function TeamMonitorPage() {
     contacts,
     employees,
     tasks,
+    tasksLoaded,
+    tasksLoading,
+    tasksError,
+    loadTasks,
     currentUser,
     loaded,
+    dataSource,
+    access,
   } = useCRM();
   const monitorCurrentUser = currentUser || { id: 'emp-1', primaryRoleKey: role };
+  const canViewTeamMonitor = canUseTeamMonitor(monitorCurrentUser);
 
-  if (!loaded) return <div className="empty-state">Loading team monitor...</div>;
+  useEffect(() => {
+    if (!canViewTeamMonitor || dataSource !== 'postgres' || !access.canReadCrm || tasksLoaded || tasksLoading) return;
+    loadTasks().catch(() => null);
+  }, [access.canReadCrm, canViewTeamMonitor, dataSource, loadTasks, tasksLoaded, tasksLoading]);
 
-  if (!canUseTeamMonitor(monitorCurrentUser)) {
+  if (!canViewTeamMonitor) {
     return (
-      <div className="empty-state">
-        <p>Team Monitor is available to administrators.</p>
-        <Link className="btn btn-sm" href="/">Back to dashboard</Link>
-      </div>
+      <PageState
+        tone="denied"
+        title="Team Monitor requires administrator access"
+        copy="Your account can keep using the CRM workspaces assigned to your role."
+        actions={<PageStateAction href="/">Back to Dashboard</PageStateAction>}
+      />
+    );
+  }
+
+  if (!loaded || (dataSource === 'postgres' && !tasksLoaded && !tasksError)) {
+    return <PageState tone="loading" title="Loading team monitor" copy="Preparing team workload and coordinator activity." />;
+  }
+
+  if (dataSource === 'postgres' && tasksError) {
+    return (
+      <PageState
+        tone="error"
+        title="Team workload could not load"
+        copy={tasksError}
+        actions={<button className="btn btn-primary" onClick={() => loadTasks({ force: true }).catch(() => null)}>Try again</button>}
+      />
     );
   }
 

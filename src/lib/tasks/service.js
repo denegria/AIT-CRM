@@ -155,6 +155,7 @@ export function toTaskPayload(row) {
     description: row.description || '',
     businessUnitId: row.businessUnitId,
     contactId: row.contactId || '',
+    contactName: row.contactName || '',
     leadId: row.leadId || '',
     workOrderId: row.workOrderId || '',
     taskType: row.taskType,

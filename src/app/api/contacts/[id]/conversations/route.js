@@ -3,6 +3,7 @@ import { Client } from 'pg';
 import { getDb } from '@/db/index.js';
 import { contacts } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
+import { sessionHasAdminRole } from '@/lib/auth/admin-policy.js';
 import { resolveContactById } from '@/lib/crm/access.js';
 import { crmErrorResponse } from '@/lib/crm/errors.js';
 import { listContactConversationMessages } from '@/lib/conversations/service.js';
@@ -21,6 +22,7 @@ import {
   META_WHATSAPP_ACCESS_TOKEN_MAP_ENV,
   createMetaProviderConfig,
 } from '@/lib/messaging/providers/meta.js';
+import { createSmsCampaignSendConfigFromEnv } from '@/lib/messaging/providers/sms.js';
 
 function getManualOutboundMetaConfig() {
   return createMetaProviderConfig({
@@ -76,12 +78,19 @@ export async function GET(request, { params }) {
 export async function POST(request, { params }) {
   const { error, session } = await requirePermission(request, PERMISSIONS.CRM_WRITE);
   if (error) return error;
+  if (!sessionHasAdminRole(session)) {
+    return NextResponse.json(
+      { error: 'Manual outbound sends require administrator access.' },
+      { status: 403 },
+    );
+  }
 
   const { id } = await params;
   const db = getDb();
   const body = await request.json().catch(() => ({}));
   const manualRequest = normalizeManualOutboundRequest(body);
   const metaConfig = getManualOutboundMetaConfig();
+  const smsConfig = createSmsCampaignSendConfigFromEnv(process.env);
 
   try {
     const contact = await resolveContactById({
@@ -108,6 +117,7 @@ export async function POST(request, { params }) {
         channelSetting: context.channelSetting,
         template: context.template,
         metaConfig,
+        smsConfig,
       });
 
       if (!guardrails.ok) {
@@ -125,6 +135,7 @@ export async function POST(request, { params }) {
         request: manualRequest,
         context,
         metaConfig,
+        smsConfig,
       });
 
       return NextResponse.json(result, { status: result.ok ? 201 : 502 });

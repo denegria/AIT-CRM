@@ -1,15 +1,16 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { Check, MessageSquare, Pencil, RotateCcw, Shield, ToggleLeft, ToggleRight, UserMinus, UserPlus } from 'lucide-react';
 import { useCRM } from '@/lib/store';
+import PageState, { PageStateAction } from '@/components/PageState';
 import { useToast } from '@/components/Toast';
 
 const defaultRoleOptions = [
   { key: 'admin', label: 'Administrator' },
-  { key: 'account_manager', label: 'Account Coordinator' },
-  { key: 'sales_manager', label: 'Sales Manager' },
+  { key: 'senior_coordinator', label: 'Senior Coordinator' },
   { key: 'designer', label: 'Designer' },
+  { key: 'account_coordinator', label: 'Account Coordinator' },
+  { key: 'sales_manager', label: 'Sales Manager' },
 ];
 
 const followUpChannels = [
@@ -61,7 +62,6 @@ function defaultTemplateForm() {
 
 export default function SettingsPage() {
   const { resetData, loaded, access, dataSource, businessUnits, setBusinessUnits, currentUser } = useCRM();
-  const router = useRouter();
   const { toast } = useToast();
   const [users, setUsers] = useState([]);
   const [userRoleOptions, setUserRoleOptions] = useState(defaultRoleOptions);
@@ -73,7 +73,7 @@ export default function SettingsPage() {
     name: '',
     email: '',
     password: '',
-    roleKey: 'account_manager',
+    roleKey: 'account_coordinator',
     businessUnitIds: [],
     isActive: true,
   });
@@ -94,12 +94,6 @@ export default function SettingsPage() {
   const [templatesError, setTemplatesError] = useState('');
   const [savingTemplate, setSavingTemplate] = useState(false);
   const [templateForm, setTemplateForm] = useState(defaultTemplateForm);
-
-  useEffect(() => {
-    if (loaded && !access.canReadSettings) {
-      router.push('/');
-    }
-  }, [access.canReadSettings, loaded, router]);
 
   useEffect(() => {
     if (!loaded || !access.canWriteSettings || dataSource !== 'postgres') return;
@@ -194,7 +188,7 @@ export default function SettingsPage() {
       name: '',
       email: '',
       password: '',
-      roleKey: 'account_manager',
+      roleKey: 'account_coordinator',
       businessUnitIds: [],
       isActive: true,
     });
@@ -449,7 +443,7 @@ export default function SettingsPage() {
       name: user.name || '',
       email: user.email || '',
       password: '',
-      roleKey: user.primaryRoleKey || 'account_manager',
+      roleKey: user.primaryRoleKey || 'account_coordinator',
       businessUnitIds: user.primaryRoleKey === 'admin' ? [] : user.businessUnitIds || [],
       isActive: user.isActive !== false,
     });
@@ -483,7 +477,20 @@ export default function SettingsPage() {
     return channelSettings.find((setting) => setting.channel === channel && !setting.businessUnitId) || null;
   }
 
-  if (!loaded || !access.canReadSettings) return <div className="empty-state">Loading...</div>;
+  if (!loaded) {
+    return <PageState tone="loading" title="Loading settings" copy="Checking your account access and workspace configuration." />;
+  }
+
+  if (!access.canReadSettings) {
+    return (
+      <PageState
+        tone="denied"
+        title="Settings require administrator access"
+        copy="Your account can keep using the CRM workspaces assigned to your role. Ask an administrator if you need settings access."
+        actions={<PageStateAction href="/">Back to Dashboard</PageStateAction>}
+      />
+    );
+  }
 
   return (
     <div className="fade-in">

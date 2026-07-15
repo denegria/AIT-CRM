@@ -29,6 +29,8 @@ test('provider diagnostics report readiness without leaking secret values', () =
     META_PAGE_ACCESS_TOKEN_MAP: JSON.stringify({ 'page-123456': 'page-token-secret' }),
     META_WHATSAPP_ACCESS_TOKEN: 'wa-secret',
     META_WHATSAPP_BUSINESS_UNIT_MAP: JSON.stringify({ 'phone-number-1': 'Signs' }),
+    SMS_WEBHOOK_SHARED_SECRET: 'sms-secret',
+    SMS_BUSINESS_UNIT_MAP: JSON.stringify({ '+15552223333': 'Signs' }),
   });
 
   assert.equal(diagnostics.webhook.verifyTokenConfigured, true);
@@ -36,9 +38,12 @@ test('provider diagnostics report readiness without leaking secret values', () =
   assert.equal(diagnostics.messenger.mappedAccessTokens.entryCount, 1);
   assert.equal(diagnostics.whatsapp.defaultAccessTokenConfigured, true);
   assert.equal(diagnostics.whatsapp.businessUnitMap.entryCount, 1);
+  assert.equal(diagnostics.sms.webhookSharedSecretConfigured, true);
+  assert.equal(diagnostics.sms.businessUnitMap.entryCount, 1);
   assert.deepEqual(diagnostics.blockers, []);
   assert.equal(JSON.stringify(diagnostics).includes('page-token-secret'), false);
   assert.equal(JSON.stringify(diagnostics).includes('wa-secret'), false);
+  assert.equal(JSON.stringify(diagnostics).includes('sms-secret'), false);
 });
 
 test('provider diagnostics list blocked config reasons', () => {
@@ -50,6 +55,8 @@ test('provider diagnostics list blocked config reasons', () => {
   assert.equal(codes.includes('messenger_access_token_missing'), true);
   assert.equal(codes.includes('whatsapp_access_token_missing'), true);
   assert.equal(codes.includes('whatsapp_business_unit_map_missing'), true);
+  assert.equal(codes.includes('sms_webhook_secret_missing'), true);
+  assert.equal(codes.includes('sms_business_unit_map_missing'), true);
 });
 
 test('redacts identifiers and returns stable non-secret hashes', () => {
@@ -179,6 +186,8 @@ test('builds scoped comms observability snapshot with redacted operational detai
       META_PAGE_ACCESS_TOKEN: 'page-token',
       META_WHATSAPP_ACCESS_TOKEN: 'wa-token',
       META_WHATSAPP_BUSINESS_UNIT_MAP: JSON.stringify({ 'phone-number-123456': 'Signs' }),
+      SMS_WEBHOOK_SHARED_SECRET: 'sms-secret',
+      SMS_BUSINESS_UNIT_MAP: JSON.stringify({ '+15552223333': 'Signs' }),
     },
     now: new Date('2026-05-27T03:00:00.000Z'),
   });

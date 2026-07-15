@@ -46,6 +46,11 @@
   line-height: 1.45;
 }
 
+.versionMeta {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+  overflow-wrap: anywhere;
+}
+
 .label {
   display: flex;
   flex-direction: column;

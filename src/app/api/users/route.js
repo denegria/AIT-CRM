@@ -10,6 +10,7 @@ import {
 } from '@/db/schema.js';
 import {
   MANAGED_ROLE_KEYS,
+  MANAGED_ROLE_LOOKUP_KEYS,
   normalizeBusinessUnitIds,
   normalizeEmail,
   normalizeManagedRoleKey,
@@ -18,6 +19,7 @@ import {
   toRoleOption,
   validateUserAccessDraft,
 } from '@/lib/admin/user-policy.js';
+import { canonicalRoleKey, canonicalRoleKeys, preferredRoleRowForKey } from '@/lib/roles.js';
 import {
   deactivateUserAccount,
   provisionUserAccess,
@@ -40,7 +42,7 @@ function errorResponse(error, fallback = 'User administration request failed.') 
 }
 
 function sortRoleKeys(roleKeys) {
-  return [...roleKeys].sort((left, right) => {
+  return canonicalRoleKeys(roleKeys).sort((left, right) => {
     const leftIndex = MANAGED_ROLE_KEYS.indexOf(left);
     const rightIndex = MANAGED_ROLE_KEYS.indexOf(right);
     return (leftIndex === -1 ? 99 : leftIndex) - (rightIndex === -1 ? 99 : rightIndex)
@@ -56,7 +58,7 @@ function toUserPayload(user, roleKeys, memberships) {
     email: user.email,
     isActive: user.isActive,
     roleKeys: sortedRoleKeys,
-    primaryRoleKey: sortedRoleKeys.includes('admin') ? 'admin' : sortedRoleKeys[0] || 'account_manager',
+    primaryRoleKey: sortedRoleKeys.includes('admin') ? 'admin' : sortedRoleKeys[0] || 'account_coordinator',
     businessUnitIds: memberships.map((membership) => membership.businessUnitId),
     memberships,
     createdAt: user.createdAt?.toISOString?.() || null,
@@ -112,7 +114,7 @@ async function readUsersForOrganization(db, organizationId) {
   const rolesByUser = new Map();
   for (const roleRow of roleRows) {
     if (!rolesByUser.has(roleRow.userId)) rolesByUser.set(roleRow.userId, new Set());
-    rolesByUser.get(roleRow.userId).add(roleRow.roleKey);
+    rolesByUser.get(roleRow.userId).add(canonicalRoleKey(roleRow.roleKey));
   }
 
   const membershipsByUser = new Map();
@@ -139,10 +141,14 @@ async function readManagedRoleContext(tx, organizationId) {
     .from(roles)
     .where(and(
       eq(roles.organizationId, organizationId),
-      inArray(roles.key, MANAGED_ROLE_KEYS),
+      inArray(roles.key, MANAGED_ROLE_LOOKUP_KEYS),
     ));
 
-  const roleByKey = new Map(roleRows.map((role) => [role.key, role]));
+  const roleByKey = new Map();
+  for (const roleKey of MANAGED_ROLE_KEYS) {
+    const roleRow = preferredRoleRowForKey(roleRows, roleKey);
+    if (roleRow) roleByKey.set(roleKey, roleRow);
+  }
   const missingRoles = MANAGED_ROLE_KEYS.filter((roleKey) => !roleByKey.has(roleKey));
   if (missingRoles.length) {
     throw httpError(`Managed roles are missing: ${missingRoles.join(', ')}. Run bootstrap role provisioning first.`, 500);
@@ -207,7 +213,7 @@ async function readUserRoleKeys(tx, userId) {
     .from(userRoles)
     .innerJoin(roles, eq(userRoles.roleId, roles.id))
     .where(eq(userRoles.userId, userId));
-  return roleRows.map((role) => role.key);
+  return canonicalRoleKeys(roleRows.map((role) => role.key));
 }
 
 async function countActiveAdmins(tx, organizationId) {

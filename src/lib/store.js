@@ -1,8 +1,13 @@
 'use client';
-import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { AuthWelcomeLobby, LoginGate } from '@/components/AuthExperience';
 import * as defaults from './data';
+import { DEFERRED_BOOTSTRAP_LOADERS, hasDeferredBootstrapLoader } from './bootstrap-contract.js';
+import { loadDeferredTasks } from './tasks/bootstrap.js';
+import { fetchDashboardSummary } from './dashboard/loader.js';
+import { fetchPipelineSummary, pipelineSummaryQuery } from './pipeline/loader.js';
+import { LEAN_SHELL_PATHS } from './bootstrap-routing.js';
 
 const CRMContext = createContext(null);
 const STORAGE_KEY = 'ait-crm-data';
@@ -21,12 +26,13 @@ function getBusinessUnitId(record) {
   return record?.businessUnitId || record?.primaryBusinessUnitId || '';
 }
 
-function defaultBusinessUnitScope({ businessUnits = [], currentUser = null, contacts = [] } = {}) {
+function defaultBusinessUnitScope({ businessUnits = [], currentUser = null, contacts = [], preferredBusinessUnitId = '' } = {}) {
   const activeUnits = (businessUnits || []).filter((unit) => unit.isActive !== false);
   const allowedIds = currentUser?.canAccessAllBusinessUnits
     ? activeUnits.map((unit) => unit.id)
     : currentUser?.businessUnitIds || activeUnits.map((unit) => unit.id);
   const allowedSet = new Set(allowedIds);
+  if (preferredBusinessUnitId && allowedSet.has(preferredBusinessUnitId)) return preferredBusinessUnitId;
   if (!currentUser?.canAccessAllBusinessUnits && currentUser?.primaryBusinessUnitId && allowedSet.has(currentUser.primaryBusinessUnitId)) {
     return currentUser.primaryBusinessUnitId;
   }
@@ -110,6 +116,7 @@ function getInitialData(seedData = defaults) {
   const fallback = seedData || defaults;
   return {
     dataSource: fallback.dataSource || 'local',
+    appVersion: fallback.appVersion || '',
     authRequired: fallback.authRequired || false,
     authError: fallback.authError || '',
     currentUser: fallback.currentUser || null,
@@ -120,11 +127,13 @@ function getInitialData(seedData = defaults) {
     businessUnits: fallback.businessUnits || [],
     employees: fallback.employees || defaults.EMPLOYEES || [],
     contacts: fallback.contacts,
+    defaultBusinessUnitId: fallback.defaultBusinessUnitId || '',
     workOrders: fallback.workOrders,
     financials: fallback.financials,
     tasks: fallback.tasks,
     calendarEvents: fallback.calendarEvents,
     salesLedger: fallback.salesLedger,
+    deferredLoaders: fallback.deferredLoaders || [],
   };
 }
 
@@ -154,9 +163,37 @@ export function CRMProvider({ children, initialData }) {
   const [businessUnits, setBusinessUnits] = useState(bootstrapData.businessUnits);
   const [employees] = useState(bootstrapData.employees);
   const [contacts, setContacts] = useState(bootstrapData.contacts);
+  const contactDirectoryIsDeferred = isPostgres && hasDeferredBootstrapLoader(
+    bootstrapData,
+    DEFERRED_BOOTSTRAP_LOADERS.CONTACT_DIRECTORY,
+  );
+  const dashboardSummaryIsDeferred = isPostgres && hasDeferredBootstrapLoader(
+    bootstrapData,
+    DEFERRED_BOOTSTRAP_LOADERS.DASHBOARD_SUMMARY,
+  );
+  const pipelineSummaryIsDeferred = isPostgres && hasDeferredBootstrapLoader(
+    bootstrapData,
+    DEFERRED_BOOTSTRAP_LOADERS.PIPELINE_SUMMARY,
+  );
+  const leanShellIsDeferred = isPostgres && hasDeferredBootstrapLoader(
+    bootstrapData,
+    DEFERRED_BOOTSTRAP_LOADERS.LEAN_SHELL,
+  );
   const [workOrders, setWorkOrders] = useState(bootstrapData.workOrders);
   const [financials, setFinancials] = useState(bootstrapData.financials);
   const [tasks, setTasks] = useState(bootstrapData.tasks);
+  const tasksAreDeferred = isPostgres && Boolean(bootstrapData.access?.canReadCrm) && hasDeferredBootstrapLoader(bootstrapData, DEFERRED_BOOTSTRAP_LOADERS.TASKS);
+  const [tasksLoadStatus, setTasksLoadStatus] = useState(tasksAreDeferred ? 'idle' : 'ready');
+  const [tasksLoadError, setTasksLoadError] = useState('');
+  const tasksLoadPromiseRef = useRef(null);
+  const [dashboardSummary, setDashboardSummary] = useState(null);
+  const [dashboardSummaryStatus, setDashboardSummaryStatus] = useState(dashboardSummaryIsDeferred ? 'idle' : 'ready');
+  const [dashboardSummaryError, setDashboardSummaryError] = useState('');
+  const dashboardSummaryPromiseRef = useRef(null);
+  const [pipelineSummary, setPipelineSummary] = useState(null);
+  const [pipelineSummaryStatus, setPipelineSummaryStatus] = useState(pipelineSummaryIsDeferred ? 'idle' : 'ready');
+  const [pipelineSummaryError, setPipelineSummaryError] = useState('');
+  const pipelineSummaryPromiseRef = useRef(null);
   const [calendarEvents, setCalendarEvents] = useState(bootstrapData.calendarEvents);
   const [salesLedger, setSalesLedger] = useState(bootstrapData.salesLedger);
   const [currentBusinessUnitId, setCurrentBusinessUnitIdState] = useState(() => {
@@ -172,10 +209,109 @@ export function CRMProvider({ children, initialData }) {
       businessUnits: bootstrapData.businessUnits,
       currentUser: bootstrapData.currentUser,
       contacts: bootstrapData.contacts,
+      preferredBusinessUnitId: bootstrapData.defaultBusinessUnitId,
     });
   });
   const [storageReady, setStorageReady] = useState(isPostgres);
   const loaded = true;
+
+  useEffect(() => {
+    const allowedDeferredPath =
+      (contactDirectoryIsDeferred && (pathname === '/contacts' || pathname === '/clients')) ||
+      (dashboardSummaryIsDeferred && pathname === '/') ||
+      (pipelineSummaryIsDeferred && pathname === '/pipeline') ||
+      (leanShellIsDeferred && LEAN_SHELL_PATHS.includes(pathname));
+    if (!contactDirectoryIsDeferred && !dashboardSummaryIsDeferred && !pipelineSummaryIsDeferred && !leanShellIsDeferred) return;
+    if (allowedDeferredPath) return;
+    window.location.reload();
+  }, [contactDirectoryIsDeferred, dashboardSummaryIsDeferred, leanShellIsDeferred, pathname, pipelineSummaryIsDeferred]);
+
+  const loadDashboardSummary = useCallback(({ businessUnitId, employeeIds = [], force = false } = {}) => {
+    if (!isPostgres || !dashboardSummaryIsDeferred) return Promise.resolve(dashboardSummary);
+    if (!force && dashboardSummaryStatus === 'ready' && dashboardSummary?.businessUnitId === businessUnitId) {
+      return Promise.resolve(dashboardSummary);
+    }
+    if (dashboardSummaryPromiseRef.current?.businessUnitId === businessUnitId) {
+      return dashboardSummaryPromiseRef.current.promise;
+    }
+
+    setDashboardSummaryStatus('loading');
+    setDashboardSummaryError('');
+    const promise = fetchDashboardSummary({ businessUnitId, employeeIds })
+      .then((payload) => {
+        setDashboardSummary(payload);
+        setDashboardSummaryStatus('ready');
+        return payload;
+      })
+      .catch((error) => {
+        setDashboardSummaryStatus('error');
+        setDashboardSummaryError(error.message || 'Dashboard summary could not load.');
+        throw error;
+      })
+      .finally(() => {
+        if (dashboardSummaryPromiseRef.current?.promise === promise) dashboardSummaryPromiseRef.current = null;
+      });
+    dashboardSummaryPromiseRef.current = { businessUnitId, promise };
+    return promise;
+  }, [dashboardSummary, dashboardSummaryIsDeferred, dashboardSummaryStatus, isPostgres]);
+
+  const loadPipelineSummary = useCallback(({ force = false, ...filters } = {}) => {
+    if (!isPostgres || !pipelineSummaryIsDeferred) return Promise.resolve(pipelineSummary);
+    const queryKey = pipelineSummaryQuery(filters);
+    if (!force && pipelineSummaryStatus === 'ready' && pipelineSummary?.queryKey === queryKey) {
+      return Promise.resolve(pipelineSummary);
+    }
+    if (pipelineSummaryPromiseRef.current?.queryKey === queryKey) {
+      return pipelineSummaryPromiseRef.current.promise;
+    }
+
+    setPipelineSummaryStatus('loading');
+    setPipelineSummaryError('');
+    const promise = fetchPipelineSummary(filters)
+      .then((payload) => {
+        setContacts(payload.contacts || []);
+        setWorkOrders(payload.workOrders || []);
+        setFinancials(payload.financials || []);
+        setPipelineSummary(payload);
+        setPipelineSummaryStatus('ready');
+        return payload;
+      })
+      .catch((error) => {
+        setPipelineSummaryStatus('error');
+        setPipelineSummaryError(error.message || 'Pipeline summary could not load.');
+        throw error;
+      })
+      .finally(() => {
+        if (pipelineSummaryPromiseRef.current?.promise === promise) pipelineSummaryPromiseRef.current = null;
+      });
+    pipelineSummaryPromiseRef.current = { queryKey, promise };
+    return promise;
+  }, [isPostgres, pipelineSummary, pipelineSummaryIsDeferred, pipelineSummaryStatus]);
+
+  const loadTasks = useCallback(({ force = false } = {}) => {
+    if (!isPostgres || !tasksAreDeferred) return Promise.resolve(tasks);
+    if (!force && tasksLoadStatus === 'ready') return Promise.resolve(tasks);
+    if (tasksLoadPromiseRef.current) return tasksLoadPromiseRef.current;
+
+    setTasksLoadStatus('loading');
+    setTasksLoadError('');
+    const request = loadDeferredTasks({ contacts })
+      .then((nextTasks) => {
+        setTasks(nextTasks);
+        setTasksLoadStatus('ready');
+        return nextTasks;
+      })
+      .catch((error) => {
+        setTasksLoadStatus('error');
+        setTasksLoadError(error.message || 'Tasks could not load.');
+        throw error;
+      })
+      .finally(() => {
+        tasksLoadPromiseRef.current = null;
+      });
+    tasksLoadPromiseRef.current = request;
+    return request;
+  }, [contacts, isPostgres, tasks, tasksAreDeferred, tasksLoadStatus]);
 
   const accessibleBusinessUnits = useMemo(() => {
     const activeUnits = (businessUnits || []).filter((unit) => unit.isActive !== false);
@@ -583,6 +719,7 @@ export function CRMProvider({ children, initialData }) {
   const value = {
     role, setRole: serverOwnedSetRole, theme, setTheme, loaded,
     dataSource: bootstrapData.dataSource,
+    appVersion: bootstrapData.appVersion,
     authRequired: bootstrapData.authRequired,
     currentUser,
     access,
@@ -592,10 +729,26 @@ export function CRMProvider({ children, initialData }) {
     currentBusinessUnitId: effectiveBusinessUnitId, currentBusinessUnit, setCurrentBusinessUnitId,
     canUseConsolidatedScope,
     scopeLabel,
-    contacts: scopedContacts, allContacts: contacts, addContact, updateContact, deleteContact,
+    contacts: scopedContacts, allContacts: contacts, contactDirectoryIsDeferred, leanShellIsDeferred, addContact, updateContact, deleteContact,
+    dashboardSummary,
+    dashboardSummaryIsDeferred,
+    dashboardSummaryLoaded: dashboardSummaryStatus === 'ready',
+    dashboardSummaryLoading: dashboardSummaryStatus === 'loading',
+    dashboardSummaryError,
+    loadDashboardSummary,
+    pipelineSummary,
+    pipelineSummaryIsDeferred,
+    pipelineSummaryLoaded: pipelineSummaryStatus === 'ready',
+    pipelineSummaryLoading: pipelineSummaryStatus === 'loading',
+    pipelineSummaryError,
+    loadPipelineSummary,
     workOrders: scopedWorkOrders, allWorkOrders: workOrders, addWorkOrder, updateWorkOrder, deleteWorkOrder,
     financials: scopedFinancials, allFinancials: financials, addFinancial, updateFinancial, deleteFinancial, recordPayment,
     tasks: scopedTasks, allTasks: tasks, addTask, updateTask, deleteTask,
+    tasksLoaded: tasksLoadStatus === 'ready',
+    tasksLoading: tasksLoadStatus === 'loading',
+    tasksError: tasksLoadError,
+    loadTasks,
     calendarEvents: scopedCalendarEvents, allCalendarEvents: calendarEvents, addCalendarEvent, deleteCalendarEvent,
     salesLedger: scopedSalesLedger, allSalesLedger: salesLedger, addSalesEntry,
     employees: isPostgres ? employees : defaults.EMPLOYEES,

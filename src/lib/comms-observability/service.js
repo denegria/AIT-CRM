@@ -1,5 +1,13 @@
 import { createHash } from 'crypto';
 import {
+  SMS_BUSINESS_UNIT_MAP_ENV,
+  SMS_PROVIDER_ENV,
+  SMS_WEBHOOK_SHARED_SECRET_ENV,
+  TELNYX_PUBLIC_KEY_ENV,
+  TWILIO_AUTH_TOKEN_ENV,
+  parseSmsObjectMap,
+} from '../messaging/providers/sms.js';
+import {
   FB_APP_SECRET_ENV,
   FB_VERIFY_TOKEN_ENV,
   META_APP_SECRET_ENV,
@@ -15,8 +23,12 @@ import {
   parseMetaObjectMap,
 } from '../messaging/providers/meta.js';
 
-const CHANNELS = ['messenger', 'whatsapp'];
-const PROVIDER = 'meta';
+const META_CHANNELS = ['messenger', 'whatsapp'];
+const SMS_CHANNELS = ['sms'];
+const CHANNELS = [...META_CHANNELS, ...SMS_CHANNELS];
+const META_PROVIDER = 'meta';
+const SMS_PROVIDERS = ['telnyx', 'twilio', 'bandwidth'];
+const PROVIDERS = [META_PROVIDER, ...SMS_PROVIDERS];
 const RECENT_LIMIT = 12;
 
 function cleanText(value) {
@@ -78,6 +90,19 @@ function parseMapSummary(raw) {
   };
 }
 
+function parseSmsMapSummary(raw) {
+  const parsed = parseSmsObjectMap(raw || '');
+  return {
+    configured: Boolean(raw),
+    validJson: !raw || Object.keys(parsed).length > 0,
+    entryCount: Object.keys(parsed).length,
+    keys: Object.keys(parsed).slice(0, 8).map((key) => ({
+      redacted: redactIdentifier(key),
+      hash: stableRedactedHash(key),
+    })),
+  };
+}
+
 function envPresent(env, ...names) {
   return names.some((name) => Boolean(env?.[name]));
 }
@@ -102,11 +127,20 @@ export function buildProviderConfigDiagnostics(env = process.env) {
     mappedAccessTokens: whatsappTokenMap,
     businessUnitMap: whatsappBuMap,
   };
+  const smsBusinessUnitMap = parseSmsMapSummary(env[SMS_BUSINESS_UNIT_MAP_ENV]);
+  const sms = {
+    provider: cleanLower(env[SMS_PROVIDER_ENV] || 'telnyx'),
+    webhookSharedSecretConfigured: envPresent(env, SMS_WEBHOOK_SHARED_SECRET_ENV),
+    telnyxPublicKeyConfigured: envPresent(env, TELNYX_PUBLIC_KEY_ENV),
+    twilioAuthTokenConfigured: envPresent(env, TWILIO_AUTH_TOKEN_ENV),
+    businessUnitMap: smsBusinessUnitMap,
+  };
 
   return {
     webhook,
     messenger,
     whatsapp,
+    sms,
     blockers: [
       !webhook.verifyTokenConfigured ? providerBlock('webhook_verify_token_missing', 'Meta webhook verify token is not configured.') : null,
       !webhook.appSecretConfigured ? providerBlock('webhook_app_secret_missing', 'Meta webhook signature app secret is not configured.') : null,
@@ -118,6 +152,12 @@ export function buildProviderConfigDiagnostics(env = process.env) {
         : null,
       whatsappBuMap.entryCount === 0
         ? providerBlock('whatsapp_business_unit_map_missing', 'WhatsApp inbound should be routed by phone number id or display number before live traffic.')
+        : null,
+      !sms.webhookSharedSecretConfigured
+        ? providerBlock('sms_webhook_secret_missing', 'SMS webhook shared secret is not configured for staging/provider callback ingestion.')
+        : null,
+      smsBusinessUnitMap.entryCount === 0
+        ? providerBlock('sms_business_unit_map_missing', 'SMS inbound should be routed by sender/profile/number before live traffic.')
         : null,
     ].filter(Boolean),
   };
@@ -220,24 +260,26 @@ async function loadInboundDiagnostics(client, { organizationId, businessUnitIds 
     query(client, `
       select
         channel,
+        provider,
         delivery_status,
         count(*)::int as count,
         count(distinct idempotency_key)::int as distinct_idempotency_keys,
         max(occurred_at) as last_at
       from conversation_messages
       where organization_id = $1
-        and provider = '${PROVIDER}'
+        and provider = any($4::text[])
         and channel = any($2::text[])
         and direction = 'inbound'
         and ($3::text[] is null or business_unit_id is null or business_unit_id::text = any($3::text[]))
-      group by channel, delivery_status
-      order by channel, delivery_status
-    `, [organizationId, CHANNELS, scope]),
+      group by channel, provider, delivery_status
+      order by channel, provider, delivery_status
+    `, [organizationId, CHANNELS, scope, PROVIDERS]),
     query(client, `
       select
         id,
         business_unit_id,
         channel,
+        provider,
         provider_account_id,
         external_message_id,
         idempotency_key,
@@ -246,26 +288,27 @@ async function loadInboundDiagnostics(client, { organizationId, businessUnitIds 
         created_at
       from conversation_messages
       where organization_id = $1
-        and provider = '${PROVIDER}'
+        and provider = any($5::text[])
         and channel = any($2::text[])
         and direction = 'inbound'
         and ($3::text[] is null or business_unit_id is null or business_unit_id::text = any($3::text[]))
       order by occurred_at desc
       limit $4
-    `, [organizationId, CHANNELS, scope, RECENT_LIMIT]),
+    `, [organizationId, CHANNELS, scope, RECENT_LIMIT, PROVIDERS]),
     query(client, `
       select
         channel,
+        provider,
         count(*) filter (where is_active = true)::int as active_count,
         count(*) filter (where is_active = false)::int as inactive_count,
         max(updated_at) as last_at
       from conversation_channels
       where organization_id = $1
-        and provider = '${PROVIDER}'
+        and provider = any($4::text[])
         and channel = any($2::text[])
         and ($3::text[] is null or business_unit_id is null or business_unit_id::text = any($3::text[]))
-      group by channel
-    `, [organizationId, CHANNELS, scope]),
+      group by channel, provider
+    `, [organizationId, CHANNELS, scope, PROVIDERS]),
   ]);
 
   const channelConfigs = Object.fromEntries(CHANNELS.map((channel) => {
@@ -285,6 +328,7 @@ async function loadInboundDiagnostics(client, { organizationId, businessUnitIds 
       id: row.id,
       businessUnitId: row.business_unit_id,
       channel: cleanLower(row.channel),
+      provider: cleanLower(row.provider),
       providerAccount: {
         redacted: redactIdentifier(row.provider_account_id),
         hash: stableRedactedHash(row.provider_account_id),
@@ -304,41 +348,44 @@ async function loadManualOutboundDiagnostics(client, { organizationId, businessU
     query(client, `
       select
         channel,
+        provider,
         delivery_status,
         count(*)::int as count,
         max(updated_at) as last_at
       from conversation_messages
       where organization_id = $1
-        and provider = '${PROVIDER}'
+        and provider = any($4::text[])
         and channel = any($2::text[])
         and direction = 'outbound'
         and raw_payload_json->>'source' = 'manual_outbound'
         and ($3::text[] is null or business_unit_id is null or business_unit_id::text = any($3::text[]))
-      group by channel, delivery_status
-      order by channel, delivery_status
-    `, [organizationId, CHANNELS, scope]),
+      group by channel, provider, delivery_status
+      order by channel, provider, delivery_status
+    `, [organizationId, CHANNELS, scope, PROVIDERS]),
     query(client, `
       select
         channel,
+        provider,
         coalesce(nullif(error_code, ''), 'provider_error') as error_code,
         count(*)::int as count,
         max(updated_at) as last_at
       from conversation_messages
       where organization_id = $1
-        and provider = '${PROVIDER}'
+        and provider = any($4::text[])
         and channel = any($2::text[])
         and direction = 'outbound'
         and raw_payload_json->>'source' = 'manual_outbound'
         and delivery_status = 'failed'
         and ($3::text[] is null or business_unit_id is null or business_unit_id::text = any($3::text[]))
-      group by channel, coalesce(nullif(error_code, ''), 'provider_error')
+      group by channel, provider, coalesce(nullif(error_code, ''), 'provider_error')
       order by count desc, error_code
-    `, [organizationId, CHANNELS, scope]),
+    `, [organizationId, CHANNELS, scope, PROVIDERS]),
     query(client, `
       select
         id,
         business_unit_id,
         channel,
+        provider,
         delivery_status,
         provider_account_id,
         external_message_id,
@@ -349,7 +396,7 @@ async function loadManualOutboundDiagnostics(client, { organizationId, businessU
         updated_at
       from conversation_messages
       where organization_id = $1
-        and provider = '${PROVIDER}'
+        and provider = any($5::text[])
         and channel = any($2::text[])
         and direction = 'outbound'
         and raw_payload_json->>'source' = 'manual_outbound'
@@ -357,13 +404,14 @@ async function loadManualOutboundDiagnostics(client, { organizationId, businessU
         and ($3::text[] is null or business_unit_id is null or business_unit_id::text = any($3::text[]))
       order by updated_at desc
       limit $4
-    `, [organizationId, CHANNELS, scope, RECENT_LIMIT]),
+    `, [organizationId, CHANNELS, scope, RECENT_LIMIT, PROVIDERS]),
   ]);
 
   return {
     byStatus: groupRowsByChannel(summaryRows),
     failures: errorRows.map((row) => ({
       channel: cleanLower(row.channel),
+      provider: cleanLower(row.provider),
       code: normalizeErrorCode(row.error_code),
       classifier: classifyProviderError(row.error_code, true),
       count: rowCount(row),
@@ -373,6 +421,7 @@ async function loadManualOutboundDiagnostics(client, { organizationId, businessU
       id: row.id,
       businessUnitId: row.business_unit_id,
       channel: cleanLower(row.channel),
+      provider: cleanLower(row.provider),
       deliveryStatus: cleanLower(row.delivery_status),
       providerAccount: {
         redacted: redactIdentifier(row.provider_account_id),
