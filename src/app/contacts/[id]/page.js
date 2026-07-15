@@ -26,7 +26,7 @@ import {
   deriveCourseSummary,
   isTerminalCourseRecordStatus,
 } from '@/lib/crm/course-records.js';
-import { appendContactNote, loadContactTimeline } from '@/lib/contacts/detail-loader.js';
+import { appendContactNote, contactDetailPageState, loadContactTimeline } from '@/lib/contacts/detail-loader.js';
 
 const SNAPSHOT_ICONS = {
   estimate: BriefcaseBusiness,
@@ -397,6 +397,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     allWorkOrders,
     financials,
     allFinancials,
+    contactDirectoryIsDeferred,
+    dashboardSummaryIsDeferred,
+    pipelineSummaryIsDeferred,
+    leanShellIsDeferred,
     updateContact,
     deleteContact,
     addFinancial,
@@ -476,6 +480,14 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const contact = useMemo(() => (
     scopedContact || allAccessibleContacts.find(c => c.id === params.id)
   ), [allAccessibleContacts, params.id, scopedContact]);
+  const detailPageState = contactDetailPageState({
+    loaded,
+    contact,
+    deferredBootstrapActive: contactDirectoryIsDeferred ||
+      dashboardSummaryIsDeferred ||
+      pipelineSummaryIsDeferred ||
+      leanShellIsDeferred,
+  });
   const useAllLinkedRecords = isClientMode || Boolean(contact && !scopedContact);
   const workOrderSource = useAllLinkedRecords ? (allWorkOrders || workOrders) : workOrders;
   const financialSource = useAllLinkedRecords ? (allFinancials || financials) : financials;
@@ -1419,7 +1431,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       });
   };
 
-  if (loaded && !contact) {
+  if (detailPageState === 'loading') {
+    return <PageState tone="loading" title={`Loading ${singularLabel.toLowerCase()}`} copy="Preparing profile, timeline, linked records, and communication history." />;
+  }
+
+  if (detailPageState === 'not-found') {
     return (
       <PageState
         tone="not-found"
@@ -1500,10 +1516,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         toast(blockedReasons[0]?.message || error.message || 'Manual send failed', 'error');
       });
   };
-
-  if (!loaded) {
-    return <PageState tone="loading" title={`Loading ${singularLabel.toLowerCase()}`} copy="Preparing profile, timeline, linked records, and communication history." />;
-  }
 
   const profileSidebar = (
     <div className={s.profileCard}>

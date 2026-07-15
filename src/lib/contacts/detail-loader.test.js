@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { appendContactNote, loadContactTimeline } from './detail-loader.js';
+import { appendContactNote, contactDetailPageState, loadContactTimeline } from './detail-loader.js';
+
+test('contact detail waits for a route bootstrap reload before declaring not found', () => {
+  assert.equal(contactDetailPageState({ loaded: false }), 'loading');
+  assert.equal(contactDetailPageState({ loaded: true, deferredBootstrapActive: true }), 'loading');
+  assert.equal(contactDetailPageState({ loaded: true }), 'not-found');
+  assert.equal(contactDetailPageState({ loaded: true, contact: { id: 'contact-1' } }), 'ready');
+});
 
 test('contact timeline loader reads the scoped detail route without global contact collections', async () => {
   const timeline = [{ id: 'note:1', type: 'note', text: 'Scoped contact detail' }];

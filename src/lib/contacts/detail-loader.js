@@ -2,6 +2,16 @@ function responseError(payload, fallback) {
   return new Error(payload?.error || fallback);
 }
 
+export function contactDetailPageState({
+  loaded = false,
+  contact = null,
+  deferredBootstrapActive = false,
+} = {}) {
+  if (!loaded || (!contact && deferredBootstrapActive)) return 'loading';
+  if (!contact) return 'not-found';
+  return 'ready';
+}
+
 export async function loadContactTimeline(contactId, { fetcher = fetch } = {}) {
   const response = await fetcher(`/api/contacts/${contactId}/timeline`, { cache: 'no-store' });
   const payload = await response.json().catch(() => ({}));
