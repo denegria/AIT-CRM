@@ -43,8 +43,6 @@ export default function CommandPalette() {
 
   useEffect(() => {
     if (!open || !usesRemoteSearch || query.trim().length < 2) {
-      setRemoteResults([]);
-      setRemoteLoading(false);
       return undefined;
     }
     const controller = new AbortController();
@@ -68,6 +66,7 @@ export default function CommandPalette() {
   const results = useMemo(() => {
     if (!query.trim()) return [];
     if (usesRemoteSearch) {
+      if (query.trim().length < 2) return [];
       return remoteResults.map((result) => ({
         ...result,
         icon: result.type === 'contact'
@@ -136,7 +135,7 @@ export default function CommandPalette() {
                 <div className="cp-item-type">{r.type}</div>
               </div>
             ))
-          ) : remoteLoading ? (
+          ) : remoteLoading && query.trim().length >= 2 ? (
             <div className="cp-empty">Searching...</div>
           ) : query ? (
             <div className="cp-empty">No results for &quot;{query}&quot;</div>
