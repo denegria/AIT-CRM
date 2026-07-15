@@ -128,7 +128,7 @@ export default function InboxPage() {
   const channels = useMemo(() => [...new Set(inboxConversations.map((row) => row.channel).filter(Boolean))], [inboxConversations]);
 
   useEffect(() => {
-    if (!loaded || !access.canReadCrm) return;
+    if (!loaded || !access.canReadMessagingInbox) return;
 
     if (fixtureMode) return;
 
@@ -158,7 +158,7 @@ export default function InboxPage() {
     return () => {
       cancelled = true;
     };
-  }, [access.canReadCrm, fixtureMode, loaded]);
+  }, [access.canReadMessagingInbox, fixtureMode, loaded]);
 
   const filteredConversations = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -231,7 +231,7 @@ export default function InboxPage() {
     : threadMessages;
 
   if (!loaded) return <div className="empty-state">Loading inbox…</div>;
-  if (!access.canReadCrm) return <div className="empty-state">CRM read access is required to view the inbox.</div>;
+  if (!access.canReadMessagingInbox) return <div className="empty-state">Messaging inbox access requires an administrator account.</div>;
 
   return (
     <div className={s.page}>

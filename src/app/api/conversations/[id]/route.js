@@ -1,12 +1,16 @@
 import { NextResponse } from 'next/server';
 import { getDb } from '@/db/index.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
+import { sessionHasAdminRole } from '@/lib/auth/admin-policy.js';
 import { crmErrorResponse } from '@/lib/crm/errors.js';
 import { listConversationThreadMessages } from '@/lib/conversations/service.js';
 
 export async function GET(request, { params }) {
   const { error, session } = await requirePermission(request, PERMISSIONS.CRM_READ);
   if (error) return error;
+  if (!sessionHasAdminRole(session)) {
+    return NextResponse.json({ error: 'Messaging inbox access requires administrator access.' }, { status: 403 });
+  }
 
   const db = getDb();
   const { id } = await params;

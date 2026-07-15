@@ -497,6 +497,7 @@ function authData({ authRequired = false, authError = '', currentUser = null } =
       canReadFinancials: false,
       canWriteFinancials: false,
       canWriteWorkOrders: false,
+      canReadMessagingInbox: false,
       canManageSmsCampaigns: false,
       canSendOutboundMessages: false,
     },
@@ -523,6 +524,7 @@ function sessionAccess(session) {
     canReadFinancials: hasPermission(session, PERMISSIONS.FINANCIALS_READ),
     canWriteFinancials: hasPermission(session, PERMISSIONS.FINANCIALS_WRITE),
     canWriteWorkOrders: hasPermission(session, PERMISSIONS.WORK_ORDERS_WRITE),
+    canReadMessagingInbox: isAdmin,
     canManageSmsCampaigns: isAdmin,
     canSendOutboundMessages: isAdmin,
   };
@@ -629,6 +631,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
         canReadFinancials: true,
         canWriteFinancials: true,
         canWriteWorkOrders: true,
+        canReadMessagingInbox: true,
         canManageSmsCampaigns: true,
         canSendOutboundMessages: true,
       },
