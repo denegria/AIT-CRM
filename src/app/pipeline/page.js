@@ -464,7 +464,7 @@ export default function PipelinePage() {
     () => pipelineSummary?.closedOutcomeCounts
       ? new Map(Object.entries(pipelineSummary.closedOutcomeCounts))
       : legacyClosedOutcomeCounts,
-    [legacyClosedOutcomeCounts, pipelineSummary?.closedOutcomeCounts],
+    [legacyClosedOutcomeCounts, pipelineSummary],
   );
   const mobileStageRows = mobileStageFilter === 'all'
     ? pipelineRows
