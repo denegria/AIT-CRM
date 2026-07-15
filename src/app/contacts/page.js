@@ -918,7 +918,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         <DataTable
           columns={columns}
           data={filteredContacts}
-          searchPlaceholder={`Search ${pluralLabel.toLowerCase()}...`}
+          searchPlaceholder={`Search ${pluralLabel.toLowerCase()} by name, phone, source, location, or course`}
           searchValue={contactDirectoryIsDeferred ? deferredDirectory.search : undefined}
           onSearchChange={contactDirectoryIsDeferred ? deferredDirectory.setSearch : undefined}
           toolbarAfterSearch={(

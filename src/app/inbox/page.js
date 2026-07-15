@@ -13,6 +13,7 @@ import {
 import { useCRM } from '@/lib/store';
 import { buildInboxFixtureData } from '@/lib/conversations/inbox-fixtures.js';
 import { inboxFixtureHint } from '@/lib/data.js';
+import { matchesSearchValues } from '@/lib/search/match.js';
 import s from './InboxPage.module.css';
 
 const STATUS_FILTERS = [
@@ -173,7 +174,7 @@ export default function InboxPage() {
       if (attentionFilter !== 'all' && conversation.attention.code !== attentionFilter) return false;
       if (!query) return true;
 
-      const haystack = [
+      return matchesSearchValues(query, [
         conversation.identityLabel,
         conversation.contact?.name,
         conversation.contact?.email,
@@ -182,8 +183,7 @@ export default function InboxPage() {
         conversation.lastMessage.preview,
         conversation.owner.label,
         conversation.businessUnit?.name,
-      ].join(' ').toLowerCase();
-      return haystack.includes(query);
+      ], [conversation.contact?.phone]);
     });
   }, [activeBusinessUnitFilter, attentionFilter, channelFilter, inboxConversations, ownerFilter, search, statusFilter]);
 

@@ -1,5 +1,6 @@
 import { and, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import {
+  contactCourseRecords,
   contacts,
   estimates,
   financialDocuments,
@@ -15,6 +16,7 @@ import {
   scopedWorkOrderWhere,
 } from '@/lib/crm/access.js';
 import { hasPermission, PERMISSIONS } from '@/lib/auth.js';
+import { searchPattern, searchPhoneDigits } from './match.js';
 
 const SEARCH_LIMIT = 5;
 
@@ -31,11 +33,21 @@ function businessUnitCondition(column, session, businessUnitId) {
 export async function loadGlobalSearch({ db, session, query, businessUnitId = '' }) {
   const value = clean(query);
   if (value.length < 2) return { results: [] };
-  const pattern = `%${value}%`;
+  const pattern = searchPattern(value);
+  const phoneDigits = searchPhoneDigits(value);
   const latestLead = db
     .selectDistinctOn([leads.contactId], {
       contactId: leads.contactId,
       assignedUserId: leads.assignedUserId,
+      sourceType: leads.sourceType,
+      sourceName: leads.sourceName,
+      status: leads.status,
+      currentStage: leads.currentStage,
+      programInterest: leads.programInterest,
+      locationPreference: leads.locationPreference,
+      currentCourse: leads.currentCourse,
+      completedCourse: leads.completedCourse,
+      endedCourse: leads.endedCourse,
     })
     .from(leads)
     .where(scopedOrgWhere(leads, session))
@@ -50,7 +62,31 @@ export async function loadGlobalSearch({ db, session, query, businessUnitId = ''
       scopedContactWhere(contacts, session),
       businessUnitCondition(contacts.primaryBusinessUnitId, session, businessUnitId),
       isRegularCoordinatorSession(session) ? eq(latestLead.assignedUserId, session.user.id) : undefined,
-      or(ilike(contacts.name, pattern), ilike(contacts.email, pattern), ilike(contacts.phone, pattern)),
+      or(
+        ilike(contacts.name, pattern),
+        ilike(contacts.companyName, pattern),
+        ilike(contacts.email, pattern),
+        ilike(contacts.phone, pattern),
+        phoneDigits
+          ? sql`regexp_replace(coalesce(${contacts.phone}, ''), '[^0-9]', '', 'g') like ${`%${phoneDigits}%`}`
+          : undefined,
+        ilike(contacts.address, pattern),
+        ilike(contacts.sourceLabel, pattern),
+        ilike(latestLead.sourceType, pattern),
+        ilike(latestLead.sourceName, pattern),
+        ilike(latestLead.status, pattern),
+        ilike(latestLead.currentStage, pattern),
+        ilike(latestLead.programInterest, pattern),
+        ilike(latestLead.locationPreference, pattern),
+        ilike(latestLead.currentCourse, pattern),
+        ilike(latestLead.completedCourse, pattern),
+        ilike(latestLead.endedCourse, pattern),
+        sql`exists (
+          select 1 from ${contactCourseRecords}
+          where ${contactCourseRecords.contactId} = ${contacts.id}
+            and ${contactCourseRecords.courseName} ilike ${pattern}
+        )`,
+      ),
     ))
     .orderBy(contacts.name)
     .limit(SEARCH_LIMIT);

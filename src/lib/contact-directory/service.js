@@ -34,6 +34,7 @@ import {
   scopedOrgWhere,
 } from '@/lib/crm/access.js';
 import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from '@/lib/crm/lifecycle.js';
+import { searchPattern, searchPhoneDigits } from '@/lib/search/match.js';
 
 export const CONTACT_DIRECTORY_PAGE_SIZE = 50;
 export const CONTACT_DIRECTORY_MAX_PAGE_SIZE = 100;
@@ -272,15 +273,32 @@ function directoryConditions({ searchParams, latestLead, session, workflowKey, e
 
   const query = clean(searchParams.get('q'));
   if (query) {
-    const pattern = `%${query}%`;
+    const pattern = searchPattern(query);
+    const phoneDigits = searchPhoneDigits(query);
     conditions.push(or(
       ilike(contacts.name, pattern),
       ilike(contacts.companyName, pattern),
       ilike(contacts.email, pattern),
       ilike(contacts.phone, pattern),
+      phoneDigits
+        ? sql`regexp_replace(coalesce(${contacts.phone}, ''), '[^0-9]', '', 'g') like ${`%${phoneDigits}%`}`
+        : undefined,
       ilike(contacts.address, pattern),
+      ilike(contacts.sourceLabel, pattern),
+      ilike(latestLead.sourceType, pattern),
       ilike(latestLead.sourceName, pattern),
       ilike(latestLead.locationPreference, pattern),
+      ilike(latestLead.programInterest, pattern),
+      ilike(latestLead.currentStage, pattern),
+      ilike(latestLead.status, pattern),
+      ilike(latestLead.currentCourse, pattern),
+      ilike(latestLead.completedCourse, pattern),
+      ilike(latestLead.endedCourse, pattern),
+      sql`exists (
+        select 1 from ${contactCourseRecords}
+        where ${contactCourseRecords.contactId} = ${contacts.id}
+          and ${contactCourseRecords.courseName} ilike ${pattern}
+      )`,
     ));
   }
   const status = clean(searchParams.get('status'));

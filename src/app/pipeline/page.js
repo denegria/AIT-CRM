@@ -20,6 +20,7 @@ import {
   contactMatchesLeadDateScope,
   contactMatchesLocation,
   contactMatchesStatusOwnerCourse,
+  courseTagsForDirectoryRow,
   effectiveLeadDateScopeForDirectory,
   CONTACT_LEAD_DATE_SCOPE_ALL,
   CONTACT_LEAD_DATE_SCOPE_CUSTOM,
@@ -39,6 +40,7 @@ import {
   pipelineFilterStateFromParams,
 } from '@/lib/contact-directory-filters';
 import { schoolLocationForContact } from '@/lib/school-locations';
+import { matchesSearchValues } from '@/lib/search/match.js';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
 import TimeframeFilterPanel from '@/components/TimeframeFilterPanel';
 import s from './PipelinePage.module.css';
@@ -92,18 +94,21 @@ function matchesOwnerSearch(owner, query) {
 }
 
 function matchesSearch(contact, query) {
-  if (!query) return true;
-  const haystack = [
+  return matchesSearchValues(query, [
     contact.name,
     contact.email,
     contact.phone,
     schoolLocationForContact(contact),
+    contact.locationPreference,
     contact.source,
+    contact.status,
+    contact.currentStage,
+    contact.programInterest,
+    ...courseTagsForDirectoryRow(contact),
     contact.latestComment,
     contact.assignedLabel,
     contact.divisionLabel,
-  ].join(' ').toLowerCase();
-  return haystack.includes(query);
+  ], [contact.phone]);
 }
 
 function normalizedPipelineColumns(columns = []) {

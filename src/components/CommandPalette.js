@@ -9,7 +9,9 @@ export default function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [remoteResults, setRemoteResults] = useState([]);
+  const [remoteResultQuery, setRemoteResultQuery] = useState('');
   const [remoteLoading, setRemoteLoading] = useState(false);
+  const [remoteError, setRemoteError] = useState('');
   const router = useRouter();
   const {
     contacts,
@@ -47,12 +49,21 @@ export default function CommandPalette() {
       return undefined;
     }
     const controller = new AbortController();
+    const requestedQuery = query.trim();
     const timer = window.setTimeout(() => {
       setRemoteLoading(true);
+      setRemoteError('');
       fetchGlobalSearch({ query, businessUnitId: currentBusinessUnitId, signal: controller.signal })
-        .then(setRemoteResults)
+        .then((results) => {
+          setRemoteResults(results);
+          setRemoteResultQuery(requestedQuery);
+        })
         .catch((error) => {
-          if (error?.name !== 'AbortError') setRemoteResults([]);
+          if (error?.name !== 'AbortError') {
+            setRemoteResults([]);
+            setRemoteResultQuery(requestedQuery);
+            setRemoteError(error?.message || 'Search could not load.');
+          }
         })
         .finally(() => {
           if (!controller.signal.aborted) setRemoteLoading(false);
@@ -68,6 +79,7 @@ export default function CommandPalette() {
     if (!query.trim()) return [];
     if (usesRemoteSearch) {
       if (query.trim().length < 2) return [];
+      if (remoteResultQuery !== query.trim()) return [];
       return remoteResults.map((result) => ({
         ...result,
         icon: result.type === 'contact'
@@ -99,7 +111,12 @@ export default function CommandPalette() {
       : [];
 
     return [...matchedContacts, ...matchedWO, ...matchedFin].slice(0, 10);
-  }, [query, contacts, workOrders, financials, access?.canReadReports, access?.canReadSettings, remoteResults, role, usesRemoteSearch]);
+  }, [query, contacts, workOrders, financials, access?.canReadReports, access?.canReadSettings, remoteResultQuery, remoteResults, role, usesRemoteSearch]);
+
+  const waitingForRemoteResults = usesRemoteSearch && query.trim().length >= 2 && (
+    remoteLoading || remoteResultQuery !== query.trim()
+  );
+  const visibleRemoteError = remoteResultQuery === query.trim() ? remoteError : '';
 
   const navigate = (path) => {
     router.push(path);
@@ -136,8 +153,10 @@ export default function CommandPalette() {
                 <div className="cp-item-type">{r.type}</div>
               </div>
             ))
-          ) : remoteLoading && query.trim().length >= 2 ? (
+          ) : waitingForRemoteResults ? (
             <div className="cp-empty">Searching...</div>
+          ) : visibleRemoteError ? (
+            <div className="cp-empty">{visibleRemoteError}</div>
           ) : query ? (
             <div className="cp-empty">No results for &quot;{query}&quot;</div>
           ) : (

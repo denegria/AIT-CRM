@@ -1460,7 +1460,7 @@ export default function FollowUpQueuePage() {
                 value={createContactSearch}
                 disabled={createBusy}
                 onChange={(event) => setCreateContactSearch(event.target.value)}
-                placeholder="Search name, phone, email, or status"
+                placeholder="Search name, phone, email, status, source, or location"
               />
               <select className="select" value={createDraft.contactId} disabled={createBusy} onChange={(event) => updateCreateContact(event.target.value)}>
                 <option value="">No contact linked</option>
@@ -1913,7 +1913,7 @@ export default function FollowUpQueuePage() {
                           value={editContactSearch}
                           disabled={editBusy}
                           onChange={(event) => setEditContactSearch(event.target.value)}
-                          placeholder="Search name, phone, email, or status"
+                          placeholder="Search name, phone, email, status, source, or location"
                         />
                       )}
                       <select className="select" value={editDraft.contactId} disabled={editBusy} onChange={(event) => updateEditContact(event.target.value)}>

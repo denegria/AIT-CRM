@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ilike, inArray, or } from 'drizzle-orm';
+import { and, asc, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { businessUnits, contacts, leads } from '../../db/schema.js';
 import {
   canAccessBusinessUnit,
@@ -8,6 +8,7 @@ import {
 } from '../crm/access.js';
 import { createCrmError } from '../crm/errors.js';
 import { workflowFromLead } from '../sales-workflow.js';
+import { searchPattern, searchPhoneDigits } from '../search/match.js';
 
 export const TASK_CONTACT_OPTION_LIMIT = 35;
 
@@ -120,14 +121,24 @@ export async function loadTaskContactOptions({
     uniqueContactIds.length ? inArray(contacts.id, uniqueContactIds) : undefined,
   ];
   if (search && !uniqueContactIds.length) {
-    const pattern = `%${search}%`;
+    const pattern = searchPattern(search);
+    const phoneDigits = searchPhoneDigits(search);
     conditions.push(or(
       ilike(contacts.name, pattern),
       ilike(contacts.companyName, pattern),
       ilike(contacts.email, pattern),
       ilike(contacts.phone, pattern),
+      phoneDigits
+        ? sql`regexp_replace(coalesce(${contacts.phone}, ''), '[^0-9]', '', 'g') like ${`%${phoneDigits}%`}`
+        : undefined,
+      ilike(contacts.address, pattern),
+      ilike(contacts.sourceLabel, pattern),
+      ilike(latestLead.sourceType, pattern),
+      ilike(latestLead.sourceName, pattern),
       ilike(latestLead.leadStatus, pattern),
       ilike(latestLead.currentStage, pattern),
+      ilike(latestLead.programInterest, pattern),
+      ilike(latestLead.locationPreference, pattern),
     ));
   }
 
