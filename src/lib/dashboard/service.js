@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import {
+  activityEvents,
   businessUnits,
   contactCourseRecords,
   contacts,
@@ -19,7 +20,7 @@ import {
 } from '@/lib/crm/access.js';
 import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from '@/lib/crm/lifecycle.js';
 import { sessionHasAdminRole } from '@/lib/auth/admin-policy.js';
-import { buildBusinessMovement } from '@/lib/team-monitor.js';
+import { summarizeAitUsaDashboardContacts } from '@/lib/dashboard/summary.js';
 
 function directoryParams(businessUnitId, values = {}) {
   const params = new URLSearchParams({ businessUnitId });
@@ -39,24 +40,20 @@ function isPendingEstimate(row = {}) {
   return type === 'estimate' && status !== 'draft' && status !== 'paid';
 }
 
-function serializeBusinessMovement(movement) {
-  return {
-    byEmployee: Object.fromEntries(movement.byEmployee.entries()),
-    totals: movement.totals,
-  };
-}
-
-async function loadBusinessMovement({ db, session, businessUnit, employeeIds }) {
-  if (!sessionHasAdminRole(session) || workflowKeyForBusinessUnit(businessUnit) !== WORKFLOW_KEYS.AIT_USA) {
-    return null;
-  }
+async function loadAitUsaDashboardContacts({ db, session, businessUnit, employeeIds }) {
 
   const compactContacts = await db
     .select({
       id: contacts.id,
       primaryBusinessUnitId: contacts.primaryBusinessUnitId,
       name: contacts.name,
+      companyName: contacts.companyName,
+      phone: contacts.phone,
+      email: contacts.email,
+      address: contacts.address,
       sourceLabel: contacts.sourceLabel,
+      isDoNotCall: contacts.isDoNotCall,
+      isWrongNumber: contacts.isWrongNumber,
       createdAt: contacts.createdAt,
       updatedAt: contacts.updatedAt,
     })
@@ -64,10 +61,15 @@ async function loadBusinessMovement({ db, session, businessUnit, employeeIds }) 
     .where(and(scopedContactWhere(contacts, session), eq(contacts.primaryBusinessUnitId, businessUnit.id)));
   const contactIds = compactContacts.map((row) => row.id);
   if (!contactIds.length) {
-    return serializeBusinessMovement(buildBusinessMovement({ contacts: [], employeeIds }));
+    return summarizeAitUsaDashboardContacts({
+      mappedContacts: [],
+      currentUserId: session.user.id,
+      employeeIds,
+      includeBusinessMovement: sessionHasAdminRole(session),
+    });
   }
 
-  const [latestLeads, courseRows, statusRows] = await Promise.all([
+  const [latestLeads, websiteEvents, courseRows, statusRows] = await Promise.all([
     db
       .selectDistinctOn([leads.contactId], {
         id: leads.id,
@@ -82,11 +84,29 @@ async function loadBusinessMovement({ db, session, businessUnit, employeeIds }) 
         completedCourse: leads.completedCourse,
         endedCourse: leads.endedCourse,
         courseOutcome: leads.courseOutcome,
+        originalNotes: leads.originalNotes,
+        sourceDetail: leads.sourceDetail,
         createdAt: leads.createdAt,
       })
       .from(leads)
       .where(and(scopedBusinessUnitWhere(leads, session), inArray(leads.contactId, contactIds)))
       .orderBy(leads.contactId, desc(leads.createdAt), desc(leads.id)),
+    db
+      .select({
+        contactId: activityEvents.contactId,
+        leadId: activityEvents.leadId,
+        businessUnitId: activityEvents.businessUnitId,
+        eventType: activityEvents.eventType,
+        occurredAt: activityEvents.occurredAt,
+        createdAt: activityEvents.createdAt,
+      })
+      .from(activityEvents)
+      .where(and(
+        scopedBusinessUnitWhere(activityEvents, session),
+        eq(activityEvents.businessUnitId, businessUnit.id),
+        eq(activityEvents.eventType, 'website_lead_captured'),
+        inArray(activityEvents.contactId, contactIds),
+      )),
     db
       .select({
         contactId: contactCourseRecords.contactId,
@@ -124,12 +144,17 @@ async function loadBusinessMovement({ db, session, businessUnit, employeeIds }) 
     compactContacts,
     latestLeads,
     [],
-    [],
+    websiteEvents,
     [businessUnit],
     session.user.canAccessAllBusinessUnits ? null : session.user.businessUnitIds,
     { courseRecords: courseRows, leadStatusHistory: statusRows },
   );
-  return serializeBusinessMovement(buildBusinessMovement({ contacts: mapped, employeeIds }));
+  return summarizeAitUsaDashboardContacts({
+    mappedContacts: mapped,
+    currentUserId: session.user.id,
+    employeeIds,
+    includeBusinessMovement: sessionHasAdminRole(session),
+  });
 }
 
 export async function loadDashboardSummary({ db, session, businessUnitId, employeeIds = [] }) {
@@ -156,7 +181,7 @@ export async function loadDashboardSummary({ db, session, businessUnitId, employ
     businessUnitRows: [businessUnit],
     ...options,
   });
-  const contactCountRequests = [
+  const contactCountRequests = workflowKey === WORKFLOW_KEYS.AIT_USA ? [] : [
     countContactDirectoryRows({ db, session, searchParams: currentParams, businessUnitRows: [businessUnit] }),
     countRows({ status: 'New Lead' }),
     countRows({ leadDateScope: 'current', owner: session.user.id }),
@@ -164,13 +189,7 @@ export async function loadDashboardSummary({ db, session, businessUnitId, employ
     countRows({ source: 'Website Form Submission' }),
   ];
 
-  if (workflowKey === WORKFLOW_KEYS.AIT_USA) {
-    contactCountRequests.push(
-      countRows({ leadDateScope: 'current', facet: 'usa_new_lead' }),
-      countRows({ leadDateScope: 'current', facet: 'usa_follow_up' }),
-      countRows({ leadDateScope: 'current', facet: 'usa_bad_contact_channel' }),
-    );
-  } else if (workflowKey === WORKFLOW_KEYS.AIT_SIGNS) {
+  if (workflowKey === WORKFLOW_KEYS.AIT_SIGNS) {
     contactCountRequests.push(
       countRows({ facet: 'signs_intake' }),
       countRows({ facet: 'signs_estimate' }),
@@ -181,7 +200,7 @@ export async function loadDashboardSummary({ db, session, businessUnitId, employ
     );
   }
 
-  const [contactCounts, workOrderRows, estimateRows, documentRows, businessMovement] = await Promise.all([
+  const [contactCounts, workOrderRows, estimateRows, documentRows, aitUsaSummary] = await Promise.all([
     Promise.all(contactCountRequests),
     db
       .select({ status: workOrders.status, assignedUserId: workOrders.assignedUserId })
@@ -200,10 +219,24 @@ export async function loadDashboardSummary({ db, session, businessUnitId, employ
       })
       .from(financialDocuments)
       .where(and(scopedBusinessUnitWhere(financialDocuments, session), eq(financialDocuments.businessUnitId, businessUnitId))),
-    loadBusinessMovement({ db, session, businessUnit, employeeIds }),
+    workflowKey === WORKFLOW_KEYS.AIT_USA
+      ? loadAitUsaDashboardContacts({ db, session, businessUnit, employeeIds })
+      : null,
   ]);
 
-  const [activeContacts, newLeads, myPipeline, needsFirstOutreach, websiteLeads, ...workflowCounts] = contactCounts;
+  const [
+    countedActiveContacts = 0,
+    countedNewLeads = 0,
+    countedMyPipeline = 0,
+    countedNeedsFirstOutreach = 0,
+    countedWebsiteLeads = 0,
+    ...workflowCounts
+  ] = contactCounts;
+  const activeContacts = aitUsaSummary?.kpis.activeContacts ?? countedActiveContacts;
+  const newLeads = aitUsaSummary?.kpis.newLeads ?? countedNewLeads;
+  const myPipeline = aitUsaSummary?.kpis.myPipeline ?? countedMyPipeline;
+  const needsFirstOutreach = aitUsaSummary?.kpis.needsFirstOutreach ?? countedNeedsFirstOutreach;
+  const websiteLeads = aitUsaSummary?.websiteLeads ?? countedWebsiteLeads;
   const financialRows = [
     ...estimateRows.map((row) => ({ type: 'Estimate', status: row.status, amount: Number(row.total || row.subtotal || 0) })),
     ...documentRows.map((row) => ({ type: row.type, status: row.status, amount: Number(row.total || row.subtotal || 0) })),
@@ -236,7 +269,9 @@ export async function loadDashboardSummary({ db, session, businessUnitId, employ
     usaBadContactChannel: 0,
   };
   if (workflowKey === WORKFLOW_KEYS.AIT_USA) {
-    [kpis.usaNewLeads, kpis.usaFollowUp, kpis.usaBadContactChannel] = workflowCounts;
+    kpis.usaNewLeads = aitUsaSummary?.kpis.usaNewLeads ?? 0;
+    kpis.usaFollowUp = aitUsaSummary?.kpis.usaFollowUp ?? 0;
+    kpis.usaBadContactChannel = aitUsaSummary?.kpis.usaBadContactChannel ?? 0;
   } else if (workflowKey === WORKFLOW_KEYS.AIT_SIGNS) {
     [
       kpis.signsIntake,
@@ -253,6 +288,6 @@ export async function loadDashboardSummary({ db, session, businessUnitId, employ
     workflowKey,
     kpis,
     sourceHealth: { websiteLeads },
-    businessMovement,
+    businessMovement: aitUsaSummary?.businessMovement ?? null,
   };
 }
