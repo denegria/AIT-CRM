@@ -1,13 +1,13 @@
 import { and, asc, desc, eq, ilike, inArray, or } from 'drizzle-orm';
-import { businessUnits, contacts, leads } from '@/db/schema.js';
+import { businessUnits, contacts, leads } from '../../db/schema.js';
 import {
   canAccessBusinessUnit,
   isRegularCoordinatorSession,
   scopedContactWhere,
   scopedOrgWhere,
-} from '@/lib/crm/access.js';
-import { createCrmError } from '@/lib/crm/errors.js';
-import { workflowFromLead } from '@/lib/sales-workflow.js';
+} from '../crm/access.js';
+import { createCrmError } from '../crm/errors.js';
+import { workflowFromLead } from '../sales-workflow.js';
 
 export const TASK_CONTACT_OPTION_LIMIT = 35;
 
