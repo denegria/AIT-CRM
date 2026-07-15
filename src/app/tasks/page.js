@@ -38,6 +38,7 @@ import {
 import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import { fetchTaskContactOptions } from '@/lib/tasks/contact-options-loader.js';
 import s from './FollowUpQueue.module.css';
 
 const TASK_TYPE_OPTIONS = [
@@ -278,6 +279,20 @@ function optionLabel(options, value) {
   return options.find(([optionValue]) => optionValue === value)?.[1] || titleCase(value);
 }
 
+function mergeContactsById(current = [], incoming = []) {
+  const byId = new Map(current.map((contact) => [contact.id, contact]));
+  let changed = false;
+  for (const contact of incoming) {
+    if (!contact?.id) continue;
+    const previous = byId.get(contact.id);
+    if (!previous || Object.entries(contact).some(([key, value]) => previous[key] !== value)) {
+      byId.set(contact.id, { ...(previous || {}), ...contact });
+      changed = true;
+    }
+  }
+  return changed ? [...byId.values()] : current;
+}
+
 export default function FollowUpQueuePage() {
   const {
     tasks,
@@ -293,6 +308,7 @@ export default function FollowUpQueuePage() {
     scopeLabel,
     addTask,
     updateTask,
+    leanShellIsDeferred,
   } = useCRM();
   const { toast } = useToast();
   const searchParams = useSearchParams();
@@ -334,6 +350,10 @@ export default function FollowUpQueuePage() {
     currentUser,
   }));
   const [createContactSearch, setCreateContactSearch] = useState('');
+  const [editContactSearch, setEditContactSearch] = useState('');
+  const [taskContacts, setTaskContacts] = useState(() => allContacts?.length ? allContacts : contacts);
+  const [taskContactsLoading, setTaskContactsLoading] = useState(false);
+  const [taskContactsError, setTaskContactsError] = useState('');
   const [createDiscardConfirmationOpen, setCreateDiscardConfirmationOpen] = useState(false);
   const [editTaskId, setEditTaskId] = useState('');
   const [editBusy, setEditBusy] = useState(false);
@@ -371,7 +391,9 @@ export default function FollowUpQueuePage() {
     };
     return [current];
   }, [assignees, coordinatorUiPolicy.ownerScoped, currentUser, fallbackAssignees]);
-  const accessibleContacts = allContacts?.length ? allContacts : contacts;
+  const accessibleContacts = leanShellIsDeferred
+    ? taskContacts
+    : allContacts?.length ? allContacts : contacts;
   const businessUnitById = useMemo(
     () => new Map((accessibleBusinessUnits || []).map((unit) => [unit.id, unit])),
     [accessibleBusinessUnits],
@@ -438,9 +460,30 @@ export default function FollowUpQueuePage() {
     () => contactOptionsForBusinessUnit(editDraft.businessUnitId),
     [contactOptionsForBusinessUnit, editDraft.businessUnitId],
   );
+  const visibleEditContactOptions = useMemo(() => {
+    const query = editContactSearch.trim().toLowerCase();
+    if (!query) return editContactOptions.slice(0, 35);
+    const selected = editContactOptions.find(({ contact }) => contact.id === editDraft.contactId);
+    const matches = editContactOptions.filter(({ label, contact }) => [
+      label,
+      contact.email,
+      contact.phone,
+      contact.status,
+      contact.currentStage,
+    ].filter(Boolean).some((value) => String(value).toLowerCase().includes(query)));
+    const limited = matches.slice(0, 35);
+    if (selected && !limited.some(({ contact }) => contact.id === selected.contact.id)) {
+      return [selected, ...limited];
+    }
+    return limited;
+  }, [editContactOptions, editContactSearch, editDraft.contactId]);
   const selectedCreateContact = useMemo(
     () => (accessibleContacts || []).find((contact) => contact.id === createDraft.contactId) || null,
     [accessibleContacts, createDraft.contactId],
+  );
+  const selectedEditContact = useMemo(
+    () => (accessibleContacts || []).find((contact) => contact.id === editDraft.contactId) || null,
+    [accessibleContacts, editDraft.contactId],
   );
 
   useEffect(() => {
@@ -478,14 +521,17 @@ export default function FollowUpQueuePage() {
       const response = await fetch(`/api/tasks?${params.toString()}`, { cache: 'no-store' });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Task queue could not load.');
-      setQueueTasks((payload.tasks || []).map((task) => normalizeTask(task, accessibleContacts)));
+      if (leanShellIsDeferred) {
+        setTaskContacts((current) => mergeContactsById(current, payload.contacts || []));
+      }
+      setQueueTasks((payload.tasks || []).map((task) => normalizeTask(task, payload.contacts || [])));
       setAssignees(payload.users || []);
     } catch (err) {
       setError(err.message || 'Task queue could not load.');
     } finally {
       setLoading(false);
     }
-  }, [accessibleContacts, contacts, currentUser?.id, dataSource, fallbackAssignees, filters.businessUnitId, filters.ownerUserId, filters.status, filters.taskType, tasks]);
+  }, [contacts, currentUser?.id, dataSource, fallbackAssignees, filters.businessUnitId, filters.ownerUserId, filters.status, filters.taskType, leanShellIsDeferred, tasks]);
 
   useEffect(() => {
     let cancelled = false;
@@ -496,6 +542,78 @@ export default function FollowUpQueuePage() {
       cancelled = true;
     };
   }, [readTasks]);
+
+  useEffect(() => {
+    if (!leanShellIsDeferred || !createOpen) return undefined;
+    const search = createContactSearch.trim();
+    const selectedName = selectedCreateContact?.name || '';
+    const searchRepresentsSelected = Boolean(createDraft.contactId && selectedName && search.includes(selectedName));
+    if (search.length === 1) return undefined;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setTaskContactsLoading(true);
+      setTaskContactsError('');
+      fetchTaskContactOptions({
+        businessUnitId: createDraft.businessUnitId,
+        query: search && !searchRepresentsSelected ? search : '',
+        contactId: searchRepresentsSelected ? createDraft.contactId : '',
+        signal: controller.signal,
+      })
+        .then((rows) => setTaskContacts((current) => mergeContactsById(current, rows)))
+        .catch((error) => {
+          if (error?.name !== 'AbortError') setTaskContactsError(error.message || 'Task contacts could not load.');
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setTaskContactsLoading(false);
+        });
+    }, 200);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [createContactSearch, createDraft.businessUnitId, createDraft.contactId, createOpen, leanShellIsDeferred, selectedCreateContact?.name]);
+
+  useEffect(() => {
+    if (!leanShellIsDeferred || !editTaskId) return undefined;
+    const selectedName = selectedEditContact?.name || '';
+    const search = editContactSearch.trim();
+    if (search.length === 1) return undefined;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setTaskContactsLoading(true);
+      setTaskContactsError('');
+      fetchTaskContactOptions({
+        businessUnitId: editDraft.businessUnitId,
+        query: search && search !== selectedName ? search : '',
+        contactId: !search || search === selectedName ? editDraft.contactId : '',
+        signal: controller.signal,
+      })
+        .then((rows) => setTaskContacts((current) => mergeContactsById(current, rows)))
+        .catch((error) => {
+          if (error?.name !== 'AbortError') setTaskContactsError(error.message || 'Task contacts could not load.');
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setTaskContactsLoading(false);
+        });
+    }, 200);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [editContactSearch, editDraft.businessUnitId, editDraft.contactId, editTaskId, leanShellIsDeferred, selectedEditContact?.name]);
+
+  useEffect(() => {
+    if (!leanShellIsDeferred) return undefined;
+    const contactId = searchParams.get('contactId') || '';
+    if (!contactId || taskContacts.some((contact) => contact.id === contactId)) return undefined;
+    const controller = new AbortController();
+    fetchTaskContactOptions({ contactId, signal: controller.signal })
+      .then((rows) => setTaskContacts((current) => mergeContactsById(current, rows)))
+      .catch((error) => {
+        if (error?.name !== 'AbortError') setTaskContactsError(error.message || 'Task contact could not load.');
+      });
+    return () => controller.abort();
+  }, [leanShellIsDeferred, searchParams, taskContacts]);
 
   const filteredTasks = useMemo(() => {
     return queueTasks
@@ -784,6 +902,7 @@ export default function FollowUpQueuePage() {
   function openEditPanel(task) {
     setEditTaskId(task.id);
     setEditDraft(editDraftFromTask(task));
+    setEditContactSearch(task.contactName || '');
     setEditError('');
     setCompletionTaskId('');
     setActionPanelTaskId(task.id);
@@ -803,6 +922,7 @@ export default function FollowUpQueuePage() {
         contactId: contactBusinessUnitId === businessUnitId ? prev.contactId : '',
       };
     });
+    setEditContactSearch('');
   }
 
   function updateEditContact(contactId) {
@@ -813,6 +933,7 @@ export default function FollowUpQueuePage() {
       contactId,
       businessUnitId,
     }));
+    setEditContactSearch(selectedContact?.name || '');
   }
 
   useEffect(() => {
@@ -1348,10 +1469,14 @@ export default function FollowUpQueuePage() {
                 {visibleContactOptions.map(({ contact, label }) => <option key={contact.id} value={contact.id}>{label}</option>)}
               </select>
               <span className={s.contactHint}>
-                {contactOptions.length > visibleContactOptions.length
+                {taskContactsLoading
+                  ? 'Searching contacts...'
+                  : taskContactsError
+                    ? taskContactsError
+                    : contactOptions.length > visibleContactOptions.length
                   ? `Showing ${visibleContactOptions.length} of ${contactOptions.length}. Type to narrow.`
                   : contactOptions.length === 0
-                    ? 'No contacts available'
+                    ? leanShellIsDeferred ? 'Type at least 2 characters to search contacts.' : 'No contacts available'
                     : `${contactOptions.length} available contacts`}
               </span>
             </label>
@@ -1784,10 +1909,22 @@ export default function FollowUpQueuePage() {
                     </label>
                     <label className={s.createContactField}>
                       <span className="form-label">Contact</span>
+                      {leanShellIsDeferred && (
+                        <input
+                          className="input"
+                          value={editContactSearch}
+                          disabled={editBusy}
+                          onChange={(event) => setEditContactSearch(event.target.value)}
+                          placeholder="Search name, phone, email, or status"
+                        />
+                      )}
                       <select className="select" value={editDraft.contactId} disabled={editBusy} onChange={(event) => updateEditContact(event.target.value)}>
                         <option value="">No contact linked</option>
-                        {editContactOptions.map(({ contact, label }) => <option key={contact.id} value={contact.id}>{label}</option>)}
+                        {visibleEditContactOptions.map(({ contact, label }) => <option key={contact.id} value={contact.id}>{label}</option>)}
                       </select>
+                      {leanShellIsDeferred && (
+                        <span className={s.contactHint}>{taskContactsLoading ? 'Searching contacts...' : taskContactsError || 'Type to search scoped contacts.'}</span>
+                      )}
                     </label>
                     {editError && <div className={s.editError}>{editError}</div>}
                     <div className={s.editActions}>

@@ -6,6 +6,7 @@ import {
   deferBootstrapContactDirectory,
   deferBootstrapContactDetails,
   deferBootstrapDashboardSummary,
+  deferBootstrapLeanShell,
   deferBootstrapPipelineSummary,
   deferBootstrapTasks,
   hasDeferredBootstrapLoader,
@@ -112,6 +113,16 @@ test('dashboard and pipeline shells defer their route-owned data', () => {
     assert.equal(hasDeferredBootstrapLoader(payload, loader), true);
     assert.ok(serializedBytes(payload) < serializedBytes(legacyBootstrap) * 0.1);
   }
+});
+
+test('lean service shells exclude broad CRM collections', () => {
+  const { core, tasks } = deterministicFixture();
+  const payload = deferBootstrapLeanShell(deferBootstrapTasks({ ...core, tasks }));
+
+  assert.deepEqual(payload.contacts, []);
+  assert.deepEqual(payload.workOrders, []);
+  assert.deepEqual(payload.financials, []);
+  assert.ok(payload.deferredLoaders.includes(DEFERRED_BOOTSTRAP_LOADERS.LEAN_SHELL));
 });
 
 test('route task payload maps the existing scoped API contract without changing task semantics', () => {

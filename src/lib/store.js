@@ -7,6 +7,7 @@ import { DEFERRED_BOOTSTRAP_LOADERS, hasDeferredBootstrapLoader } from './bootst
 import { loadDeferredTasks } from './tasks/bootstrap.js';
 import { fetchDashboardSummary } from './dashboard/loader.js';
 import { fetchPipelineSummary, pipelineSummaryQuery } from './pipeline/loader.js';
+import { LEAN_SHELL_PATHS } from './bootstrap-routing.js';
 
 const CRMContext = createContext(null);
 const STORAGE_KEY = 'ait-crm-data';
@@ -174,6 +175,10 @@ export function CRMProvider({ children, initialData }) {
     bootstrapData,
     DEFERRED_BOOTSTRAP_LOADERS.PIPELINE_SUMMARY,
   );
+  const leanShellIsDeferred = isPostgres && hasDeferredBootstrapLoader(
+    bootstrapData,
+    DEFERRED_BOOTSTRAP_LOADERS.LEAN_SHELL,
+  );
   const [workOrders, setWorkOrders] = useState(bootstrapData.workOrders);
   const [financials, setFinancials] = useState(bootstrapData.financials);
   const [tasks, setTasks] = useState(bootstrapData.tasks);
@@ -214,11 +219,12 @@ export function CRMProvider({ children, initialData }) {
     const allowedDeferredPath =
       (contactDirectoryIsDeferred && (pathname === '/contacts' || pathname === '/clients')) ||
       (dashboardSummaryIsDeferred && pathname === '/') ||
-      (pipelineSummaryIsDeferred && pathname === '/pipeline');
-    if (!contactDirectoryIsDeferred && !dashboardSummaryIsDeferred && !pipelineSummaryIsDeferred) return;
+      (pipelineSummaryIsDeferred && pathname === '/pipeline') ||
+      (leanShellIsDeferred && LEAN_SHELL_PATHS.includes(pathname));
+    if (!contactDirectoryIsDeferred && !dashboardSummaryIsDeferred && !pipelineSummaryIsDeferred && !leanShellIsDeferred) return;
     if (allowedDeferredPath) return;
     window.location.reload();
-  }, [contactDirectoryIsDeferred, dashboardSummaryIsDeferred, pathname, pipelineSummaryIsDeferred]);
+  }, [contactDirectoryIsDeferred, dashboardSummaryIsDeferred, leanShellIsDeferred, pathname, pipelineSummaryIsDeferred]);
 
   const loadDashboardSummary = useCallback(({ businessUnitId, employeeIds = [], force = false } = {}) => {
     if (!isPostgres || !dashboardSummaryIsDeferred) return Promise.resolve(dashboardSummary);
@@ -723,7 +729,7 @@ export function CRMProvider({ children, initialData }) {
     currentBusinessUnitId: effectiveBusinessUnitId, currentBusinessUnit, setCurrentBusinessUnitId,
     canUseConsolidatedScope,
     scopeLabel,
-    contacts: scopedContacts, allContacts: contacts, contactDirectoryIsDeferred, addContact, updateContact, deleteContact,
+    contacts: scopedContacts, allContacts: contacts, contactDirectoryIsDeferred, leanShellIsDeferred, addContact, updateContact, deleteContact,
     dashboardSummary,
     dashboardSummaryIsDeferred,
     dashboardSummaryLoaded: dashboardSummaryStatus === 'ready',

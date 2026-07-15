@@ -44,6 +44,7 @@ import {
   deferBootstrapContactDetails,
   deferBootstrapContactDirectory,
   deferBootstrapDashboardSummary,
+  deferBootstrapLeanShell,
   deferBootstrapPipelineSummary,
   deferBootstrapTasks,
   toContactListPayload,
@@ -648,7 +649,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
   try {
     const db = getDb();
     const access = sessionAccess(session);
-    if (['contact-directory', 'dashboard', 'pipeline'].includes(bootstrapMode)) {
+    if (['contact-directory', 'dashboard', 'pipeline', 'lean-shell'].includes(bootstrapMode)) {
       const [businessUnitRows, contactCountRows, userRows, membershipRows, userRoleRows, importStaging] = await Promise.all([
         db.select().from(businessUnitsTable).where(scopedOrgWhere(businessUnitsTable, session)).orderBy(asc(businessUnitsTable.name)),
         db
@@ -681,6 +682,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       }));
       if (bootstrapMode === 'dashboard') return deferBootstrapDashboardSummary(leanPayload);
       if (bootstrapMode === 'pipeline') return deferBootstrapPipelineSummary(leanPayload);
+      if (bootstrapMode === 'lean-shell') return deferBootstrapLeanShell(leanPayload);
       return deferBootstrapContactDirectory(leanPayload);
     }
     const [

@@ -21,9 +21,10 @@ export default function CommandPalette() {
     contactDirectoryIsDeferred,
     dashboardSummaryIsDeferred,
     pipelineSummaryIsDeferred,
+    leanShellIsDeferred,
   } = useCRM();
   const inputRef = useRef(null);
-  const usesRemoteSearch = Boolean(contactDirectoryIsDeferred || dashboardSummaryIsDeferred || pipelineSummaryIsDeferred);
+  const usesRemoteSearch = Boolean(contactDirectoryIsDeferred || dashboardSummaryIsDeferred || pipelineSummaryIsDeferred || leanShellIsDeferred);
 
   useEffect(() => {
     const handleKeyDown = (e) => {

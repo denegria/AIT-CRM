@@ -4,6 +4,7 @@ export const DEFERRED_BOOTSTRAP_LOADERS = Object.freeze({
   CONTACT_DIRECTORY: 'contactDirectory',
   DASHBOARD_SUMMARY: 'dashboardSummary',
   PIPELINE_SUMMARY: 'pipelineSummary',
+  LEAN_SHELL: 'leanShell',
 });
 
 export const CONTACT_BOOTSTRAP_SUMMARY_FIELDS = Object.freeze({
@@ -138,6 +139,10 @@ export function deferBootstrapDashboardSummary(payload = {}) {
 
 export function deferBootstrapPipelineSummary(payload = {}) {
   return deferBootstrapCrmSurface(payload, DEFERRED_BOOTSTRAP_LOADERS.PIPELINE_SUMMARY);
+}
+
+export function deferBootstrapLeanShell(payload = {}) {
+  return deferBootstrapCrmSurface(payload, DEFERRED_BOOTSTRAP_LOADERS.LEAN_SHELL);
 }
 
 export function hasDeferredBootstrapLoader(payload = {}, loader) {
