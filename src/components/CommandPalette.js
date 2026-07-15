@@ -3,13 +3,27 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, User, ClipboardList, FileText, X } from 'lucide-react';
 import { useCRM } from '@/lib/store';
+import { fetchGlobalSearch } from '@/lib/search/loader.js';
 
 export default function CommandPalette() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [remoteResults, setRemoteResults] = useState([]);
+  const [remoteLoading, setRemoteLoading] = useState(false);
   const router = useRouter();
-  const { contacts, workOrders, financials, loaded, role, access } = useCRM();
+  const {
+    contacts,
+    workOrders,
+    financials,
+    role,
+    access,
+    currentBusinessUnitId,
+    contactDirectoryIsDeferred,
+    dashboardSummaryIsDeferred,
+    pipelineSummaryIsDeferred,
+  } = useCRM();
   const inputRef = useRef(null);
+  const usesRemoteSearch = Boolean(contactDirectoryIsDeferred || dashboardSummaryIsDeferred || pipelineSummaryIsDeferred);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -27,8 +41,42 @@ export default function CommandPalette() {
     if (open && inputRef.current) inputRef.current.focus();
   }, [open]);
 
+  useEffect(() => {
+    if (!open || !usesRemoteSearch || query.trim().length < 2) {
+      setRemoteResults([]);
+      setRemoteLoading(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setRemoteLoading(true);
+      fetchGlobalSearch({ query, businessUnitId: currentBusinessUnitId, signal: controller.signal })
+        .then(setRemoteResults)
+        .catch((error) => {
+          if (error?.name !== 'AbortError') setRemoteResults([]);
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setRemoteLoading(false);
+        });
+    }, 200);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [currentBusinessUnitId, open, query, usesRemoteSearch]);
+
   const results = useMemo(() => {
     if (!query.trim()) return [];
+    if (usesRemoteSearch) {
+      return remoteResults.map((result) => ({
+        ...result,
+        icon: result.type === 'contact'
+          ? <User size={16} />
+          : result.type === 'work-order'
+            ? <ClipboardList size={16} />
+            : <FileText size={16} />,
+      }));
+    }
     const q = query.toLowerCase();
     
     const matchedContacts = contacts.filter(c => c.name.toLowerCase().includes(q) || c.email.toLowerCase().includes(q))
@@ -51,7 +99,7 @@ export default function CommandPalette() {
       : [];
 
     return [...matchedContacts, ...matchedWO, ...matchedFin].slice(0, 10);
-  }, [query, contacts, workOrders, financials, access?.canReadReports, access?.canReadSettings, role]);
+  }, [query, contacts, workOrders, financials, access?.canReadReports, access?.canReadSettings, remoteResults, role, usesRemoteSearch]);
 
   const navigate = (path) => {
     router.push(path);
@@ -88,6 +136,8 @@ export default function CommandPalette() {
                 <div className="cp-item-type">{r.type}</div>
               </div>
             ))
+          ) : remoteLoading ? (
+            <div className="cp-empty">Searching...</div>
           ) : query ? (
             <div className="cp-empty">No results for &quot;{query}&quot;</div>
           ) : (
