@@ -9,7 +9,7 @@ import {
 } from '@/db/schema.js';
 import {
   canAccessBusinessUnit,
-  isRegularCoordinatorSession,
+  contactLeadAccessWhere,
   scopedBusinessUnitWhere,
   scopedContactWhere,
   scopedOrgWhere,
@@ -38,6 +38,7 @@ export async function loadGlobalSearch({ db, session, query, businessUnitId = ''
   const latestLead = db
     .selectDistinctOn([leads.contactId], {
       contactId: leads.contactId,
+      businessUnitId: leads.businessUnitId,
       assignedUserId: leads.assignedUserId,
       sourceType: leads.sourceType,
       sourceName: leads.sourceName,
@@ -61,7 +62,7 @@ export async function loadGlobalSearch({ db, session, query, businessUnitId = ''
     .where(and(
       scopedContactWhere(contacts, session),
       businessUnitCondition(contacts.primaryBusinessUnitId, session, businessUnitId),
-      isRegularCoordinatorSession(session) ? eq(latestLead.assignedUserId, session.user.id) : undefined,
+      contactLeadAccessWhere(contacts, latestLead, session),
       or(
         ilike(contacts.name, pattern),
         ilike(contacts.companyName, pattern),

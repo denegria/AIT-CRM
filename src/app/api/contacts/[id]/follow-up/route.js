@@ -232,7 +232,7 @@ export async function GET(request, { params }) {
       contactId: id,
     });
     const lead = await resolveLatestLeadForContact(db, session.user.organizationId, contact.id);
-    assertCanAccessContactLead(session, lead);
+    assertCanAccessContactLead(session, lead, contact);
     const task = await findOldestOpenFollowUpTask(db, session, contact.id);
     return NextResponse.json({ task: safeTaskSummary(task) });
   } catch (err) {
@@ -285,7 +285,7 @@ export async function POST(request, { params }) {
           .where(and(eq(leads.id, existingTask.leadId), eq(leads.organizationId, session.user.organizationId)))
           .limit(1))[0] || null
       : await resolveLatestLeadForContact(db, session.user.organizationId, contact.id);
-    assertCanAccessContactLead(session, lead);
+    assertCanAccessContactLead(session, lead, contact);
 
     const businessUnitId = existingTask?.businessUnitId || lead?.businessUnitId || contact.primaryBusinessUnitId;
     if (!businessUnitId) throw createCrmError('A business unit is required to log follow-up.');

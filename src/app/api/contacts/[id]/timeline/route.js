@@ -54,7 +54,7 @@ export async function POST(request, { params }) {
       contactId: id,
     });
     const lead = await latestLeadForContact(db, session.user.organizationId, contact.id);
-    assertCanAccessContactLead(session, lead);
+    assertCanAccessContactLead(session, lead, contact);
     const [note] = await db
       .insert(notes)
       .values({

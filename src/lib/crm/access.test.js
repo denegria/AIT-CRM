@@ -191,3 +191,45 @@ test('regular coordinator contact list keeps only contacts whose latest lead is 
     ['contact-1', 'contact-2', 'contact-3'],
   );
 });
+
+test('AIT Signs membership grants division-wide contact access without widening AIT USA access', () => {
+  const mixed = session(['account_coordinator']);
+  mixed.user.businessUnitIds = ['bu-usa', 'bu-signs'];
+  mixed.user.businessUnitMemberships = [
+    { id: 'bu-usa', name: 'AIT USA Institute', isPrimary: false },
+    { id: 'bu-signs', name: 'AIT Signs', isPrimary: true },
+  ];
+  mixed.user.businessUnitNamesById = {
+    'bu-usa': 'AIT USA Institute',
+    'bu-signs': 'AIT Signs',
+  };
+
+  assert.equal(canAccessContactLead(mixed, {
+    businessUnitId: 'bu-signs',
+    assignedUserId: 'user-2',
+  }), true);
+  assert.equal(canAccessContactLead(mixed, {
+    businessUnitId: 'bu-usa',
+    assignedUserId: 'user-2',
+  }), false);
+  assert.equal(canAccessContactLead(mixed, {
+    businessUnitId: 'bu-usa',
+    assignedUserId: 'user-1',
+  }), true);
+
+  const contacts = [
+    { id: 'signs-other-owner', primaryBusinessUnitId: 'bu-signs' },
+    { id: 'usa-current-owner', primaryBusinessUnitId: 'bu-usa' },
+    { id: 'usa-other-owner', primaryBusinessUnitId: 'bu-usa' },
+  ];
+  const leads = [
+    { contactId: 'signs-other-owner', businessUnitId: 'bu-signs', assignedUserId: 'user-2', createdAt: '2026-01-01T00:00:00Z' },
+    { contactId: 'usa-current-owner', businessUnitId: 'bu-usa', assignedUserId: 'user-1', createdAt: '2026-01-01T00:00:00Z' },
+    { contactId: 'usa-other-owner', businessUnitId: 'bu-usa', assignedUserId: 'user-2', createdAt: '2026-01-01T00:00:00Z' },
+  ];
+
+  assert.deepEqual(
+    filterContactsForSession(contacts, leads, mixed).map((contact) => contact.id),
+    ['signs-other-owner', 'usa-current-owner'],
+  );
+});

@@ -27,7 +27,7 @@ async function loadContactContext(db, session, contactId) {
     contactId,
   });
   const lead = await latestLeadForContact(db, session.user.organizationId, contact.id);
-  assertCanAccessContactLead(session, lead);
+  assertCanAccessContactLead(session, lead, contact);
   return { contact, lead };
 }
 

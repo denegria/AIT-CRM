@@ -233,7 +233,7 @@ async function resolveTaskLinks(db, session, body) {
   const lead = explicitLead || latestContactLead;
   const workOrder = await resolveWorkOrderById(db, session, workOrderId);
   if (contact || lead) {
-    assertCanAccessContactLead(session, lead);
+    assertCanAccessContactLead(session, lead, contact);
   }
 
   if (contact && lead?.contactId && lead.contactId !== contact.id) {

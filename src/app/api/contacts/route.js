@@ -311,7 +311,7 @@ export async function PATCH(request) {
 
   let lead = await latestLeadForContact(db, session.user.organizationId, id);
   try {
-    assertCanAccessContactLead(session, lead);
+    assertCanAccessContactLead(session, lead, existing);
   } catch (error) {
     return crmErrorResponse(error);
   }
@@ -468,7 +468,7 @@ export async function DELETE(request) {
   let lead = null;
   try {
     lead = await latestLeadForContact(db, session.user.organizationId, id);
-    assertCanAccessContactLead(session, lead);
+    assertCanAccessContactLead(session, lead, existing);
   } catch (error) {
     return crmErrorResponse(error);
   }

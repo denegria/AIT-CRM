@@ -72,6 +72,30 @@ export function workOrderBusinessUnitIdsForUser(user = {}) {
   return businessUnitIds;
 }
 
+export function divisionWideContactBusinessUnitIdsForUser(user = {}) {
+  if (user?.canAccessAllBusinessUnits) return null;
+
+  const memberships = Array.isArray(user?.businessUnitMemberships)
+    ? user.businessUnitMemberships
+    : [];
+  if (memberships.length) {
+    return [
+      ...new Set(
+        memberships
+          .filter(isWorkOrdersBusinessUnit)
+          .map((unit) => unit.id || unit.businessUnitId)
+          .filter(Boolean),
+      ),
+    ];
+  }
+
+  const businessUnitIds = Array.isArray(user?.businessUnitIds) ? user.businessUnitIds.filter(Boolean) : [];
+  const namesById = user?.businessUnitNamesById && typeof user.businessUnitNamesById === 'object'
+    ? user.businessUnitNamesById
+    : {};
+  return businessUnitIds.filter((id) => isWorkOrdersBusinessUnit({ name: namesById[id] }));
+}
+
 export function canUseWorkOrdersWorkspace(user = {}) {
   const allowedIds = workOrderBusinessUnitIdsForUser(user);
   return allowedIds === null || allowedIds.length > 0;
@@ -164,13 +188,29 @@ export function latestLeadByContactId(leadRows = []) {
   return lookup;
 }
 
-export function canAccessContactLead(session, lead = null) {
+export function canAccessContactLead(session, lead = null, contact = null) {
   if (!isRegularCoordinatorSession(session)) return true;
+  const businessUnitIds = [
+    contact?.primaryBusinessUnitId,
+    contact?.businessUnitId,
+    lead?.businessUnitId,
+  ].filter(Boolean);
+  const divisionWideIds = divisionWideContactBusinessUnitIdsForUser(session?.user);
+  if (businessUnitIds.length && (
+    divisionWideIds === null
+    || businessUnitIds.some((businessUnitId) => divisionWideIds.includes(businessUnitId))
+  )) {
+    return true;
+  }
   return Boolean(lead?.assignedUserId && lead.assignedUserId === session.user.id);
 }
 
 export function filterContactsForSession(contactRows = [], leadRows = [], session) {
   if (!isRegularCoordinatorSession(session)) return contactRows;
   const latestLeadLookup = latestLeadByContactId(leadRows);
-  return contactRows.filter((contact) => canAccessContactLead(session, latestLeadLookup.get(contact.id)));
+  return contactRows.filter((contact) => canAccessContactLead(
+    session,
+    latestLeadLookup.get(contact.id),
+    contact,
+  ));
 }

@@ -28,7 +28,7 @@ import {
 import { loadContactBootstrapSummaryRows } from '@/lib/contact-summary-loader.js';
 import { attachPaymentSnapshotContactLinks } from '@/lib/financial-linkage.js';
 import {
-  isRegularCoordinatorSession,
+  contactLeadAccessWhere,
   scopedBusinessUnitWhere,
   scopedContactWhere,
   scopedOrgWhere,
@@ -269,7 +269,7 @@ function directoryConditions({ searchParams, latestLead, session, workflowKey, e
     const allowed = session.user.canAccessAllBusinessUnits || session.user.businessUnitIds.includes(businessUnitId);
     conditions.push(allowed ? eq(contacts.primaryBusinessUnitId, businessUnitId) : sql`false`);
   }
-  if (isRegularCoordinatorSession(session)) conditions.push(eq(latestLead.assignedUserId, session.user.id));
+  conditions.push(contactLeadAccessWhere(contacts, latestLead, session));
 
   const query = clean(searchParams.get('q'));
   if (query) {

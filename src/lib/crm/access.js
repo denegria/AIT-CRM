@@ -8,6 +8,7 @@ export {
   canArchiveContactsDirectly,
   canManageCoordinatorAssignments,
   canUseWorkOrderBusinessUnit,
+  divisionWideContactBusinessUnitIdsForUser,
   filterContactsForSession,
   isRegularCoordinatorSession,
   isWorkOrderSelfScopedSession,
@@ -20,6 +21,7 @@ import {
   canAccessContactLead,
   canAccessWorkOrder,
   canUseWorkOrderBusinessUnit,
+  divisionWideContactBusinessUnitIdsForUser,
   isRegularCoordinatorSession,
   isWorkOrderSelfScopedSession,
   workOrderBusinessUnitIdsForUser,
@@ -71,6 +73,19 @@ export function scopedContactWhere(table, session) {
   );
 }
 
+export function contactLeadAccessWhere(contactTable, leadTable, session) {
+  if (!isRegularCoordinatorSession(session)) return undefined;
+  const ownerScope = eq(leadTable.assignedUserId, session.user.id);
+  const divisionWideIds = divisionWideContactBusinessUnitIdsForUser(session.user);
+  if (divisionWideIds === null) return undefined;
+  if (!divisionWideIds.length) return ownerScope;
+  return or(
+    ownerScope,
+    inArray(contactTable.primaryBusinessUnitId, divisionWideIds),
+    inArray(leadTable.businessUnitId, divisionWideIds),
+  );
+}
+
 export function scopedTaskWhere(table, session) {
   const orgScope = scopedBusinessUnitWhere(table, session);
   if (!isRegularCoordinatorSession(session)) return orgScope;
@@ -97,9 +112,9 @@ export function scopedWorkOrderWhere(table, session) {
   );
 }
 
-export function assertCanAccessContactLead(session, lead = null) {
-  if (!canAccessContactLead(session, lead)) {
-    throw createCrmError('Regular coordinators can only access contacts assigned to them.', 403);
+export function assertCanAccessContactLead(session, lead = null, contact = null) {
+  if (!canAccessContactLead(session, lead, contact)) {
+    throw createCrmError('Regular coordinators can only access assigned contacts or shared AIT Signs contacts.', 403);
   }
 }
 

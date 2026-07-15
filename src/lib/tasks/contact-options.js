@@ -2,7 +2,7 @@ import { and, asc, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { businessUnits, contacts, leads } from '../../db/schema.js';
 import {
   canAccessBusinessUnit,
-  isRegularCoordinatorSession,
+  contactLeadAccessWhere,
   scopedContactWhere,
   scopedOrgWhere,
 } from '../crm/access.js';
@@ -90,6 +90,7 @@ export async function loadTaskContactOptions({
   const latestLead = db
     .selectDistinctOn([leads.contactId], {
       contactId: leads.contactId,
+      businessUnitId: leads.businessUnitId,
       leadId: leads.id,
       leadStatus: leads.status,
       currentStage: leads.currentStage,
@@ -117,7 +118,7 @@ export async function loadTaskContactOptions({
     requestedBusinessUnitId && requestedBusinessUnitId !== 'all'
       ? eq(contacts.primaryBusinessUnitId, requestedBusinessUnitId)
       : undefined,
-    isRegularCoordinatorSession(session) ? eq(latestLead.assignedUserId, session.user.id) : undefined,
+    contactLeadAccessWhere(contacts, latestLead, session),
     uniqueContactIds.length ? inArray(contacts.id, uniqueContactIds) : undefined,
   ];
   if (search && !uniqueContactIds.length) {
