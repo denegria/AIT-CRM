@@ -476,6 +476,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [courseBusy, setCourseBusy] = useState(false);
   const [courseError, setCourseError] = useState('');
   const [selectedCourseRecordId, setSelectedCourseRecordId] = useState('');
+  const [phoneHistoryState, setPhoneHistoryState] = useState({ contactId: '', items: [], loading: false, error: '' });
 
   const scopedContact = useMemo(() => contacts.find(c => c.id === params.id), [contacts, params.id]);
   const allAccessibleContacts = allContacts?.length ? allContacts : contacts;
@@ -827,6 +828,39 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       cancelled = true;
     };
   }, [contact?.id, dataSource, showCoursesTab]);
+
+  useEffect(() => {
+    if (!contact?.id || dataSource !== 'postgres') return undefined;
+    let cancelled = false;
+    const requestContactId = contact.id;
+    fetch(`/api/contacts/${contact.id}/phones`, { cache: 'no-store' })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Phone history load failed.');
+        if (!cancelled) {
+          setPhoneHistoryState({
+            contactId: requestContactId,
+            items: Array.isArray(payload.phones) ? payload.phones : [],
+            loading: false,
+            error: '',
+          });
+        }
+      })
+      .catch((error) => {
+        console.error(error);
+        if (!cancelled) {
+          setPhoneHistoryState({
+            contactId: requestContactId,
+            items: [],
+            loading: false,
+            error: error.message || 'Phone history load failed.',
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [contact?.id, dataSource]);
 
   useEffect(() => {
     if (!contact?.id || dataSource !== 'postgres') return undefined;
@@ -1586,6 +1620,26 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             <span className={s.missingInfo}>Missing phone</span>
           )}
         </div>
+        {phoneHistoryState.contactId === contact.id && phoneHistoryState.items.some((phone) => !phone.isPrimary) && (
+          <div className={s.infoItem}>
+            <Archive size={16} />
+            <div className={s.phoneHistory}>
+              <strong>Previous phone numbers</strong>
+              {phoneHistoryState.items.filter((phone) => !phone.isPrimary).map((phone) => (
+                <span key={phone.id || phone.normalizedPhone}>
+                  {phone.phone}
+                  {phone.isWrongNumber ? ' · Wrong number' : phone.isDoNotCall ? ' · Do not call' : ' · Historical — do not use for outreach'}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {phoneHistoryState.contactId === contact.id && phoneHistoryState.error && (
+          <div className={s.infoItem}>
+            <AlertCircle size={16} />
+            <span className={s.missingInfo}>{phoneHistoryState.error}</span>
+          </div>
+        )}
         {contact.address && <div className={s.infoItem}><MapPin size={16} /> <span>{contact.address}</span></div>}
         <div className={s.infoItem}><Calendar size={16} /> <span>Last touch: {contact.lastTouch || contact.lastContact || 'None'}</span></div>
         <div className={s.infoItem}><Edit3 size={16} /> <span>Last edited: {contact.lastEdited || 'None'}</span></div>

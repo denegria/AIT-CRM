@@ -144,6 +144,39 @@ export const contacts = pgTable('contacts', {
   updatedAt,
 });
 
+export const contactPhoneNumbers = pgTable('contact_phone_numbers', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').references(() => businessUnits.id, { onDelete: 'set null' }),
+  contactId: uuid('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
+  phone: text('phone').notNull(),
+  normalizedPhone: text('normalized_phone').notNull(),
+  isPrimary: boolean('is_primary').notNull().default(false),
+  isDoNotCall: boolean('is_do_not_call').notNull().default(false),
+  isWrongNumber: boolean('is_wrong_number').notNull().default(false),
+  channelConsentJson: jsonb('channel_consent_json').notNull().default({}),
+  sourceType: text('source_type'),
+  sourceReference: text('source_reference'),
+  observedAt: timestamp('observed_at', { withTimezone: true }),
+  effectiveAt: timestamp('effective_at', { withTimezone: true }),
+  retiredAt: timestamp('retired_at', { withTimezone: true }),
+  createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  metadataJson: jsonb('metadata_json').notNull().default({}),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  contactPhoneIdx: uniqueIndex('contact_phone_numbers_contact_phone_idx').on(
+    table.organizationId,
+    table.contactId,
+    table.normalizedPhone,
+  ),
+  contactPrimaryIdx: uniqueIndex('contact_phone_numbers_contact_primary_idx')
+    .on(table.organizationId, table.contactId)
+    .where(sql`${table.isPrimary} = true`),
+  orgPhoneIdx: index('contact_phone_numbers_org_phone_idx').on(table.organizationId, table.normalizedPhone),
+  businessUnitIdx: index('contact_phone_numbers_business_unit_idx').on(table.businessUnitId),
+}));
+
 export const contactChannelConsents = pgTable('contact_channel_consents', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
@@ -899,6 +932,7 @@ export const allTables = {
   userRoles,
   businessUnitMemberships,
   contacts,
+  contactPhoneNumbers,
   contactChannelConsents,
   contactChannelConsentEvents,
   contactPeople,
