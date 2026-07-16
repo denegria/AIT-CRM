@@ -101,6 +101,8 @@ export function courseRecordPayloadFromRow(row = {}) {
     id: row.id || '',
     contactId: row.contactId || '',
     leadId: row.leadId || '',
+    classSectionId: row.classSectionId || '',
+    classSection: row.classSection || null,
     businessUnitId: row.businessUnitId || '',
     courseName: cleanText(row.courseName),
     courseLocation: courseLocationForPayload(row.courseLocation),
@@ -118,6 +120,8 @@ export function courseRecordPayloadFromRow(row = {}) {
 
 export function courseRecordSummaryPayloadFromRow(row = {}) {
   return {
+    classSectionId: row.classSectionId || '',
+    classSection: row.classSection || null,
     courseName: cleanText(row.courseName),
     courseLocation: courseLocationForPayload(row.courseLocation),
     teacher: cleanText(row.teacher),
@@ -137,6 +141,10 @@ export function courseRecordInputFromPayload(payload = {}, { allowClear = false 
   const input = {};
   if (Object.prototype.hasOwnProperty.call(source, 'courseName')) {
     input.courseName = cleanText(source.courseName);
+  }
+  if (Object.prototype.hasOwnProperty.call(source, 'classSectionId')) {
+    const value = cleanText(source.classSectionId);
+    input.classSectionId = value || (allowClear ? null : undefined);
   }
   if (Object.prototype.hasOwnProperty.call(source, 'courseLocation')) {
     input.courseLocation = courseLocationForDb(source.courseLocation, { allowClear });
@@ -168,6 +176,7 @@ export function courseRecordInputFromPayload(payload = {}, { allowClear = false 
 export function courseRecordValuesFromInput(input = {}, defaults = {}) {
   return {
     ...defaults,
+    ...(Object.prototype.hasOwnProperty.call(input, 'classSectionId') ? { classSectionId: input.classSectionId || null } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'courseName') ? { courseName: cleanText(input.courseName) } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'courseLocation') ? { courseLocation: courseLocationForPayload(input.courseLocation) || null } : {}),
     ...(Object.prototype.hasOwnProperty.call(input, 'teacher') ? { teacher: cleanText(input.teacher) || null } : {}),
@@ -195,11 +204,21 @@ export function validateCourseRecordInput(input = {}, {
     if (!input.startDate) {
       throw new Error('Start date is required for the current course.');
     }
-    const hasOtherActive = existingRecords.some((record) => (
-      record.id !== currentRecordId && normalizeCourseRecordStatus(record.status) === 'active'
-    ));
-    if (hasOtherActive) {
-      throw new Error('This contact already has a current course. End it before starting another course.');
+    const normalizedCourse = normalized(input.courseName);
+    const normalizedLocation = normalized(input.courseLocation);
+    const normalizedTeacher = normalized(input.teacher);
+    const hasDuplicateActive = existingRecords.some((record) => {
+      if (record.id === currentRecordId || normalizeCourseRecordStatus(record.status) !== 'active') return false;
+      if (input.classSectionId || record.classSectionId) {
+        return Boolean(input.classSectionId) && record.classSectionId === input.classSectionId;
+      }
+      return normalized(record.courseName) === normalizedCourse &&
+        normalized(record.courseLocation) === normalizedLocation &&
+        normalized(record.teacher) === normalizedTeacher &&
+        dateForPayload(record.startDate) === dateForPayload(input.startDate);
+    });
+    if (hasDuplicateActive) {
+      throw new Error('This student already has an active enrollment for the same class section.');
     }
   }
 }
@@ -218,11 +237,13 @@ export function sortCourseRecords(records = []) {
 export function deriveCourseSummary(records = []) {
   const sorted = sortCourseRecords(records.map(courseRecordPayloadFromRow));
   const currentCourse = sorted.find((record) => record.status === 'active') || null;
+  const currentCourses = sorted.filter((record) => record.status === 'active');
   const completedCourses = sorted.filter((record) => record.status === 'completed');
   const endedCourses = sorted.filter((record) => isTerminalCourseRecordStatus(record.status));
   return {
     records: sorted,
     currentCourse,
+    currentCourses,
     latestCompletedCourse: completedCourses[0] || null,
     latestEndedCourse: endedCourses[0] || null,
     hasCurrentCourse: Boolean(currentCourse),

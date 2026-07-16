@@ -297,12 +297,42 @@ export const leads = pgTable('leads', {
   updatedAt,
 });
 
+export const courseClassSections = pgTable('course_class_sections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
+  sectionKey: text('section_key').notNull(),
+  courseName: text('course_name').notNull(),
+  teacher: text('teacher'),
+  courseLocation: text('course_location'),
+  modality: text('modality').notNull().default('in_person'),
+  scheduleDaysJson: jsonb('schedule_days_json').notNull().default([]),
+  startTime: text('start_time'),
+  endTime: text('end_time'),
+  scheduledDaysPerWeek: integer('scheduled_days_per_week'),
+  status: text('status').notNull().default('active'),
+  sourceType: text('source_type'),
+  sourceReference: text('source_reference'),
+  metadataJson: jsonb('metadata_json').notNull().default({}),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  businessUnitSectionIdx: uniqueIndex('course_class_sections_business_unit_section_idx').on(
+    table.organizationId,
+    table.businessUnitId,
+    table.sectionKey,
+  ),
+  businessUnitStatusIdx: index('course_class_sections_business_unit_status_idx').on(table.businessUnitId, table.status),
+  orgCourseIdx: index('course_class_sections_org_course_idx').on(table.organizationId, table.courseName),
+}));
+
 export const contactCourseRecords = pgTable('contact_course_records', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
   businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
   contactId: uuid('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
   leadId: uuid('lead_id').references(() => leads.id, { onDelete: 'set null' }),
+  classSectionId: uuid('class_section_id').references(() => courseClassSections.id, { onDelete: 'set null' }),
   courseName: text('course_name').notNull(),
   courseLocation: text('course_location'),
   teacher: text('teacher'),
@@ -319,6 +349,10 @@ export const contactCourseRecords = pgTable('contact_course_records', {
   contactStatusIdx: index('contact_course_records_contact_status_idx').on(table.contactId, table.status),
   businessUnitStatusIdx: index('contact_course_records_business_unit_status_idx').on(table.businessUnitId, table.status),
   leadIdx: index('contact_course_records_lead_idx').on(table.leadId),
+  classSectionIdx: index('contact_course_records_class_section_idx').on(table.classSectionId),
+  activeSectionEnrollmentIdx: uniqueIndex('contact_course_records_active_section_enrollment_idx')
+    .on(table.organizationId, table.contactId, table.classSectionId)
+    .where(sql`${table.status} = 'active' and ${table.classSectionId} is not null`),
 }));
 
 export const leadStatusHistory = pgTable('lead_status_history', {
@@ -937,6 +971,7 @@ export const allTables = {
   contactChannelConsentEvents,
   contactPeople,
   leads,
+  courseClassSections,
   contactCourseRecords,
   leadStatusHistory,
   notifications,

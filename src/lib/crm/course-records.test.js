@@ -82,13 +82,13 @@ test('course record location round-trips structured and legacy values', () => {
   });
 });
 
-test('course record validation enforces one current course for v1', () => {
+test('course record validation allows multiple active sections and blocks duplicate enrollment replay', () => {
   assert.throws(
     () => validateCourseRecordInput(
-      { courseName: 'Forklift', status: 'active', startDate: '2026-07-01' },
-      { existingRecords: [{ id: 'old', status: 'active' }] },
+      { classSectionId: 'section-a', courseName: 'English 1', status: 'active', startDate: '2026-07-01' },
+      { existingRecords: [{ id: 'old', classSectionId: 'section-a', courseName: 'English 1', status: 'active' }] },
     ),
-    /already has a current course/,
+    /same class section/,
   );
 
   assert.throws(
@@ -100,8 +100,13 @@ test('course record validation enforces one current course for v1', () => {
   );
 
   assert.doesNotThrow(() => validateCourseRecordInput(
-    { courseName: 'Forklift', status: 'active', startDate: '2026-07-01' },
-    { existingRecords: [{ id: 'old', status: 'completed' }] },
+    { classSectionId: 'section-b', courseName: 'Computer', status: 'active', startDate: '2026-07-01' },
+    { existingRecords: [{ id: 'old', classSectionId: 'section-a', courseName: 'English 1', status: 'active' }] },
+  ));
+
+  assert.doesNotThrow(() => validateCourseRecordInput(
+    { courseName: 'Forklift', courseLocation: 'Bound Brook', teacher: 'Ana', status: 'active', startDate: '2026-07-01' },
+    { existingRecords: [{ id: 'old', courseName: 'GED', courseLocation: 'Bound Brook', teacher: 'Ana', status: 'active', startDate: '2026-07-01' }] },
   ));
 });
 
@@ -113,6 +118,7 @@ test('course summary derives current and historical records', () => {
   ]);
 
   assert.equal(summary.currentCourse.courseName, 'Forklift');
+  assert.deepEqual(summary.currentCourses.map((record) => record.courseName), ['Forklift']);
   assert.equal(summary.currentCourse.courseLocation, 'Flemington');
   assert.equal(summary.currentCourse.teacher, 'Ana Rivera');
   assert.equal(summary.latestCompletedCourse.courseName, 'ESL Level 1');

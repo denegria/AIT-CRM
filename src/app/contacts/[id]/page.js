@@ -73,6 +73,7 @@ const emptyPaymentForm = {
 
 const emptyCourseForm = {
   id: '',
+  classSectionId: '',
   courseName: '',
   courseLocation: '',
   teacher: '',
@@ -85,12 +86,29 @@ const emptyCourseForm = {
 
 const COURSE_STATUS_HELP = {
   planned: 'Use when the student is expected to start later.',
-  active: 'Use for the one course currently in progress.',
+  active: 'Use for a class the student is currently attending.',
   completed: 'Use when the course ended successfully.',
   dropped: 'Use when the student left or quit before finishing.',
   cancelled: 'Use when the course never moved forward.',
   transferred: 'Use when the student moved into another class or location.',
 };
+
+function classSectionScheduleLabel(section = {}) {
+  const days = Array.isArray(section.scheduleDays) ? section.scheduleDays.join(', ') : '';
+  const time = [section.startTime, section.endTime].filter(Boolean).join('–');
+  return [days, time].filter(Boolean).join(' ');
+}
+
+function classSectionDisplayLabel(section = {}) {
+  return [
+    section.courseName,
+    section.teacher,
+    section.courseLocation,
+    classSectionScheduleLabel(section),
+    section.modality === 'online' ? 'Online' : '',
+    section.status !== 'active' ? 'Inactive' : '',
+  ].filter(Boolean).join(' · ');
+}
 
 const FOLLOW_UP_OUTCOME_OPTIONS = [
   ['reached_interested', 'Reached - interested'],
@@ -470,7 +488,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [paymentForm, setPaymentForm] = useState(emptyPaymentForm);
   const [invoiceWorkOrderId, setInvoiceWorkOrderId] = useState('');
-  const [courseRecordsState, setCourseRecordsState] = useState({ contactId: '', items: [], loading: false, error: '' });
+  const [courseRecordsState, setCourseRecordsState] = useState({ contactId: '', items: [], sections: [], loading: false, error: '' });
   const [courseModal, setCourseModal] = useState(null);
   const [courseForm, setCourseForm] = useState(emptyCourseForm);
   const [courseBusy, setCourseBusy] = useState(false);
@@ -596,8 +614,17 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       ? courseRecordsState.items
       : []
   ), [contact?.id, courseRecordsState.contactId, courseRecordsState.items, showCoursesTab]);
+  const currentClassSections = useMemo(() => (
+    showCoursesTab && courseRecordsState.contactId === contact?.id
+      ? courseRecordsState.sections
+      : []
+  ), [contact?.id, courseRecordsState.contactId, courseRecordsState.sections, showCoursesTab]);
   const courseSummary = useMemo(() => deriveCourseSummary(currentCourseRecords), [currentCourseRecords]);
   const activeCourseRecord = courseSummary.currentCourse;
+  const activeCourseRecords = courseSummary.currentCourses;
+  const selectedClassSection = useMemo(() => (
+    currentClassSections.find((section) => section.id === courseForm.classSectionId) || null
+  ), [courseForm.classSectionId, currentClassSections]);
   const selectedCourseRecord = useMemo(() => (
     currentCourseRecords.find((record) => record.id === selectedCourseRecordId) ||
     activeCourseRecord ||
@@ -609,7 +636,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const courseStatusLabel = courseRecordStatusLabel(courseForm.status);
   const courseModeLabel = courseForm.id
     ? 'Edit saved record'
-    : (courseModal === 'history' ? 'Backfill history' : 'Start current course');
+    : (courseModal === 'history' ? 'Backfill history' : 'Start enrollment');
   const canSaveCourseForm = Boolean(cleanText(courseForm.courseName)) &&
     (!courseStartDateRequired || Boolean(courseForm.startDate));
   const financialNotice = isAitUsaContact
@@ -802,6 +829,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           setCourseRecordsState({
             contactId: requestContactId,
             items,
+            sections: Array.isArray(payload.classSections) ? payload.classSections : [],
             loading: false,
             error: '',
           });
@@ -818,6 +846,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           setCourseRecordsState({
             contactId: requestContactId,
             items: [],
+            sections: [],
             loading: false,
             error: error.message || 'Course history load failed.',
           });
@@ -1010,6 +1039,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     const isEnd = mode === 'end' && record;
     setCourseForm(isEdit || isComplete || isEnd ? {
       id: record.id,
+      classSectionId: record.classSectionId || '',
       courseName: record.courseName || '',
       courseLocation: record.courseLocation || '',
       teacher: record.teacher || '',
@@ -1049,6 +1079,16 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     }));
   };
 
+  const selectClassSection = (classSectionId) => {
+    const section = currentClassSections.find((item) => item.id === classSectionId);
+    updateCourseForm(section ? {
+      classSectionId: section.id,
+      courseName: section.courseName || '',
+      courseLocation: section.courseLocation || '',
+      teacher: section.teacher || '',
+    } : { classSectionId: '' });
+  };
+
   const saveCourseRecord = async () => {
     if (!contact?.id || !access.canWriteCrm || courseBusy) return;
     if (!cleanText(courseForm.courseName)) {
@@ -1073,6 +1113,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       setCourseRecordsState({
         contactId: contact.id,
         items,
+        sections: Array.isArray(payload.classSections) ? payload.classSections : currentClassSections,
         loading: false,
         error: '',
       });
@@ -1942,39 +1983,39 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   <div className={s.courseHeroMain}>
                     <div className={s.courseHeroIcon}><GraduationCap size={22} /></div>
                     <div>
-                      <span className={s.courseEyebrow}>Current course</span>
-                      <h2>{activeCourseRecord?.courseName || 'No current course'}</h2>
+                      <span className={s.courseEyebrow}>Active enrollments</span>
+                      <h2>{activeCourseRecords.length ? `${activeCourseRecords.length} active` : 'No active enrollments'}</h2>
                       <p>
-                        {activeCourseRecord
-                          ? [
-                              activeCourseRecord.startDate ? `Started ${activeCourseRecord.startDate}` : '',
-                              activeCourseRecord.courseLocation || 'Delivery location not set',
-                              activeCourseRecord.teacher ? `Teacher: ${activeCourseRecord.teacher}` : 'Teacher not assigned',
-                              activeCourseRecord.notes || '',
-                            ].filter(Boolean).join(' - ') || 'Active course record'
-                          : 'Start a new course when the student enrolls again. Older courses stay in history.'}
+                        {activeCourseRecords.length
+                          ? 'A student can attend more than one class section at the same time.'
+                          : 'Start an enrollment when the student joins a class. Older courses stay in history.'}
                       </p>
+                      {activeCourseRecords.length > 0 && (
+                        <div className={s.courseActiveList}>
+                          {activeCourseRecords.map((record) => (
+                            <button
+                              key={record.id}
+                              type="button"
+                              className={s.courseActiveItem}
+                              onClick={() => setSelectedCourseRecordId(record.id)}
+                            >
+                              <strong>{record.courseName}</strong>
+                              <span>{[
+                                record.teacher ? `Teacher: ${record.teacher}` : '',
+                                record.courseLocation,
+                                classSectionScheduleLabel(record.classSection),
+                              ].filter(Boolean).join(' · ') || 'Class details not set'}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   </div>
                   {access.canWriteCrm && (
                     <div className={s.courseHeroActions}>
-                      {activeCourseRecord ? (
-                        <>
-                          <button className="btn btn-sm" type="button" onClick={() => openCourseModal('edit', activeCourseRecord)}>
-                            <Edit3 size={14} /> Edit
-                          </button>
-                          <button className="btn btn-sm" type="button" onClick={() => openCourseModal('complete', activeCourseRecord)}>
-                            <CheckCircle2 size={14} /> Mark Completed
-                          </button>
-                          <button className="btn btn-sm" type="button" onClick={() => openCourseModal('end', activeCourseRecord)}>
-                            <AlertCircle size={14} /> End Course
-                          </button>
-                        </>
-                      ) : (
-                        <button className="btn btn-primary btn-sm" type="button" onClick={() => openCourseModal('new')}>
-                          <Plus size={14} /> Start Course
-                        </button>
-                      )}
+                      <button className="btn btn-primary btn-sm" type="button" onClick={() => openCourseModal('new')}>
+                        <Plus size={14} /> Add Enrollment
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1989,11 +2030,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       <button className="btn btn-sm" type="button" onClick={() => openCourseModal('history')}>
                         <Plus size={14} /> Add History
                       </button>
-                      {!activeCourseRecord && (
-                        <button className="btn btn-primary btn-sm" type="button" onClick={() => openCourseModal('new')}>
-                          <Plus size={14} /> Start Course
-                        </button>
-                      )}
+                      <button className="btn btn-primary btn-sm" type="button" onClick={() => openCourseModal('new')}>
+                        <Plus size={14} /> Add Enrollment
+                      </button>
                     </div>
                   )}
                 </div>
@@ -2002,7 +2041,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 {!courseRecordsState.error && !courseRecordsState.loading && currentCourseRecords.length === 0 && (
                   <div className={s.courseEmpty}>
                     <div className="empty-state-title">No course history yet</div>
-                    <p className="empty-state-copy">Add the current course or backfill a completed course to start the timeline.</p>
+                    <p className="empty-state-copy">Add an active enrollment or backfill a completed course to start the timeline.</p>
                     {access.canWriteCrm && (
                       <button className="btn btn-primary" type="button" onClick={() => openCourseModal('new')}>
                         <Plus size={16} /> Start Course
@@ -2028,6 +2067,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                               {courseRecordStatusLabel(record.status)}
                               {` - ${record.courseLocation || 'Delivery location not set'}`}
                               {` - ${record.teacher ? `Teacher: ${record.teacher}` : 'Teacher not assigned'}`}
+                              {record.classSection ? ` - ${classSectionScheduleLabel(record.classSection) || record.classSection.sectionKey}` : ''}
                               {record.startDate ? ` - ${record.startDate}` : ''}
                               {record.endDate ? ` to ${record.endDate}` : ''}
                             </small>
@@ -2062,6 +2102,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                             <div>
                               <span>Ended</span>
                               <strong>{selectedCourseRecord.endDate || (selectedCourseRecord.status === 'active' ? 'Current' : 'Not set')}</strong>
+                            </div>
+                            <div className={s.courseInspectorWide}>
+                              <span>Class section</span>
+                              <strong>{selectedCourseRecord.classSection
+                                ? classSectionDisplayLabel(selectedCourseRecord.classSection)
+                                : 'Legacy or manually entered course record'}</strong>
                             </div>
                             <div className={s.courseInspectorWide}>
                               <span>Outcome / reason</span>
@@ -2470,7 +2516,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         <Modal
           open={Boolean(courseModal)}
           onClose={closeCourseModal}
-          title={courseForm.id ? 'Edit Course' : (courseModal === 'history' ? 'Add Course History' : 'Start Course')}
+          title={courseForm.id ? 'Edit Enrollment' : (courseModal === 'history' ? 'Add Course History' : 'Add Enrollment')}
           variant="dialog"
           panelClassName="course-editor-dialog-panel"
           footer={(
@@ -2500,14 +2546,33 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   <p>Choose the course, record its teacher, and keep the delivery location tied to this class record.</p>
                 </div>
               </div>
+              <div className="form-group">
+                <label className="form-label">Class Section</label>
+                <select
+                  className="input select"
+                  value={courseForm.classSectionId || ''}
+                  disabled={courseBusy}
+                  data-autofocus
+                  onChange={(event) => selectClassSection(event.target.value)}
+                >
+                  <option value="">No saved section — enter course details manually</option>
+                  {currentClassSections
+                    .filter((section) => section.status === 'active' || section.id === courseForm.classSectionId)
+                    .map((section) => (
+                      <option key={section.id} value={section.id}>{classSectionDisplayLabel(section)}</option>
+                    ))}
+                </select>
+                {selectedClassSection && (
+                  <small>Section details are shared by every student in this class and stay consistent across enrollments.</small>
+                )}
+              </div>
               <div className="grid-2">
                 <div className="form-group">
                   <label className="form-label">Course</label>
                   <select
                     className="input select"
                     value={courseForm.courseName || ''}
-                    disabled={courseBusy}
-                    data-autofocus
+                    disabled={courseBusy || Boolean(selectedClassSection)}
                     onChange={(event) => updateCourseForm({ courseName: event.target.value })}
                   >
                     <option value="">Select a course</option>
@@ -2521,7 +2586,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   <input
                     className="input"
                     value={courseForm.teacher || ''}
-                    disabled={courseBusy}
+                    disabled={courseBusy || Boolean(selectedClassSection)}
                     placeholder="Teacher name"
                     onChange={(event) => updateCourseForm({ teacher: event.target.value })}
                   />
@@ -2532,7 +2597,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   <select
                     className="input select"
                     value={courseForm.courseLocation || ''}
-                    disabled={courseBusy}
+                    disabled={courseBusy || Boolean(selectedClassSection)}
                     onChange={(event) => updateCourseForm({ courseLocation: event.target.value })}
                   >
                     <option value="">Delivery location not set</option>
@@ -2607,8 +2672,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   </div>
                 ) : (
                   <div className="course-editor-state-note">
-                    <strong>{courseForm.status === 'planned' ? 'End date hidden' : 'Current course'}</strong>
-                    <span>{courseForm.status === 'planned' ? 'Set an end date after the student completes, drops, cancels, or transfers.' : 'Only one course can be current at a time for this student.'}</span>
+                    <strong>{courseForm.status === 'planned' ? 'End date hidden' : 'Active enrollment'}</strong>
+                    <span>{courseForm.status === 'planned' ? 'Set an end date after the student completes, drops, cancels, or transfers.' : 'Other class sections can remain active at the same time.'}</span>
                   </div>
                 )}
               </div>
@@ -2650,9 +2715,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               )}
             </aside>
 
-            {courseForm.status === 'active' && activeCourseRecord && activeCourseRecord.id !== courseForm.id && (
-              <div className={s.courseError}>End the current course before starting another current course.</div>
-            )}
             {courseError && <div className={s.courseError}>{courseError}</div>}
           </div>
         </Modal>

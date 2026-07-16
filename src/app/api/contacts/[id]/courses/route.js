@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { and, desc, eq } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
-import { contactCourseRecords, contacts } from '@/db/schema.js';
+import { contactCourseRecords, contacts, courseClassSections } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import { assertCanAccessContactLead, resolveContactById } from '@/lib/crm/access.js';
 import { crmErrorResponse } from '@/lib/crm/errors.js';
@@ -14,6 +14,7 @@ import {
 } from '@/lib/crm/course-records.js';
 import { isUuid } from '@/lib/crm/validation.js';
 import { latestLeadForContact } from '@/lib/crm/write-helpers.js';
+import { classSectionPayload, listClassSections } from '@/lib/crm/class-sections.js';
 
 function cleanString(value) {
   return String(value || '').trim();
@@ -33,14 +34,18 @@ async function loadContactContext(db, session, contactId) {
 
 async function listCourseRecords(db, session, contactId) {
   const rows = await db
-    .select()
+    .select({ course: contactCourseRecords, classSection: courseClassSections })
     .from(contactCourseRecords)
+    .leftJoin(courseClassSections, eq(contactCourseRecords.classSectionId, courseClassSections.id))
     .where(and(
       eq(contactCourseRecords.organizationId, session.user.organizationId),
       eq(contactCourseRecords.contactId, contactId),
     ))
     .orderBy(desc(contactCourseRecords.startDate), desc(contactCourseRecords.createdAt));
-  return sortCourseRecords(rows).map(courseRecordPayloadFromRow);
+  return sortCourseRecords(rows.map(({ course, classSection }) => ({
+    ...course,
+    classSection: classSection ? classSectionPayload(classSection) : null,
+  }))).map(courseRecordPayloadFromRow);
 }
 
 function businessUnitIdForRecord(session, contact, lead) {
@@ -51,6 +56,55 @@ function businessUnitIdForRecord(session, contact, lead) {
     '';
 }
 
+async function loadClassSection(db, session, businessUnitId, classSectionId) {
+  if (!classSectionId) return null;
+  if (!isUuid(classSectionId)) {
+    throw new Error('A valid class section is required.');
+  }
+  const [section] = await db
+    .select()
+    .from(courseClassSections)
+    .where(and(
+      eq(courseClassSections.id, classSectionId),
+      eq(courseClassSections.organizationId, session.user.organizationId),
+      eq(courseClassSections.businessUnitId, businessUnitId),
+    ))
+    .limit(1);
+  if (!section) {
+    const error = new Error('Class section not found in this business unit.');
+    error.status = 404;
+    throw error;
+  }
+  return section;
+}
+
+function applyClassSection(input, section) {
+  if (!section) return input;
+  return {
+    ...input,
+    classSectionId: section.id,
+    courseName: section.courseName,
+    courseLocation: section.courseLocation,
+    teacher: section.teacher,
+  };
+}
+
+async function courseResponseContext(db, session, contact, lead) {
+  const businessUnitId = businessUnitIdForRecord(session, contact, lead);
+  const [courses, classSections] = await Promise.all([
+    listCourseRecords(db, session, contact.id),
+    businessUnitId
+      ? listClassSections({
+          db,
+          organizationId: session.user.organizationId,
+          businessUnitId,
+          includeInactive: true,
+        })
+      : [],
+  ]);
+  return { courses, classSections };
+}
+
 export async function GET(request, { params }) {
   const { error, session } = await requirePermission(request, PERMISSIONS.CRM_READ);
   if (error) return error;
@@ -59,9 +113,8 @@ export async function GET(request, { params }) {
   const db = getDb();
 
   try {
-    const { contact } = await loadContactContext(db, session, id);
-    const courses = await listCourseRecords(db, session, contact.id);
-    return NextResponse.json({ courses });
+    const { contact, lead } = await loadContactContext(db, session, id);
+    return NextResponse.json(await courseResponseContext(db, session, contact, lead));
   } catch (err) {
     return crmErrorResponse(err);
   }
@@ -82,12 +135,17 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'Course records need a business unit.' }, { status: 400 });
     }
 
-    const input = courseRecordInputFromPayload(body);
+    let input = courseRecordInputFromPayload(body);
     input.status ||= 'active';
+    const section = await loadClassSection(db, session, businessUnitId, input.classSectionId);
+    if (section?.status !== 'active' && input.status === 'active') {
+      return NextResponse.json({ error: 'Inactive class sections cannot accept new active enrollments.' }, { status: 400 });
+    }
+    input = applyClassSection(input, section);
     const existingRecords = await listCourseRecords(db, session, contact.id);
     validateCourseRecordInput(input, { existingRecords });
 
-    const courses = await db.transaction(async (tx) => {
+    await db.transaction(async (tx) => {
       await tx.insert(contactCourseRecords).values(courseRecordValuesFromInput(input, {
         organizationId: session.user.organizationId,
         businessUnitId,
@@ -95,9 +153,8 @@ export async function POST(request, { params }) {
         leadId: lead?.id || null,
         status: 'active',
       }));
-      return listCourseRecords(tx, session, contact.id);
     });
-    return NextResponse.json({ courses }, { status: 201 });
+    return NextResponse.json(await courseResponseContext(db, session, contact, lead), { status: 201 });
   } catch (err) {
     return err?.status
       ? crmErrorResponse(err)
@@ -116,7 +173,7 @@ export async function PATCH(request, { params }) {
 
   const db = getDb();
   try {
-    const { contact } = await loadContactContext(db, session, id);
+    const { contact, lead } = await loadContactContext(db, session, id);
     const [existing] = await db
       .select()
       .from(contactCourseRecords)
@@ -128,10 +185,22 @@ export async function PATCH(request, { params }) {
       .limit(1);
     if (!existing) return NextResponse.json({ error: 'Course record not found.' }, { status: 404 });
 
-    const input = courseRecordInputFromPayload(body, { allowClear: true });
+    let input = courseRecordInputFromPayload(body, { allowClear: true });
+    const nextClassSectionId = Object.prototype.hasOwnProperty.call(input, 'classSectionId')
+      ? input.classSectionId
+      : existing.classSectionId;
+    const section = await loadClassSection(db, session, existing.businessUnitId, nextClassSectionId);
+    input = applyClassSection(input, section);
+    const nextStatus = Object.prototype.hasOwnProperty.call(input, 'status') ? input.status : existing.status;
+    if (section?.status !== 'active' && nextStatus === 'active' && section.id !== existing.classSectionId) {
+      return NextResponse.json({ error: 'Inactive class sections cannot accept new active enrollments.' }, { status: 400 });
+    }
     const existingRecords = await listCourseRecords(db, session, contact.id);
     validateCourseRecordInput({
+      classSectionId: Object.prototype.hasOwnProperty.call(input, 'classSectionId') ? input.classSectionId : existing.classSectionId,
       courseName: Object.prototype.hasOwnProperty.call(input, 'courseName') ? input.courseName : existing.courseName,
+      courseLocation: Object.prototype.hasOwnProperty.call(input, 'courseLocation') ? input.courseLocation : existing.courseLocation,
+      teacher: Object.prototype.hasOwnProperty.call(input, 'teacher') ? input.teacher : existing.teacher,
       status: Object.prototype.hasOwnProperty.call(input, 'status') ? input.status : existing.status,
       startDate: Object.prototype.hasOwnProperty.call(input, 'startDate') ? input.startDate : existing.startDate,
     }, {
@@ -140,7 +209,7 @@ export async function PATCH(request, { params }) {
     });
 
     const patch = courseRecordValuesFromInput(input, { updatedAt: new Date() });
-    const courses = await db.transaction(async (tx) => {
+    await db.transaction(async (tx) => {
       await tx
         .update(contactCourseRecords)
         .set(patch)
@@ -149,9 +218,8 @@ export async function PATCH(request, { params }) {
           eq(contactCourseRecords.organizationId, session.user.organizationId),
           eq(contactCourseRecords.contactId, contact.id),
         ));
-      return listCourseRecords(tx, session, contact.id);
     });
-    return NextResponse.json({ courses });
+    return NextResponse.json(await courseResponseContext(db, session, contact, lead));
   } catch (err) {
     return err?.status
       ? crmErrorResponse(err)
