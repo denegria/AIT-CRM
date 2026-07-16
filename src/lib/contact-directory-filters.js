@@ -278,6 +278,15 @@ export function effectiveLeadDateScopeForDirectory({
   return hasExplicitLeadDateFilter ? leadDateScope : CONTACT_LEAD_DATE_SCOPE_ALL;
 }
 
+export function effectiveLeadDateScopeForContactParams(searchParams) {
+  const hasExplicitLeadDateFilter = ['leadDateScope', 'leadDateFrom', 'leadDateTo']
+    .some((key) => searchParams?.has?.(key));
+  return effectiveLeadDateScopeForDirectory({
+    leadDateScope: leadDateScopeFromContactParams(searchParams),
+    hasExplicitLeadDateFilter,
+  });
+}
+
 export function contactMatchesLeadDateScope(contact = {}, {
   leadDateScope = DEFAULT_CONTACT_LEAD_DATE_SCOPE,
   leadDateFrom = DEFAULT_CONTACT_LEAD_DATE_FROM,

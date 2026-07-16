@@ -25,7 +25,7 @@ import {
   contactMatchesSource,
   contactMatchesStatusOwnerCourse,
   courseTagsForDirectoryRow,
-  effectiveLeadDateScopeForDirectory,
+  effectiveLeadDateScopeForContactParams,
   CONTACT_LEAD_DATE_SCOPE_ALL,
   CONTACT_LEAD_DATE_SCOPE_CUSTOM,
   CONTACT_LEAD_DATE_SCOPE_QUARTER,
@@ -374,10 +374,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     !coordinatorUiPolicy.ownerScoped &&
     effectiveOwnerFilter !== DEFAULT_CONTACT_OWNER_FILTER &&
     !hasExplicitLeadDateFilter;
-  const effectiveLeadDateScope = effectiveLeadDateScopeForDirectory({
-    leadDateScope,
-    hasExplicitLeadDateFilter: hasExplicitLeadDateFilter || ownerFilterImpliesAllLeadDates,
-  });
+  const effectiveLeadDateScope = effectiveLeadDateScopeForContactParams(searchParams);
   const updateFilterQuery = useCallback((patch) => {
     const patchHasLeadDateScope =
       Object.prototype.hasOwnProperty.call(patch, 'leadDateScope') ||

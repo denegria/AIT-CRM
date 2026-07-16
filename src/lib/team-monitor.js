@@ -333,7 +333,7 @@ function monitorSignal(metrics = {}) {
     return { label: 'Needs attention', tone: 'danger' };
   }
   if (!metrics.openTasks && !metrics.activeAssignedContacts && !metrics.unassignedActiveContacts) {
-    return { label: 'No assigned work', tone: 'muted' };
+    return { label: 'No active workload', tone: 'muted' };
   }
   return { label: 'On track', tone: 'success' };
 }
@@ -371,7 +371,7 @@ export function hasTeamMonitorWork(row = {}) {
 export function filterTeamMonitorRows({ roster = [], unassigned = emptyMonitorMetrics(), attention = 'all' } = {}) {
   const employees = roster.filter((employee) => {
     if (attention === 'attention') return employee.signal === 'Needs attention';
-    if (attention === 'no-work') return employee.signal === 'No assigned work';
+    if (attention === 'no-work') return employee.signal === 'No active workload';
     return true;
   });
   const includeUnassigned = attention !== 'no-work' &&

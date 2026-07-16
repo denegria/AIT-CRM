@@ -178,7 +178,7 @@ function MonitorControls({ period, attention, onPeriodChange, onAttentionChange 
         ))}
       </div>
       <div className={s.controlGroup} role="group" aria-label="Attention filter">
-        {[['all', 'All work'], ['attention', 'Needs attention'], ['no-work', 'No assigned work']].map(([value, label]) => (
+        {[['all', 'All work'], ['attention', 'Needs attention'], ['no-work', 'No active workload']].map(([value, label]) => (
           <button key={value} type="button" className={attention === value ? s.activePill : s.pill} aria-pressed={attention === value} onClick={() => onAttentionChange(value)}>
             {label}
           </button>

@@ -20,6 +20,7 @@ import {
   courseForContactDirectoryFilter,
   courseTagsForDirectoryRow,
   effectiveLeadDateScopeForDirectory,
+  effectiveLeadDateScopeForContactParams,
   pipelineFilterQuery,
   pipelineFilterStateFromParams,
 } from './contact-directory-filters.js';
@@ -120,6 +121,17 @@ test('directory date scope defaults to no date limit until a date filter is expl
       }))
       .map((contact) => contact.id),
     ['current'],
+  );
+});
+
+test('owner drill-down keeps all lead dates unless the URL explicitly includes a date filter', () => {
+  assert.equal(
+    effectiveLeadDateScopeForContactParams(new URLSearchParams('owner=user-1')),
+    CONTACT_LEAD_DATE_SCOPE_ALL,
+  );
+  assert.equal(
+    effectiveLeadDateScopeForContactParams(new URLSearchParams('owner=user-1&leadDateScope=current')),
+    DEFAULT_CONTACT_LEAD_DATE_SCOPE,
   );
 });
 
