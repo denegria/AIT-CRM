@@ -6,16 +6,18 @@ import {
   CheckSquare,
   Clock3,
   ExternalLink,
-  MessageSquare,
   TrendingDown,
   UserCheck,
   UsersRound,
 } from 'lucide-react';
 import {
   buildTaskScopePreview,
+  buildTeamMonitorPageModel,
+  buildTeamMonitorSummary,
   buildTeamMonitorViewModel,
 } from '@/lib/team-monitor.js';
 import s from './TeamMonitorPanel.module.css';
+import { TeamMonitorRosterTable } from './TeamMonitorRosterTable.js';
 
 const KPI_META = [
   { key: 'onlineNow', label: 'Online now', Icon: UsersRound, tone: 'success' },
@@ -141,78 +143,55 @@ function PreviewEmployeeList({ roster }) {
   );
 }
 
-function RosterTable({ roster, selectedEmployeeId, onSelectEmployee, compact = false }) {
-  const visibleRoster = compact ? roster.slice(0, 5) : roster;
+function MonitorSummary({ summary, periodLabel }) {
+  const metrics = [
+    ['completedTasks', `Completed ${periodLabel.toLowerCase()}`, 'success'],
+    ['dueToday', 'Due today', 'warning'],
+    ['overdue', 'Overdue', 'danger'],
+    ['unassignedOpenTasks', 'Unassigned open tasks', 'danger'],
+    ['activeAssignedContacts', 'Active assigned contacts', 'accent'],
+    ['contactsWithoutNextFollowUp', 'Without next follow-up', 'warning'],
+    ['recentStructuredFollowUps', `Recorded follow-ups ${periodLabel.toLowerCase()}`, 'accent'],
+    ['enrollments', `Enrollments ${periodLabel.toLowerCase()}`, 'success'],
+  ];
   return (
-    <div className={s.tableWrap}>
-      <table className={s.rosterTable}>
-        <thead>
-          <tr>
-            <th>Employee</th>
-            <th>Status / last online</th>
-            <th>Today progress</th>
-            <th>Assigned contacts</th>
-            <th>Enrollments wk</th>
-            <th>Cancels wk</th>
-            <th>Overdue</th>
-            <th>Signal</th>
-          </tr>
-        </thead>
-        <tbody>
-          {visibleRoster.map((employee) => (
-            <tr
-              key={employee.id}
-              className={employee.id === selectedEmployeeId ? s.selectedRow : ''}
-              onClick={() => onSelectEmployee?.(employee.id)}
-            >
-              <td>
-                <div className={s.employeeCell}>
-                  <EmployeeAvatar employee={employee} />
-                  <span>
-                    <strong>{employee.name || employee.email || 'Unnamed user'}</strong>
-                    <small>{employee.roleLabel}</small>
-                  </span>
-                </div>
-              </td>
-              <td>
-                <div className={s.statusCell}>
-                  <span className={`${s.dot} ${statusDotClass(employee.presenceTone)}`} />
-                  <span>{employee.presenceLabel}</span>
-                  <small>{employee.lastOnlineLabel}</small>
-                </div>
-              </td>
-              <td>
-                <div className={s.progressCell}>
-                  <span>{employee.progressDone} of {employee.progressTotal}</span>
-                  <div className={s.progressTrack}>
-                    <span style={{ width: progressWidth(employee.progressDone, employee.progressTotal) }} />
-                  </div>
-                </div>
-              </td>
-              <td>{employee.assignedContactCount}</td>
-              <td><span className={s.successCount}>{employee.enrollmentsThisWeekCount}</span></td>
-              <td><span className={employee.cancellationsThisWeekCount ? s.softCount : s.zeroCount}>{employee.cancellationsThisWeekCount}</span></td>
-              <td><span className={employee.overdueCount ? s.dangerCount : s.zeroCount}>{employee.overdueCount}</span></td>
-              <td>
-                <span className={s.signal}>
-                  <span className={`${s.dot} ${statusDotClass(employee.signalTone)}`} />
-                  {employee.signal}
-                </span>
-              </td>
-            </tr>
-          ))}
-          {!visibleRoster.length && (
-            <tr>
-              <td colSpan={8} className={s.emptyCell}>No active employees are available for this scope.</td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+    <div className={s.monitorMetricGrid} aria-label="Filtered roster plus unassigned reconciliation totals">
+      {metrics.map(([key, label, tone]) => (
+        <div key={key} className={s.monitorMetric}>
+          <span className={`${s.dot} ${statusDotClass(tone)}`} aria-hidden="true" />
+          <span><strong>{summary[key]}</strong><small>{label} · filtered roster + unassigned</small></span>
+        </div>
+      ))}
     </div>
   );
 }
 
-function EmployeeDetail({ employee }) {
+function MonitorControls({ period, attention, onPeriodChange, onAttentionChange }) {
+  return (
+    <div className={s.monitorControls}>
+      <div className={s.controlGroup} role="group" aria-label="Reporting period">
+        {[['today', 'Today'], ['week', 'This week']].map(([value, label]) => (
+          <button key={value} type="button" className={period === value ? s.activePill : s.pill} aria-pressed={period === value} onClick={() => onPeriodChange(value)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <div className={s.controlGroup} role="group" aria-label="Attention filter">
+        {[['all', 'All work'], ['attention', 'Needs attention'], ['no-work', 'No assigned work']].map(([value, label]) => (
+          <button key={value} type="button" className={attention === value ? s.activePill : s.pill} aria-pressed={attention === value} onClick={() => onAttentionChange(value)}>
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RosterTable({ roster, selectedEmployeeId, onSelectEmployee }) {
+  return <TeamMonitorRosterTable roster={roster} selectedEmployeeId={selectedEmployeeId} onSelectEmployee={onSelectEmployee} renderAvatar={(employee) => <EmployeeAvatar employee={employee} />} styles={s} />;
+}
+
+function EmployeeDetail({ employee, periodLabel }) {
   if (!employee) {
     return (
       <aside className={s.detailPanel}>
@@ -228,21 +207,21 @@ function EmployeeDetail({ employee }) {
         <span>
           <strong>{employee.name || employee.email || 'Unnamed user'}</strong>
           <small>{employee.roleLabel}</small>
-          <small>{employee.presenceLabel} · {employee.lastOnlineLabel}</small>
+          {employee.isUnassignedBucket && <small>Explicit reconciliation bucket</small>}
         </span>
       </div>
       <div className={s.detailSection}>
-        <div className={s.detailTitle}>Enrollment movement</div>
+        <div className={s.detailTitle}>Auditable workload</div>
         <div className={s.detailStats}>
-          <span><strong>{employee.assignedContactCount}</strong><small>assigned contacts</small></span>
-          <span><strong>{employee.enrollmentsTodayCount}</strong><small>today</small></span>
-          <span><strong>{employee.enrollmentsThisWeekCount}</strong><small>enrolled wk</small></span>
-          <span><strong>{employee.cancellationsThisWeekCount}</strong><small>cancels wk</small></span>
+          <span><strong>{employee.completedTasks}</strong><small>completed {periodLabel.toLowerCase()}</small></span>
+          <span><strong>{employee.activeAssignedContacts}</strong><small>active contacts</small></span>
+          <span><strong>{employee.contactsWithoutNextFollowUp}</strong><small>without next follow-up</small></span>
+          <span><strong>{employee.enrollments}</strong><small>enrollments {periodLabel.toLowerCase()}</small></span>
         </div>
       </div>
       <div className={s.detailSection}>
-        <div className={s.detailTitle}>Today tasks</div>
-        {employee.todayTasks.length ? employee.todayTasks.map((task) => (
+        <div className={s.detailTitle}>Due today</div>
+        {employee.dueTodayTasks.length ? employee.dueTodayTasks.map((task) => (
           <div key={task.id} className={s.detailTask}>
             <CheckSquare size={14} />
             <span>{task.title || 'Untitled task'}</span>
@@ -261,12 +240,11 @@ function EmployeeDetail({ employee }) {
         )) : <div className={s.emptyDetail}>No overdue tasks.</div>}
       </div>
       <div className={s.detailActions}>
-        <Link className="btn btn-sm" href={`/tasks?ownerUserId=${encodeURIComponent(employee.id)}`}>
+        <Link className="btn btn-sm" href={employee.taskHref}>
           View tasks
         </Link>
-        <Link className="btn btn-sm" href="/inbox">
-          <MessageSquare size={14} />
-          Message
+        <Link className="btn btn-sm" href={employee.contactHref}>
+          View contacts
         </Link>
       </div>
     </aside>
@@ -381,40 +359,51 @@ export function TeamMonitorPreview({ employees, tasks, contacts, currentUser, bu
 }
 
 export function TeamMonitorPageSurface({ employees, tasks, contacts, currentUser }) {
-  const viewModel = useMemo(() => buildTeamMonitorViewModel({ employees, tasks, contacts, currentUser }), [contacts, currentUser, employees, tasks]);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState(() => viewModel.roster[0]?.id || '');
-  const selectedEmployee = viewModel.roster.find((employee) => employee.id === selectedEmployeeId) || viewModel.roster[0] || null;
+  const [period, setPeriod] = useState('today');
+  const [attention, setAttention] = useState('all');
+  const viewModel = useMemo(
+    () => buildTeamMonitorPageModel({ employees, tasks, contacts, currentUser, period }),
+    [contacts, currentUser, employees, period, tasks],
+  );
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const filteredRoster = useMemo(() => {
+    const employeesForAttention = viewModel.roster.filter((employee) => {
+      if (attention === 'attention') return employee.signal === 'Needs attention';
+      if (attention === 'no-work') return employee.signal === 'No assigned work';
+      return true;
+    });
+    return [...employeesForAttention, viewModel.unassigned];
+  }, [attention, viewModel.roster, viewModel.unassigned]);
+  const filteredSummary = useMemo(
+    () => buildTeamMonitorSummary({ roster: filteredRoster.filter((employee) => !employee.isUnassignedBucket), unassigned: viewModel.unassigned }),
+    [filteredRoster, viewModel.unassigned],
+  );
+  const selectedEmployee = filteredRoster.find((employee) => employee.id === selectedEmployeeId) || filteredRoster[0] || null;
 
   return (
     <div className={s.monitorSurface}>
       <div className="page-header">
         <div>
           <h1 className="page-title">Team Monitor</h1>
-          <p className="page-subtitle">Employee activity, task progress, enrollments, and cancellation movement.</p>
+          <p className="page-subtitle">Scoped task ownership, follow-up coverage, and enrollment movement. Counts are from CRM records, not presence signals.</p>
         </div>
       </div>
-      <MetricCards summary={viewModel.summary} />
+      <MonitorSummary summary={filteredSummary} periodLabel={viewModel.period.label} />
       <div className={s.fullLayout}>
         <section className={s.rosterCard}>
-          <div className={s.filterRow}>
-            <span className={s.activePill}>Today</span>
-            <span className={s.pill}>This week</span>
-            <span className={s.divider} />
-            <span className={s.pill}>All</span>
-            <span className={s.pill}>Needs attention</span>
-          </div>
+          <MonitorControls period={period} attention={attention} onPeriodChange={setPeriod} onAttentionChange={setAttention} />
           <RosterTable
-            roster={viewModel.roster}
+            roster={filteredRoster}
             selectedEmployeeId={selectedEmployee?.id}
             onSelectEmployee={setSelectedEmployeeId}
           />
           <div className={s.tableFooter}>
             <span>{viewModel.updatedLabel}</span>
-            <span>Showing {viewModel.roster.length} employee{viewModel.roster.length === 1 ? '' : 's'}</span>
+            <span>Showing {filteredRoster.length - 1} employee{filteredRoster.length === 2 ? '' : 's'} plus unassigned work</span>
           </div>
-          <p className={s.lowData}>{viewModel.lowDataNotice}</p>
+          <p className={s.lowData}>{viewModel.metricNote}{viewModel.summary.unattributedTasks || viewModel.summary.unattributedContacts ? ` ${viewModel.summary.unattributedTasks + viewModel.summary.unattributedContacts} item${viewModel.summary.unattributedTasks + viewModel.summary.unattributedContacts === 1 ? '' : 's'} with an owner outside this roster remain in the reconciliation bucket.` : ''}</p>
         </section>
-        <EmployeeDetail employee={selectedEmployee} />
+        <EmployeeDetail employee={selectedEmployee} periodLabel={viewModel.period.label} />
       </div>
     </div>
   );

@@ -7,7 +7,7 @@ import { DEFERRED_BOOTSTRAP_LOADERS, hasDeferredBootstrapLoader } from './bootst
 import { loadDeferredTasks } from './tasks/bootstrap.js';
 import { fetchDashboardSummary } from './dashboard/loader.js';
 import { fetchPipelineSummary, pipelineSummaryQuery } from './pipeline/loader.js';
-import { LEAN_SHELL_PATHS } from './bootstrap-routing.js';
+import { LEAN_SHELL_PATHS, requiresTeamMonitorBootstrapReload } from './bootstrap-routing.js';
 
 const CRMContext = createContext(null);
 const STORAGE_KEY = 'ait-crm-data';
@@ -133,6 +133,7 @@ function getInitialData(seedData = defaults) {
     tasks: fallback.tasks,
     calendarEvents: fallback.calendarEvents,
     salesLedger: fallback.salesLedger,
+    bootstrapMode: fallback.bootstrapMode || 'full',
     deferredLoaders: fallback.deferredLoaders || [],
   };
 }
@@ -145,6 +146,7 @@ export function CRMProvider({ children, initialData }) {
   const pathname = usePathname();
   const [bootstrapData] = useState(() => getInitialData(initialData));
   const isPublicJoinPage = pathname === '/join';
+  const routeDataReady = !requiresTeamMonitorBootstrapReload({ pathname, bootstrapMode: bootstrapData.bootstrapMode });
   const isPostgres = bootstrapData.dataSource === 'postgres';
   const initialRole = bootstrapData.currentUser?.primaryRoleKey || 'admin';
   const [role, setRole] = useState(() => {
@@ -216,6 +218,11 @@ export function CRMProvider({ children, initialData }) {
   const loaded = true;
 
   useEffect(() => {
+    if (!routeDataReady) window.location.reload();
+  }, [routeDataReady]);
+
+  useEffect(() => {
+    if (!routeDataReady) return;
     const allowedDeferredPath =
       (contactDirectoryIsDeferred && (pathname === '/contacts' || pathname === '/clients')) ||
       (dashboardSummaryIsDeferred && pathname === '/') ||
@@ -224,7 +231,7 @@ export function CRMProvider({ children, initialData }) {
     if (!contactDirectoryIsDeferred && !dashboardSummaryIsDeferred && !pipelineSummaryIsDeferred && !leanShellIsDeferred) return;
     if (allowedDeferredPath) return;
     window.location.reload();
-  }, [contactDirectoryIsDeferred, dashboardSummaryIsDeferred, leanShellIsDeferred, pathname, pipelineSummaryIsDeferred]);
+  }, [contactDirectoryIsDeferred, dashboardSummaryIsDeferred, leanShellIsDeferred, pathname, pipelineSummaryIsDeferred, routeDataReady]);
 
   const loadDashboardSummary = useCallback(({ businessUnitId, employeeIds = [], force = false } = {}) => {
     if (!isPostgres || !dashboardSummaryIsDeferred) return Promise.resolve(dashboardSummary);
@@ -721,6 +728,7 @@ export function CRMProvider({ children, initialData }) {
     dataSource: bootstrapData.dataSource,
     appVersion: bootstrapData.appVersion,
     authRequired: bootstrapData.authRequired,
+    routeDataReady,
     currentUser,
     access,
     importStaging,
@@ -756,6 +764,14 @@ export function CRMProvider({ children, initialData }) {
     sources: defaults.SOURCES,
     resetData,
   };
+
+  if (!routeDataReady) {
+    return (
+      <CRMContext.Provider value={value}>
+        <main className="page-container" aria-busy="true" aria-live="polite">Refreshing scoped workspace…</main>
+      </CRMContext.Provider>
+    );
+  }
 
   if (bootstrapData.authRequired && !isPublicJoinPage) {
     return (

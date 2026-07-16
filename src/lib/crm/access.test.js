@@ -9,6 +9,9 @@ import {
   canUseCoordinatorRoute,
   canUseWorkOrderBusinessUnit,
   canUseWorkOrdersForBusinessUnit,
+  canUseTeamMonitorWorkspace,
+  filterTeamMonitorEmployees,
+  filterTeamMonitorContacts,
   canUseWorkOrdersWorkspace,
   canUseRegularCoordinatorRoute,
   coordinatorUiPolicyForUser,
@@ -38,6 +41,37 @@ test('senior coordinator is not treated as a regular owner-scoped coordinator', 
   assert.equal(isRegularCoordinatorSession(senior), false);
   assert.equal(canManageCoordinatorAssignments(senior), true);
   assert.equal(canArchiveContactsDirectly(senior), true);
+});
+
+test('team monitor allows admins and senior coordinators, with roster limited to assigned divisions', () => {
+  const senior = session(['senior_coordinator'], 'senior-1');
+  const admin = session(['admin'], 'admin-1');
+  const roster = [
+    { id: 'senior-1', businessUnitIds: ['bu-1'] },
+    { id: 'signs-employee', businessUnitIds: ['bu-1'] },
+    { id: 'mixed-employee', businessUnitIds: ['bu-1', 'bu-2'] },
+    { id: 'other-employee', businessUnitIds: ['bu-2'] },
+  ];
+
+  assert.equal(canUseTeamMonitorWorkspace(senior.user), true);
+  assert.equal(canUseTeamMonitorWorkspace(admin.user), true);
+  assert.equal(canUseTeamMonitorWorkspace(session(['account_coordinator']).user), false);
+  const seniorRoster = filterTeamMonitorEmployees(roster, senior.user);
+  assert.deepEqual(seniorRoster.map((employee) => employee.id), ['senior-1', 'signs-employee', 'mixed-employee']);
+  assert.deepEqual(seniorRoster.find((employee) => employee.id === 'mixed-employee').businessUnitIds, ['bu-1']);
+  assert.deepEqual(filterTeamMonitorEmployees(roster, admin.user).map((employee) => employee.id), ['senior-1', 'signs-employee', 'mixed-employee', 'other-employee']);
+});
+
+test('team monitor never grants restricted coordinators null or another-division contacts', () => {
+  const senior = session(['senior_coordinator']);
+  const contacts = [
+    { id: 'allowed', primaryBusinessUnitId: 'bu-1' },
+    { id: 'other', primaryBusinessUnitId: 'bu-2' },
+    { id: 'unassigned', primaryBusinessUnitId: null },
+  ];
+
+  assert.deepEqual(filterTeamMonitorContacts(contacts, senior.user).map((contact) => contact.id), ['allowed']);
+  assert.deepEqual(filterTeamMonitorContacts(contacts, { ...senior.user, canAccessAllBusinessUnits: true }).map((contact) => contact.id), ['allowed', 'other', 'unassigned']);
 });
 
 test('regular coordinator is owner scoped and cannot use direct archive or reassignment powers', () => {

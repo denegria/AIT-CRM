@@ -30,6 +30,7 @@ export default async function RootLayout({ children }) {
   const bootstrapMode = bootstrapModeForPathname(pathname);
   const bootstrapData = {
     ...(await getBootstrapData(session, bootstrapMode)),
+    bootstrapMode,
     persistedBusinessUnitScope: cookieStore.get(SCOPE_STORAGE_KEY)?.value || '',
     persistedBusinessUnitScopeUserId: cookieStore.get(SCOPE_USER_KEY)?.value || '',
   };

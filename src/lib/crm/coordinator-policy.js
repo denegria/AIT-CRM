@@ -7,6 +7,33 @@ import {
 
 export { ROLE_KEYS, roleKeysForUser, userHasRole };
 
+const TEAM_MONITOR_ROLE_KEYS = new Set([
+  ROLE_KEYS.ADMIN,
+  ROLE_KEYS.SENIOR_COORDINATOR,
+]);
+
+export function canUseTeamMonitorWorkspace(user = {}) {
+  return roleKeysForUser(user).some((roleKey) => TEAM_MONITOR_ROLE_KEYS.has(roleKey));
+}
+
+export function filterTeamMonitorEmployees(employeeRows = [], user = {}) {
+  if (user?.canAccessAllBusinessUnits) return employeeRows;
+
+  const allowedBusinessUnitIds = new Set(user?.businessUnitIds || []);
+  return employeeRows
+    .filter((employee) => (employee?.businessUnitIds || []).some((businessUnitId) => allowedBusinessUnitIds.has(businessUnitId)))
+    .map((employee) => ({
+      ...employee,
+      businessUnitIds: (employee.businessUnitIds || []).filter((businessUnitId) => allowedBusinessUnitIds.has(businessUnitId)),
+    }));
+}
+
+export function filterTeamMonitorContacts(contactRows = [], user = {}) {
+  if (user?.canAccessAllBusinessUnits) return contactRows;
+  const allowedBusinessUnitIds = new Set(user?.businessUnitIds || []);
+  return contactRows.filter((contact) => allowedBusinessUnitIds.has(contact?.primaryBusinessUnitId));
+}
+
 export function isSeniorCoordinatorSession(session = {}) {
   return userHasRole(session.user, ROLE_KEYS.SENIOR_COORDINATOR);
 }

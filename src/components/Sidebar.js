@@ -6,12 +6,11 @@ import { usePathname } from 'next/navigation';
 import { publishLogout } from '@/lib/auth/session-sync.js';
 import { roleLabel } from '@/lib/roles.js';
 import { useCRM } from '@/lib/store';
-import { canUseWorkOrdersForBusinessUnit, coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
+import { canUseTeamMonitorWorkspace, canUseWorkOrdersForBusinessUnit, coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import { isClientAccountBusinessUnit } from '@/lib/crm/lifecycle';
 import s from './Sidebar.module.css';
 
 import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, CloudSun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal, Inbox, Megaphone, UsersRound } from 'lucide-react';
-import { canUseTeamMonitor } from '@/lib/team-monitor.js';
 
 const nav = [
   { href: '/', label: 'Dashboard', Icon: LayoutDashboard },
@@ -129,7 +128,7 @@ export default function Sidebar() {
   const visibleNav = useMemo(() => scopedNav.filter(({ href }) => {
     if (coordinatorUiPolicy.isRegularCoordinator && !regularCoordinatorNav.has(href)) return false;
     if (href === '/work-orders' && !canUseWorkOrders) return false;
-    if (href === '/team-monitor' && !canUseTeamMonitor(monitorCurrentUser)) return false;
+    if (href === '/team-monitor' && !canUseTeamMonitorWorkspace(monitorCurrentUser)) return false;
     if (href === '/settings' && !access.canReadSettings) return false;
     if (href === '/comms-ops' && !access.canReadSettings) return false;
     if (href === '/import-review' && !access.canReadImportReview) return false;

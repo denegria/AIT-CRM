@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { TeamMonitorPageSurface } from '@/components/TeamMonitorPanel';
 import PageState, { PageStateAction } from '@/components/PageState';
-import { canUseTeamMonitor } from '@/lib/team-monitor.js';
+import { canUseTeamMonitorWorkspace } from '@/lib/crm/coordinator-policy.js';
 import { useCRM } from '@/lib/store';
 
 export default function TeamMonitorPage() {
@@ -20,20 +20,25 @@ export default function TeamMonitorPage() {
     loaded,
     dataSource,
     access,
+    routeDataReady,
   } = useCRM();
   const monitorCurrentUser = currentUser || { id: 'emp-1', primaryRoleKey: role };
-  const canViewTeamMonitor = canUseTeamMonitor(monitorCurrentUser);
+  const canViewTeamMonitor = canUseTeamMonitorWorkspace(monitorCurrentUser);
 
   useEffect(() => {
-    if (!canViewTeamMonitor || dataSource !== 'postgres' || !access.canReadCrm || tasksLoaded || tasksLoading) return;
+    if (!routeDataReady || !canViewTeamMonitor || dataSource !== 'postgres' || !access.canReadCrm || tasksLoaded || tasksLoading) return;
     loadTasks().catch(() => null);
-  }, [access.canReadCrm, canViewTeamMonitor, dataSource, loadTasks, tasksLoaded, tasksLoading]);
+  }, [access.canReadCrm, canViewTeamMonitor, dataSource, loadTasks, routeDataReady, tasksLoaded, tasksLoading]);
+
+  if (!routeDataReady) {
+    return <PageState tone="loading" title="Loading team monitor" copy="Refreshing the scoped team monitor workspace." />;
+  }
 
   if (!canViewTeamMonitor) {
     return (
       <PageState
         tone="denied"
-        title="Team Monitor requires administrator access"
+        title="Team Monitor is unavailable for this role"
         copy="Your account can keep using the CRM workspaces assigned to your role."
         actions={<PageStateAction href="/">Back to Dashboard</PageStateAction>}
       />

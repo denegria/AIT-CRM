@@ -7,10 +7,14 @@ import { sessionHasAdminRole } from './auth/admin-policy.js';
 import {
   businessUnits as businessUnitsTable,
   contacts as contactsTable,
+  activityEvents as activityEventsTable,
+  contactCourseRecords as contactCourseRecordsTable,
+  leadStatusHistory as leadStatusHistoryTable,
   workOrders as workOrdersTable,
   estimates as estimatesTable,
   financialDocuments as financialDocumentsTable,
   paymentSnapshots as paymentSnapshotsTable,
+  tasks as tasksTable,
   leads as leadsTable,
   roles as rolesTable,
   users as usersTable,
@@ -22,10 +26,12 @@ import {
   importReviewItems as importReviewItemsTable,
 } from '../db/schema.js';
 import {
+  canUseTeamMonitorWorkspace,
   filterContactsForSession,
   isRegularCoordinatorSession,
   scopedBusinessUnitWhere,
   scopedContactWhere,
+  scopedTeamMonitorContactWhere,
   scopedOrgWhere,
   scopedWorkOrderWhere,
 } from './crm/access.js';
@@ -50,6 +56,8 @@ import {
   toContactListPayload,
 } from './bootstrap-contract.js';
 import { loadContactBootstrapSummaryRows } from './contact-summary-loader.js';
+import { latestStructuredFollowUpAt } from './structured-follow-up.js';
+import { buildTeamMonitorBootstrapPayload } from './team-monitor-bootstrap.js';
 
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const toBootstrapBusinessUnitPayload = (row) => toBusinessUnitPayload(row, { emptyColor: null });
@@ -371,6 +379,7 @@ export function mapContacts(
       lastTouchText: touchSummary.lastTouchText,
       lastFollowUpTouch: touchSummary.lastFollowUpTouch,
       lastFollowUpTouchText: touchSummary.lastFollowUpTouchText,
+      lastStructuredFollowUpAt: latestStructuredFollowUpAt(contactEvents),
       hasRecentFollowUpTouch: touchSummary.hasRecentFollowUpTouch,
       latestComment: touchSummary.latestComment,
       latestCommentDate: touchSummary.latestCommentDate,
@@ -603,6 +612,66 @@ function emptyDbData(businessUnitRows = [], importStaging = null) {
   };
 }
 
+function teamMonitorBusinessUnitWhere(session) {
+  const orgScope = scopedOrgWhere(businessUnitsTable, session);
+  if (session.user.canAccessAllBusinessUnits) return orgScope;
+  if (!session.user.businessUnitIds.length) return and(orgScope, sql`false`);
+  return and(orgScope, inArray(businessUnitsTable.id, session.user.businessUnitIds));
+}
+
+async function loadTeamMonitorBootstrapData({ db, session, access, appVersion }) {
+  const [businessUnitRows, contactRows, leadRows, taskRows, userRows, membershipRows, userRoleRows] = await Promise.all([
+    db.select().from(businessUnitsTable).where(teamMonitorBusinessUnitWhere(session)).orderBy(asc(businessUnitsTable.name)),
+    db.select().from(contactsTable).where(scopedTeamMonitorContactWhere(contactsTable, session)).orderBy(desc(contactsTable.createdAt)),
+    db.select().from(leadsTable).where(scopedBusinessUnitWhere(leadsTable, session)).orderBy(desc(leadsTable.createdAt)),
+    db.select().from(tasksTable).where(scopedBusinessUnitWhere(tasksTable, session)).orderBy(desc(tasksTable.createdAt)),
+    db.select().from(usersTable).where(and(
+      eq(usersTable.organizationId, session.user.organizationId),
+      eq(usersTable.isActive, true),
+    )).orderBy(asc(usersTable.name), asc(usersTable.email)),
+    db.select().from(businessUnitMembershipsTable),
+    db
+      .select({ userId: userRolesTable.userId, roleKey: rolesTable.key })
+      .from(userRolesTable)
+      .innerJoin(rolesTable, eq(userRolesTable.roleId, rolesTable.id))
+      .where(eq(rolesTable.organizationId, session.user.organizationId)),
+  ]);
+  const contactIds = contactRows.map((contact) => contact.id);
+  const [courseRecords, leadStatusHistory, activityEvents] = contactIds.length
+    ? await Promise.all([
+        db.select().from(contactCourseRecordsTable).where(and(
+          eq(contactCourseRecordsTable.organizationId, session.user.organizationId),
+          inArray(contactCourseRecordsTable.contactId, contactIds),
+          scopedBusinessUnitWhere(contactCourseRecordsTable, session),
+        )),
+        db.select().from(leadStatusHistoryTable).where(and(
+          eq(leadStatusHistoryTable.organizationId, session.user.organizationId),
+          inArray(leadStatusHistoryTable.contactId, contactIds),
+          scopedBusinessUnitWhere(leadStatusHistoryTable, session),
+        )),
+        db.select().from(activityEventsTable).where(and(
+          eq(activityEventsTable.organizationId, session.user.organizationId),
+          inArray(activityEventsTable.contactId, contactIds),
+          scopedBusinessUnitWhere(activityEventsTable, session),
+        )),
+      ])
+    : [[], [], []];
+
+  return buildTeamMonitorBootstrapPayload({
+    appVersion,
+    currentUser: session.user,
+    access,
+    businessUnits: businessUnitRows,
+    employees: mapEmployees(userRows, membershipRows, userRoleRows),
+    contacts: contactRows,
+    leads: leadRows,
+    tasks: taskRows,
+    courseRecords,
+    leadStatusHistory,
+    activityEvents,
+  });
+}
+
 export const getBootstrapData = cache(async function getBootstrapData(session = null, bootstrapMode = 'full') {
   const appVersion = getServerAppVersion();
   if (!process.env.DATABASE_URL) {
@@ -649,9 +718,21 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
     return authData({ authRequired: true });
   }
 
+  if (bootstrapMode === 'team-monitor' && !canUseTeamMonitorWorkspace(session.user)) {
+    return {
+      ...emptyDbData([], null),
+      businessUnits: [],
+      currentUser: session.user,
+      access: sessionAccess(session),
+    };
+  }
+
   try {
     const db = getDb();
     const access = sessionAccess(session);
+    if (bootstrapMode === 'team-monitor') {
+      return loadTeamMonitorBootstrapData({ db, session, access, appVersion });
+    }
     if (['contact-directory', 'dashboard', 'pipeline', 'lean-shell'].includes(bootstrapMode)) {
       const [businessUnitRows, contactCountRows, userRows, membershipRows, userRoleRows, importStaging] = await Promise.all([
         db.select().from(businessUnitsTable).where(scopedOrgWhere(businessUnitsTable, session)).orderBy(asc(businessUnitsTable.name)),

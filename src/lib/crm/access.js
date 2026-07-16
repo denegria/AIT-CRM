@@ -7,8 +7,11 @@ export {
   canAccessWorkOrder,
   canArchiveContactsDirectly,
   canManageCoordinatorAssignments,
+  canUseTeamMonitorWorkspace,
   canUseWorkOrderBusinessUnit,
   divisionWideContactBusinessUnitIdsForUser,
+  filterTeamMonitorEmployees,
+  filterTeamMonitorContacts,
   filterContactsForSession,
   isRegularCoordinatorSession,
   isWorkOrderSelfScopedSession,
@@ -71,6 +74,13 @@ export function scopedContactWhere(table, session) {
       inArray(table.primaryBusinessUnitId, session.user.businessUnitIds),
     ),
   );
+}
+
+export function scopedTeamMonitorContactWhere(table, session) {
+  const orgScope = and(scopedOrgWhere(table, session), isNull(table.archivedAt));
+  if (session.user.canAccessAllBusinessUnits) return orgScope;
+  if (!session.user.businessUnitIds.length) return and(orgScope, sql`false`);
+  return and(orgScope, inArray(table.primaryBusinessUnitId, session.user.businessUnitIds));
 }
 
 export function contactLeadAccessWhere(contactTable, leadTable, session) {

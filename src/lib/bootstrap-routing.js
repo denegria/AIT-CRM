@@ -11,6 +11,11 @@ export function bootstrapModeForPathname(pathname = '') {
   if (pathname === '/contacts' || pathname === '/clients') return 'contact-directory';
   if (pathname === '/') return 'dashboard';
   if (pathname === '/pipeline') return 'pipeline';
+  if (pathname === '/team-monitor') return 'team-monitor';
   if (LEAN_SHELL_PATHS.includes(pathname)) return 'lean-shell';
   return 'full';
+}
+
+export function requiresTeamMonitorBootstrapReload({ pathname = '', bootstrapMode = '' } = {}) {
+  return (bootstrapMode === 'team-monitor') !== (bootstrapModeForPathname(pathname) === 'team-monitor');
 }

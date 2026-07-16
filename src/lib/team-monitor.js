@@ -223,6 +223,7 @@ export function normalizeMonitorTask(task = {}) {
     ...task,
     dueAt,
     ownerUserId: taskOwnerId(task),
+    unattributedOwner: Boolean(task.unattributedOwner),
     status,
     completed: Boolean(task.completed || status === 'completed'),
     priority: String(task.priority || 'medium').toLowerCase(),
@@ -273,6 +274,195 @@ export function buildTaskScopePreview({
     }));
 }
 
+function monitorPeriodRange(period, now) {
+  const todayStart = startOfUtcDay(now);
+  if (period === 'week') {
+    const weekStart = startOfUtcWeek(now);
+    return { key: 'week', label: 'This week', start: weekStart, end: weekStart + (7 * 24 * 60 * 60 * 1000) };
+  }
+  return { key: 'today', label: 'Today', start: todayStart, end: todayStart + (24 * 60 * 60 * 1000) };
+}
+
+function emptyMonitorMetrics() {
+  return {
+    completedTasks: 0,
+    dueToday: 0,
+    overdue: 0,
+    openTasks: 0,
+    activeAssignedContacts: 0,
+    contactsWithoutNextFollowUp: 0,
+    recentStructuredFollowUps: 0,
+    enrollments: 0,
+    enrollmentToday: 0,
+    enrollmentWeek: 0,
+    unassignedOpenTasks: 0,
+    unattributedTasks: 0,
+    unattributedContacts: 0,
+    dueTodayTasks: [],
+    overdueTasks: [],
+    completedTasksInPeriod: [],
+  };
+}
+
+function isActiveMonitorContact(contact = {}) {
+  const status = contactStatus(contact).toLowerCase();
+  return Boolean(contact?.id) && !['enrolled', 'dropped / quit', 'lost', 'archived'].includes(status);
+}
+
+function hasValidNextFollowUp(task = {}) {
+  return isTaskOpen(task) && task.taskType === 'follow_up' &&
+    Boolean(task.contactId) && Boolean(dateTime(task.dueAt || task.dueDate));
+}
+
+function isStructuredFollowUpInRange(contact = {}, range) {
+  return inRange(dateTime(contact.lastStructuredFollowUpAt), range.start, range.end);
+}
+
+function monitorSignal(metrics = {}) {
+  if (metrics.overdue || metrics.dueToday || metrics.contactsWithoutNextFollowUp) {
+    return { label: 'Needs attention', tone: 'danger' };
+  }
+  if (!metrics.openTasks && !metrics.activeAssignedContacts) {
+    return { label: 'No assigned work', tone: 'muted' };
+  }
+  return { label: 'On track', tone: 'success' };
+}
+
+function metricTargetForOwner(ownerUserId, employeeMetrics, unassignedMetrics) {
+  return employeeMetrics.get(ownerUserId) || unassignedMetrics;
+}
+
+export function buildTeamMonitorPageModel({
+  employees = [],
+  tasks = [],
+  contacts = [],
+  currentUser = null,
+  period = 'today',
+  today = taskDateKey(new Date()),
+  now = Date.now(),
+} = {}) {
+  const range = monitorPeriodRange(period, now);
+  const normalizedTasks = tasks.map(normalizeMonitorTask);
+  const employeeMetrics = new Map(employees.map((employee) => [employee.id, emptyMonitorMetrics()]));
+  const unassignedMetrics = emptyMonitorMetrics();
+  const validFollowUpContactIds = new Set(
+    normalizedTasks.filter(hasValidNextFollowUp).map((task) => task.contactId),
+  );
+
+  for (const task of normalizedTasks) {
+    const ownerUserId = task.ownerUserId;
+    const metrics = task.unattributedOwner
+      ? unassignedMetrics
+      : metricTargetForOwner(ownerUserId, employeeMetrics, unassignedMetrics);
+    const taskIsOpen = isTaskOpen(task);
+    if (!ownerUserId && !task.unattributedOwner) unassignedMetrics.unassignedOpenTasks += taskIsOpen ? 1 : 0;
+    if (task.unattributedOwner || (ownerUserId && !employeeMetrics.has(ownerUserId))) unassignedMetrics.unattributedTasks += 1;
+    if (taskIsOpen) metrics.openTasks += 1;
+    if (task.completed && inRange(dateTime(task.completedAt || task.completedDate), range.start, range.end)) {
+      metrics.completedTasks += 1;
+      metrics.completedTasksInPeriod.push(task);
+    }
+    if (isTaskDueToday(task, today)) {
+      metrics.dueToday += 1;
+      metrics.dueTodayTasks.push(task);
+    }
+    if (isTaskOverdue(task, today)) {
+      metrics.overdue += 1;
+      metrics.overdueTasks.push(task);
+    }
+  }
+
+  for (const contact of contacts) {
+    if (!isActiveMonitorContact(contact)) continue;
+    const hasUnattributedOwner = Boolean(contact.unattributedOwner);
+    const metrics = hasUnattributedOwner
+      ? unassignedMetrics
+      : metricTargetForOwner(contactOwnerId(contact), employeeMetrics, unassignedMetrics);
+    if (contactOwnerId(contact) || hasUnattributedOwner) metrics.activeAssignedContacts += 1;
+    if (hasUnattributedOwner) metrics.unattributedContacts += 1;
+    if (!validFollowUpContactIds.has(contact.id)) metrics.contactsWithoutNextFollowUp += 1;
+    if (isStructuredFollowUpInRange(contact, range)) metrics.recentStructuredFollowUps += 1;
+  }
+
+  for (const contact of contacts) {
+    if (!isEnrolledContact(contact)) continue;
+    const enrollmentTime = dateTime(enrollmentDateForContact(contact));
+    if (!enrollmentTime) continue;
+    const metrics = metricTargetForOwner(contactOwnerId(contact), employeeMetrics, unassignedMetrics);
+    if (inRange(enrollmentTime, range.start, range.end)) metrics.enrollments += 1;
+    if (inRange(enrollmentTime, startOfUtcDay(now), startOfUtcDay(now) + (24 * 60 * 60 * 1000))) metrics.enrollmentToday += 1;
+    if (inRange(enrollmentTime, startOfUtcWeek(now), startOfUtcWeek(now) + (7 * 24 * 60 * 60 * 1000))) metrics.enrollmentWeek += 1;
+  }
+
+  const roster = employees.map((employee) => {
+    const metrics = employeeMetrics.get(employee.id) || emptyMonitorMetrics();
+    const signal = monitorSignal(metrics);
+    return {
+      ...employee,
+      ...metrics,
+      roleLabel: employee.roleLabel || employee.roleKeys?.[0]?.replaceAll('_', ' ') || 'Team member',
+      signal: signal.label,
+      signalTone: signal.tone,
+      taskHref: `/tasks?ownerUserId=${encodeURIComponent(employee.id)}`,
+      contactHref: '/contacts',
+    };
+  }).sort((left, right) => (
+    right.overdue - left.overdue ||
+    right.contactsWithoutNextFollowUp - left.contactsWithoutNextFollowUp ||
+    String(left.name || '').localeCompare(String(right.name || ''))
+  ));
+
+  const unassignedSignal = monitorSignal(unassignedMetrics);
+  const unassigned = {
+    id: 'unassigned',
+    name: 'Unassigned work',
+    roleLabel: 'Tasks and active contacts without an eligible owner',
+    isUnassignedBucket: true,
+    ...unassignedMetrics,
+    signal: unassignedSignal.label,
+    signalTone: unassignedSignal.tone,
+    taskHref: '/tasks?unassigned=true',
+    contactHref: '/contacts',
+  };
+  const summary = buildTeamMonitorSummary({ roster, unassigned });
+
+  return {
+    canUseTeamMonitor: canUseTeamMonitor(currentUser),
+    period: range,
+    summary,
+    roster,
+    unassigned,
+    reconciliation: {
+      completedTasks: summary.completedTasks,
+      dueToday: summary.dueToday,
+      overdue: summary.overdue,
+      openTasks: [...roster, unassigned].reduce((sum, row) => sum + Number(row.openTasks || 0), 0),
+      enrollments: summary.enrollments,
+    },
+    metricNote: 'Completed work is a completed task in the selected period. A valid next follow-up is an open follow-up task with a due date. Recorded follow-ups use the contact’s latest structured follow-up event; missing evidence is shown as zero, not performance.',
+    updatedLabel: 'Scoped CRM records',
+  };
+}
+
+export function buildTeamMonitorSummary({ roster = [], unassigned = emptyMonitorMetrics() } = {}) {
+  const reconciledRows = [...roster, unassigned];
+  const total = (key) => reconciledRows.reduce((sum, row) => sum + Number(row[key] || 0), 0);
+  return {
+    completedTasks: total('completedTasks'),
+    dueToday: total('dueToday'),
+    overdue: total('overdue'),
+    unassignedOpenTasks: unassigned.unassignedOpenTasks,
+    activeAssignedContacts: total('activeAssignedContacts'),
+    contactsWithoutNextFollowUp: total('contactsWithoutNextFollowUp'),
+    recentStructuredFollowUps: total('recentStructuredFollowUps'),
+    enrollments: total('enrollments'),
+    enrollmentsToday: total('enrollmentToday'),
+    enrollmentsThisWeek: total('enrollmentWeek'),
+    unattributedTasks: unassigned.unattributedTasks,
+    unattributedContacts: unassigned.unattributedContacts,
+  };
+}
+
 export function buildTeamMonitorViewModel({
   employees = [],
   tasks = [],
@@ -302,7 +492,7 @@ export function buildTeamMonitorViewModel({
     const employeeTasks = tasksByOwner.get(employee.id) || [];
     const businessMetrics = businessMovement.byEmployee.get(employee.id) || {};
     const openTasks = employeeTasks.filter(isTaskOpen);
-    const completedToday = employeeTasks.filter((task) => task.completed && taskDateKey(task.completedAt || task.updatedAt) === today);
+    const completedToday = employeeTasks.filter((task) => task.completed && taskDateKey(task.completedAt || task.completedDate) === today);
     const dueToday = employeeTasks.filter((task) => isTaskDueToday(task, today));
     const overdue = employeeTasks.filter((task) => isTaskOverdue(task, today));
     const incomplete = openTasks.length;

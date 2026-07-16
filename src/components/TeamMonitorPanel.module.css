@@ -5,6 +5,42 @@
   margin-bottom: 18px;
 }
 
+.monitorMetricGrid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(4, minmax(150px, 1fr));
+}
+
+.monitorMetric {
+  align-items: center;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  display: flex;
+  gap: 9px;
+  min-height: 66px;
+  padding: 11px 13px;
+}
+
+.monitorMetric strong,
+.monitorMetric small {
+  display: block;
+}
+
+.monitorMetric strong {
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
+.monitorMetric small {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  line-height: 1.2;
+  margin-top: 5px;
+}
+
 .kpiCard,
 .previewCard,
 .tasksPanel,
@@ -459,6 +495,24 @@
   padding: 14px 16px;
 }
 
+.monitorControls,
+.controlGroup {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.monitorControls {
+  border-bottom: 1px solid var(--border-subtle);
+  justify-content: space-between;
+  padding: 14px 16px;
+}
+
+.controlGroup + .controlGroup {
+  justify-content: flex-end;
+}
+
 .pill,
 .activePill {
   border: 1px solid var(--border-default);
@@ -691,6 +745,10 @@
     grid-template-columns: repeat(2, minmax(160px, 1fr));
   }
 
+  .monitorMetricGrid {
+    grid-template-columns: repeat(2, minmax(150px, 1fr));
+  }
+
   .dashboardLayout,
   .fullLayout {
     grid-template-columns: 1fr;
@@ -709,6 +767,10 @@
 @media (max-width: 680px) {
   .kpiGrid {
     grid-template-columns: 1fr;
+  }
+
+  .monitorMetricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .teamPulse,
@@ -744,9 +806,70 @@
 
   .sectionHeader,
   .controlRow,
-  .filterRow {
+  .filterRow,
+  .monitorControls {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .controlGroup,
+  .controlGroup + .controlGroup {
+    justify-content: flex-start;
+  }
+
+  .monitorControls .pill,
+  .monitorControls .activePill {
+    flex: 1 1 auto;
+    text-align: center;
+  }
+
+  .tableWrap {
+    overflow-x: visible;
+  }
+
+  .rosterTable,
+  .rosterTable tbody,
+  .rosterTable tr,
+  .rosterTable td {
+    display: block;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .rosterTable thead {
+    display: none;
+  }
+
+  .rosterTable tbody tr {
+    border-bottom: 1px solid var(--border-subtle);
+    display: grid;
+    gap: 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 8px 12px;
+  }
+
+  .rosterTable tbody td {
+    align-items: center;
+    border: 0;
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 4px;
+  }
+
+  .rosterTable tbody td:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .rosterTable tbody td::before {
+    color: var(--text-muted);
+    content: attr(data-label);
+    font-size: var(--text-xs);
+    font-weight: 750;
+    margin-right: 8px;
+  }
+
+  .rosterTable tbody td:first-child::before {
+    display: none;
   }
 
   .segmented {

@@ -91,6 +91,10 @@ function isFollowUpEvent(row) {
   );
 }
 
+function isStructuredFollowUpOutcome(row) {
+  return sql`lower(coalesce(${row.eventType}, '')) ~ '^follow_up\\.[a-z_]+$'`;
+}
+
 function withoutRowId(row = {}) {
   const { rowId: _rowId, ...payload } = row;
   return payload;
@@ -147,7 +151,7 @@ async function latestActivityCandidates(db, contactIds) {
     not(isSystemHistory(activityEventsTable.message)),
   );
 
-  const [latestRows, touchRows, followUpRows, submissionRows] = await Promise.all([
+  const [latestRows, touchRows, followUpRows, structuredFollowUpRows, submissionRows] = await Promise.all([
     db
       .selectDistinctOn([activityEventsTable.contactId], selection)
       .from(activityEventsTable)
@@ -164,6 +168,11 @@ async function latestActivityCandidates(db, contactIds) {
       .where(and(baseWhere, isFollowUpEvent(activityEventsTable)))
       .orderBy(activityEventsTable.contactId, desc(eventTime), desc(activityEventsTable.createdAt), desc(activityEventsTable.message)),
     db
+      .selectDistinctOn([activityEventsTable.contactId], selection)
+      .from(activityEventsTable)
+      .where(and(baseWhere, isStructuredFollowUpOutcome(activityEventsTable)))
+      .orderBy(activityEventsTable.contactId, desc(eventTime), desc(activityEventsTable.createdAt), desc(activityEventsTable.message)),
+    db
       .selectDistinctOn([activityEventsTable.contactId, activityEventsTable.leadId], selection)
       .from(activityEventsTable)
       .where(and(
@@ -178,7 +187,7 @@ async function latestActivityCandidates(db, contactIds) {
       ),
   ]);
 
-  return mergeContactSummaryCandidateRows(latestRows, touchRows, followUpRows, submissionRows)
+  return mergeContactSummaryCandidateRows(latestRows, touchRows, followUpRows, structuredFollowUpRows, submissionRows)
     .sort((left, right) => createdAtTime(right) - createdAtTime(left));
 }
 
