@@ -22,6 +22,10 @@ __pycache__/
 /docs/ait-signs-staging-preview.json
 /src/lib/ait-signs-seed.js
 
+# private student import vaults: keep raw/cleaned workbooks and row-level
+# manifests repo-local without publishing student PII into Git history
+/private-imports/
+
 # generated AIT Signs review/audit packets should be archived outside the app repo
 /docs/mis-*-ait-signs-*.json
 /docs/mis-*-ait-signs-*.csv

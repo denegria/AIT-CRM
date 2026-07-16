@@ -1,0 +1,139 @@
+{
+  "generatedAt": "2026-07-16T22:17:02.417407+00:00",
+  "mode": "read_only_artifact_build",
+  "productionFingerprint": {
+    "neonBranchId": "br-purple-bar-aphafrgp",
+    "businessUnitName": "AIT USA Institute"
+  },
+  "lanes": {
+    "inactive": {
+      "state": "manifest_final_data_held",
+      "contactCandidates": 584,
+      "resolvedContactActions": 573,
+      "deferredContacts": 11,
+      "historicalCourseRows": 619,
+      "actionableCourseRowsAfterGates": 435
+    },
+    "active": {
+      "state": "manifest_built_data_held_after_inactive",
+      "officialRosterRows": 147,
+      "uniqueContactIdentities": 144,
+      "actionableEnrollmentRowsAfterGates": 125,
+      "heldEnrollmentRows": 22
+    },
+    "attendance": {
+      "state": "absolute_last_unvalidated_lineage_only",
+      "approvedManifest": false,
+      "requiredGate": "regenerate_and_revalidate_against_final_active_manifest_and_original_workbooks"
+    }
+  },
+  "linearIssues": {
+    "inactiveManifestLane": "MIS-318",
+    "activeEnrollmentLane": "MIS-323",
+    "attendanceLane": "MIS-272",
+    "alternatePhoneHistoryGate": "MIS-319",
+    "courseCatalogGate": "MIS-320",
+    "classSectionsAndMultiEnrollmentGate": "MIS-321",
+    "manifestImportServiceGate": "MIS-322"
+  },
+  "requiredProductGates": [
+    "Add Computer and Math to the controlled AIT USA course catalog",
+    "Add a Contact alternate-phone/history model so prior valid numbers are preserved without overloading contact_people",
+    "Add first-class course-section identity and support multiple simultaneous active enrollments for one Contact",
+    "Preserve class schedule, modality, teacher, location, and source lineage on imported active enrollments",
+    "Provide an idempotent approval-gated manifest dry-run/apply path"
+  ],
+  "files": [
+    {
+      "role": "attendance_held",
+      "vaultPath": "private-imports/mis-318/held/attendance/ait-usa-bound-brook-active-attendance-history-unvalidated.xlsx",
+      "sizeBytes": 345654,
+      "sha256": "6c80f2b79b593ef8058071fa865e8310d8bbddf4b275efa89785ec5c51c407d9"
+    },
+    {
+      "role": "attendance_held",
+      "vaultPath": "private-imports/mis-318/held/attendance/ait-usa-plainfield-active-attendance-history-unvalidated.xlsx",
+      "sizeBytes": 74588,
+      "sha256": "409aad0600397db4460b7a5b423531d5c66782237e9f17e646948a9a5bed0385"
+    },
+    {
+      "role": "cleaned",
+      "vaultPath": "private-imports/mis-318/sources/cleaned/ait-usa-bound-brook-active-students.xlsx",
+      "sizeBytes": 73035,
+      "sha256": "dc52535c66313b7b68c22003695564fa33ee9f638a0dfb59627c1eedc97af7df"
+    },
+    {
+      "role": "cleaned",
+      "vaultPath": "private-imports/mis-318/sources/cleaned/ait-usa-bound-brook-inactive-students-cleaning.xlsx",
+      "sizeBytes": 228949,
+      "sha256": "cc328366de1d21d2a5919ac3bdecd4c01aab9282fb056670757b3729b040f1b9"
+    },
+    {
+      "role": "cleaned",
+      "vaultPath": "private-imports/mis-318/sources/cleaned/ait-usa-plainfield-active-students.xlsx",
+      "sizeBytes": 27749,
+      "sha256": "89e13a2b498aafeefa579df0909d15f6029237e52b68c7ea369206c516c93564"
+    },
+    {
+      "role": "cleaned",
+      "vaultPath": "private-imports/mis-318/sources/cleaned/ait-usa-plainfield-inactive-students-cleaning.xlsx",
+      "sizeBytes": 30225,
+      "sha256": "58aa089ec0be5334b3bcecd2fb8fbe5ed02ef5a4d7650038dee942fd9c2e0780"
+    },
+    {
+      "role": "comparison",
+      "vaultPath": "private-imports/mis-318/sources/evidence/ait-usa-bound-brook-inactive-prod-comparison-approval.xlsx",
+      "sizeBytes": 250036,
+      "sha256": "7e0012c1bc681c764ccc067ddf4bb36dd40781e8629f087811c1b21a2c6f5a26"
+    },
+    {
+      "role": "comparison",
+      "vaultPath": "private-imports/mis-318/sources/evidence/ait-usa-plainfield-inactive-prod-comparison-approval.xlsx",
+      "sizeBytes": 36976,
+      "sha256": "a76ca92b1378305a1a32d5f862556c392eed926dba5d7f2905f2b4543af6b54d"
+    },
+    {
+      "role": "current_active_manifest",
+      "vaultPath": "private-imports/mis-318/manifests/ait-usa-active-enrollment-manifest.xlsx",
+      "sizeBytes": 58443,
+      "sha256": "656afd060dc6e04f165cdb0afe48943afbf30396ca33c6b48fa48a2c92f743c4"
+    },
+    {
+      "role": "current_inactive_manifest",
+      "vaultPath": "private-imports/mis-318/manifests/ait-usa-inactive-student-final-action-manifest.xlsx",
+      "sizeBytes": 209597,
+      "sha256": "b1fe6e160212fe6c9d66510e4276ff034f32249c15cc49d25dac5d444ecaac33"
+    },
+    {
+      "role": "identity_resolution",
+      "vaultPath": "private-imports/mis-318/sources/evidence/ait-usa-bound-brook-manual-contact-resolution-review.xlsx",
+      "sizeBytes": 122008,
+      "sha256": "c8a2140563c0435d21a341b890b29d450a6b90248b80806989760aa88a604f2d"
+    },
+    {
+      "role": "identity_resolution",
+      "vaultPath": "private-imports/mis-318/sources/evidence/ait-usa-plainfield-manual-contact-resolution-review.xlsx",
+      "sizeBytes": 28671,
+      "sha256": "aeac2d7e5f8bbf7934b085a8fb709876f656dee74d06bee4caf066b751126212"
+    },
+    {
+      "role": "original",
+      "vaultPath": "private-imports/mis-318/sources/original/bound-brook-source.xlsx",
+      "sizeBytes": 10664574,
+      "sha256": "ac2e5eede4b3130eaaab56faff813a6d78de72765015cb58db8e071564985134"
+    },
+    {
+      "role": "original",
+      "vaultPath": "private-imports/mis-318/sources/original/plainfield-source.xlsx",
+      "sizeBytes": 2929854,
+      "sha256": "40f044c82488d80474a56f6be7efebc484ace21c71f7cd5b896b91f58c768f47"
+    },
+    {
+      "role": "production_snapshot",
+      "vaultPath": "private-imports/mis-318/sources/evidence/prod-crm-readonly-snapshot-20260716.json",
+      "sizeBytes": 3911602,
+      "sha256": "05ab19582b72334cdfdc945541987ee3c05db6ed4c445f6e7cbd853d5f0a3dda"
+    }
+  ],
+  "privacy": "Row-level files are repo-local and Git-ignored; only this non-PII index is tracked."
+}
