@@ -1,13 +1,18 @@
 {
   "leads": [
-    { "id": "lead-owner", "assignedUserId": "owner-new", "status": "Follow Up" },
-    { "id": "lead-enrolled", "assignedUserId": "owner-enrolled", "status": "Enrolled" },
-    { "id": "lead-unassigned", "assignedUserId": null, "status": "Follow Up" }
+    { "id": "lead-owner", "contactId": "contact-owner", "sourceType": "website_form", "assignedUserId": "owner-new", "status": "Follow Up" },
+    { "id": "lead-enrolled", "contactId": "contact-enrolled", "sourceType": "facebook_lead_ads", "assignedUserId": "owner-enrolled", "status": "Enrolled" },
+    { "id": "lead-unassigned", "contactId": "contact-unassigned", "sourceType": "website_form", "assignedUserId": null, "status": "Follow Up" },
+    { "id": "lead-historical", "contactId": "contact-historical", "sourceType": "wix_historical_import", "assignedUserId": "owner-new", "status": "Follow Up" },
+    { "id": "lead-imported", "contactId": "contact-imported", "sourceType": "xlsx", "assignedUserId": "owner-new", "status": "Follow Up" }
   ],
   "tasks": [
     { "id": "task-owner", "organizationId": "org-fixture", "businessUnitId": "bu-fixture", "contactId": "contact-owner", "leadId": "lead-owner", "taskType": "follow_up", "sourceType": "automation", "sourceLabel": "New lead follow-up", "status": "open", "ownerUserId": "owner-old" },
     { "id": "task-enrolled", "organizationId": "org-fixture", "businessUnitId": "bu-fixture", "contactId": "contact-enrolled", "leadId": "lead-enrolled", "taskType": "follow_up", "sourceType": "automation", "sourceLabel": "New lead follow-up", "status": "snoozed", "ownerUserId": "owner-enrolled" },
     { "id": "task-unassigned", "organizationId": "org-fixture", "businessUnitId": "bu-fixture", "contactId": "contact-unassigned", "leadId": "lead-unassigned", "taskType": "follow_up", "sourceType": "automation", "sourceLabel": "New lead follow-up", "status": "open", "ownerUserId": "owner-old" },
-    { "id": "task-manual", "organizationId": "org-fixture", "businessUnitId": "bu-fixture", "contactId": "contact-owner", "leadId": "lead-owner", "taskType": "follow_up", "sourceType": "manual", "sourceLabel": "Follow-up completion", "status": "open", "ownerUserId": "owner-old" }
+    { "id": "task-manual", "organizationId": "org-fixture", "businessUnitId": "bu-fixture", "contactId": "contact-owner", "leadId": "lead-owner", "taskType": "follow_up", "sourceType": "manual", "sourceLabel": "Follow-up completion", "status": "open", "ownerUserId": "owner-old" },
+    { "id": "task-cross-contact", "organizationId": "org-fixture", "businessUnitId": "bu-fixture", "contactId": "contact-wrong", "leadId": "lead-owner", "taskType": "follow_up", "sourceType": "automation", "sourceLabel": "New lead follow-up", "status": "open", "ownerUserId": "owner-old" },
+    { "id": "task-historical", "organizationId": "org-fixture", "businessUnitId": "bu-fixture", "contactId": "contact-historical", "leadId": "lead-historical", "taskType": "follow_up", "sourceType": "automation", "sourceLabel": "New lead follow-up", "status": "open", "ownerUserId": "owner-old" },
+    { "id": "task-imported", "organizationId": "org-fixture", "businessUnitId": "bu-fixture", "contactId": "contact-imported", "leadId": "lead-imported", "taskType": "follow_up", "sourceType": "automation", "sourceLabel": "New lead follow-up", "status": "open", "ownerUserId": "owner-old" }
   ]
 }

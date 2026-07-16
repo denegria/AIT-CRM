@@ -96,6 +96,7 @@ export function buildTeamMonitorBootstrapPayload({
       const history = historyByContactId.get(contact.id) || [];
       return {
         id: contact.id,
+        primaryBusinessUnitId: contact.primaryBusinessUnitId,
         workflowKey: workflow.workflowKey,
         status: workflow.status,
         currentStage: workflow.currentStage,

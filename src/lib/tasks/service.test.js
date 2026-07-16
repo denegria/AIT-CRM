@@ -17,6 +17,7 @@ function followUpTask(overrides = {}) {
     taskType: 'follow_up',
     sourceType: 'automation',
     sourceLabel: 'New lead follow-up',
+    leadSourceType: 'website_form',
     status: 'open',
     ownerUserId: 'owner-old',
     dueAt: new Date('2026-07-01T09:00:00.000Z'),
@@ -39,6 +40,7 @@ function reconciliationTx({ selectedTasks, updatedTasks = [] }) {
       select() {
         return {
           from() { return this; },
+          innerJoin() { return this; },
           where(condition) {
             selectConditions.push(condition);
             return Promise.resolve(selectedTasks);
@@ -187,6 +189,8 @@ test('reconciliation rechecks every task eligibility predicate before writing an
       assert.match(query.sql, new RegExp(`"tasks"\\."${field}"`));
     }
   }
+  const updateQuery = new PgDialect().sqlToQuery(updateConditions[0]);
+  assert.match(updateQuery.sql, /"leads"\."source_type"/);
 });
 
 test('owner synchronization rejects an omitted owner without reading or writing tasks', async () => {
@@ -239,6 +243,7 @@ function structuredFollowUpDb({ currentTask = null, linkedTask }) {
     select() {
       return {
         from() { return this; },
+        innerJoin() { return this; },
         where() { return Promise.resolve([linkedTask]); },
       };
     },

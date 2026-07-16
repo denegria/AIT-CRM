@@ -15,6 +15,7 @@ import {
   buildTeamMonitorPageModel,
   buildTeamMonitorSummary,
   buildTeamMonitorViewModel,
+  filterTeamMonitorRows,
 } from '@/lib/team-monitor.js';
 import s from './TeamMonitorPanel.module.css';
 import { TeamMonitorRosterTable } from './TeamMonitorRosterTable.js';
@@ -145,21 +146,21 @@ function PreviewEmployeeList({ roster }) {
 
 function MonitorSummary({ summary, periodLabel }) {
   const metrics = [
-    ['completedTasks', `Completed ${periodLabel.toLowerCase()}`, 'success'],
-    ['dueToday', 'Due today', 'warning'],
-    ['overdue', 'Overdue', 'danger'],
-    ['unassignedOpenTasks', 'Unassigned open tasks', 'danger'],
-    ['activeAssignedContacts', 'Active assigned contacts', 'accent'],
-    ['contactsWithoutNextFollowUp', 'Without next follow-up', 'warning'],
-    ['recentStructuredFollowUps', `Recorded follow-ups ${periodLabel.toLowerCase()}`, 'accent'],
-    ['enrollments', `Enrollments ${periodLabel.toLowerCase()}`, 'success'],
+    { key: 'taskProgress', value: `${summary.completedTasks} / ${summary.taskProgressTotal}`, label: `Task progress ${periodLabel.toLowerCase()}`, tone: 'success' },
+    { key: 'openTasks', value: summary.openTasks, label: 'Open tasks', tone: 'accent' },
+    { key: 'dueToday', value: summary.dueToday, label: 'Due today', tone: 'warning' },
+    { key: 'overdue', value: summary.overdue, label: 'Overdue tasks', tone: 'danger' },
+    { key: 'assignedContacts', value: summary.assignedContacts, label: 'Assigned contacts', tone: 'accent' },
+    { key: 'contactsWithoutNextFollowUp', value: summary.contactsWithoutNextFollowUp, label: 'Without next follow-up', tone: 'warning' },
+    { key: 'enrollments', value: summary.enrollments, label: `Enrollments ${periodLabel.toLowerCase()}`, tone: 'success' },
+    { key: 'cancellations', value: summary.cancellations, label: `Cancellations ${periodLabel.toLowerCase()}`, tone: 'danger' },
   ];
   return (
     <div className={s.monitorMetricGrid} aria-label="Filtered roster plus unassigned reconciliation totals">
-      {metrics.map(([key, label, tone]) => (
+      {metrics.map(({ key, value, label, tone }) => (
         <div key={key} className={s.monitorMetric}>
           <span className={`${s.dot} ${statusDotClass(tone)}`} aria-hidden="true" />
-          <span><strong>{summary[key]}</strong><small>{label} · filtered roster + unassigned</small></span>
+          <span><strong>{value}</strong><small>{label} · visible rows</small></span>
         </div>
       ))}
     </div>
@@ -213,10 +214,13 @@ function EmployeeDetail({ employee, periodLabel }) {
       <div className={s.detailSection}>
         <div className={s.detailTitle}>Auditable workload</div>
         <div className={s.detailStats}>
-          <span><strong>{employee.completedTasks}</strong><small>completed {periodLabel.toLowerCase()}</small></span>
+          <span><strong>{employee.completedTasks} / {employee.taskProgressTotal}</strong><small>task progress {periodLabel.toLowerCase()}</small></span>
+          <span><strong>{employee.openTasks}</strong><small>open tasks</small></span>
+          <span><strong>{employee.assignedContacts}</strong><small>assigned contacts</small></span>
           <span><strong>{employee.activeAssignedContacts}</strong><small>active contacts</small></span>
           <span><strong>{employee.contactsWithoutNextFollowUp}</strong><small>without next follow-up</small></span>
           <span><strong>{employee.enrollments}</strong><small>enrollments {periodLabel.toLowerCase()}</small></span>
+          <span><strong>{employee.cancellations}</strong><small>cancellations {periodLabel.toLowerCase()}</small></span>
         </div>
       </div>
       <div className={s.detailSection}>
@@ -366,18 +370,13 @@ export function TeamMonitorPageSurface({ employees, tasks, contacts, currentUser
     [contacts, currentUser, employees, period, tasks],
   );
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
-  const filteredRoster = useMemo(() => {
-    const employeesForAttention = viewModel.roster.filter((employee) => {
-      if (attention === 'attention') return employee.signal === 'Needs attention';
-      if (attention === 'no-work') return employee.signal === 'No assigned work';
-      return true;
-    });
-    return [...employeesForAttention, viewModel.unassigned];
-  }, [attention, viewModel.roster, viewModel.unassigned]);
-  const filteredSummary = useMemo(
-    () => buildTeamMonitorSummary({ roster: filteredRoster.filter((employee) => !employee.isUnassignedBucket), unassigned: viewModel.unassigned }),
-    [filteredRoster, viewModel.unassigned],
+  const filteredRoster = useMemo(
+    () => filterTeamMonitorRows({ roster: viewModel.roster, unassigned: viewModel.unassigned, attention }),
+    [attention, viewModel.roster, viewModel.unassigned],
   );
+  const visibleUnassigned = filteredRoster.find((employee) => employee.isUnassignedBucket);
+  const visibleEmployees = filteredRoster.filter((employee) => !employee.isUnassignedBucket);
+  const filteredSummary = buildTeamMonitorSummary({ roster: visibleEmployees, unassigned: visibleUnassigned });
   const selectedEmployee = filteredRoster.find((employee) => employee.id === selectedEmployeeId) || filteredRoster[0] || null;
 
   return (
@@ -399,7 +398,7 @@ export function TeamMonitorPageSurface({ employees, tasks, contacts, currentUser
           />
           <div className={s.tableFooter}>
             <span>{viewModel.updatedLabel}</span>
-            <span>Showing {filteredRoster.length - 1} employee{filteredRoster.length === 2 ? '' : 's'} plus unassigned work</span>
+            <span>Showing {visibleEmployees.length} employee{visibleEmployees.length === 1 ? '' : 's'}{visibleUnassigned ? ' plus unassigned work' : ''}</span>
           </div>
           <p className={s.lowData}>{viewModel.metricNote}{viewModel.summary.unattributedTasks || viewModel.summary.unattributedContacts ? ` ${viewModel.summary.unattributedTasks + viewModel.summary.unattributedContacts} item${viewModel.summary.unattributedTasks + viewModel.summary.unattributedContacts === 1 ? '' : 's'} with an owner outside this roster remain in the reconciliation bucket.` : ''}</p>
         </section>

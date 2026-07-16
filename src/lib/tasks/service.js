@@ -10,6 +10,7 @@ import {
 } from '../../db/schema.js';
 import { TASK_EVENT_TYPES, TASK_SOURCE_TYPES, TASK_STATUSES, TASK_TYPES } from './constants.js';
 import { createCrmError } from '../crm/errors.js';
+import { INBOUND_LEAD_SOURCE_TYPES } from '../crm/lead-provenance.js';
 import {
   AUTOMATED_INBOUND_FOLLOW_UP_SOURCE_LABEL,
   planAutomatedInboundFollowUpReconciliation,
@@ -21,6 +22,18 @@ function compactObject(value) {
   return Object.fromEntries(
     Object.entries(value).filter(([, entry]) => entry !== undefined),
   );
+}
+
+function currentInboundLeadProvenanceCondition() {
+  const sourceTypes = sql.join(INBOUND_LEAD_SOURCE_TYPES.map((sourceType) => sql`${sourceType}`), sql`, `);
+  return sql`exists (
+    select 1 from ${leads}
+    where ${leads.id} = ${tasks.leadId}
+      and ${leads.organizationId} = ${tasks.organizationId}
+      and ${leads.businessUnitId} = ${tasks.businessUnitId}
+      and ${leads.contactId} = ${tasks.contactId}
+      and lower(${leads.sourceType}) in (${sourceTypes})
+  )`;
 }
 
 function activityMessageFor(eventType, task) {
@@ -100,10 +113,19 @@ export async function reconcileAutomatedInboundFollowUpTasks(tx, {
   if (leadId) selectConditions.push(eq(tasks.leadId, leadId));
   if (excludeTaskId) selectConditions.push(sql`${tasks.id} <> ${excludeTaskId}`);
 
-  const eligibleTasks = await tx
-    .select()
+  const eligibleTaskRows = await tx
+    .select({ task: tasks, leadSourceType: leads.sourceType })
     .from(tasks)
+    .innerJoin(leads, and(
+      eq(leads.id, tasks.leadId),
+      eq(leads.organizationId, tasks.organizationId),
+      eq(leads.businessUnitId, tasks.businessUnitId),
+      eq(leads.contactId, tasks.contactId),
+    ))
     .where(and(...selectConditions));
+  const eligibleTasks = eligibleTaskRows.map((row) => row.task
+    ? { ...row.task, leadSourceType: row.leadSourceType }
+    : row);
 
   const plannedTasks = planAutomatedInboundFollowUpReconciliation(eligibleTasks, {
     organizationId,
@@ -130,6 +152,7 @@ export async function reconcileAutomatedInboundFollowUpTasks(tx, {
       eq(tasks.organizationId, organizationId),
       eq(tasks.businessUnitId, businessUnitId),
       eq(tasks.contactId, contactId),
+      currentInboundLeadProvenanceCondition(),
       eq(tasks.taskType, TASK_TYPES.FOLLOW_UP),
       eq(tasks.sourceType, TASK_SOURCE_TYPES.AUTOMATION),
       eq(tasks.sourceLabel, AUTOMATED_INBOUND_FOLLOW_UP_SOURCE_LABEL),

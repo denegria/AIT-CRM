@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import process from 'node:process';
-import { Client } from 'pg';
+import { INBOUND_LEAD_SOURCE_TYPES, isCurrentInboundLeadProvenance } from '../src/lib/crm/lead-provenance.js';
 
 const OPEN_STATUSES = ['open', 'in_progress', 'snoozed'];
 const NO_FURTHER_PROSPECTING = new Set(['Enrolled', 'Not Interested']);
@@ -34,7 +34,7 @@ function groupedCounts(rows) {
 }
 
 function planRow(task, lead) {
-  if (!lead) return null;
+  if (!lead || task.contactId !== lead.contactId || !isCurrentInboundLeadProvenance({ sourceType: lead.sourceType })) return null;
   const lifecycleStatus = String(lead?.status || '').trim();
   if (NO_FURTHER_PROSPECTING.has(lifecycleStatus)) {
     return { taskId: task.id, contactId: task.contactId, leadId: task.leadId, action: 'cancel', lifecycleStatus };
@@ -63,6 +63,10 @@ async function fixturePlan(options) {
     .filter((task) => task.sourceLabel === SOURCE_LABEL && OPEN_STATUSES.includes(task.status))
     .filter((task) => !options.organizationId || task.organizationId === options.organizationId)
     .filter((task) => !options.businessUnitId || task.businessUnitId === options.businessUnitId)
+    .filter((task) => {
+      const lead = leads.get(task.leadId);
+      return lead && task.contactId === lead.contactId && isCurrentInboundLeadProvenance({ sourceType: lead.sourceType });
+    })
     .slice(0, options.limit);
   return {
     fingerprint: fixtureFingerprint(options.fixture, raw),
@@ -85,18 +89,28 @@ function safeDatabaseFingerprint(databaseUrl, row) {
 async function databasePlan(client, options, { lock = false } = {}) {
   const fingerprintRow = (await client.query(`select current_database() as database, current_schema() as schema, current_setting('neon.branch_id', true) as neon_branch_id, current_setting('neon.project_id', true) as neon_project_id`)).rows[0];
   const result = await client.query(`
-    select t.id, t.organization_id as "organizationId", t.business_unit_id as "businessUnitId", t.contact_id as "contactId", t.lead_id as "leadId", t.owner_user_id as "ownerUserId", l.assigned_user_id as "assignedUserId", l.status
+    select t.id, t.organization_id as "organizationId", t.business_unit_id as "businessUnitId", t.contact_id as "contactId", t.lead_id as "leadId", t.owner_user_id as "ownerUserId", l.contact_id as "leadContactId", l.source_type as "leadSourceType", l.assigned_user_id as "assignedUserId", l.status
     from tasks t
-    join leads l on l.id = t.lead_id and l.organization_id = t.organization_id and l.business_unit_id = t.business_unit_id
+    join leads l on l.id = t.lead_id and l.organization_id = t.organization_id and l.business_unit_id = t.business_unit_id and l.contact_id = t.contact_id
     where t.task_type = 'follow_up' and t.source_type = 'automation' and t.source_label = $1
       and t.status = any($2::text[])
       and ($3::uuid is null or t.organization_id = $3)
       and ($4::uuid is null or t.business_unit_id = $4)
+      and lower(l.source_type) = any($5::text[])
     order by t.created_at asc, t.id asc
-    limit $5
+    limit $6
     ${lock ? 'for update' : ''}
-  `, [SOURCE_LABEL, OPEN_STATUSES, options.organizationId, options.businessUnitId, options.limit]);
-  return { fingerprint: safeDatabaseFingerprint(process.env.DATABASE_URL, fingerprintRow), rows: result.rows.map((task) => planRow(task, task)).filter(Boolean) };
+  `, [SOURCE_LABEL, OPEN_STATUSES, options.organizationId, options.businessUnitId, INBOUND_LEAD_SOURCE_TYPES, options.limit]);
+  return {
+    fingerprint: safeDatabaseFingerprint(process.env.DATABASE_URL, fingerprintRow),
+    rows: result.rows.map((task) => planRow(task, {
+      id: task.leadId,
+      contactId: task.leadContactId,
+      sourceType: task.leadSourceType,
+      assignedUserId: task.assignedUserId,
+      status: task.status,
+    })).filter(Boolean),
+  };
 }
 
 async function applyDatabasePlan(client, rows, actorUserId = null) {
@@ -106,12 +120,13 @@ async function applyDatabasePlan(client, rows, actorUserId = null) {
         with candidate as (
           select t.*, l.assigned_user_id as resolved_owner_user_id
           from tasks t
-          join leads l on l.id = t.lead_id and l.organization_id = t.organization_id and l.business_unit_id = t.business_unit_id
+          join leads l on l.id = t.lead_id and l.organization_id = t.organization_id and l.business_unit_id = t.business_unit_id and l.contact_id = t.contact_id
           where t.id = $1
             and t.task_type = 'follow_up'
             and t.source_type = 'automation'
             and t.source_label = $2
             and t.status = any($3::text[])
+            and lower(l.source_type) = any($4::text[])
             and l.status not in ('Enrolled', 'Not Interested')
             and t.owner_user_id is distinct from l.assigned_user_id
           for update
@@ -120,19 +135,20 @@ async function applyDatabasePlan(client, rows, actorUserId = null) {
           from candidate c where t.id = c.id returning t.*
         )
         insert into task_events (task_id, organization_id, business_unit_id, event_type, from_status, to_status, from_owner_user_id, to_owner_user_id, from_due_at, to_due_at, actor_user_id, message, metadata_json, occurred_at)
-        select changed.id, changed.organization_id, changed.business_unit_id, 'assigned', candidate.status, changed.status, candidate.owner_user_id, changed.owner_user_id, candidate.due_at, changed.due_at, $4, 'Synchronized automated inbound follow-up owner with contact assignment.', jsonb_build_object('source', 'backlog_reconciliation', 'reason', 'contact_owner_changed', 'contactId', changed.contact_id, 'leadId', changed.lead_id), now() from changed join candidate on candidate.id = changed.id
-      `, [row.taskId, SOURCE_LABEL, OPEN_STATUSES, actorUserId]);
+        select changed.id, changed.organization_id, changed.business_unit_id, 'assigned', candidate.status, changed.status, candidate.owner_user_id, changed.owner_user_id, candidate.due_at, changed.due_at, $5, 'Synchronized automated inbound follow-up owner with contact assignment.', jsonb_build_object('source', 'backlog_reconciliation', 'reason', 'contact_owner_changed', 'contactId', changed.contact_id, 'leadId', changed.lead_id), now() from changed join candidate on candidate.id = changed.id
+      `, [row.taskId, SOURCE_LABEL, OPEN_STATUSES, INBOUND_LEAD_SOURCE_TYPES, actorUserId]);
     } else {
       await client.query(`
         with candidate as (
           select t.*, l.status as lifecycle_status
           from tasks t
-          join leads l on l.id = t.lead_id and l.organization_id = t.organization_id and l.business_unit_id = t.business_unit_id
+          join leads l on l.id = t.lead_id and l.organization_id = t.organization_id and l.business_unit_id = t.business_unit_id and l.contact_id = t.contact_id
           where t.id = $1
             and t.task_type = 'follow_up'
             and t.source_type = 'automation'
             and t.source_label = $2
             and t.status = any($3::text[])
+            and lower(l.source_type) = any($4::text[])
             and l.status in ('Enrolled', 'Not Interested')
           for update
         ), changed as (
@@ -140,8 +156,8 @@ async function applyDatabasePlan(client, rows, actorUserId = null) {
           from candidate c where t.id = c.id returning t.*
         )
         insert into task_events (task_id, organization_id, business_unit_id, event_type, from_status, to_status, from_owner_user_id, to_owner_user_id, from_due_at, to_due_at, actor_user_id, message, metadata_json, occurred_at)
-        select changed.id, changed.organization_id, changed.business_unit_id, 'canceled', candidate.status, changed.status, candidate.owner_user_id, changed.owner_user_id, candidate.due_at, changed.due_at, $4, 'Canceled automated inbound follow-up because the contact no longer needs prospecting.', jsonb_build_object('source', 'backlog_reconciliation', 'reason', 'no_further_prospecting_lifecycle', 'lifecycleStatus', candidate.lifecycle_status, 'contactId', changed.contact_id, 'leadId', changed.lead_id), now() from changed join candidate on candidate.id = changed.id
-      `, [row.taskId, SOURCE_LABEL, OPEN_STATUSES, actorUserId]);
+        select changed.id, changed.organization_id, changed.business_unit_id, 'canceled', candidate.status, changed.status, candidate.owner_user_id, changed.owner_user_id, candidate.due_at, changed.due_at, $5, 'Canceled automated inbound follow-up because the contact no longer needs prospecting.', jsonb_build_object('source', 'backlog_reconciliation', 'reason', 'no_further_prospecting_lifecycle', 'lifecycleStatus', candidate.lifecycle_status, 'contactId', changed.contact_id, 'leadId', changed.lead_id), now() from changed join candidate on candidate.id = changed.id
+      `, [row.taskId, SOURCE_LABEL, OPEN_STATUSES, INBOUND_LEAD_SOURCE_TYPES, actorUserId]);
     }
   }
 }
@@ -159,6 +175,7 @@ async function main() {
     return;
   }
 
+  const { Client } = await import('pg');
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   try {

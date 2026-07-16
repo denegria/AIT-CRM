@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildTeamMonitorBootstrapPayload } from './team-monitor-bootstrap.js';
 import { requiresTeamMonitorBootstrapReload } from './bootstrap-routing.js';
+import { recordMatchesBusinessUnitScope } from './business-unit-scope.js';
 
 test('restricted team monitor bootstrap projects only scoped monitor data', () => {
   const payload = buildTeamMonitorBootstrapPayload({
@@ -31,6 +32,7 @@ test('restricted team monitor bootstrap projects only scoped monitor data', () =
   assert.deepEqual(payload.employees.find((employee) => employee.id === 'mixed').businessUnitIds, ['bu-allowed']);
   assert.equal(Object.hasOwn(payload.employees[0], 'email'), false);
   assert.deepEqual(payload.contacts.map((contact) => contact.id), ['allowed-contact']);
+  assert.equal(payload.contacts[0].primaryBusinessUnitId, 'bu-allowed');
   assert.equal(Object.hasOwn(payload.contacts[0], 'name'), false);
   assert.equal(payload.contacts[0].assignedTo, '');
   assert.equal(payload.contacts[0].unattributedOwner, true);
@@ -40,6 +42,23 @@ test('restricted team monitor bootstrap projects only scoped monitor data', () =
   assert.deepEqual(payload.workOrders, []);
   assert.deepEqual(payload.financials, []);
   assert.equal(Object.hasOwn(payload, 'users'), false);
+});
+
+test('scoped team monitor contacts survive the shared store business-unit handoff', () => {
+  const payload = buildTeamMonitorBootstrapPayload({
+    currentUser: { id: 'senior', businessUnitIds: ['bu-allowed'], canAccessAllBusinessUnits: false },
+    businessUnits: [{ id: 'bu-allowed', name: 'Allowed' }],
+    employees: [{ id: 'owner', name: 'Owner', businessUnitIds: ['bu-allowed'] }],
+    contacts: [
+      { id: 'active-contact', primaryBusinessUnitId: 'bu-allowed' },
+      { id: 'other-contact', primaryBusinessUnitId: 'bu-other' },
+    ],
+    leads: [{ id: 'lead', contactId: 'active-contact', businessUnitId: 'bu-allowed', status: 'Follow Up', assignedUserId: 'owner' }],
+  });
+
+  const storeScopedContacts = payload.contacts.filter((contact) => recordMatchesBusinessUnitScope(contact, 'bu-allowed'));
+  assert.deepEqual(storeScopedContacts.map((contact) => contact.id), ['active-contact']);
+  assert.equal(storeScopedContacts[0].assignedTo, 'owner');
 });
 
 test('admin team monitor bootstrap retains organization-wide monitor scope', () => {

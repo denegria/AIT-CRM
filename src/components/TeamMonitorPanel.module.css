@@ -309,7 +309,7 @@
 .rosterTable,
 .taskTable {
   border-collapse: collapse;
-  min-width: 860px;
+  min-width: 760px;
   table-layout: fixed;
   width: 100%;
 }
@@ -343,9 +343,15 @@
 }
 
 .rosterTable tbody tr:hover,
+.rosterTable tbody tr:focus-visible,
 .selectedRow {
   background: var(--bg-hover);
   box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.rosterTable tbody tr:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
 .employeeCell,

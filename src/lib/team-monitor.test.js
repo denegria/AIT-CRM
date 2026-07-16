@@ -6,6 +6,7 @@ import {
   buildTeamMonitorSummary,
   buildTeamMonitorViewModel,
   canUseTeamMonitor,
+  filterTeamMonitorRows,
 } from './team-monitor.js';
 
 const employees = [
@@ -144,6 +145,7 @@ test('team monitor page metrics reconcile employee rows with the explicit unassi
       { id: 'active-missing', workflowKey: 'ait_usa', status: 'Follow Up', assignedTo: 'u-one' },
       { id: 'active-unassigned', workflowKey: 'ait_usa', status: 'Follow Up' },
       { id: 'enrolled', workflowKey: 'ait_usa', status: 'Enrolled', assignedTo: 'u-one', enrollmentStatusChangedAt: '2026-07-08T12:00:00Z' },
+      { id: 'cancelled', workflowKey: 'ait_usa', status: 'Dropped / Quit', assignedTo: 'u-two', droppedStatusChangedAt: '2026-07-08T12:30:00Z' },
     ],
   });
 
@@ -152,12 +154,19 @@ test('team monitor page metrics reconcile employee rows with the explicit unassi
   assert.equal(viewModel.summary.dueToday, 1);
   assert.equal(viewModel.summary.overdue, 1);
   assert.equal(viewModel.summary.unassignedOpenTasks, 1);
+  assert.equal(viewModel.summary.openTasks, 5);
+  assert.equal(viewModel.summary.taskProgressTotal, 6);
+  assert.equal(viewModel.summary.assignedContacts, 4);
   assert.equal(viewModel.summary.activeAssignedContacts, 2);
+  assert.equal(viewModel.summary.unassignedActiveContacts, 1);
   assert.equal(viewModel.summary.contactsWithoutNextFollowUp, 2);
   assert.equal(viewModel.summary.recentStructuredFollowUps, 1);
   assert.equal(viewModel.summary.enrollments, 1);
+  assert.equal(viewModel.summary.cancellations, 1);
   assert.equal(viewModel.unassigned.unattributedTasks, 1);
   assert.equal(sofia.contactsWithoutNextFollowUp, 1);
+  assert.equal(sofia.taskProgressTotal, 3);
+  assert.equal(sofia.contactHref, '/contacts?owner=u-one');
   assert.equal(sofia.signal, 'Needs attention');
   assert.equal(viewModel.reconciliation.openTasks, 5);
   assert.equal(viewModel.reconciliation.completedTasks, viewModel.summary.completedTasks);
@@ -243,14 +252,34 @@ test('filtered team monitor summary reconciles displayed rows with the unassigne
       { id: 'unassigned', status: 'open', dueAt: '2026-07-08T10:00:00Z' },
     ],
   });
-  const visibleRoster = model.roster.filter((employee) => employee.signal === 'Needs attention');
-  const summary = buildTeamMonitorSummary({ roster: visibleRoster, unassigned: model.unassigned });
+  const visibleRows = filterTeamMonitorRows({ roster: model.roster, unassigned: model.unassigned, attention: 'attention' });
+  const visibleRoster = visibleRows.filter((employee) => !employee.isUnassignedBucket);
+  const visibleUnassigned = visibleRows.find((employee) => employee.isUnassignedBucket);
+  const summary = buildTeamMonitorSummary({ roster: visibleRoster, unassigned: visibleUnassigned });
 
   assert.equal(visibleRoster.length, 1);
   assert.equal(summary.overdue, 1);
   assert.equal(summary.completedTasks, 0);
   assert.equal(summary.unassignedOpenTasks, 1);
   assert.equal(model.summary.completedTasks, 1);
+});
+
+test('attention filters never append an empty or contradictory unassigned bucket', () => {
+  const model = buildTeamMonitorPageModel({
+    employees: employees.slice(1),
+    currentUser: { primaryRoleKey: 'admin' },
+    today: '2026-07-08',
+    now: new Date('2026-07-08T18:00:00Z').getTime(),
+    tasks: [{ id: 'sofia-overdue', ownerUserId: 'u-one', status: 'open', dueAt: '2026-07-07T10:00:00Z' }],
+  });
+
+  const attentionRows = filterTeamMonitorRows({ roster: model.roster, unassigned: model.unassigned, attention: 'attention' });
+  const noWorkRows = filterTeamMonitorRows({ roster: model.roster, unassigned: model.unassigned, attention: 'no-work' });
+
+  assert.deepEqual(attentionRows.map((row) => row.id), ['u-one']);
+  assert.deepEqual(noWorkRows.map((row) => row.id), ['u-two']);
+  assert.equal(attentionRows.some((row) => row.isUnassignedBucket), false);
+  assert.equal(noWorkRows.some((row) => row.isUnassignedBucket), false);
 });
 
 test('unattributed allowed-division tasks reconcile without exposing or treating an outside owner as unassigned', () => {

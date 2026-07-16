@@ -8,14 +8,18 @@ import { loadDeferredTasks } from './tasks/bootstrap.js';
 import { fetchDashboardSummary } from './dashboard/loader.js';
 import { fetchPipelineSummary, pipelineSummaryQuery } from './pipeline/loader.js';
 import { LEAN_SHELL_PATHS, requiresTeamMonitorBootstrapReload } from './bootstrap-routing.js';
+import {
+  ALL_BUSINESS_UNITS,
+  UNASSIGNED_BUSINESS_UNIT,
+  recordBusinessUnitId,
+  recordMatchesBusinessUnitScope,
+} from './business-unit-scope.js';
 
 const CRMContext = createContext(null);
 const STORAGE_KEY = 'ait-crm-data';
 const SCOPE_STORAGE_KEY = 'ait-crm-business-unit-scope';
 const SCOPE_USER_KEY = 'ait-crm-scope-user-id';
 const SCOPE_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
-const ALL_BUSINESS_UNITS = 'all';
-const UNASSIGNED_BUSINESS_UNIT = 'unassigned';
 const THEME_OPTIONS = new Set(['light', 'dusk', 'dark']);
 
 function normalizeTheme(value) {
@@ -23,7 +27,7 @@ function normalizeTheme(value) {
 }
 
 function getBusinessUnitId(record) {
-  return record?.businessUnitId || record?.primaryBusinessUnitId || '';
+  return recordBusinessUnitId(record);
 }
 
 function defaultBusinessUnitScope({ businessUnits = [], currentUser = null, contacts = [], preferredBusinessUnitId = '' } = {}) {
@@ -383,10 +387,7 @@ export function CRMProvider({ children, initialData }) {
   }, [accessibleBusinessUnits, currentUser?.id]);
 
   const inCurrentBusinessUnitScope = useCallback((record) => {
-    if (effectiveBusinessUnitId === ALL_BUSINESS_UNITS) return true;
-    const businessUnitId = getBusinessUnitId(record);
-    if (effectiveBusinessUnitId === UNASSIGNED_BUSINESS_UNIT) return !businessUnitId;
-    return businessUnitId === effectiveBusinessUnitId;
+    return recordMatchesBusinessUnitScope(record, effectiveBusinessUnitId);
   }, [effectiveBusinessUnitId]);
 
   const businessUnitByContactId = useMemo(() => {

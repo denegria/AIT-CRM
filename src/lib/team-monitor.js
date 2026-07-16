@@ -289,10 +289,14 @@ function emptyMonitorMetrics() {
     dueToday: 0,
     overdue: 0,
     openTasks: 0,
+    taskProgressTotal: 0,
+    assignedContacts: 0,
     activeAssignedContacts: 0,
+    unassignedActiveContacts: 0,
     contactsWithoutNextFollowUp: 0,
     recentStructuredFollowUps: 0,
     enrollments: 0,
+    cancellations: 0,
     enrollmentToday: 0,
     enrollmentWeek: 0,
     unassignedOpenTasks: 0,
@@ -319,10 +323,16 @@ function isStructuredFollowUpInRange(contact = {}, range) {
 }
 
 function monitorSignal(metrics = {}) {
-  if (metrics.overdue || metrics.dueToday || metrics.contactsWithoutNextFollowUp) {
+  if (
+    metrics.overdue ||
+    metrics.dueToday ||
+    metrics.contactsWithoutNextFollowUp ||
+    metrics.unassignedOpenTasks ||
+    metrics.unassignedActiveContacts
+  ) {
     return { label: 'Needs attention', tone: 'danger' };
   }
-  if (!metrics.openTasks && !metrics.activeAssignedContacts) {
+  if (!metrics.openTasks && !metrics.activeAssignedContacts && !metrics.unassignedActiveContacts) {
     return { label: 'No assigned work', tone: 'muted' };
   }
   return { label: 'On track', tone: 'success' };
@@ -330,6 +340,44 @@ function monitorSignal(metrics = {}) {
 
 function metricTargetForOwner(ownerUserId, employeeMetrics, unassignedMetrics) {
   return employeeMetrics.get(ownerUserId) || unassignedMetrics;
+}
+
+function finalizedMonitorMetrics(metrics = emptyMonitorMetrics()) {
+  return {
+    ...metrics,
+    taskProgressTotal: Number(metrics.completedTasks || 0) + Number(metrics.openTasks || 0),
+  };
+}
+
+export function hasTeamMonitorWork(row = {}) {
+  return [
+    'completedTasks',
+    'openTasks',
+    'dueToday',
+    'overdue',
+    'assignedContacts',
+    'activeAssignedContacts',
+    'unassignedActiveContacts',
+    'contactsWithoutNextFollowUp',
+    'recentStructuredFollowUps',
+    'enrollments',
+    'cancellations',
+    'unassignedOpenTasks',
+    'unattributedTasks',
+    'unattributedContacts',
+  ].some((key) => Number(row[key] || 0) > 0);
+}
+
+export function filterTeamMonitorRows({ roster = [], unassigned = emptyMonitorMetrics(), attention = 'all' } = {}) {
+  const employees = roster.filter((employee) => {
+    if (attention === 'attention') return employee.signal === 'Needs attention';
+    if (attention === 'no-work') return employee.signal === 'No assigned work';
+    return true;
+  });
+  const includeUnassigned = attention !== 'no-work' &&
+    hasTeamMonitorWork(unassigned) &&
+    (attention !== 'attention' || unassigned.signal === 'Needs attention');
+  return includeUnassigned ? [...employees, unassigned] : employees;
 }
 
 export function buildTeamMonitorPageModel({
@@ -373,29 +421,36 @@ export function buildTeamMonitorPageModel({
   }
 
   for (const contact of contacts) {
-    if (!isActiveMonitorContact(contact)) continue;
     const hasUnattributedOwner = Boolean(contact.unattributedOwner);
+    const ownerUserId = contactOwnerId(contact);
     const metrics = hasUnattributedOwner
       ? unassignedMetrics
-      : metricTargetForOwner(contactOwnerId(contact), employeeMetrics, unassignedMetrics);
-    if (contactOwnerId(contact) || hasUnattributedOwner) metrics.activeAssignedContacts += 1;
+      : metricTargetForOwner(ownerUserId, employeeMetrics, unassignedMetrics);
+    if (ownerUserId || hasUnattributedOwner) metrics.assignedContacts += 1;
     if (hasUnattributedOwner) metrics.unattributedContacts += 1;
-    if (!validFollowUpContactIds.has(contact.id)) metrics.contactsWithoutNextFollowUp += 1;
-    if (isStructuredFollowUpInRange(contact, range)) metrics.recentStructuredFollowUps += 1;
-  }
 
-  for (const contact of contacts) {
-    if (!isEnrolledContact(contact)) continue;
-    const enrollmentTime = dateTime(enrollmentDateForContact(contact));
-    if (!enrollmentTime) continue;
-    const metrics = metricTargetForOwner(contactOwnerId(contact), employeeMetrics, unassignedMetrics);
-    if (inRange(enrollmentTime, range.start, range.end)) metrics.enrollments += 1;
-    if (inRange(enrollmentTime, startOfUtcDay(now), startOfUtcDay(now) + (24 * 60 * 60 * 1000))) metrics.enrollmentToday += 1;
-    if (inRange(enrollmentTime, startOfUtcWeek(now), startOfUtcWeek(now) + (7 * 24 * 60 * 60 * 1000))) metrics.enrollmentWeek += 1;
+    if (isActiveMonitorContact(contact)) {
+      if (ownerUserId || hasUnattributedOwner) metrics.activeAssignedContacts += 1;
+      else metrics.unassignedActiveContacts += 1;
+      if (!validFollowUpContactIds.has(contact.id)) metrics.contactsWithoutNextFollowUp += 1;
+      if (isStructuredFollowUpInRange(contact, range)) metrics.recentStructuredFollowUps += 1;
+    }
+
+    if (isEnrolledContact(contact)) {
+      const enrollmentTime = dateTime(enrollmentDateForContact(contact));
+      if (inRange(enrollmentTime, range.start, range.end)) metrics.enrollments += 1;
+      if (inRange(enrollmentTime, startOfUtcDay(now), startOfUtcDay(now) + (24 * 60 * 60 * 1000))) metrics.enrollmentToday += 1;
+      if (inRange(enrollmentTime, startOfUtcWeek(now), startOfUtcWeek(now) + (7 * 24 * 60 * 60 * 1000))) metrics.enrollmentWeek += 1;
+    }
+
+    if (isCancellationContact(contact)) {
+      const cancellationTime = dateTime(cancellationDateForContact(contact));
+      if (inRange(cancellationTime, range.start, range.end)) metrics.cancellations += 1;
+    }
   }
 
   const roster = employees.map((employee) => {
-    const metrics = employeeMetrics.get(employee.id) || emptyMonitorMetrics();
+    const metrics = finalizedMonitorMetrics(employeeMetrics.get(employee.id) || emptyMonitorMetrics());
     const signal = monitorSignal(metrics);
     return {
       ...employee,
@@ -404,7 +459,7 @@ export function buildTeamMonitorPageModel({
       signal: signal.label,
       signalTone: signal.tone,
       taskHref: `/tasks?ownerUserId=${encodeURIComponent(employee.id)}`,
-      contactHref: '/contacts',
+      contactHref: `/contacts?owner=${encodeURIComponent(employee.id)}`,
     };
   }).sort((left, right) => (
     right.overdue - left.overdue ||
@@ -412,17 +467,18 @@ export function buildTeamMonitorPageModel({
     String(left.name || '').localeCompare(String(right.name || ''))
   ));
 
-  const unassignedSignal = monitorSignal(unassignedMetrics);
+  const finalizedUnassignedMetrics = finalizedMonitorMetrics(unassignedMetrics);
+  const unassignedSignal = monitorSignal(finalizedUnassignedMetrics);
   const unassigned = {
     id: 'unassigned',
     name: 'Unassigned work',
     roleLabel: 'Tasks and active contacts without an eligible owner',
     isUnassignedBucket: true,
-    ...unassignedMetrics,
+    ...finalizedUnassignedMetrics,
     signal: unassignedSignal.label,
     signalTone: unassignedSignal.tone,
     taskHref: '/tasks?unassigned=true',
-    contactHref: '/contacts',
+    contactHref: '/contacts?owner=unassigned',
   };
   const summary = buildTeamMonitorSummary({ roster, unassigned });
 
@@ -436,10 +492,13 @@ export function buildTeamMonitorPageModel({
       completedTasks: summary.completedTasks,
       dueToday: summary.dueToday,
       overdue: summary.overdue,
-      openTasks: [...roster, unassigned].reduce((sum, row) => sum + Number(row.openTasks || 0), 0),
+      openTasks: summary.openTasks,
+      taskProgressTotal: summary.taskProgressTotal,
+      assignedContacts: summary.assignedContacts,
       enrollments: summary.enrollments,
+      cancellations: summary.cancellations,
     },
-    metricNote: 'Completed work is a completed task in the selected period. A valid next follow-up is an open follow-up task with a due date. Recorded follow-ups use the contact’s latest structured follow-up event; missing evidence is shown as zero, not performance.',
+    metricNote: 'Task progress is completed in the selected period divided by those completions plus currently open tasks. Assigned contacts are current CRM ownership across lifecycle states. A valid next follow-up is an open follow-up task with a due date. Enrollment and cancellation movement require explicit dated CRM evidence.',
     updatedLabel: 'Scoped CRM records',
   };
 }
@@ -449,13 +508,18 @@ export function buildTeamMonitorSummary({ roster = [], unassigned = emptyMonitor
   const total = (key) => reconciledRows.reduce((sum, row) => sum + Number(row[key] || 0), 0);
   return {
     completedTasks: total('completedTasks'),
+    openTasks: total('openTasks'),
+    taskProgressTotal: total('taskProgressTotal'),
     dueToday: total('dueToday'),
     overdue: total('overdue'),
     unassignedOpenTasks: unassigned.unassignedOpenTasks,
+    assignedContacts: total('assignedContacts'),
     activeAssignedContacts: total('activeAssignedContacts'),
+    unassignedActiveContacts: unassigned.unassignedActiveContacts,
     contactsWithoutNextFollowUp: total('contactsWithoutNextFollowUp'),
     recentStructuredFollowUps: total('recentStructuredFollowUps'),
     enrollments: total('enrollments'),
+    cancellations: total('cancellations'),
     enrollmentsToday: total('enrollmentToday'),
     enrollmentsThisWeek: total('enrollmentWeek'),
     unattributedTasks: unassigned.unattributedTasks,

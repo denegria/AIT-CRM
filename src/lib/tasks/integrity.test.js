@@ -15,19 +15,23 @@ function task(overrides = {}) {
     taskType: 'follow_up',
     sourceType: 'automation',
     sourceLabel: 'New lead follow-up',
+    leadSourceType: 'website_form',
     status: 'open',
     ownerUserId: 'owner-old',
     ...overrides,
   };
 }
 
-test('automated inbound follow-up eligibility excludes manual, closed, and cross-business-unit tasks', () => {
+test('automated inbound follow-up eligibility excludes manual, closed, cross-business-unit, historical, and imported tasks', () => {
   const scope = { organizationId: 'org-1', businessUnitId: 'bu-1', contactId: 'contact-1' };
   assert.equal(isEligibleAutomatedInboundFollowUpTask(task(), scope), true);
   assert.equal(isEligibleAutomatedInboundFollowUpTask(task({ sourceType: 'manual' }), scope), false);
   assert.equal(isEligibleAutomatedInboundFollowUpTask(task({ status: 'completed' }), scope), false);
   assert.equal(isEligibleAutomatedInboundFollowUpTask(task({ businessUnitId: 'bu-2' }), scope), false);
   assert.equal(isEligibleAutomatedInboundFollowUpTask(task({ sourceLabel: 'Recurring task' }), scope), false);
+  assert.equal(isEligibleAutomatedInboundFollowUpTask(task({ leadSourceType: 'wix_historical_import' }), scope), false);
+  assert.equal(isEligibleAutomatedInboundFollowUpTask(task({ leadSourceType: 'xlsx' }), scope), false);
+  assert.equal(isEligibleAutomatedInboundFollowUpTask(task({ leadSourceType: 'facebook_lead_ads' }), scope), true);
 });
 
 test('owner synchronization selects only changed eligible tasks and is idempotent', () => {

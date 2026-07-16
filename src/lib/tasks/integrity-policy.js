@@ -1,4 +1,5 @@
 import { TASK_SOURCE_TYPES, TASK_STATUSES, TASK_TYPES } from './constants.js';
+import { isCurrentInboundLeadProvenance } from '../crm/lead-provenance.js';
 
 export const AUTOMATED_INBOUND_FOLLOW_UP_SOURCE_LABEL = 'New lead follow-up';
 const OPEN_STATUSES = [TASK_STATUSES.OPEN, TASK_STATUSES.IN_PROGRESS, TASK_STATUSES.SNOOZED];
@@ -14,6 +15,7 @@ export function isEligibleAutomatedInboundFollowUpTask(task = {}, {
     task.taskType === TASK_TYPES.FOLLOW_UP &&
     task.sourceType === TASK_SOURCE_TYPES.AUTOMATION &&
     task.sourceLabel === AUTOMATED_INBOUND_FOLLOW_UP_SOURCE_LABEL &&
+    isCurrentInboundLeadProvenance({ sourceType: task.leadSourceType }) &&
     OPEN_STATUSES.includes(task.status);
 }
 
