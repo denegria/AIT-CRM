@@ -17,7 +17,7 @@ import {
   resolveContactById,
 } from '@/lib/crm/access.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
-import { evaluateLifecycleTransition } from '@/lib/crm/lifecycle.js';
+import { evaluateLifecycleTransition, isNoFurtherProspectingLifecycleStatus } from '@/lib/crm/lifecycle.js';
 import {
   leadProfilePatchFromPayload,
   leadProfilePatchToDrizzleValues,
@@ -377,7 +377,11 @@ export async function POST(request, { params }) {
         contactPatch: contactPatchForFollowUpOutcome(completion.outcome, now),
         leadPatch: transition.leadPatch,
         leadStatusChange: transition.leadStatusChange,
-        cancelOpenFollowUps: transition.leadStatusChange?.toStatus === 'Not Interested',
+        cancelOpenFollowUps: isNoFurtherProspectingLifecycleStatus(transition.leadStatusChange?.toStatus),
+        cancelOpenFollowUpsContext: {
+          source: 'follow_up_completion',
+          lifecycleStatus: transition.leadStatusChange?.toStatus || null,
+        },
         profileActivity: transition.profileActivity,
         nextTaskValues,
         nextTaskEventMetadata: compactObject({
@@ -413,7 +417,11 @@ export async function POST(request, { params }) {
       contactPatch: contactPatchForFollowUpOutcome(completion.outcome, now),
       leadPatch: transition.leadPatch,
       leadStatusChange: transition.leadStatusChange,
-      cancelOpenFollowUps: transition.leadStatusChange?.toStatus === 'Not Interested',
+      cancelOpenFollowUps: isNoFurtherProspectingLifecycleStatus(transition.leadStatusChange?.toStatus),
+      cancelOpenFollowUpsContext: {
+        source: 'follow_up_activity',
+        lifecycleStatus: transition.leadStatusChange?.toStatus || null,
+      },
       profileActivity: transition.profileActivity,
       nextTaskValues,
       nextTaskEventMetadata: compactObject({

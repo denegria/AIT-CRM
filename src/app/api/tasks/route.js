@@ -21,7 +21,7 @@ import {
   resolveContactById,
 } from '@/lib/crm/access.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
-import { evaluateLifecycleTransition } from '@/lib/crm/lifecycle.js';
+import { evaluateLifecycleTransition, isNoFurtherProspectingLifecycleStatus } from '@/lib/crm/lifecycle.js';
 import {
   leadProfilePatchFromPayload,
   leadProfilePatchToDrizzleValues,
@@ -687,7 +687,11 @@ export async function PATCH(request) {
         contactPatch: contactPatchForFollowUpOutcome(completion.outcome, now),
         leadPatch,
         leadStatusChange,
-        cancelOpenFollowUps: leadStatusChange?.toStatus === 'Not Interested',
+        cancelOpenFollowUps: isNoFurtherProspectingLifecycleStatus(leadStatusChange?.toStatus),
+        cancelOpenFollowUpsContext: {
+          source: 'task_follow_up_completion',
+          lifecycleStatus: leadStatusChange?.toStatus || null,
+        },
         profileActivity: leadProfileUpdateSummary
           ? {
               eventType: 'lead_profile.updated',

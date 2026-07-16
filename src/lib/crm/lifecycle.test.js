@@ -4,6 +4,7 @@ import {
   evaluateLifecycleTransition,
   lifecycleWorkflowForBusinessUnit,
   isClientAccountBusinessUnit,
+  isNoFurtherProspectingLifecycleStatus,
   normalizeLifecycleStatus,
   requireLifecycleStatus,
   workflowKeyForBusinessUnit,
@@ -47,6 +48,13 @@ test('lifecycle workflows resolve division-specific statuses', () => {
 test('requireLifecycleStatus rejects arbitrary lifecycle strings', () => {
   assert.equal(requireLifecycleStatus('Qualified'), 'Qualified');
   assert.throws(() => requireLifecycleStatus('Maybe Later'), /Invalid lifecycle status/);
+});
+
+test('no-further-prospecting policy explicitly includes enrolled and not interested only', () => {
+  assert.equal(isNoFurtherProspectingLifecycleStatus('Enrolled'), true);
+  assert.equal(isNoFurtherProspectingLifecycleStatus('Not Interested'), true);
+  assert.equal(isNoFurtherProspectingLifecycleStatus('Follow Up'), false);
+  assert.equal(isNoFurtherProspectingLifecycleStatus('Course Completed'), false);
 });
 
 test('evaluateLifecycleTransition allows active movement and closing for normal CRM writers', () => {

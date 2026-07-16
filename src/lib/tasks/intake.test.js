@@ -21,13 +21,15 @@ test('creates inbound lead follow-up tasks idempotently', async () => {
     contactName: 'Ada Lead',
     detail: 'Interested in English classes.',
     idempotencyKey: 'website:lead-1',
+    ownerUserId: 'owner-1',
     metadata: { externalId: 'lead-1' },
   });
 
   assert.deepEqual(result, { inserted: true, taskActivityEventId: 'activity-1' });
-  assert.equal(calls[0].sql.startsWith('with new_task as'), true);
+  assert.equal(calls[0].sql.startsWith('with intake_lock as'), true);
+  assert.equal(calls[0].sql.includes('pg_advisory_xact_lock'), true);
   assert.equal(calls[0].sql.includes('where not exists'), true);
-  assert.deepEqual(calls[0].params.slice(0, 12), [
+  assert.deepEqual(calls[0].params.slice(0, 13), [
     'org-1',
     'bu-1',
     'contact-1',
@@ -37,11 +39,12 @@ test('creates inbound lead follow-up tasks idempotently', async () => {
     'follow_up',
     'open',
     'high',
+    'owner-1',
     'automation',
     'website:lead-1',
     'New lead follow-up',
   ]);
-  assert.equal(JSON.parse(calls[0].params[12]).requiresFollowUpNote, true);
+  assert.equal(JSON.parse(calls[0].params[13]).requiresFollowUpNote, true);
 });
 
 test('skips invalid inbound lead intake task payloads', async () => {

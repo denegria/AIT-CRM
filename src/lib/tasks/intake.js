@@ -20,6 +20,7 @@ export async function createInboundLeadIntakeTask(client, {
   contactName,
   detail,
   idempotencyKey,
+  ownerUserId = null,
   metadata = {},
 } = {}) {
   if (!organizationId || !businessUnitId || !contactId || !leadId || !idempotencyKey) {
@@ -36,29 +37,33 @@ export async function createInboundLeadIntakeTask(client, {
 
   const inserted = await client.query(
     `
-      with new_task as (
+      with intake_lock as (
+        select pg_advisory_xact_lock(hashtextextended($11::text || ':' || $12::text, 0))
+      ),
+      new_task as (
         insert into tasks
         (organization_id, business_unit_id, contact_id, lead_id, title, description, task_type, status, priority, due_at, owner_user_id, created_by_user_id, source_type, source_id, source_label, metadata_json)
-        select $1, $2, $3, $4, $5, $6, $7, $8, $9, now(), null, null, $10, $11, $12, $13::jsonb
+        select $1, $2, $3, $4, $5, $6, $7, $8, $9, now(), $10, null, $11, $12, $13, $14::jsonb
+        from intake_lock
         where not exists (
           select 1
           from tasks
           where organization_id = $1
-            and source_type = $10
-            and source_id = $11
+            and source_type = $11
+            and source_id = $12
         )
         returning *
       ),
       task_event as (
         insert into task_events
         (task_id, organization_id, business_unit_id, event_type, to_status, to_owner_user_id, to_due_at, actor_user_id, message, metadata_json)
-        select id, organization_id, business_unit_id, 'created', status, owner_user_id, due_at, null, 'Created new lead follow-up task.', $13::jsonb
+        select id, organization_id, business_unit_id, 'created', status, owner_user_id, due_at, null, 'Created new lead follow-up task.', $14::jsonb
         from new_task
         returning id
       )
       insert into activity_events
       (organization_id, business_unit_id, contact_id, lead_id, event_type, message, metadata_json, actor_user_id, occurred_at)
-      select organization_id, business_unit_id, contact_id, lead_id, 'task.created', 'Created new lead follow-up task.', $13::jsonb, null, now()
+      select organization_id, business_unit_id, contact_id, lead_id, 'task.created', 'Created new lead follow-up task.', $14::jsonb, null, now()
       from new_task
       returning id
     `,
@@ -72,6 +77,7 @@ export async function createInboundLeadIntakeTask(client, {
       TASK_TYPES.FOLLOW_UP,
       TASK_STATUSES.OPEN,
       TASK_PRIORITIES.HIGH,
+      ownerUserId,
       TASK_SOURCE_TYPES.AUTOMATION,
       idempotencyKey,
       'New lead follow-up',

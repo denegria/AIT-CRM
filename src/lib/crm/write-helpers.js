@@ -1,6 +1,8 @@
 import { and, desc, eq } from 'drizzle-orm';
 import { activityEvents, businessUnits, contacts, leadStatusHistory, leads, notes, workOrders } from '../../db/schema.js';
 import { updateLeadOwnerWithActivity } from './assignment.js';
+import { isNoFurtherProspectingLifecycleStatus } from './lifecycle.js';
+import { reconcileAutomatedInboundFollowUpTasks } from '../tasks/service.js';
 
 export async function latestLeadForContact(db, organizationId, contactId) {
   const [lead] = await db
@@ -105,6 +107,8 @@ export async function updateContactWithLeadAndNotes({
 
     let lead = existingLead;
     if (existingLead && leadPatch) {
+      const shouldCancelAutomatedFollowUps = leadStatusChange?.changed &&
+        isNoFurtherProspectingLifecycleStatus(leadStatusChange.toStatus);
       const hasOwnerPatch = Object.prototype.hasOwnProperty.call(leadPatch, 'assignedUserId');
       const ownerUserId = hasOwnerPatch ? leadPatch.assignedUserId || null : undefined;
       const leadPatchWithoutOwner = { ...leadPatch };
@@ -139,6 +143,33 @@ export async function updateContactWithLeadAndNotes({
           ownerUserId,
         });
         lead = assignment.lead;
+        if (assignment.changed && !shouldCancelAutomatedFollowUps) {
+          await reconcileAutomatedInboundFollowUpTasks(tx, {
+            organizationId,
+            businessUnitId: lead.businessUnitId,
+            contactId,
+            leadId: lead.id,
+            actorUserId,
+            ownerUserId: assignment.ownerUserId,
+            action: 'sync_owner',
+            source: 'contact_assignment',
+            reason: 'contact_owner_changed',
+          });
+        }
+      }
+
+      if (shouldCancelAutomatedFollowUps) {
+        await reconcileAutomatedInboundFollowUpTasks(tx, {
+          organizationId,
+          businessUnitId: lead.businessUnitId,
+          contactId,
+          leadId: lead.id,
+          actorUserId,
+          action: 'cancel',
+          source: 'contact_lifecycle',
+          reason: 'no_further_prospecting_lifecycle',
+          lifecycleStatus: leadStatusChange.toStatus,
+        });
       }
     }
 

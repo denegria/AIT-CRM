@@ -300,13 +300,13 @@ test('creates a notification after a new website lead is promoted', async () => 
   ]);
   assert.equal(notificationInsert.params[11], 'website:web-001');
 
-  const taskInsert = calls.find((call) => call.sql.startsWith('with new_task as'));
+  const taskInsert = calls.find((call) => call.sql.startsWith('with intake_lock as'));
   assert.ok(taskInsert);
   assert.equal(taskInsert.params[6], 'follow_up');
   assert.equal(taskInsert.params[8], 'high');
-  assert.equal(taskInsert.params[9], 'automation');
-  assert.equal(taskInsert.params[10], 'website:web-001');
-  assert.equal(taskInsert.params[11], 'New lead follow-up');
+  assert.equal(taskInsert.params[10], 'automation');
+  assert.equal(taskInsert.params[11], 'website:web-001');
+  assert.equal(taskInsert.params[12], 'New lead follow-up');
 });
 
 test('routes Wix student geography to the lead and explicit campus to intended learning location', async () => {
@@ -481,8 +481,8 @@ test('persists refresh-site placement consent contract in audit and task metadat
   assert.equal(notificationMetadata.communicationPreference, 'sms');
   assert.equal(notificationMetadata.placement.advisorConfirmation, 'Advisor will confirm the level before enrollment.');
 
-  const taskInsert = calls.find((call) => call.sql.startsWith('with new_task as'));
-  const taskMetadata = JSON.parse(taskInsert.params[12]);
+  const taskInsert = calls.find((call) => call.sql.startsWith('with intake_lock as'));
+  const taskMetadata = JSON.parse(taskInsert.params[13]);
   assert.equal(taskMetadata.submissionType, 'placement_test');
   assert.equal(taskMetadata.placement.scoreBand, 'A2-B1');
 });
@@ -593,7 +593,7 @@ function createWebsitePromotionClient() {
         if (normalizedSql.startsWith('insert into notifications')) {
           return { rows: [{ id: 'notification-1' }] };
         }
-        if (normalizedSql.startsWith('with new_task as')) {
+        if (normalizedSql.startsWith('with intake_lock as')) {
           return { rows: [{ id: 'task-activity-1' }] };
         }
         if (normalizedSql.startsWith('update leads set original_notes')) {

@@ -33,6 +33,7 @@
     "db:load-ait-signs-staging": "node scripts/load-ait-signs-staging.mjs",
     "db:load-ait-usa-staging": "node scripts/load-ait-usa-staging.mjs",
     "db:review-ait-signs-staging": "node scripts/review-ait-signs-staging.mjs",
+    "reconcile:automated-inbound-follow-ups": "node scripts/reconcile-automated-inbound-follow-ups.mjs",
     "db:promote-ait-signs-staging": "node scripts/promote-ait-signs-staging.mjs",
     "db:bootstrap-auth-user": "node scripts/bootstrap-auth-user.mjs",
     "db:generate": "drizzle-kit generate --config drizzle.config.mjs",

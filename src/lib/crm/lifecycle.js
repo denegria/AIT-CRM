@@ -47,6 +47,19 @@ export const CLOSED_STATUS_REOPEN_REASONS = Object.freeze({
   new_course_follow_up: 'Reopened for new course follow-up.',
 });
 
+// Prospecting stops once an AIT USA lead is enrolled or explicitly declines.
+// Reopening is a lifecycle correction/new-course decision only; it never
+// reopens canceled automation tasks.
+export const NO_FURTHER_PROSPECTING_LIFECYCLE_STATUSES = Object.freeze([
+  'Not Interested',
+  'Enrolled',
+]);
+
+export function isNoFurtherProspectingLifecycleStatus(status, options = {}) {
+  const normalized = normalizeLifecycleStatus(status, options);
+  return NO_FURTHER_PROSPECTING_LIFECYCLE_STATUSES.includes(normalized || String(status || '').trim());
+}
+
 const STATUS_ALIASES = new Map([
   ['new', 'New Lead'],
   ['new lead', 'New Lead'],

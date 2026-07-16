@@ -123,7 +123,7 @@ function createServiceClient({
         if (normalized.startsWith('insert into notifications')) {
           return { rows: [{ id: 'notification-1' }] };
         }
-        if (normalized.startsWith('with new_task as')) {
+        if (normalized.startsWith('with intake_lock as')) {
           return { rows: [{ id: 'task-activity-1' }] };
         }
         if (normalized.startsWith('insert into import_normalized_records')) {
@@ -319,8 +319,8 @@ test('auto-promotes safe mapped leadgen events while preserving import audit row
   assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), true);
   assert.equal(calls.some((call) => call.sql.startsWith('insert into activity_events')), true);
   assert.equal(calls.some((call) => call.sql.startsWith('insert into notifications')), true);
-  assert.equal(calls.some((call) => call.sql.startsWith('with new_task as')), true);
-  assert.equal(calls.filter((call) => call.sql.startsWith('insert into activity_events')).length, 1);
+  assert.equal(calls.some((call) => call.sql.startsWith('with intake_lock as')), true);
+  assert.equal(calls.filter((call) => call.sql.startsWith('insert into activity_events')).length, 2);
 
   const notificationInsert = calls.find((call) => call.sql.startsWith('insert into notifications'));
   assert.deepEqual(notificationInsert.params.slice(0, 8), [
@@ -335,17 +335,18 @@ test('auto-promotes safe mapped leadgen events while preserving import audit row
   ]);
   assert.equal(notificationInsert.params[11], 'facebook_lead_ads:leadgen-1');
 
-  const taskInsert = calls.find((call) => call.sql.startsWith('with new_task as'));
+  const taskInsert = calls.find((call) => call.sql.startsWith('with intake_lock as'));
   assert.equal(taskInsert.params[6], 'follow_up');
   assert.equal(taskInsert.params[8], 'high');
-  assert.equal(taskInsert.params[9], 'automation');
-  assert.equal(taskInsert.params[10], 'facebook_lead_ads:leadgen-1');
-  assert.equal(taskInsert.params[11], 'New lead follow-up');
+  assert.equal(taskInsert.params[9], 'user-owner-1');
+  assert.equal(taskInsert.params[10], 'automation');
+  assert.equal(taskInsert.params[11], 'facebook_lead_ads:leadgen-1');
+  assert.equal(taskInsert.params[12], 'New lead follow-up');
 
   const normalizedInsert = calls.find((call) => call.sql.startsWith('insert into import_normalized_records'));
   const proposedLead = JSON.parse(normalizedInsert.params[3]);
   assert.equal(proposedLead.lead_id, 'lead-1');
-  assert.equal(proposedLead.assigned_user_id, null);
+  assert.equal(proposedLead.assigned_user_id, 'user-owner-1');
   assert.deepEqual(proposedLead.auto_promotion, {
     attempted: true,
     promoted: true,

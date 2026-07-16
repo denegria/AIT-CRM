@@ -119,7 +119,7 @@ function createClient({ batchSourceType = 'facebook_messenger', batchBusinessUni
           return { rows: [{ id: 'notification-1' }] };
         }
 
-        if (normalized.startsWith('with new_task as')) {
+        if (normalized.startsWith('with intake_lock as')) {
           return { rows: [{ id: 'task-activity-1' }] };
         }
 
@@ -392,7 +392,7 @@ test('approving staged Facebook leads promotes them into CRM records', async () 
     'bu-1',
     'contact-1',
     'Facebook leadgen_id=leadgen-1 source_row_id=source-row-1',
-    null,
+    'owner-1',
   ]);
   assert.equal(leadInsert.params.at(-1), 'Facebook Ads');
 

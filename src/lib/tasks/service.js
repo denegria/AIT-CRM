@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNull, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm';
 import {
   activityEvents,
   contacts,
@@ -7,9 +7,15 @@ import {
   notes,
   taskEvents,
   tasks,
-} from '@/db/schema.js';
-import { TASK_EVENT_TYPES, TASK_STATUSES, TASK_TYPES } from './constants.js';
-import { createCrmError } from '@/lib/crm/errors.js';
+} from '../../db/schema.js';
+import { TASK_EVENT_TYPES, TASK_SOURCE_TYPES, TASK_STATUSES, TASK_TYPES } from './constants.js';
+import { createCrmError } from '../crm/errors.js';
+import {
+  AUTOMATED_INBOUND_FOLLOW_UP_SOURCE_LABEL,
+  planAutomatedInboundFollowUpReconciliation,
+} from './integrity-policy.js';
+
+export { AUTOMATED_INBOUND_FOLLOW_UP_SOURCE_LABEL, isEligibleAutomatedInboundFollowUpTask } from './integrity-policy.js';
 
 function compactObject(value) {
   return Object.fromEntries(
@@ -57,49 +63,113 @@ function taskEventValues({
   };
 }
 
-async function cancelOpenFollowUpTasks(tx, {
+/**
+ * Synchronizes only open automated inbound intake tasks. Callers decide whether
+ * owner synchronization or lifecycle cancellation is permitted; this service
+ * performs the scoped, auditable, idempotent task writes in their transaction.
+ */
+export async function reconcileAutomatedInboundFollowUpTasks(tx, {
   organizationId,
-  actorUserId,
-  contactId = null,
+  businessUnitId,
+  contactId,
   leadId = null,
+  actorUserId = null,
+  ownerUserId,
+  action,
+  source,
+  reason,
+  lifecycleStatus = null,
   excludeTaskId = null,
-  reason = 'Canceled because the lead is not interested.',
-}) {
-  if (!contactId && !leadId) return [];
-  const now = new Date();
-  const filters = [
+} = {}) {
+  if (!organizationId || !businessUnitId || !contactId || !['sync_owner', 'cancel'].includes(action)) {
+    return { changedTasks: [], reason: 'invalid_reconciliation_scope' };
+  }
+  if (action === 'sync_owner' && ownerUserId === undefined) {
+    return { changedTasks: [], reason: 'missing_owner' };
+  }
+
+  const selectConditions = [
     eq(tasks.organizationId, organizationId),
+    eq(tasks.businessUnitId, businessUnitId),
+    eq(tasks.contactId, contactId),
     eq(tasks.taskType, TASK_TYPES.FOLLOW_UP),
+    eq(tasks.sourceType, TASK_SOURCE_TYPES.AUTOMATION),
+    eq(tasks.sourceLabel, AUTOMATED_INBOUND_FOLLOW_UP_SOURCE_LABEL),
     inArray(tasks.status, [TASK_STATUSES.OPEN, TASK_STATUSES.IN_PROGRESS, TASK_STATUSES.SNOOZED]),
   ];
-  if (contactId) filters.push(eq(tasks.contactId, contactId));
-  if (leadId) filters.push(eq(tasks.leadId, leadId));
-  if (excludeTaskId) filters.push(sql`${tasks.id} <> ${excludeTaskId}`);
+  if (leadId) selectConditions.push(eq(tasks.leadId, leadId));
+  if (excludeTaskId) selectConditions.push(sql`${tasks.id} <> ${excludeTaskId}`);
 
-  const canceledTasks = await tx
-    .update(tasks)
-    .set({
-      status: TASK_STATUSES.CANCELED,
-      canceledAt: now,
-      completedAt: null,
-      snoozedUntil: null,
-      updatedAt: now,
-    })
-    .where(and(...filters))
-    .returning();
+  const eligibleTasks = await tx
+    .select()
+    .from(tasks)
+    .where(and(...selectConditions));
 
-  if (canceledTasks.length) {
-    await tx.insert(taskEvents).values(canceledTasks.map((task) => taskEventValues({
+  const plannedTasks = planAutomatedInboundFollowUpReconciliation(eligibleTasks, {
+    organizationId,
+    businessUnitId,
+    contactId,
+    action,
+    ownerUserId,
+  });
+  const candidates = plannedTasks.map(({ task }) => task);
+  const changedTasks = [];
+  const now = new Date();
+  for (const existingTask of candidates) {
+    const patch = action === 'sync_owner'
+      ? { ownerUserId, updatedAt: now }
+      : {
+          status: TASK_STATUSES.CANCELED,
+          canceledAt: now,
+          completedAt: null,
+          snoozedUntil: null,
+          updatedAt: now,
+        };
+    const updateConditions = [
+      eq(tasks.id, existingTask.id),
+      eq(tasks.organizationId, organizationId),
+      eq(tasks.businessUnitId, businessUnitId),
+      eq(tasks.contactId, contactId),
+      eq(tasks.taskType, TASK_TYPES.FOLLOW_UP),
+      eq(tasks.sourceType, TASK_SOURCE_TYPES.AUTOMATION),
+      eq(tasks.sourceLabel, AUTOMATED_INBOUND_FOLLOW_UP_SOURCE_LABEL),
+      inArray(tasks.status, [TASK_STATUSES.OPEN, TASK_STATUSES.IN_PROGRESS, TASK_STATUSES.SNOOZED]),
+    ];
+    if (leadId) updateConditions.push(eq(tasks.leadId, leadId));
+    if (excludeTaskId) updateConditions.push(sql`${tasks.id} <> ${excludeTaskId}`);
+    if (action === 'sync_owner') {
+      updateConditions.push(ownerUserId === null
+        ? isNotNull(tasks.ownerUserId)
+        : or(isNull(tasks.ownerUserId), ne(tasks.ownerUserId, ownerUserId)));
+    }
+    const [task] = await tx
+      .update(tasks)
+      .set(patch)
+      .where(and(...updateConditions))
+      .returning();
+    if (!task) continue;
+
+    await tx.insert(taskEvents).values(taskEventValues({
       organizationId,
       actorUserId,
       task,
-      eventType: TASK_EVENT_TYPES.CANCELED,
-      message: reason,
-      metadataJson: { reason: 'lead_not_interested' },
-    })));
+      previousTask: existingTask,
+      eventType: action === 'sync_owner' ? TASK_EVENT_TYPES.ASSIGNED : TASK_EVENT_TYPES.CANCELED,
+      message: action === 'sync_owner'
+        ? 'Synchronized automated inbound follow-up owner with contact assignment.'
+        : 'Canceled automated inbound follow-up because the contact no longer needs prospecting.',
+      metadataJson: {
+        source: source || 'task_reconciliation',
+        reason: reason || (action === 'sync_owner' ? 'contact_owner_changed' : 'no_further_prospecting_lifecycle'),
+        contactId,
+        leadId,
+        lifecycleStatus,
+      },
+    }));
+    changedTasks.push(task);
   }
 
-  return canceledTasks;
+  return { changedTasks, reason: null };
 }
 
 function activityEventValues({
@@ -391,6 +461,7 @@ export async function completeFollowUpTaskWithActivity({
   nextTaskValues = null,
   nextTaskEventMetadata = {},
   cancelOpenFollowUps = false,
+  cancelOpenFollowUpsContext = {},
 }) {
   return db.transaction(async (tx) => {
     const [task] = await tx
@@ -487,12 +558,17 @@ export async function completeFollowUpTaskWithActivity({
     }
 
     if (cancelOpenFollowUps) {
-      await cancelOpenFollowUpTasks(tx, {
+      await reconcileAutomatedInboundFollowUpTasks(tx, {
         organizationId,
         actorUserId,
+        businessUnitId: task.businessUnitId,
         contactId: task.contactId,
         leadId: task.leadId,
         excludeTaskId: task.id,
+        action: 'cancel',
+        source: 'lifecycle_reconciliation',
+        reason: 'no_further_prospecting_lifecycle',
+        ...cancelOpenFollowUpsContext,
       });
     }
 
@@ -541,6 +617,7 @@ export async function recordFollowUpActivity({
   nextTaskValues = null,
   nextTaskEventMetadata = {},
   cancelOpenFollowUps = false,
+  cancelOpenFollowUpsContext = {},
 }) {
   return db.transaction(async (tx) => {
     await tx.insert(activityEvents).values({
@@ -612,11 +689,16 @@ export async function recordFollowUpActivity({
     }
 
     if (cancelOpenFollowUps) {
-      await cancelOpenFollowUpTasks(tx, {
+      await reconcileAutomatedInboundFollowUpTasks(tx, {
         organizationId,
         actorUserId,
+        businessUnitId: context.businessUnitId,
         contactId: context.contactId || null,
         leadId: context.leadId || null,
+        action: 'cancel',
+        source: 'lifecycle_reconciliation',
+        reason: 'no_further_prospecting_lifecycle',
+        ...cancelOpenFollowUpsContext,
       });
     }
 

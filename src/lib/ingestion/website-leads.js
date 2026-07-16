@@ -1324,6 +1324,7 @@ export async function ingestWebsiteLeadSubmission(client, {
       contactName: lead.name,
       detail: inboundLeadDetail,
       idempotencyKey: inboundLeadIdempotencyKey,
+      ownerUserId: assignedUserId,
       metadata: inboundLeadMetadata,
     });
     await client.query(
