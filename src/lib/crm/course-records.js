@@ -30,6 +30,8 @@ export const AIT_USA_COURSE_OPTIONS = Object.freeze([
   'English 6',
   'GED',
   'Citizenship Prep',
+  'Computer',
+  'Math',
 ]);
 
 function cleanText(value = '') {

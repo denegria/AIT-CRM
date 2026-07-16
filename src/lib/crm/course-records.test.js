@@ -51,9 +51,13 @@ test('course options expose the AIT USA catalog and preserve legacy saved values
     'English 6',
     'GED',
     'Citizenship Prep',
+    'Computer',
+    'Math',
   ]);
   assert.deepEqual(courseNameOptions('ESL Level 1'), [...AIT_USA_COURSE_OPTIONS, 'ESL Level 1']);
   assert.deepEqual(courseNameOptions(' English 1 '), AIT_USA_COURSE_OPTIONS);
+  assert.deepEqual(courseNameOptions(' Computer '), AIT_USA_COURSE_OPTIONS);
+  assert.deepEqual(courseNameOptions('Math'), AIT_USA_COURSE_OPTIONS);
 });
 
 test('course teacher round-trips and can be cleared', () => {
