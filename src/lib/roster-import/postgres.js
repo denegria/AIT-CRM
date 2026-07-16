@@ -1,4 +1,5 @@
 import { deterministicImportUuid } from './manifest.js';
+import { applyContactMerge } from '../contact-merge/service.js';
 
 function cleanText(value = '') {
   return String(value || '').trim();
@@ -336,6 +337,17 @@ export async function applyRosterImportPlan(client, {
     }
     for (const action of plan.contactActions) {
       if (action.state === 'ready') {
+        for (const duplicateContactId of action.duplicateContactIds || []) {
+          await applyContactMerge(client, {
+            organizationId: scope.organizationId,
+            sourceContactId: duplicateContactId,
+            targetContactId: action.targetContactId,
+            idempotencyKey: `${action.idempotencyKey}:merge:${duplicateContactId}`,
+            approvalReference: approval.approvalRef,
+            actorUserId,
+            manageTransaction: false,
+          });
+        }
         await ensureContact(client, scope, action);
         await applyLifecycle(client, scope, action);
         await recordAction(client, scope, runId, action, 'applied', action.targetContactId);

@@ -4,6 +4,7 @@ import path from 'node:path';
 import pg from 'pg';
 import { validateRosterManifest, validateRosterManifestApproval } from '../../src/lib/roster-import/manifest.js';
 import { buildRosterImportPlan } from '../../src/lib/roster-import/planner.js';
+import { inspectContactMerge } from '../../src/lib/contact-merge/service.js';
 import {
   applyRosterImportPlan,
   loadRosterImportSnapshot,
@@ -65,6 +66,31 @@ try {
   const plan = buildRosterImportPlan(manifest, snapshot, {
     maxAgeMs: mode === 'apply' ? 48 * 60 * 60 * 1000 : 30 * 24 * 60 * 60 * 1000,
   });
+  plan.contactMergeInspections = [];
+  for (const action of plan.contactActions.filter((item) => item.operation === 'merge_contacts')) {
+    for (const sourceContactId of action.duplicateContactIds) {
+      try {
+        const inspection = await inspectContactMerge(client, {
+          organizationId: scope.organizationId,
+          sourceContactId,
+          targetContactId: action.targetContactId,
+        });
+        plan.contactMergeInspections.push({
+          idempotencyKey: `${action.idempotencyKey}:merge:${sourceContactId}`,
+          sourceContactId,
+          targetContactId: action.targetContactId,
+          approvalEligible: inspection.approvalEligible,
+          relationshipInventory: inspection.inventory,
+        });
+        if (!inspection.approvalEligible) {
+          plan.blockers.push(`Contact merge source ${sourceContactId} is not eligible.`);
+        }
+      } catch (error) {
+        plan.blockers.push(`Contact merge ${sourceContactId} -> ${action.targetContactId}: ${error.message}`);
+      }
+    }
+  }
+  plan.approvalEligible = plan.blockers.length === 0;
   const target = {
     host: databaseUrl.hostname,
     database: databaseUrl.pathname.slice(1),

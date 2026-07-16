@@ -398,6 +398,25 @@ export const rosterImportActions = pgTable('roster_import_actions', {
   runStatusIdx: index('roster_import_actions_run_status_idx').on(table.runId, table.status),
 }));
 
+export const contactMergeRuns = pgTable('contact_merge_runs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  sourceContactId: uuid('source_contact_id').notNull().references(() => contacts.id, { onDelete: 'restrict' }),
+  targetContactId: uuid('target_contact_id').notNull().references(() => contacts.id, { onDelete: 'restrict' }),
+  idempotencyKey: text('idempotency_key').notNull(),
+  approvalReference: text('approval_reference').notNull(),
+  status: text('status').notNull().default('applying'),
+  relationshipInventoryJson: jsonb('relationship_inventory_json').notNull().default({}),
+  resultJson: jsonb('result_json').notNull().default({}),
+  actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  orgIdempotencyIdx: uniqueIndex('contact_merge_runs_org_idempotency_idx').on(table.organizationId, table.idempotencyKey),
+  sourceTargetIdx: index('contact_merge_runs_source_target_idx').on(table.sourceContactId, table.targetContactId),
+}));
+
 export const leadStatusHistory = pgTable('lead_status_history', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
@@ -1018,6 +1037,7 @@ export const allTables = {
   contactCourseRecords,
   rosterImportRuns,
   rosterImportActions,
+  contactMergeRuns,
   leadStatusHistory,
   notifications,
   estimates,

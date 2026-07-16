@@ -82,7 +82,7 @@ test('dry-run converts a newly arrived exact identity into reuse and skips repla
   assert.equal(plan.courseActions[0].operation, 'replay');
 });
 
-test('contact merge is surfaced as an explicit blocker instead of silently deleting data', () => {
+test('contact merge is routed through the approved relationship service', () => {
   const manifest = inactiveManifest();
   manifest.contactActions[0].duplicate_contact_ids = '22222222-2222-4222-8222-222222222222';
   manifest.contentSha256 = manifestContentSha256(manifest);
@@ -92,9 +92,9 @@ test('contact merge is surfaced as an explicit blocker instead of silently delet
       { id: '22222222-2222-4222-8222-222222222222', name: 'Maria Student', phone: '9085550100' },
     ],
   }, { now: new Date('2026-07-17T00:00:00Z') });
-  assert.equal(plan.approvalEligible, false);
-  assert.equal(plan.contactActions[0].state, 'blocked');
-  assert.match(plan.contactActions[0].reason, /relationship-reparent plan/);
+  assert.equal(plan.approvalEligible, true);
+  assert.equal(plan.contactActions[0].state, 'ready');
+  assert.equal(plan.contactActions[0].operation, 'merge_contacts');
 });
 
 test('active lane refuses to proceed before the exact inactive manifest hash completed', () => {

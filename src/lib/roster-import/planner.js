@@ -110,7 +110,7 @@ function planContactAction(manifest, row, snapshot, resolvedReferences) {
   const result = {
     idempotencyKey: row.idempotencyKey,
     entity: 'contact',
-    state: duplicateIds.length ? 'blocked' : 'ready',
+    state: 'ready',
     operation: duplicateIds.length ? 'merge_contacts' : (liveTarget ? 'reuse_contact' : 'create_contact'),
     targetContactId: target.id,
     duplicateContactIds: duplicateIds,
@@ -119,7 +119,7 @@ function planContactAction(manifest, row, snapshot, resolvedReferences) {
     primaryPhoneOperation: phoneChanged ? 'replace_primary_preserve_previous' : 'ensure_primary_history',
     lifecycle: lifecyclePlan(manifest, row, target.id, snapshot),
     reason: duplicateIds.length
-      ? 'physical Contact merge needs a separately verified relationship-reparent plan'
+      ? 'approved duplicate Contacts will be merged through the relationship-inventory service'
       : target.kind,
   };
   return result;
