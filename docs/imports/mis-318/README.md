@@ -3,8 +3,10 @@
 This directory tracks the lineage and current state of the Bound Brook and
 Plainfield student-roster work. Row-level files contain private student data and
 are intentionally stored under the repo-local, Git-ignored
-`private-imports/mis-318/` vault. The current files are also attached to the
-relevant Linear issue for controlled review.
+`private-imports/mis-318/` vault. The current review workbooks are attached to
+the relevant Linear issues. The private vault also contains canonical JSON
+execution manifests for the dry-run/apply service; their hashes and sizes are
+tracked here without publishing student data.
 
 ## Lanes
 
@@ -22,7 +24,8 @@ relevant Linear issue for controlled review.
    original workbooks before use.
 
 Linear ownership: inactive `MIS-318`, active enrollment `MIS-323`, and
-attendance `MIS-272`. Product gates are `MIS-319` through `MIS-322`.
+attendance `MIS-272`. Product gates are `MIS-319` through `MIS-322`, plus
+collision-safe Contact merge slice `MIS-324`.
 
 ## Privacy and source of truth
 
@@ -54,3 +57,29 @@ python3 scripts/imports/mis-318-validate-manifests.py \
 The builder is read-only with respect to CRM data. It consumes the verified
 production snapshot and local workbook artifacts; it never connects to or
 writes to a database.
+
+## Dry-run and apply
+
+`MIS-322` verifies the JSON content hash, source workbook checksum, row counts,
+lane ordering, freshness, and per-row idempotency keys. Attendance manifests
+are rejected. Dry-run writes only a private JSON report.
+
+```bash
+DATABASE_URL=... node scripts/imports/run-roster-manifest.mjs \
+  --mode dry-run \
+  --manifest private-imports/mis-318/manifests/execution/ait-usa-inactive-student-actions-v1.json \
+  --source-workbook private-imports/mis-318/manifests/ait-usa-inactive-student-final-action-manifest.xlsx \
+  --output private-imports/mis-318/reports/inactive-dry-run.json
+```
+
+Apply additionally requires an unexpired manifest-specific HMAC approval,
+`AIT_CRM_IMPORT_APPROVAL_SECRET`, and an exact `--confirm-target-host` value.
+It rechecks live Contact identity, lifecycle, course duplicates, lane order,
+and prior idempotency keys inside a transaction with an advisory lock.
+
+Physical duplicate-Contact merges are intentionally a hard dry-run blocker.
+The current inactive manifest contains merge proposals whose related records
+must be safely reparented and collision-tested before those rows can apply.
+The engine will not archive or delete a duplicate Contact merely to make the
+import proceed. All data remains held pending final production dry-run review
+and explicit production-write approval.

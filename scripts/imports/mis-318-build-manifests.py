@@ -618,6 +618,32 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def canonical_json(value) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def execution_manifest(path: Path, payload: dict) -> dict:
+    payload = json.loads(json.dumps({**payload, "schemaVersion": 1, "approvalState": "held"}, default=text))
+    payload["contentSha256"] = hashlib.sha256(canonical_json(payload).encode("utf-8")).hexdigest()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    path.chmod(0o600)
+    return {
+        "vaultPath": path.relative_to(path.parents[4]).as_posix(),
+        "sizeBytes": path.stat().st_size,
+        "sha256": sha256(path),
+    }
+
+
+def with_action_key(row: dict, action_key: str) -> dict:
+    return {"idempotencyKey": action_key, **row}
+
+
+def action_key(lane: str, kind: str, *parts) -> str:
+    digest = hashlib.sha256("|".join(text(part) for part in parts).encode("utf-8")).hexdigest()[:32]
+    return f"mis-318:{lane}:{kind}:{digest}"
+
+
 def archive_file(source: Path, destination: Path) -> None:
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(source, destination)
@@ -747,6 +773,153 @@ def main() -> None:
 
     inactive_path.chmod(0o600)
     active_path.chmod(0o600)
+    execution_dir = manifest_dir / "execution"
+    generated_at = datetime.now(timezone.utc).isoformat()
+    inactive_execution_path = execution_dir / "ait-usa-inactive-student-actions-v1.json"
+    inactive_execution_inventory = execution_manifest(inactive_execution_path, {
+        "manifestId": "mis-318-inactive-students-v1",
+        "lane": "inactive",
+        "generatedAt": generated_at,
+        "sourceWorkbook": {
+            "filename": inactive_path.name,
+            "sha256": sha256(inactive_path),
+        },
+        "sourceProductionFingerprint": {
+            "neonBranchId": fingerprint.get("neonBranchId"),
+            "businessUnitName": fingerprint.get("businessUnitName"),
+        },
+        "sequence": {"afterLane": None, "attendanceSupported": False},
+        "requiredProductGates": ["MIS-319", "MIS-320", "MIS-321", "MIS-322", "MIS-324"],
+        "expectedCounts": {
+            "contacts": len(contact_actions),
+            "resolvedContacts": sum(1 for row in contact_actions if not row["final_contact_action"].startswith("defer")),
+            "deferredContacts": sum(1 for row in contact_actions if row["final_contact_action"].startswith("defer")),
+            "courses": len(inactive_courses),
+            "actionableCourses": sum(1 for row in inactive_courses if row["proposed_course_action"].startswith("insert")),
+        },
+        "contactActions": [
+            with_action_key(row, action_key("inactive", "contact", row.get("candidate_id"), row.get("identity_key")))
+            for row in contact_actions
+        ],
+        "classSectionActions": [],
+        "courseActions": [
+            with_action_key(row, action_key(
+                "inactive",
+                "course",
+                row.get("location"),
+                row.get("source_sheet"),
+                row.get("source_cell"),
+                row.get("identity_key"),
+                row.get("mapped_course"),
+            ))
+            for row in inactive_courses
+        ],
+    })
+    inactive_content_sha = json.loads(inactive_execution_path.read_text(encoding="utf-8"))["contentSha256"]
+
+    section_variants = defaultdict(set)
+    for row in active_enrollments:
+        section_key = text(row.get("class_section_key"))
+        if not section_key:
+            continue
+        signature = (
+            text(row.get("mapped_course")),
+            text(row.get("teacher")),
+            text(row.get("course_location")) or text(row.get("location")),
+            text(row.get("modality")),
+            text(row.get("class_time")),
+            text(row.get("class_days")),
+            text(row.get("scheduled_days_per_week")),
+        )
+        section_variants[section_key].add(signature)
+
+    resolved_section_keys = {}
+    for section_key, signatures in section_variants.items():
+        for signature in signatures:
+            resolved_section_keys[(section_key, signature)] = section_key if len(signatures) == 1 else (
+                f"{section_key}-{hashlib.sha256(canonical_json(signature).encode('utf-8')).hexdigest()[:8]}"
+            )
+
+    active_sections = {}
+    active_execution_rows = []
+    for row in active_enrollments:
+        original_section_key = text(row.get("class_section_key"))
+        signature = (
+            text(row.get("mapped_course")),
+            text(row.get("teacher")),
+            text(row.get("course_location")) or text(row.get("location")),
+            text(row.get("modality")),
+            text(row.get("class_time")),
+            text(row.get("class_days")),
+            text(row.get("scheduled_days_per_week")),
+        )
+        section_key = resolved_section_keys.get((original_section_key, signature), original_section_key)
+        execution_row = {**row, "resolved_class_section_key": section_key}
+        active_execution_rows.append(execution_row)
+        if not section_key:
+            continue
+        section = {
+            "sectionKey": section_key,
+            "sourceSectionKey": original_section_key,
+            "courseName": text(row.get("mapped_course")),
+            "teacher": text(row.get("teacher")),
+            "courseLocation": text(row.get("course_location")) or text(row.get("location")),
+            "modality": text(row.get("modality")),
+            "classTime": text(row.get("class_time")),
+            "classDays": text(row.get("class_days")),
+            "scheduledDaysPerWeek": text(row.get("scheduled_days_per_week")),
+            "sourceType": "student_roster",
+            "sourceReference": f"MIS-323:{text(row.get('source_sheet'))}:{text(row.get('source_cell'))}",
+        }
+        active_sections.setdefault(section_key, section)
+
+    active_execution_path = execution_dir / "ait-usa-active-enrollment-actions-v1.json"
+    active_execution_inventory = execution_manifest(active_execution_path, {
+        "manifestId": "mis-318-active-enrollments-v1",
+        "lane": "active",
+        "generatedAt": generated_at,
+        "sourceWorkbook": {
+            "filename": active_path.name,
+            "sha256": sha256(active_path),
+        },
+        "sourceProductionFingerprint": {
+            "neonBranchId": fingerprint.get("neonBranchId"),
+            "businessUnitName": fingerprint.get("businessUnitName"),
+        },
+        "sequence": {
+            "afterLane": "inactive",
+            "requiredPriorManifestSha256": inactive_content_sha,
+            "attendanceSupported": False,
+        },
+        "requiredProductGates": ["MIS-319", "MIS-320", "MIS-321", "MIS-322", "MIS-324"],
+        "expectedCounts": {
+            "contacts": len(active_contacts),
+            "enrollments": len(active_enrollments),
+            "actionableEnrollments": sum(1 for row in active_enrollments if row["proposed_enrollment_action"].startswith("insert")),
+            "heldEnrollments": sum(1 for row in active_enrollments if row["proposed_enrollment_action"].startswith("hold")),
+            "classSections": len(active_sections),
+        },
+        "contactActions": [
+            with_action_key(row, action_key("active", "contact", row.get("identity_key"), row.get("planned_contact_reference")))
+            for row in active_contacts
+        ],
+        "classSectionActions": [
+            with_action_key(section, action_key("active", "section", section_key))
+            for section_key, section in sorted(active_sections.items())
+        ],
+        "courseActions": [
+            with_action_key(row, action_key(
+                "active",
+                "enrollment",
+                row.get("location"),
+                row.get("source_sheet"),
+                row.get("source_cell"),
+                row.get("planned_contact_reference"),
+                row.get("resolved_class_section_key"),
+            ))
+            for row in active_execution_rows
+        ],
+    })
     archived = archive_sources(source_root, vault_root)
     manifest_inventory = [
         {
@@ -761,6 +934,8 @@ def main() -> None:
             "sizeBytes": active_path.stat().st_size,
             "sha256": sha256(active_path),
         },
+        {"role": "current_inactive_execution_manifest", **inactive_execution_inventory},
+        {"role": "current_active_execution_manifest", **active_execution_inventory},
     ]
     index = {
         "generatedAt": datetime.now(timezone.utc).isoformat(),
@@ -799,6 +974,7 @@ def main() -> None:
             "courseCatalogGate": "MIS-320",
             "classSectionsAndMultiEnrollmentGate": "MIS-321",
             "manifestImportServiceGate": "MIS-322",
+            "safeContactMergeGate": "MIS-324",
         },
         "requiredProductGates": [
             "Add Computer and Math to the controlled AIT USA course catalog",
@@ -806,6 +982,7 @@ def main() -> None:
             "Add first-class course-section identity and support multiple simultaneous active enrollments for one Contact",
             "Preserve class schedule, modality, teacher, location, and source lineage on imported active enrollments",
             "Provide an idempotent approval-gated manifest dry-run/apply path",
+            "Provide collision-safe duplicate Contact relationship reparenting before merge actions apply",
         ],
         "files": sorted(archived + manifest_inventory, key=lambda row: (row["role"], row["vaultPath"])),
         "privacy": "Row-level files are repo-local and Git-ignored; only this non-PII index is tracked.",

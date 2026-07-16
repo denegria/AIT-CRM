@@ -39,6 +39,27 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def canonical_json(value) -> str:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def validate_execution_manifest(path: Path, expected_lane: str) -> dict:
+    manifest = json.loads(path.read_text(encoding="utf-8"))
+    content_sha = manifest.pop("contentSha256")
+    assert hashlib.sha256(canonical_json(manifest).encode("utf-8")).hexdigest() == content_sha
+    manifest["contentSha256"] = content_sha
+    assert manifest["schemaVersion"] == 1
+    assert manifest["lane"] == expected_lane
+    assert manifest["approvalState"] == "held"
+    assert manifest["sequence"]["attendanceSupported"] is False
+    assert set(manifest["requiredProductGates"]) == {"MIS-319", "MIS-320", "MIS-321", "MIS-322", "MIS-324"}
+    actions = manifest["contactActions"] + manifest["classSectionActions"] + manifest["courseActions"]
+    keys = [row["idempotencyKey"] for row in actions]
+    assert len(keys) == len(set(keys))
+    assert all(key.startswith(f"mis-318:{expected_lane}:") for key in keys)
+    return manifest
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-root", type=Path, required=True)
@@ -59,9 +80,14 @@ def main() -> None:
     assert index["lanes"]["inactive"]["state"] == "manifest_final_data_held"
     assert index["lanes"]["active"]["state"] == "manifest_built_data_held_after_inactive"
 
-    repo_root = Path.cwd().resolve()
     for item in index["files"]:
-        path = repo_root / item["vaultPath"]
+        vault_path = Path(item["vaultPath"])
+        expected_prefix = Path("private-imports/mis-318")
+        try:
+            relative_vault_path = vault_path.relative_to(expected_prefix)
+        except ValueError as error:
+            raise AssertionError(f"Index path escaped the MIS-318 private vault: {vault_path}") from error
+        path = vault_root / relative_vault_path
         assert path.exists(), path
         assert path.stat().st_size == item["sizeBytes"]
         assert sha256(path) == item["sha256"]
@@ -70,15 +96,21 @@ def main() -> None:
     original_roles = [item for item in index["files"] if item["role"] == "original"]
     cleaned_roles = [item for item in index["files"] if item["role"] == "cleaned"]
     attendance_roles = [item for item in index["files"] if item["role"] == "attendance_held"]
+    execution_roles = [item for item in index["files"] if item["role"].endswith("_execution_manifest")]
     assert len(original_roles) == 2
     assert len(cleaned_roles) == 4
     assert len(attendance_roles) == 2
+    assert len(execution_roles) == 2
 
     inactive_path = vault_root / "manifests/ait-usa-inactive-student-final-action-manifest.xlsx"
     active_path = vault_root / "manifests/ait-usa-active-enrollment-manifest.xlsx"
+    inactive_execution_path = vault_root / "manifests/execution/ait-usa-inactive-student-actions-v1.json"
+    active_execution_path = vault_root / "manifests/execution/ait-usa-active-enrollment-actions-v1.json"
     for path in (inactive_path, active_path):
         with ZipFile(path) as archive:
             assert archive.testzip() is None
+    inactive_execution = validate_execution_manifest(inactive_execution_path, "inactive")
+    active_execution = validate_execution_manifest(active_execution_path, "active")
 
     contact_actions = rows(inactive_path, "Contact_Actions")
     inactive_courses = rows(inactive_path, "Historical_Course_Actions")
@@ -126,6 +158,12 @@ def main() -> None:
         by_identity[text(row["planned_contact_reference"]) or f"held:{row['source_cell']}"] .append(row)
     repeated = [group for key, group in by_identity.items() if not key.startswith("held:") and len(group) > 1]
     assert repeated
+    assert len(inactive_execution["contactActions"]) == len(contact_actions)
+    assert len(inactive_execution["courseActions"]) == len(inactive_courses)
+    assert len(active_execution["contactActions"]) == len(active_contacts)
+    assert len(active_execution["courseActions"]) == len(active_enrollments)
+    assert len(active_execution["classSectionActions"]) == active_execution["expectedCounts"]["classSections"]
+    assert active_execution["sequence"]["requiredPriorManifestSha256"] == inactive_execution["contentSha256"]
 
     source_active_count = 0
     for slug in ("bound-brook", "plainfield"):
@@ -133,13 +171,15 @@ def main() -> None:
         source_active_count += len(rows(source_path, "Roster_Source_Rows"))
     assert source_active_count == len(active_enrollments) == 147
 
+    repo_root = Path.cwd().resolve()
     course_records_source = (repo_root / "src/lib/crm/course-records.js").read_text(encoding="utf-8")
     schema_source = (repo_root / "src/db/schema.js").read_text(encoding="utf-8")
-    assert "'Computer'" not in course_records_source
-    assert "'Math'" not in course_records_source
-    assert "This contact already has a current course" in course_records_source
-    assert "contactPhoneHistory" not in schema_source
-    assert "courseSectionId" not in schema_source
+    assert "'Computer'" in course_records_source
+    assert "'Math'" in course_records_source
+    assert "same class section" in course_records_source
+    assert "contactPhoneNumbers" in schema_source
+    assert "courseClassSections" in schema_source
+    assert "classSectionId" in schema_source
 
     print(json.dumps({
         "validatedFiles": len(index["files"]),

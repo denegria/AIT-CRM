@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-16T22:17:02.417407+00:00",
+  "generatedAt": "2026-07-16T23:26:36.106129+00:00",
   "mode": "read_only_artifact_build",
   "productionFingerprint": {
     "neonBranchId": "br-purple-bar-aphafrgp",
@@ -34,14 +34,16 @@
     "alternatePhoneHistoryGate": "MIS-319",
     "courseCatalogGate": "MIS-320",
     "classSectionsAndMultiEnrollmentGate": "MIS-321",
-    "manifestImportServiceGate": "MIS-322"
+    "manifestImportServiceGate": "MIS-322",
+    "safeContactMergeGate": "MIS-324"
   },
   "requiredProductGates": [
     "Add Computer and Math to the controlled AIT USA course catalog",
     "Add a Contact alternate-phone/history model so prior valid numbers are preserved without overloading contact_people",
     "Add first-class course-section identity and support multiple simultaneous active enrollments for one Contact",
     "Preserve class schedule, modality, teacher, location, and source lineage on imported active enrollments",
-    "Provide an idempotent approval-gated manifest dry-run/apply path"
+    "Provide an idempotent approval-gated manifest dry-run/apply path",
+    "Provide collision-safe duplicate Contact relationship reparenting before merge actions apply"
   ],
   "files": [
     {
@@ -93,16 +95,28 @@
       "sha256": "a76ca92b1378305a1a32d5f862556c392eed926dba5d7f2905f2b4543af6b54d"
     },
     {
+      "role": "current_active_execution_manifest",
+      "vaultPath": "private-imports/mis-318/manifests/execution/ait-usa-active-enrollment-actions-v1.json",
+      "sizeBytes": 356209,
+      "sha256": "4ada7467809ef043af879d139f0362b6a1667c7036b80e945be12647219719a5"
+    },
+    {
       "role": "current_active_manifest",
       "vaultPath": "private-imports/mis-318/manifests/ait-usa-active-enrollment-manifest.xlsx",
-      "sizeBytes": 58443,
-      "sha256": "656afd060dc6e04f165cdb0afe48943afbf30396ca33c6b48fa48a2c92f743c4"
+      "sizeBytes": 58444,
+      "sha256": "70d310b5567131194b65214644e2bd05a736d5e9a30ac13f7a349e2bd7569315"
+    },
+    {
+      "role": "current_inactive_execution_manifest",
+      "vaultPath": "private-imports/mis-318/manifests/execution/ait-usa-inactive-student-actions-v1.json",
+      "sizeBytes": 1376286,
+      "sha256": "93269e9469fb7129e3c839904407aa07bf606e5567534bec8c7f25805802bd78"
     },
     {
       "role": "current_inactive_manifest",
       "vaultPath": "private-imports/mis-318/manifests/ait-usa-inactive-student-final-action-manifest.xlsx",
-      "sizeBytes": 209597,
-      "sha256": "b1fe6e160212fe6c9d66510e4276ff034f32249c15cc49d25dac5d444ecaac33"
+      "sizeBytes": 209602,
+      "sha256": "e40d9b939855205701fb432ece39a00306e224d363e38efc34b2f9a96f2c8ba4"
     },
     {
       "role": "identity_resolution",

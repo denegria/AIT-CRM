@@ -355,6 +355,49 @@ export const contactCourseRecords = pgTable('contact_course_records', {
     .where(sql`${table.status} = 'active' and ${table.classSectionId} is not null`),
 }));
 
+export const rosterImportRuns = pgTable('roster_import_runs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
+  manifestId: text('manifest_id').notNull(),
+  manifestSha256: text('manifest_sha256').notNull(),
+  lane: text('lane').notNull(),
+  approvalReference: text('approval_reference').notNull(),
+  approvedAt: timestamp('approved_at', { withTimezone: true }).notNull(),
+  status: text('status').notNull().default('applying'),
+  expectedCountsJson: jsonb('expected_counts_json').notNull().default({}),
+  resultCountsJson: jsonb('result_counts_json').notNull().default({}),
+  reportJson: jsonb('report_json').notNull().default({}),
+  createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  manifestIdx: uniqueIndex('roster_import_runs_manifest_idx').on(table.organizationId, table.manifestSha256),
+  businessUnitCreatedIdx: index('roster_import_runs_business_unit_created_idx').on(table.businessUnitId, table.createdAt),
+}));
+
+export const rosterImportActions = pgTable('roster_import_actions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
+  runId: uuid('run_id').notNull().references(() => rosterImportRuns.id, { onDelete: 'cascade' }),
+  idempotencyKey: text('idempotency_key').notNull(),
+  entityType: text('entity_type').notNull(),
+  operation: text('operation').notNull(),
+  status: text('status').notNull(),
+  targetId: uuid('target_id'),
+  sourceReference: text('source_reference'),
+  beforeJson: jsonb('before_json').notNull().default({}),
+  afterJson: jsonb('after_json').notNull().default({}),
+  errorText: text('error_text'),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  orgIdempotencyIdx: uniqueIndex('roster_import_actions_org_idempotency_idx').on(table.organizationId, table.idempotencyKey),
+  runStatusIdx: index('roster_import_actions_run_status_idx').on(table.runId, table.status),
+}));
+
 export const leadStatusHistory = pgTable('lead_status_history', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
@@ -973,6 +1016,8 @@ export const allTables = {
   leads,
   courseClassSections,
   contactCourseRecords,
+  rosterImportRuns,
+  rosterImportActions,
   leadStatusHistory,
   notifications,
   estimates,
