@@ -18,7 +18,7 @@ const nav = [
   { href: '/contacts', label: 'Contacts', Icon: Users },
   { href: '/pipeline', label: 'Pipeline', Icon: Columns3 },
   { href: '/tasks', label: 'Tasks', Icon: ListTodo },
-  { href: '/active-classes', label: 'Active Classes', Icon: BookOpenCheck },
+  { href: '/active-classes', label: 'Active Classes', mobileLabel: 'Classes', Icon: BookOpenCheck },
   { href: '/team-monitor', label: 'Team Monitor', Icon: UsersRound },
   { href: '/inbox', label: 'Inbox', Icon: Inbox },
   { href: '/sms-campaigns', label: 'SMS Campaigns', Icon: Megaphone },
@@ -218,7 +218,7 @@ export default function Sidebar() {
           {visibleNav.map((item) => renderNavLink(item))}
         </div>
         <div className={s.mobileNav}>
-          {mobileNav.primary.map((item) => renderNavLink(item, s.mobileNavItem))}
+          {mobileNav.primary.map((item) => renderNavLink({ ...item, label: item.mobileLabel || item.label }, s.mobileNavItem))}
           {mobileNav.overflow.length > 0 && (
             <div className={s.moreWrap}>
               <button

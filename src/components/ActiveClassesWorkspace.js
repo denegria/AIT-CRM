@@ -92,6 +92,7 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null 
   const [reopenReason, setReopenReason] = useState('');
   const revisionRef = useRef(selectedSession(initialState?.workspace)?.revision || 0);
   const selectedClassIdRef = useRef(selectedClassId);
+  const classCardRefs = useRef(new Map());
 
   const busy = Boolean(mutationKind);
 
@@ -158,6 +159,23 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null 
   const visibleClasses = useMemo(() => (
     locationFilter === 'all' ? classes : classes.filter((item) => formatClassLocation(item) === locationFilter)
   ), [classes, locationFilter]);
+
+  useEffect(() => {
+    if (!selectedClassId || typeof window === 'undefined' || !window.matchMedia('(max-width: 720px)').matches) return undefined;
+
+    const frame = window.requestAnimationFrame(() => {
+      const selectedCard = classCardRefs.current.get(selectedClassId);
+      if (!selectedCard) return;
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      selectedCard.scrollIntoView({
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        block: 'nearest',
+        inline: 'center',
+      });
+    });
+
+    return () => window.cancelAnimationFrame(frame);
+  }, [selectedClassId, visibleClasses]);
 
   const selectedClass = classes.find((item) => item.id === selectedClassId) || null;
   const session = selectedSession(workspace);
@@ -378,6 +396,10 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null 
               <button
                 type="button"
                 key={item.id}
+                ref={(node) => {
+                  if (node) classCardRefs.current.set(item.id, node);
+                  else classCardRefs.current.delete(item.id);
+                }}
                 className={`${s.classCard} ${item.id === selectedClassId ? s.classCardSelected : ''}`}
                 onClick={() => chooseClass(item.id)}
                 disabled={busy}
@@ -581,7 +603,7 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null 
                           <button type="button" className="btn btn-sm" onClick={handleMarkAllPresent} disabled={busy || roster.length === 0}>Mark all present</button>
                         )}
                         <span className={`${s.saveStatus} ${saveState === 'error' ? s.saveStatusError : ''}`} aria-live="polite">
-                          {saveState === 'saving' ? <><LoaderCircle className={s.spin} size={14} /> Saving…</> : saveState === 'saved' ? <><Check size={14} /> {saveMessage}</> : 'Ready'}
+                          {saveState === 'saving' ? <><LoaderCircle className={s.spin} size={14} /> Saving…</> : saveState === 'saved' ? <><Check size={14} /> {saveMessage}</> : <><Check size={14} /> Saved</>}
                         </span>
                       </div>
                     </header>

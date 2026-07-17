@@ -24,4 +24,13 @@ test('Quick Mark keeps unmarked explicit and guards submission completeness', ()
   assert.match(source, /Mark every student before submitting/);
   assert.match(source, /counts\.unmarked > 0/);
   assert.match(source, /Submit attendance/);
+  assert.match(source, /<Check size=\{14\} \/> Saved/);
+  assert.doesNotMatch(source, /: 'Ready'/);
+});
+
+test('mobile class rail keeps the selected class visible without forcing motion', () => {
+  assert.match(source, /classCardRefs\.current\.get\(selectedClassId\)/);
+  assert.match(source, /scrollIntoView/);
+  assert.match(source, /prefers-reduced-motion: reduce/);
+  assert.match(source, /inline: 'center'/);
 });
