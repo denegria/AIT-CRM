@@ -109,6 +109,41 @@ test('inactive manifest rejects an ambiguous primary-phone policy', () => {
   );
 });
 
+test('inactive manifest rejects unusable primary and historical phone values', () => {
+  const invalidPrimary = inactiveManifest({
+    contactActions: [{ ...inactiveManifest().contactActions[0], primary_phone: '90855501009085550101' }],
+  });
+  assert.throws(
+    () => buildRosterImportPlan(invalidPrimary, {}, { now: new Date('2026-07-17T00:00:00Z') }),
+    /usable authoritative primary phone/,
+  );
+
+  const invalidHistory = inactiveManifest({
+    contactActions: [{ ...inactiveManifest().contactActions[0], historical_phone_options: '9085550199;123' }],
+  });
+  assert.throws(
+    () => buildRosterImportPlan(invalidHistory, {}, { now: new Date('2026-07-17T00:00:00Z') }),
+    /phone history may contain only usable phone numbers/,
+  );
+});
+
+test('dry-run blocks conflicting actions that resolve to the same Contact', () => {
+  const base = inactiveManifest();
+  const conflicting = inactiveManifest({
+    expectedCounts: { contacts: 2, resolvedContacts: 2, deferredContacts: 0, courses: 1 },
+    contactActions: [
+      base.contactActions[0],
+      { ...base.contactActions[0], idempotencyKey: 'mis-318:inactive:contact:b', primary_phone: '9085550101' },
+    ],
+  });
+  const plan = buildRosterImportPlan(conflicting, {
+    contacts: [{ id: '11111111-1111-4111-8111-111111111111', name: 'Maria Student', phone: '9085550100' }],
+  }, { now: new Date('2026-07-17T00:00:00Z') });
+  assert.equal(plan.approvalEligible, false);
+  assert.equal(plan.contactConsistencyErrors.length, 1);
+  assert.match(plan.contactConsistencyErrors[0].reason, /conflicting phone, location, or lifecycle/);
+});
+
 test('multiple active enrollment locations remain on course records instead of flattening Contact location', () => {
   const manifest = inactiveManifest({
     lane: 'active',

@@ -13,7 +13,13 @@ function parseArgs(argv) {
 }
 
 function digits(value) {
-  return String(value || '').replace(/\D/g, '');
+  const raw = String(value || '').replace(/\D/g, '');
+  return raw.length === 11 && raw.startsWith('1') ? raw.slice(1) : raw;
+}
+
+function usablePhone(value) {
+  const valueDigits = digits(value);
+  return valueDigits.length >= 10 && valueDigits.length <= 13;
 }
 
 function countBy(items, key) {
@@ -90,7 +96,9 @@ try {
     [target.organizationId, targetIds],
   )).rows;
   const contactById = new Map(contacts.map((contact) => [contact.id, contact]));
-  assert(contacts.length === 573, `Expected 573 target Contacts, found ${contacts.length}.`, failures);
+  const uniqueTargetCount = new Set(targetIds).size;
+  assert(uniqueTargetCount === 570 && contacts.length === uniqueTargetCount,
+    `Expected 570 unique target Contacts from 573 actions, found ${contacts.length}.`, failures);
 
   const phoneRows = (await client.query(
     `select contact_id, normalized_phone, is_primary, retired_at
@@ -98,7 +106,7 @@ try {
     [target.organizationId, targetIds],
   )).rows;
   const phonesByContact = Map.groupBy(phoneRows, (row) => row.contact_id);
-  let priorPrimaryReplacementCount = 0;
+  const priorPrimaryReplacements = new Set();
   for (const action of readyContacts) {
     const actual = contactById.get(action.targetContactId);
     assert(Boolean(actual), `Missing target Contact ${action.targetContactId}.`, failures);
@@ -111,26 +119,27 @@ try {
     const primaryRows = rows.filter((row) => row.is_primary);
     assert(primaryRows.length === 1 && primaryRows[0].normalized_phone === action.identity.normalizedPhone,
       `Contact ${action.targetContactId} does not have exactly one authoritative workbook primary phone row.`, failures);
-    const requiredHistory = new Set((action.historicalPhones || []).map(digits).filter(Boolean));
+    const requiredHistory = new Set((action.historicalPhones || []).map(digits).filter((phone) => usablePhone(phone)));
     const priorTarget = sourceContacts.get(action.targetContactId);
-    if (priorTarget?.phone && digits(priorTarget.phone) !== action.identity.normalizedPhone) {
+    if (usablePhone(priorTarget?.phone) && digits(priorTarget.phone) !== action.identity.normalizedPhone) {
       requiredHistory.add(digits(priorTarget.phone));
-      priorPrimaryReplacementCount += 1;
+      priorPrimaryReplacements.add(action.targetContactId);
     }
     for (const duplicateId of action.duplicateContactIds || []) {
       const priorDuplicate = sourceContacts.get(duplicateId);
-      if (priorDuplicate?.phone && digits(priorDuplicate.phone) !== action.identity.normalizedPhone) {
+      if (usablePhone(priorDuplicate?.phone) && digits(priorDuplicate.phone) !== action.identity.normalizedPhone) {
         requiredHistory.add(digits(priorDuplicate.phone));
       }
     }
-    const actualPhones = new Set(rows.map((row) => row.normalized_phone));
+    const actualPhones = new Set(rows.map((row) => digits(row.normalized_phone)));
     for (const historicalPhone of requiredHistory) {
       assert(actualPhones.has(historicalPhone),
         `Contact ${action.targetContactId} is missing historical phone ${historicalPhone}.`, failures);
     }
   }
-  assert(priorPrimaryReplacementCount === 10,
-    `Expected 10 existing scalar-primary replacements, found ${priorPrimaryReplacementCount}.`, failures);
+  assert(priorPrimaryReplacements.size === 10,
+    `Expected 10 existing scalar-primary replacements, found ${priorPrimaryReplacements.size}.`, failures);
+  assert(phoneRows.every((row) => usablePhone(row.normalized_phone)), 'Phone history contains an unusable normalized phone.', failures);
 
   const createActions = readyContacts.filter((action) => action.operation === 'create_contact');
   for (const action of createActions) {
@@ -242,7 +251,7 @@ try {
     manifest: { id: plan.manifestId, sha256: plan.manifestSha256 },
     counts: {
       contacts: { ready: readyContacts.length, held: heldContacts.length, operations: countBy(readyContacts, 'operation') },
-      primaryPhones: { workbookAuthoritative: readyContacts.length, replacedExistingScalar: priorPrimaryReplacementCount },
+      primaryPhones: { workbookAuthoritativeActions: readyContacts.length, uniqueContacts: uniqueTargetCount, replacedExistingScalar: priorPrimaryReplacements.size },
       courses: { ready: readyCourses.length, held: heldCourses.length, locations: countBy(courseRows, 'course_location'), rawDateLineage: rawDateLineageCount },
       lifecycle: { preservedContacts: protectedActions.length, droppedQuitContacts: droppedIds.length },
       merges: mergeRuns.length,

@@ -12,7 +12,8 @@ function phoneDigits(value = '') {
 
 function phoneForStorage(value = '') {
   const digits = phoneDigits(value);
-  return digits.length === 10 ? `+1${digits}` : (digits ? `+${digits}` : '');
+  if (digits.length < 10 || digits.length > 13) return '';
+  return digits.length === 10 ? `+1${digits}` : `+${digits}`;
 }
 
 export async function resolveRosterImportScope(client, businessUnitName) {
@@ -197,7 +198,8 @@ async function ensureContact(client, scope, action) {
   );
   if (current.rows.length !== 1) throw new Error(`Contact ${action.targetContactId} is unavailable during apply.`);
   const existingPhone = cleanText(current.rows[0].phone);
-  const phones = [...new Set([existingPhone, ...action.historicalPhones, action.identity.phone].filter(Boolean))];
+  const phones = [...new Set([existingPhone, ...action.historicalPhones, action.identity.phone]
+    .filter((phone) => phoneForStorage(phone)))];
   for (const phone of phones) {
     const normalized = phoneForStorage(phone);
     if (!normalized) continue;

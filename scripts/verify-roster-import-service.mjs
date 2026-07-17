@@ -30,6 +30,8 @@ const manifest = {
       identity_key: `verification:${suffix}`,
       student_name: 'MIS 322 Verification Student',
       primary_phone: '(908) 555-0198',
+      primary_phone_policy: 'inactive_workbook_authoritative',
+      phone_history_policy: 'preserve_all_other_valid_numbers',
       historical_phone_options: '(908) 555-0197',
       final_contact_action: 'create_new_contact',
       planned_contact_reference: `planned:verification:${suffix}`,
@@ -43,6 +45,9 @@ const manifest = {
       identity_key: `verification:protected:${suffix}`,
       student_name: 'MIS 322 Protected Student',
       primary_phone: '(908) 555-0196',
+      primary_phone_policy: 'inactive_workbook_authoritative',
+      phone_history_policy: 'preserve_all_other_valid_numbers',
+      historical_phone_options: '(908) 555-0188',
       final_contact_action: 'reuse_existing_contact_exact',
       target_contact_id: 'REPLACED_AFTER_FIXTURE_INSERT',
       planned_contact_reference: 'REPLACED_AFTER_FIXTURE_INSERT',
@@ -98,7 +103,7 @@ try {
   const scope = { organizationId, businessUnitId: unit.rows[0].id, businessUnitName: 'AIT USA' };
   const protectedContact = await client.query(
     `insert into contacts (organization_id, primary_business_unit_id, name, phone, address, source_label)
-     values ($1, $2, 'MIS 322 Protected Student', '+19085550196', null, 'Existing CRM source') returning id`,
+     values ($1, $2, 'MIS 322 Protected Student', '908 555 0188 / 908 555 0196', null, 'Existing CRM source') returning id`,
     [organizationId, scope.businessUnitId],
   );
   const protectedContactId = protectedContact.rows[0].id;
@@ -157,6 +162,8 @@ try {
     `select
        (select count(*)::int from contacts where organization_id = $1) as contacts,
        (select count(*)::int from contact_phone_numbers where organization_id = $1) as phones,
+       (select count(*)::int from contact_phone_numbers where organization_id = $1
+         and length(regexp_replace(normalized_phone, '[^0-9]', '', 'g')) not between 10 and 13) as invalid_phones,
        (select count(*)::int from contact_course_records where organization_id = $1) as courses,
        (select count(*)::int from contact_course_records where organization_id = $1 and status = 'dropped') as dropped_courses,
        (select count(*)::int from contact_course_records where organization_id = $1 and class_section_id is null) as historical_courses_without_sections,
@@ -170,7 +177,8 @@ try {
   );
   assert.deepEqual(counts.rows[0], {
     contacts: 2,
-    phones: 3,
+    phones: 4,
+    invalid_phones: 0,
     courses: 2,
     dropped_courses: 2,
     historical_courses_without_sections: 2,
@@ -186,7 +194,7 @@ try {
     firstApply: 'completed',
     replay: 'no-op',
     contacts: 2,
-    phoneHistoryRows: 3,
+    phoneHistoryRows: 4,
     courseRecords: 2,
     protectedLifecycle: 'Retargeting',
     contactLocations: ['Bound Brook', 'Plainfield'],

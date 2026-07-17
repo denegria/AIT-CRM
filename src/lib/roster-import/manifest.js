@@ -6,6 +6,12 @@ function cleanText(value = '') {
   return String(value || '').trim();
 }
 
+function usablePhone(value = '') {
+  const raw = cleanText(value).replace(/\D+/g, '');
+  const digits = raw.length === 11 && raw.startsWith('1') ? raw.slice(1) : raw;
+  return digits.length >= 10 && digits.length <= 13;
+}
+
 function sortValue(value) {
   if (Array.isArray(value)) return value.map(sortValue);
   if (value && typeof value === 'object') {
@@ -77,6 +83,12 @@ export function validateRosterManifest(manifest, { now = new Date(), maxAgeMs = 
     }
     if (actionableContacts.some((row) => cleanText(row.phone_history_policy) !== 'preserve_all_other_valid_numbers')) {
       throw new Error('Every actionable inactive Contact must preserve all other valid numbers as phone history.');
+    }
+    if (actionableContacts.some((row) => !usablePhone(row.primary_phone))) {
+      throw new Error('Every actionable inactive Contact must have a usable authoritative primary phone.');
+    }
+    if (actionableContacts.some((row) => cleanText(row.historical_phone_options).split(';').filter(Boolean).some((phone) => !usablePhone(phone)))) {
+      throw new Error('Inactive Contact phone history may contain only usable phone numbers.');
     }
   } else {
     assertCount(courseActions.length, counts.enrollments, 'enrollments');

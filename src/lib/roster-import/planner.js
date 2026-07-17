@@ -255,6 +255,27 @@ function summarize(actions) {
   }, {});
 }
 
+function conflictingContactTargetActions(actions) {
+  const byTarget = Map.groupBy(actions.filter((action) => action.state === 'ready'), (action) => action.targetContactId);
+  const errors = [];
+  for (const [targetContactId, targetActions] of byTarget) {
+    if (targetActions.length < 2) continue;
+    const phones = new Set(targetActions.map((action) => action.identity.normalizedPhone));
+    const locations = new Set(targetActions.map((action) => JSON.stringify(action.location.desiredLocations || action.location.desiredLocation || '')));
+    const lifecycles = new Set(targetActions.map((action) => action.lifecycle.operation));
+    if (phones.size > 1 || locations.size > 1 || lifecycles.size > 1) {
+      errors.push({
+        entity: 'contact',
+        state: 'error',
+        operation: 'conflicting_target_actions',
+        targetContactId,
+        reason: 'multiple manifest identities resolve to one Contact with conflicting phone, location, or lifecycle actions',
+      });
+    }
+  }
+  return errors;
+}
+
 export function buildRosterImportPlan(manifest, rawSnapshot = {}, options = {}) {
   validateRosterManifest(manifest, options);
   const snapshot = {
@@ -271,10 +292,11 @@ export function buildRosterImportPlan(manifest, rawSnapshot = {}, options = {}) 
   }
   const resolvedReferences = new Map();
   const contacts = manifest.contactActions.map((row) => planContactAction(manifest, row, snapshot, resolvedReferences));
+  const contactConsistencyErrors = conflictingContactTargetActions(contacts);
   const sections = manifest.classSectionActions.map((row) => planSectionAction(row, snapshot));
   const sectionPlans = new Map(sections.filter((row) => row.section?.sectionKey).map((row) => [row.section.sectionKey, row]));
   const courses = manifest.courseActions.map((row) => planCourseAction(manifest, row, snapshot, resolvedReferences, sectionPlans));
-  const actions = [...sequenceErrors, ...contacts, ...sections, ...courses];
+  const actions = [...sequenceErrors, ...contactConsistencyErrors, ...contacts, ...sections, ...courses];
   const blockers = actions.filter((action) => action.state === 'error' || action.state === 'blocked');
   return {
     schemaVersion: 1,
@@ -289,6 +311,7 @@ export function buildRosterImportPlan(manifest, rawSnapshot = {}, options = {}) 
     contactActions: contacts,
     classSectionActions: sections,
     courseActions: courses,
+    contactConsistencyErrors,
     sequenceErrors,
   };
 }
