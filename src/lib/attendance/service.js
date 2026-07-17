@@ -21,6 +21,7 @@ import {
   courseClassSections,
 } from '../../db/schema.js';
 import { createCrmError } from '../crm/errors.js';
+import { canonicalScheduleDays } from '../schedule-days.js';
 import {
   assertScheduledSessionDate,
   attendanceSnapshotsEqual,
@@ -246,8 +247,7 @@ export async function listAttendanceClasses({ db, session, date = todayInAttenda
   const sections = rows.filter((row) => (
     isAitUsaBusinessUnit(row.businessUnitName)
     && canAccessBusinessUnit(session, row.businessUnitId)
-    && Array.isArray(row.scheduleDaysJson)
-    && row.scheduleDaysJson.includes(weekday)
+    && canonicalScheduleDays(row.scheduleDaysJson).includes(weekday)
   ));
   if (!sections.length) return { date, classes: [] };
 
@@ -348,7 +348,7 @@ export async function getAttendanceWorkspace({ db, session, sectionId, weekOf, s
       teacher: section.teacher || '',
       location: section.courseLocation || '',
       modality: section.modality,
-      scheduleDays: section.scheduleDaysJson,
+      scheduleDays: canonicalScheduleDays(section.scheduleDaysJson),
       startTime: section.startTime || '',
       endTime: section.endTime || '',
     },

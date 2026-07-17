@@ -55,6 +55,15 @@ test('scheduled occurrences and mutation dates follow canonical weekdays', () =>
     ['2026-07-13', '2026-07-15', '2026-07-17'],
   );
   assert.equal(assertScheduledSessionDate({ scheduleDaysJson: ['Friday'] }, '2026-07-17'), '2026-07-17');
+  assert.deepEqual(
+    scheduledDatesForWeek(['LUN', 'MAR', 'MIE', 'JUE'], '2026-07-17'),
+    ['2026-07-13', '2026-07-14', '2026-07-15', '2026-07-16'],
+  );
+  assert.deepEqual(
+    scheduledDatesForWeek(['MONDAY TO THURSDAY'], '2026-07-17'),
+    ['2026-07-13', '2026-07-14', '2026-07-15', '2026-07-16'],
+  );
+  assert.equal(assertScheduledSessionDate({ scheduleDaysJson: ['VIERNES'] }, '2026-07-17'), '2026-07-17');
   assert.throws(
     () => assertScheduledSessionDate({ scheduleDaysJson: ['Monday'] }, '2026-07-17'),
     /not a scheduled Friday meeting/,

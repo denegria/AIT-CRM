@@ -1,5 +1,5 @@
 import { ROLE_KEYS, roleKeysForUser } from '../roles.js';
-import { CANONICAL_WEEKDAYS } from '../schedule-days.js';
+import { CANONICAL_WEEKDAYS, canonicalScheduleDays } from '../schedule-days.js';
 
 function inputError(message) {
   const error = new Error(message);
@@ -82,7 +82,7 @@ export function weekBounds(value) {
 
 export function scheduledDatesForWeek(scheduleDays, weekOf) {
   const { start } = weekBounds(weekOf);
-  const selected = new Set(Array.isArray(scheduleDays) ? scheduleDays : []);
+  const selected = new Set(canonicalScheduleDays(scheduleDays));
   const startDate = parseSessionDate(start).date;
   return CANONICAL_WEEKDAYS.flatMap((weekday, offset) => {
     if (!selected.has(weekday)) return [];
@@ -94,7 +94,7 @@ export function scheduledDatesForWeek(scheduleDays, weekOf) {
 
 export function assertScheduledSessionDate(section, sessionDate) {
   const weekday = weekdayForSessionDate(sessionDate);
-  const days = Array.isArray(section?.scheduleDaysJson) ? section.scheduleDaysJson : [];
+  const days = canonicalScheduleDays(section?.scheduleDaysJson);
   if (!days.includes(weekday)) {
     throw inputError(`${sessionDate} is not a scheduled ${weekday} meeting for this class.`);
   }
