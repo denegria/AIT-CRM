@@ -17,6 +17,11 @@ function normalizedPhone(value = '') {
   return digits.length === 11 && digits.startsWith('1') ? digits.slice(1) : digits;
 }
 
+function usablePhone(value = '') {
+  const digits = normalizedPhone(value);
+  return digits.length >= 10 && digits.length <= 13;
+}
+
 function splitIds(value = '') {
   return cleanText(value).split(';').map((item) => item.trim()).filter(Boolean);
 }
@@ -158,7 +163,11 @@ function planContactAction(manifest, row, snapshot, resolvedReferences) {
     targetContactId: target.id,
     duplicateContactIds: duplicateIds,
     identity,
-    historicalPhones: splitIds(row.historical_phone_options),
+    historicalPhones: [...new Set([
+      ...splitIds(row.historical_phone_options),
+      liveTarget?.phone,
+      ...duplicateIds.map((id) => snapshot.contacts.find((contact) => contact.id === id)?.phone),
+    ].filter((phone) => usablePhone(phone) && normalizedPhone(phone) !== identity.normalizedPhone))],
     primaryPhonePolicy: cleanText(row.primary_phone_policy),
     phoneHistoryPolicy: cleanText(row.phone_history_policy),
     primaryPhoneOperation: phoneChanged ? 'replace_primary_preserve_previous' : 'ensure_primary_history',

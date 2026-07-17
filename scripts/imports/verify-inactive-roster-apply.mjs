@@ -117,7 +117,7 @@ try {
       `Contact ${action.targetContactId} location is ${actual.address || '<blank>'}, expected ${action.location.desiredLocation}.`, failures);
     const rows = phonesByContact.get(action.targetContactId) || [];
     const primaryRows = rows.filter((row) => row.is_primary);
-    assert(primaryRows.length === 1 && primaryRows[0].normalized_phone === action.identity.normalizedPhone,
+    assert(primaryRows.length === 1 && digits(primaryRows[0].normalized_phone) === action.identity.normalizedPhone,
       `Contact ${action.targetContactId} does not have exactly one authoritative workbook primary phone row.`, failures);
     const requiredHistory = new Set((action.historicalPhones || []).map(digits).filter((phone) => usablePhone(phone)));
     const priorTarget = sourceContacts.get(action.targetContactId);
@@ -137,8 +137,11 @@ try {
         `Contact ${action.targetContactId} is missing historical phone ${historicalPhone}.`, failures);
     }
   }
-  assert(priorPrimaryReplacements.size === 10,
-    `Expected 10 existing scalar-primary replacements, found ${priorPrimaryReplacements.size}.`, failures);
+  const plannedPrimaryReplacements = new Set(readyContacts
+    .filter((action) => action.primaryPhoneOperation === 'replace_primary_preserve_previous')
+    .map((action) => action.targetContactId));
+  assert(plannedPrimaryReplacements.size === 10,
+    `Expected 10 planned scalar-primary replacements, found ${plannedPrimaryReplacements.size}.`, failures);
   assert(phoneRows.every((row) => usablePhone(row.normalized_phone)), 'Phone history contains an unusable normalized phone.', failures);
 
   const createActions = readyContacts.filter((action) => action.operation === 'create_contact');
@@ -251,7 +254,12 @@ try {
     manifest: { id: plan.manifestId, sha256: plan.manifestSha256 },
     counts: {
       contacts: { ready: readyContacts.length, held: heldContacts.length, operations: countBy(readyContacts, 'operation') },
-      primaryPhones: { workbookAuthoritativeActions: readyContacts.length, uniqueContacts: uniqueTargetCount, replacedExistingScalar: priorPrimaryReplacements.size },
+      primaryPhones: {
+        workbookAuthoritativeActions: readyContacts.length,
+        uniqueContacts: uniqueTargetCount,
+        plannedReplacements: plannedPrimaryReplacements.size,
+        priorUsableScalarsPreserved: priorPrimaryReplacements.size,
+      },
       courses: { ready: readyCourses.length, held: heldCourses.length, locations: countBy(courseRows, 'course_location'), rawDateLineage: rawDateLineageCount },
       lifecycle: { preservedContacts: protectedActions.length, droppedQuitContacts: droppedIds.length },
       merges: mergeRuns.length,

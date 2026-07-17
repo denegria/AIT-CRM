@@ -203,13 +203,14 @@ test('contact merge is routed through the approved relationship service', () => 
   manifest.contentSha256 = manifestContentSha256(manifest);
   const plan = buildRosterImportPlan(manifest, {
     contacts: [
-      { id: '11111111-1111-4111-8111-111111111111', name: 'Maria Student', phone: '9085550100' },
-      { id: '22222222-2222-4222-8222-222222222222', name: 'Maria Student', phone: '9085550100' },
+      { id: '11111111-1111-4111-8111-111111111111', name: 'Maria Student', phone: '9085550177' },
+      { id: '22222222-2222-4222-8222-222222222222', name: 'Maria Student', phone: '9085550188' },
     ],
   }, { now: new Date('2026-07-17T00:00:00Z') });
   assert.equal(plan.approvalEligible, true);
   assert.equal(plan.contactActions[0].state, 'ready');
   assert.equal(plan.contactActions[0].operation, 'merge_contacts');
+  assert.deepEqual(new Set(plan.contactActions[0].historicalPhones), new Set(['908-555-0199', '9085550177', '9085550188']));
 });
 
 test('active lane refuses to proceed before the exact inactive manifest hash completed', () => {
