@@ -48,6 +48,7 @@ async function createManifest(t, runOverride) {
   const calls = [];
   const run = runOverride || (async (command, args, options = {}) => {
     calls.push({ command, args, options });
+    if (command === 'git') return { stdout: 'c66d266 refs/heads/qa/mis-313-import', stderr: '', code: 0 };
     return { stdout: neonCreateResult(), stderr: '', code: 0 };
   });
   const result = await createQaBranch({ ...BASE_OPTIONS, rootDir, execute: true }, {
@@ -83,14 +84,32 @@ test('create pins Neon CLI, sets provider expiry, and writes no connection strin
   const manifestText = await fs.readFile(manifestPath, 'utf8');
   const manifest = JSON.parse(manifestText);
 
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0].command, 'npx');
-  assert.equal(calls[0].args.includes('neonctl@2.34.0'), true);
-  assert.equal(calls[0].args.includes('--expires-at'), true);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].command, 'git');
+  assert.deepEqual(calls[0].args, ['ls-remote', '--exit-code', '--heads', 'origin', 'refs/heads/qa/mis-313-import']);
+  assert.equal(calls[1].command, 'npx');
+  assert.equal(calls[1].args.includes('neonctl@2.34.0'), true);
+  assert.equal(calls[1].args.includes('--expires-at'), true);
   assert.equal(manifest.neon.branchId, 'br-temporary');
   assert.equal(manifest.neon.parentBranchId, 'br-production');
   assert.equal(manifest.preview.gitBranch, 'qa/mis-313-import');
   assert.equal(manifestText.includes('postgresql://'), false);
+});
+
+test('create refuses a missing remote preview branch before Neon mutation', async () => {
+  const calls = [];
+  await assert.rejects(
+    () => createQaBranch({ ...BASE_OPTIONS, execute: true }, {
+      now: () => new Date(NOW),
+      run: async (command, args) => {
+        calls.push({ command, args });
+        throw new Error('git exited with 2: preview branch missing');
+      },
+    }),
+    /preview branch missing/,
+  );
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].command, 'git');
 });
 
 test('attach passes DATABASE_URL over stdin and installs branch-scoped no-I/O flags', async (t) => {

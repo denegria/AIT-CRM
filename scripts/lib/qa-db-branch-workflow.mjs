@@ -268,6 +268,7 @@ export async function createQaBranch(options, overrides = {}) {
   const expiresAt = new Date(now.getTime() + input.ttlHours * 60 * 60 * 1000);
   const rootDir = path.resolve(options.rootDir || process.cwd());
   const manifestPath = path.resolve(options.manifestPath || defaultManifestPath(rootDir, input.branchName));
+  const gitRemote = clean(options.gitRemote) || 'origin';
   const plan = {
     action: 'create',
     execute: Boolean(options.execute),
@@ -275,10 +276,19 @@ export async function createQaBranch(options, overrides = {}) {
     branchName: input.branchName,
     parentBranchId: input.parentBranch,
     previewBranch: input.previewBranch,
+    gitRemote,
     expiresAt: expiresAt.toISOString(),
     manifestPath,
   };
   if (!options.execute) return plan;
+
+  await deps.run('git', [
+    'ls-remote',
+    '--exit-code',
+    '--heads',
+    gitRemote,
+    `refs/heads/${input.previewBranch}`,
+  ]);
 
   const result = await deps.run('npx', neonArgs(
     'branches',

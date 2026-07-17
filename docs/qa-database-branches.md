@@ -38,6 +38,8 @@ When `AIT_CRM_EXTERNAL_IO_DISABLED=true`, public provider webhooks return `503`,
 - Exact Neon IDs for production and persistent staging. Obtain them from approved environment configuration; do not infer them from hostnames.
 - A non-production Git branch that will own the protected preview deployment.
 
+Push the non-production code branch before creating the Neon branch. Vercel requires a real branch in the connected Git repository before it accepts branch-specific environment variables. The branch's initial preview uses the normal Preview environment; production-derived data is not attached until the guarded workflow runs.
+
 Set operator-only values without committing them:
 
 ```bash
@@ -47,6 +49,12 @@ export AIT_CRM_PROTECTED_NEON_BRANCH_IDS="<production-branch-id>,<staging-branch
 ```
 
 ## 1. Plan and create
+
+Push the selected non-production branch and let its ordinary Preview deployment start first:
+
+```bash
+git push origin "qa/mis-313-<purpose>"
+```
 
 First inspect the plan. This does not mutate Neon or Vercel:
 
@@ -90,7 +98,7 @@ npm run qa:db-branch -- attach \
   --execute
 ```
 
-Attach before pushing or redeploying the preview Git branch. Vercel applies branch-specific variables only to subsequent deployments. Do not run `vercel --prod` and do not target the persistent staging branch.
+After attachment, redeploy the same preview Git branch so Vercel applies its branch-specific variables. Do not run `vercel --prod` and do not target the persistent staging branch.
 
 Push or redeploy only the selected non-production preview branch through the normal Git/Vercel preview path. Verify that Deployment Protection is active before authenticating or inspecting production-derived data.
 

@@ -36,7 +36,8 @@ Dry-run is the default for create, attach, and destroy. Add --execute to mutate 
 Commands:
   create  --issue MIS-123 --owner NAME --purpose TEXT --preview-branch BRANCH
           --project-id PROJECT --parent-branch PRODUCTION_BRANCH_ID
-          --protected-branch-ids PRODUCTION_ID,STAGING_ID [--ttl-hours 24] [--execute]
+          --protected-branch-ids PRODUCTION_ID,STAGING_ID [--git-remote origin]
+          [--ttl-hours 24] [--execute]
   attach  --manifest-path PATH [--vercel-project PROJECT] [--execute]
   verify  --manifest-path PATH [--database-only]
   status  --manifest-path PATH
