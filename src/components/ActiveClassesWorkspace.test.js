@@ -15,6 +15,7 @@ test('workspace preserves the approved Overview, Roster, and Attendance tabs wit
 test('roster links remain conditional on the server-provided capability', () => {
   assert.match(source, /workspace\.canLinkContacts && student\.contactId/);
   assert.match(source, /href={`\/contacts\/\$\{student\.contactId\}`}/);
+  assert.match(source, /Enrollment changes are managed outside this workspace\./);
   assert.match(source, /canReopenSubmittedAttendance/);
 });
 

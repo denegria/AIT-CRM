@@ -586,7 +586,11 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null 
                         </div>
                       ))}
                     </div>
-                    <p className={s.rosterFootnote}>Enrollment changes are managed from the student’s Contact record.</p>
+                    <p className={s.rosterFootnote}>
+                      {workspace.canLinkContacts
+                        ? 'Enrollment changes are managed from the student’s Contact record.'
+                        : 'Enrollment changes are managed outside this workspace.'}
+                    </p>
                   </section>
                 )}
 
