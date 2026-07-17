@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-17T02:33:55.268768+00:00",
+  "generatedAt": "2026-07-17T02:37:43.632475+00:00",
   "mode": "read_only_artifact_build",
   "productionFingerprint": {
     "neonBranchId": "br-purple-bar-aphafrgp",
@@ -98,25 +98,25 @@
       "role": "current_active_execution_manifest",
       "vaultPath": "private-imports/mis-318/manifests/execution/ait-usa-active-enrollment-actions-v1.json",
       "sizeBytes": 356209,
-      "sha256": "55a17d991cbc14655f849964078117e414ecea032299d2156d7b85f75f07aa95"
+      "sha256": "235fa0095d62681b50d373d3113a5e25cdf591ef84926e5e6faa1e4322b41a1b"
     },
     {
       "role": "current_active_manifest",
       "vaultPath": "private-imports/mis-318/manifests/ait-usa-active-enrollment-manifest.xlsx",
-      "sizeBytes": 58448,
-      "sha256": "34e5223192c1f44fe3f0a6fae9e28a2638386c6acf77b092d11868a940b3c599"
+      "sizeBytes": 58446,
+      "sha256": "35c47c186506079d49f555f9b07f2e5089ff7b6d99836c522c46027c471e6f0d"
     },
     {
       "role": "current_inactive_execution_manifest",
       "vaultPath": "private-imports/mis-318/manifests/execution/ait-usa-inactive-student-actions-v1.json",
       "sizeBytes": 1452901,
-      "sha256": "a511cc709ec53a3686fbf4bf64784f6e5e360fbdf4e463413337488db4dbefb6"
+      "sha256": "c747d251f0246221306573ac45656cff89a6675a47693052de7fc684e9ece850"
     },
     {
       "role": "current_inactive_manifest",
       "vaultPath": "private-imports/mis-318/manifests/ait-usa-inactive-student-final-action-manifest.xlsx",
-      "sizeBytes": 215947,
-      "sha256": "81fb194c926d03ba7919f79738915083d7307ffd120d578cc00e6d4945121122"
+      "sizeBytes": 215951,
+      "sha256": "5482163059ee1942a6d1d063e9862df7333353c886d24993bb30934fef18a7e3"
     },
     {
       "role": "identity_resolution",
