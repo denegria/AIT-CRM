@@ -1,93 +1,56 @@
-# ✨ AIT CRM
+# AIT CRM
 
-A high-density, professional CRM built for rapid data editing, lead management, staged import review, and operational document generation.
+AIT CRM is a private, multi-business operations platform for AIT. It combines customer records, lead and task workflows, class enrollment and attendance, work-order operations, controlled data imports, communications, and role-based administration in one application.
 
-For the strategic goals and non-negotiable constraints, read [goals and constraints.md](./goals%20and%20constraints.md).
+The product is designed around AIT's operating rules rather than a generic CRM template: organization and business-unit boundaries, auditable changes, staged imports, scoped employee access, and reliable source attribution are first-class concerns.
 
-## 🧭 Quick Start
+![Active Classes overview showing sessions, roster, and session notes](./docs/images/active-classes-overview.png)
 
-1. Open the dashboard to see revenue, pipeline, tasks, and recent operational work.
-2. Use Contacts & Leads to search, filter, and edit customer data quickly.
-3. Move into Work Orders or Financials when you need PDFs, line items, or status tracking.
-4. Use Import Review for staged AIT Signs rows before they are promoted into production tables.
-5. Switch between Admin and Employee views from the sidebar to match the task at hand.
+> Screenshots in this repository use synthetic staging records. They contain no customer phone numbers, email addresses, or other private contact data.
 
-## 🧑‍💻 How To Use The App
+## Product capabilities
 
-- Keep the interface dense and fast-moving; it is designed for rapid edits.
-- Double-click editable cells in tables to make inline updates.
-- Use the drawer-style forms for add and edit flows when you need a fuller view.
-- Review staged import rows carefully before approving them.
-- Leave ambiguous rows in `needs_review` or reject them instead of forcing a bad match.
+- **Contacts and pipeline** — searchable customer records, lead stages, attribution, notes, and activity history.
+- **Tasks and team coordination** — assigned work, priorities, due dates, follow-up context, and senior-level monitoring.
+- **Active Classes** — class-first navigation, roster access, dated sessions, session notes, and fast attendance marking.
+- **AIT Signs operations** — work orders, estimates, operational financial snapshots, and generated documents.
+- **Import review** — staged, traceable data review before approved records are promoted into CRM tables.
+- **Inbound lead capture** — website and Meta ingestion with explicit business-unit routing and audit metadata.
+- **Administration** — account-managed roles, business-unit memberships, settings, reports, and operational diagnostics.
 
-## Features
+Feature visibility is determined by the deployed release channel, the selected business unit, and server-enforced permissions.
 
-### 📊 Dashboard
-- KPI cards for revenue, pipeline value, active work orders, and new leads
-- Task list with priorities, due dates, and inline task creation
-- Calendar widget with color-coded event indicators
-- Revenue trend chart for monthly performance
-- Invoice status breakdown for paid, pending, and overdue work
-- Employee progress tracking for admin visibility
+## Architecture
 
-### 👥 Contacts & Leads
-- High-density sortable and filterable data table
-- Inline editing for fast cleanup and updates
-- Lead status tracking from new lead to won or lost
-- Lead source tracking for Facebook Ads, Website, Referral, Cold Call, and Google Ads
-- Drawer-style forms for add and edit flows
+- Next.js 16 App Router and React 19
+- PostgreSQL on Neon as the system of record
+- Drizzle ORM and versioned SQL migrations
+- Server-side service and policy layers for business behavior
+- Vercel deployments with separate staging and production branches
+- Provider adapters for website, Meta, SMS, and other external integrations
 
-### 🧾 Work Orders
-- Priority-based work order management
-- Status tracking from pending to in progress, completed, or on hold
-- One-click PDF generation for professional documents
-- Client and employee assignment
+The application intentionally keeps product rules in the CRM. Authentication establishes identity; the server independently enforces organization, business-unit, role, and action scope.
 
-### 💰 Financials
-- Tabbed interface for invoices, estimates, and receipts
-- Line item editing with auto-calculated totals
-- Status badges for draft, pending, paid, and overdue
-- One-click PDF generation for financial documents
-- Professional document templates with headers and line items
+## Security and data integrity
 
-### 📈 Reports
-- Monthly financial snapshot with KPI cards
-- Revenue by month chart
-- Invoice status breakdown chart
-- Lead source analysis
-- Quick stats like conversion rate and average invoice value
-- CSV export for financial data
+- Secrets are supplied through local or hosted environment variables and are never committed.
+- Sensitive routes authorize every request on the server; UI visibility is not treated as authorization.
+- Imports retain source references and review decisions for audit and recovery.
+- Destructive or ambiguous data operations are rehearsed against staging or isolated database branches first.
+- Attendance and other concurrent workflows use revision checks to prevent stale browser tabs from silently overwriting newer changes.
+- Production changes follow explicit validation and promotion gates.
 
-### ✅ Import Review
-- Staged AIT Signs rows are reviewed before promotion into production tables
-- Approve or reject rows from the `/import-review` screen or the CLI
-- Use the summary and sample commands to inspect a batch before approving
-- Only `approved` rows are promoted; ambiguous rows stay in review or are rejected
+See [goals and constraints.md](./goals%20and%20constraints.md) for the product boundaries behind these decisions.
 
-### ⚙️ Settings
-- Webhook configuration for Facebook Ads and Google Ads endpoints
-- Automation rules overview
-- API access configuration
-- Role-based access control management
-- Data reset functionality
+## Local development
 
-## 👤 Role-Based Views
+Requirements:
 
-Toggle between **Admin** and **Employee** views using the sidebar toggle:
+- Node.js compatible with Next.js 16
+- npm
+- PostgreSQL for database-backed development
 
-- **Admin**: full access to all data, reports, employee tracking, and financial oversight
-- **Employee**: personal tasks, assigned leads, and document generation
-
-## 🛠️ Tech Stack
-
-- **Framework**: Next.js 16 App Router
-- **UI**: React 19
-- **Database**: Postgres
-- **ORM/Migrations**: Drizzle
-- **Icons**: Lucide React
-- **PDFs**: jsPDF
-
-## 🚀 Development
+Install dependencies and start the development server:
 
 ```bash
 npm install
@@ -96,93 +59,44 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-Useful commands:
+Core validation commands:
 
 ```bash
 npm run lint
 npm run build
-npm run profile:ait-signs
-npm run import:ait-signs-staging
-npm run seed:ait-signs
-npm run db:load-ait-signs-staging
-npm run db:review-ait-signs-staging
-npm run db:promote-ait-signs-staging
-npm run db:bootstrap-auth-user
-npm run db:generate
-npm run db:migrate
-npm run verify:production
 npm run verify:rbac
 ```
 
-Database commands require `DATABASE_URL`.
-Production release, rollback, backup, and Meta page setup steps live in [docs/production-runbook.md](./docs/production-runbook.md).
-The short V1 operator/admin handoff lives in [docs/v1-handoff.md](./docs/v1-handoff.md).
-The V2 execution plan and issue-sized slices live in [docs/v2-plan.md](./docs/v2-plan.md).
-
-Website lead ingestion is available at `/api/webhooks/website-leads` once these production env vars are configured:
-
-- `WEBSITE_LEADS_WEBHOOK_SECRET`: shared secret sent as `Authorization: Bearer <secret>`, `x-ait-webhook-secret`, or a body field named `x-ait-webhook-secret`
-- `WEBSITE_LEADS_BUSINESS_UNIT_MAP`: optional JSON map from source/form/domain keys to business-unit name or id, for example `{"ait-usa-contact":"AIT USA Institute","default":"AIT Signs"}`
-
-POST JSON can include `name`, `firstName`, `lastName`, `email`, `phone`, `company`, `address`, `location`, `age`, `message`, `service`, `sourceKey`, `formId`, `sourceName`, `externalId`, `submittedAt`, and `businessUnit`/`division`. Wix-style payloads wrapped as `{ "data": { ... } }` are accepted. Secret fields are redacted from audit/import storage.
-
-AIT USA Wix lead ingestion is V1-ready. AIT Signs WordPress/Divi lead ingestion is intentionally parked until the public form stack is stabilized or replaced.
-
-For database-backed app sessions, set `AIT_CRM_SESSION_SECRET`, run migrations, then bootstrap the first admin:
+Database commands:
 
 ```bash
-AIT_CRM_BOOTSTRAP_ADMIN_EMAIL=admin@example.com \
-AIT_CRM_BOOTSTRAP_ADMIN_PASSWORD='change-me' \
-npm run db:bootstrap-auth-user
+npm run db:generate
+npm run db:migrate
 ```
 
-For Facebook lead webhook verification and signed payload validation:
+Database-backed commands require `DATABASE_URL`. Authentication and integration credentials must also be supplied through environment variables. Ask a project administrator for the approved environment configuration; do not copy credentials into documentation, issue comments, or source files.
 
-```bash
-META_WEBHOOK_VERIFY_TOKEN=replace-me
-FACEBOOK_APP_SECRET=replace-me
-META_PAGE_ACCESS_TOKEN=replace-me
-META_PAGE_ACCESS_TOKEN_MAP='{"637956449579628":"page-token-for-this-page"}'
-META_PAGE_BUSINESS_UNIT_MAP='{"637956449579628":"AIT USA Institute"}'
-```
+## Release model
 
-`FACEBOOK_WEBHOOK_VERIFY_TOKEN` is also supported for compatibility.
+- `staging` is the QA lane and auto-deploys to the protected staging environment.
+- `master` is the production lane and is promoted only after staging acceptance and explicit approval.
+- Database migrations are verified against the intended Neon branch before application.
+- Production data is never used as screenshot or fixture data.
 
-Webhook endpoint:
+Operational release, rollback, and recovery procedures are documented in the [production runbook](./docs/production-runbook.md).
 
-`/api/webhooks/facebook-leads`
+## Documentation
 
-The webhook accepts both Facebook Lead Ads `leadgen` events and Page Messenger
-`messages` events. Lead Ads events fetch full lead fields from Graph API before
-creating CRM contacts/leads. Messenger events create or link CRM leads on first
-inbound Page conversation and log subsequent messages as activity.
-`META_PAGE_ACCESS_TOKEN` is the default Page token. `META_PAGE_ACCESS_TOKEN_MAP`
-optionally maps Facebook Page IDs to per-page tokens when multiple Pages are
-connected. `META_PAGE_BUSINESS_UNIT_MAP` optionally routes a Facebook Page ID to
-a business unit id or name; unmapped pages fall back to the first active business
-unit.
+- [User guide](./USER_GUIDE.md)
+- [Product goals and constraints](./goals%20and%20constraints.md)
+- [Production runbook](./docs/production-runbook.md)
+- [V1 operator and administrator handoff](./docs/v1-handoff.md)
+- [V2 execution plan](./docs/v2-plan.md)
 
-## 🔄 Import Workflow
+## Product boundaries
 
-The staged AIT Signs import is reviewed row by row before promotion.
-
-1. Load or refresh staging data with `npm run db:load-ait-signs-staging`.
-2. Inspect the queue with `npm run db:review-ait-signs-staging summary` or the `/import-review` screen.
-3. Approve a row with either the UI Approve action or the CLI:
-
-```bash
-npm run db:review-ait-signs-staging approve-row --sheet "Sheet Name" --row 123 --reason "clean match"
-```
-
-4. Use `needs_review` or reject the row if the mapping is unclear.
-5. Run `npm run db:promote-ait-signs-staging --dry-run` before writing production records.
-6. Promote only approved rows with `npm run db:promote-ait-signs-staging`.
-
-Import review also accepts the temporary `AIT_CRM_ADMIN_TOKEN` path for internal unlocks until app-owned auth/RBAC covers every case.
-
-## V1 Boundaries
-
-- QuickBooks remains the accounting source of truth.
-- Financials and Reports are limited/admin surfaces in V1.
-- File/attachment storage is blocked until an object store such as Cloudflare R2 is configured.
-- WordPress/Divi lead capture is post-V1 unless the site form stack is renewed, replaced, or otherwise stabilized.
+- QuickBooks remains the accounting source of truth; CRM financial records provide operational context rather than a replacement ledger.
+- Files require approved object storage and do not belong in PostgreSQL.
+- Historical attendance is not imported. Attendance begins with the dedicated class-session workflow.
+- Automated outreach must preserve consent, attribution, audit history, owner routing, and stop conditions.
+- Uncertain imports and identity matches remain held for human review instead of being forced into production.

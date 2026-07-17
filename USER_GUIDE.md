@@ -1,110 +1,121 @@
-# AIT Signs CRM — User & Admin Guide
+# AIT CRM User Guide
 
-Welcome to the AIT Signs CRM! This guide will help you navigate the system and manage your shop's operations efficiently.
+AIT CRM adapts to your account role and selected business unit. You may see fewer navigation items or actions than another employee; that is intentional. Access is determined by the server, not by a visual mode switch.
 
----
+Screenshots in this guide use synthetic staging records and contain no customer contact information.
 
-## 🧭 Navigation & Interface
+## Sign in and select your scope
 
-### **The Sidebar**
-- **Dashboard**: Your daily bird's-eye view of revenue, tasks, and calendar.
-- **Contacts**: Where all your leads and clients live.
-- **Import Review**: Stage and review incoming rows before they are promoted.
-- **Work Orders**: Track the production and installation of signs.
-- **Financials**: Admin-only sample/demo surface (not a v1 production workflow).
-- **Reports**: Admin-only sample/demo surface (not a v1 production workflow).
-- **Settings**: Configure automation and system preferences.
+1. Sign in with the account issued by an administrator.
+2. Confirm the business unit shown in the division selector.
+3. Change divisions only when your account has access and the work belongs in that division.
+4. Contact an administrator if a required workspace is missing. Do not share your password in a support message.
 
-### **Pro Tips**
-- 🔍 **Global Search**: Press `Cmd + K` (or `Ctrl + K`) to quickly find any contact or invoice from anywhere in the app.
-- 🌓 **Dark Mode**: Use the toggle at the bottom of the sidebar to switch between Light and Dark mode.
-- 🔔 **Notifications**: Watch the bottom right for "Toasts" that confirm your actions (Saved, Deleted, etc.).
-- 🛡️ **Export Restrictions**: Data exports (CSV) are restricted to **Administrators** only.
+Administrators can work across permitted divisions. Coordinators, designers, and managers see the records and actions assigned to their role and business-unit memberships.
 
----
+## Main workspaces
 
-## 👥 Managing Contacts & Leads
+- **Dashboard** — current activity, follow-up priorities, and operational summaries.
+- **Contacts** — customer and student records, source context, notes, history, and related work.
+- **Pipeline** — lead stages and next-action management.
+- **Tasks** — assigned work, due dates, priorities, and completion tracking.
+- **Active Classes** — class rosters, dated sessions, attendance, and session notes for AIT USA Institute.
+- **Team Monitor** — senior-level workload and progress visibility.
+- **Work Orders** — AIT Signs production and installation work.
+- **Import Review** — controlled review of staged records before promotion.
+- **Financials and Reports** — authorized operational and management views; QuickBooks remains the accounting source of truth.
+- **Settings and operational tools** — administrator-only configuration and diagnostics.
 
-### **Table vs. Pipeline View**
-On the Contacts page, use the icons in the top right to switch views:
-1.  **List View (Table)**: Best for bulk viewing and sorting data. **Double-click** any name or email to edit it directly in the table.
-2.  **Pipeline View (Kanban)**: Best for managing leads. Click and drag a card to move a lead through the stages (New Lead → Won).
+Workspace availability follows the deployed release channel and your account permissions.
 
-**Filtering**: Use the status dropdown at the top to filter contacts by stage (e.g., show only "Qualified" leads). This works in both Table and Kanban views.
+## Daily contact and lead workflow
 
-### **Contact Details**
-Click **"View"** on any contact to open their profile. Here you can:
-- View their entire **Activity Timeline**.
-- Add a new **Note** about a recent phone call or meeting.
-- See all **Work Orders** and **Invoices** linked specifically to that person.
+1. Start from Dashboard, Tasks, or Pipeline to identify the next action.
+2. Open the Contact before outreach and review the source, recent notes, tasks, and activity history.
+3. Record the outcome of a call, message, meeting, or correction in the CRM.
+4. Update the lead stage only when the new stage reflects the real customer state.
+5. Create or complete the next task so ownership is clear.
+6. Use Work Orders only when AIT Signs work is ready for production or installation tracking.
 
----
+When a contact looks duplicated or the source information conflicts, stop and ask for review. Do not merge or overwrite uncertain identity data simply to clear a queue.
 
-## 🛠️ Work Orders & Document Generation
+## Active Classes and attendance
 
-### **Managing Jobs**
-- Click **"+ New Work Order"** to start a job.
-- Assign a **Priority** (High/Medium/Low) to keep your team focused on urgent installs.
-- Use the **Status Filter** at the top to find "In Progress" or "Pending" orders.
+Active Classes is organized class-first. Select the date, then choose a class from the class rail.
 
-### **Generating PDFs**
-Professional documents are just one click away:
-- In Work Orders or Financials, click the **"PDF"** button.
-- The system will instantly generate a professional document with the AIT Signs header and all relevant details.
+### Overview
 
----
+The Overview tab contains only the information needed to orient the employee:
 
-## ✅ Daily Lead Workflow
+- dated sessions in chronological order
+- the attendance state for each session
+- a roster preview
+- a session note tied to the selected date
 
-1. Start in **Contacts** and filter for New Lead or the relevant pipeline stage.
-2. Open the contact detail before outreach so notes, source, website form details, and work history are visible.
-3. After outreach, update the stage and add a note with the call/message result.
-4. Use the pipeline view when managing many leads at once.
-5. Use Work Orders only once a job is real enough to track production or install work.
+Selecting another session changes the note and attendance context. A note-only session remains **Not started** until at least one attendance mark exists.
 
----
+### Roster
 
-## ✅ Import Review Safety
+The Roster tab shows all active enrollments for the class.
 
-- Use **Import Review** to set row status (`approved`, `needs_review`, `rejected`, `pending`).
-- Approving rows is safe: it updates staged review status only.
-- Production CRM tables are written only when promotion is run.
-- Recommended sequence:
-  1. Approve only clear rows.
-  2. Keep uncertain rows in `needs_review`.
-  3. Run a promotion dry run first.
-  4. Promote approved rows.
-- Capture sheet name, row number, and reason when approving or rejecting from the CLI.
+- Regular coordinators see student names as plain text.
+- Senior coordinators and administrators may open authorized Contact profiles from student names.
+- The absence of a link does not mean the enrollment is missing; it reflects the user's Contact-detail permission.
 
----
+### Quick Mark attendance
 
-## 💰 Financials & Reports (v1 Note)
+![Quick Mark attendance with present and unmarked students](./docs/images/attendance-quick-mark.png)
 
-- These pages are intentionally limited in v1 and currently serve as admin-only sample/demo surfaces.
-- They are visible to administrators and hidden/restricted for non-admin users.
-- Core v1 operational work should prioritize Contacts, Import Review, and Work Orders.
+1. Choose the intended date and class.
+2. Open **Attendance** or select **Take attendance** from the current session.
+3. Mark each student **Present** or **Absent**. Unmarked is a deliberate third state.
+4. Add a student-specific note only when it provides useful attendance context.
+5. Review the present, absent, and unmarked totals.
+6. Submit only after every active student is marked.
 
----
+Submitted attendance is read-only. A senior coordinator or administrator can reopen it when a correction is required; the reopen action is audited. If another employee or browser tab saved a newer revision, reload the current session before trying again.
 
-## 🌐 Website Leads (v1 Note)
+Session notes and attendance are saved independently. Updating the Overview note cannot replace attendance marks, and updating attendance cannot erase the session note.
 
-- AIT USA Wix lead ingestion is connected through the CRM website-leads webhook.
-- Website form details such as address/location, age, message, source, and extra submitted fields are preserved in the contact/lead record or notes.
-- AIT Signs WordPress/Divi lead ingestion is not a v1 blocker. It should wait until the live form stack is renewed, replaced, or otherwise stable.
+## Tasks and Team Monitor
 
----
+- Use Tasks for work that has a clear owner and follow-up date.
+- Keep titles specific and use the description for the context another employee needs to finish the task.
+- Complete a task only when the work is actually resolved.
+- Senior coordinators and administrators use Team Monitor to review workload and progress within their authorized scope.
 
-## 🛡️ Admin vs. Employee Roles
+## Work Orders and operational financials
 
-Roles are account-based (not a sidebar toggle in database-backed sessions):
-- **Administrators**: See global revenue, track all employee progress, and have full access to Reports, Settings, and Data Exports.
-- **Account Coordinators / Sales Managers / Designers**: Focused on their specific operational tasks. Settings, high-level financial reports, and data exports are restricted.
+- Create a Work Order when an AIT Signs job is ready for operational tracking.
+- Keep status, owner, priority, and customer context current.
+- Generated documents reflect CRM operational data and should be reviewed before they are sent externally.
+- Financials and Reports provide operational visibility; accounting corrections remain in QuickBooks.
 
----
+## Import Review
 
-## 🆘 Troubleshooting & Support
+Import Review protects live CRM records from uncertain source data.
 
-- **Data Reset**: In local/demo mode, use **Settings → Reset Data** to restore defaults.
-- **Database-backed sessions**: Data is stored in Postgres; browser local data reset does not control production records.
-- **Bad imported data**: Capture the contact/lead name, email/phone, business unit, source sheet, source row, and what field looks wrong.
-- **Missing website lead**: Capture the website/page, timestamp, submitted email/phone, and source form. Do not share webhook secrets in support notes.
+1. Review the source reference and normalized fields.
+2. Approve only clear mappings.
+3. Leave uncertain rows in `needs_review` or reject them with a reason.
+4. Run the approved dry-run and verification process before promotion.
+5. Never force a contact match, class match, or phone replacement to make the queue smaller.
+
+Production promotions are administrative operations and remain separately approval-gated.
+
+## Privacy and support
+
+- Do not place passwords, API keys, webhook secrets, or database URLs in notes or support tickets.
+- Avoid sharing screenshots that contain customer phone numbers, email addresses, street addresses, or message content.
+- If a screenshot is necessary, crop to the relevant area and fully redact private fields before sharing.
+- For a data issue, provide the record name, business unit, affected workflow, source reference when available, and a description of what is wrong. Send private identifiers only through the approved support channel.
+- Sign out on shared devices and do not reuse another employee's session.
+
+## Troubleshooting
+
+- **A workspace is missing:** confirm the selected division, then ask an administrator to review your role and memberships.
+- **A save reports a newer revision:** reload the session or record, review the newer data, then apply your change again.
+- **Attendance cannot be submitted:** mark every active student or resolve the unmarked count.
+- **Submitted attendance needs correction:** ask a senior coordinator or administrator to reopen the session.
+- **A website lead is missing:** provide the website or form, approximate submission time, business unit, and source reference. Never include webhook credentials.
+- **Imported data looks wrong:** do not manually hide the mismatch; preserve the source reference and request review.
