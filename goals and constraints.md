@@ -1,169 +1,76 @@
-# AIT CRM
+# AIT CRM: Goals and Constraints
 
-AIT CRM is a custom all-in-one business operations system for AIT's multi-business organization. It starts with AIT Signs, but the product is being built to support multiple business units under one account, shared customer history, staged data migration, real permissions, operational reporting, and future lead ingestion/automation.
+This document defines the durable product boundaries for AIT CRM. Implementation details may evolve, but changes that weaken these constraints require an explicit product and security review.
 
-This is not intended to be a wrapper around a generic CRM. The product should own the business rules that matter: business-unit scoping, employee roles, customer/job history, import review, lead attribution, activity timelines, and operational workflows.
+## Product goals
 
-## Product Goals
+- Provide one trustworthy operational system across AIT Signs, AIT USA Institute, AIT Photo & Video, and AIT Taxes.
+- Preserve business-unit separation while allowing authorized organization-level visibility.
+- Replace spreadsheet-dependent daily work with structured contacts, leads, tasks, classes, enrollments, work orders, notes, and activity history.
+- Make every imported or externally sourced record traceable to its origin.
+- Give employees focused workflows that are fast on desktop and mobile without exposing data outside their responsibility.
+- Support staged automation only after identity, consent, assignment, and data quality are reliable.
 
-- Give AIT one operational source of truth across AIT Signs, AIT USA Institute, AIT Photo & Video, and AIT Taxes.
-- Replace spreadsheet-driven work tracking with structured contacts, leads, estimates, work orders, notes, tasks, payments snapshots, and activity history. Files are planned once object storage is configured.
-- Preserve business-unit separation while still allowing consolidated organization-level reporting.
-- Make lead ingestion from Facebook, website forms, spreadsheets, and future sources reliable, traceable, and reviewable.
-- Support role-specific workflows for administrators, designers, account managers, and sales managers.
-- Keep historical Spanish spreadsheet notes and source rows traceable instead of flattening them into lossy fields.
-- Build toward automated follow-up and communication workflows after the CRM data foundation is trustworthy.
+## Source-of-truth rules
 
-## First Client Context
+- PostgreSQL is the CRM system of record.
+- Business units are relational scope, not labels or client-side filters.
+- Authentication proves identity; the CRM server owns authorization.
+- QuickBooks remains the accounting source of truth. CRM financial data is an operational snapshot.
+- External providers deliver messages, forms, files, or accounting context; they do not own CRM business rules.
+- File contents belong in approved object storage. PostgreSQL stores metadata, ownership, and access policy.
 
-The first production target has four business units:
+## Access and privacy constraints
 
-1. AIT Signs
-2. AIT USA Institute
-3. AIT Photo & Video
-4. AIT Taxes
+- Every database-backed request is scoped by organization, business unit, role, and action permission.
+- Administrators may work across authorized business units. Non-admin users are limited to explicit memberships and capabilities.
+- UI controls may explain access, but hiding a control is never the security boundary.
+- Contact links, financial data, exports, settings, and operational diagnostics are returned only when the server authorizes them.
+- Secrets remain in environment or provider configuration. They must not appear in source, fixtures, screenshots, logs, or support notes.
+- Documentation and QA evidence use synthetic or fully redacted data.
+- Production customer data is never copied into a public artifact.
 
-AIT Signs is the first implementation focus. Its existing source data comes from spreadsheet exports with lifecycle tabs for prospects, estimates, active work orders, and completed/paid work. The data is messy and Spanish-first, with duplicate contacts, freeform follow-up notes, payment fields, status legends, and spreadsheet artifacts.
+## Data integrity constraints
 
-The migration is product work, not a one-time CSV load. Raw rows need to be staged, classified, reviewed, and promoted into normalized CRM records only after they are understood.
+- Imported rows retain source type, source reference, and review lineage.
+- Phone and email normalization may identify candidates, but uncertain identities are held for review rather than merged automatically.
+- Imports are deterministic, approval-gated, directly verified, and safe to replay.
+- Data corrections preserve valid history when the product model supports it.
+- Concurrent editing uses revision or equivalent conflict detection where silent overwrites would be harmful.
+- Destructive changes use explicit targets, database constraints, and a tested recovery path.
+- Production migrations and data operations are rehearsed on staging or an isolated Neon branch first.
 
-## Core Constraints
+## Attendance constraints
 
-- AIT CRM must be a custom CRM/business system, not a thin integration around HubSpot, GoHighLevel, or another prebuilt CRM.
-- Directus may be useful as a temporary admin/data accelerator, but it must not own core CRM permissions, business-unit rules, ingestion logic, or automation behavior.
-- Business units are real relational records, not tags. Records that are operationally scoped should carry `organization_id` and usually `business_unit_id`.
-- Contacts can be organization-level and may have a primary business unit, while leads, jobs/work orders, estimates, campaigns, messages, tasks, files, and financial snapshots are usually business-unit scoped.
-- Authentication proves identity; AIT CRM owns authorization through app-controlled roles, permissions, organization scope, business-unit scope, assignment, and ownership.
-- Clerk is not the default auth choice because the project should avoid unnecessary vendor cost and complexity unless polished hosted user management becomes more valuable than owning the auth path.
-- QuickBooks remains the accounting source of truth for V1. AIT CRM can store invoice/payment visibility and estimate context, but it should not try to become a full accounting ledger.
-- Files should live in object storage, with metadata and permissions in Postgres. File blobs should not live in the database. V1 file/attachment work is blocked until Cloudflare R2 or another S3-compatible bucket is configured.
-- Secrets belong in hosting/provider dashboards or local environment variables, never in committed files.
+- Attendance is recorded for one enrollment in one dated class session; it is not a property of a Contact.
+- The V1 model uses `class_sessions` and `attendance_records` with existing class sections and enrollments.
+- Present, absent, and unmarked are distinct states. Unmarked students cannot be silently converted to absent.
+- Session notes and attendance marks are separate revisioned operations so one cannot overwrite the other.
+- Submitted attendance is read-only until an authorized senior coordinator or administrator reopens it.
+- Regular coordinators may take attendance for accessible AIT USA Institute classes but do not receive Contact-detail links from the roster.
+- Historical workbook attendance is intentionally not imported. The operational record begins with the approved forward-looking workflow.
 
-## Data And Import Constraints
+## Import and automation constraints
 
-- Preserve raw source rows, sheet names, source row numbers, and original Spanish text for traceability.
-- Normalize phones first and use them as a strong dedupe signal, but do not blindly merge every matching phone without review.
-- Treat spreadsheet status labels and legends as business vocabulary that needs mapping, not as noise.
-- Convert repeated follow-up columns into timeline/activity records.
-- Convert payment, tax, total, advance, and balance fields into financial snapshots tied to estimates or work orders. They are operational snapshots, not authoritative accounting records.
-- Route uncertain mappings, malformed rows, duplicate candidates, conflicting financial values, and unclear Spanish notes to a human review queue.
-- The app should support rollback or re-run behavior for import batches before production use.
+- Raw source data is staged, classified, and reviewed before promotion.
+- Malformed rows, ambiguous mappings, unresolved duplicates, and conflicting values remain held.
+- Website and provider ingestion require explicit business-unit routing and idempotency.
+- Automated outbound communication requires approved templates, consent rules, owner routing, audit events, and stop conditions for reply, opt-out, or completion.
+- Provider payloads are minimized and secret-like fields are redacted from stored audit context.
 
-## Architecture Direction
+## Delivery constraints
 
-- Next.js app for the CRM product UI.
-- Postgres as the source of truth.
-- Drizzle for schema and migrations.
-- Custom API/server layer for product behavior.
-- Custom internal admin screens inside the CRM.
-- Vercel for the Next.js app and route handlers.
-- Neon Postgres for managed database hosting.
-- Cloudflare R2 or another S3-compatible store for files and attachments.
-- Durable workflows later for follow-up, ingestion retries, reminders, and automation.
-- SMS, email, voice, Meta/Facebook, and QuickBooks should be provider integrations, not the core product brain.
+- `staging` is the validation lane; `master` is the production lane.
+- Feature code reaches production only after live staging QA and explicit approval.
+- Migrations are applied only to a verified database branch and are checked separately from application deployment.
+- Small, reviewable slices are preferred over broad rewrites.
+- A feature is not complete until tests, lint, production build, role boundaries, responsive behavior, and relevant live flows have been verified.
+- QA fixtures are labeled, synthetic, isolated to staging, and removed after verification.
 
-## Permission Model
+## Current boundaries
 
-V1 should keep the role set aligned with the current CRM prototype:
-
-- `admin`
-- `designer`
-- `account_coordinator`
-- `sales_manager`
-
-Permissions should be granular and composable. Access checks should consider organization, business unit, role, assignment, record ownership, and sensitive field permissions.
-
-Example behavior:
-
-- Admins see all business units.
-- Sales managers see sales activity, assigned teams/leads, and business-unit scoped performance.
-- Account managers see assigned contacts, customer activity, and follow-up work.
-- Designers see design/job-related work assigned to them with restricted financial and settings access.
-
-## Automation Boundaries
-
-Automation is part of the product direction, but it should come after the data foundation is reliable.
-
-The CRM should eventually support:
-
-- Facebook Lead Ads ingestion
-- website form ingestion
-- lead/contact dedupe
-- source and campaign attribution
-- SMS/email follow-up
-- task assignment
-- pause-on-reply, booked, or opt-out behavior
-- reminders and escalation rules
-- activity and audit logging for every automated action
-
-The near-term product should prioritize trustworthy data, import review, business-unit scoping, and manual operations before automated outreach.
-
-## V1 Launch Boundaries
-
-- V1 launch focus is Contacts/Leads, Import Review, Work Orders, business-unit scoping, auth/RBAC, production verification, and verified website lead ingestion for the stable forms.
-- AIT USA Wix ingestion is part of V1.
-- AIT Signs WordPress/Divi ingestion is post-V1 until the public form stack is renewed, replaced, or otherwise stable.
-- QuickBooks stays out of V1 and remains the accounting source of truth.
-- File/attachment storage waits for object storage setup.
-
-## Build And Operating Constraints
-
-- Keep the current UI stable while the data layer moves from generated/local data to Postgres-backed reads and writes.
-- Prefer small, reviewable implementation slices over broad rewrites.
-- Track concrete work in Linear and keep this repo/docs aligned with the source-of-truth plan.
-- Use GitHub for code history, branches, pull requests, and review evidence.
-- Use Codex as the coding harness and Symphony-style routing for issue-driven execution when that path is appropriate.
-- Do not push or deploy sensitive changes without a validation checkpoint.
-
-## Current Technical Baseline
-
-- Framework: Next.js 16 App Router
-- UI: React 19
-- Icons: Lucide React
-- PDFs: jsPDF
-- Database: Postgres
-- ORM/migrations: Drizzle
-- Current fallback state: sanitized demo records are used only when no database is configured; live empty databases should stay empty until import staging is loaded
-- Live database status: the initial schema and import staging migrations have been applied to Neon; AIT Signs rows flow through import review before promotion into production CRM tables
-- Auth status: database-backed sessions require `AIT_CRM_SESSION_SECRET` plus a bootstrapped user; local no-database mode still uses sanitized demo data
-- Website lead status: AIT USA Wix ingestion is proven through the website-leads webhook; WordPress/Divi ingestion is parked until the form stack is stabilized
-
-## Development
-
-```bash
-npm install
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000).
-
-Useful commands:
-
-```bash
-npm run lint
-npm run build
-npm run profile:ait-signs
-npm run import:ait-signs-staging
-npm run seed:ait-signs
-npm run db:load-ait-signs-staging
-npm run db:review-ait-signs-staging
-npm run db:promote-ait-signs-staging
-npm run db:bootstrap-auth-user
-npm run db:generate
-npm run db:migrate
-```
-
-Database commands require `DATABASE_URL` in the environment.
-
-For database-backed app sessions, set `AIT_CRM_SESSION_SECRET`, run migrations,
-then bootstrap the first admin with:
-
-```bash
-AIT_CRM_BOOTSTRAP_ADMIN_EMAIL=admin@example.com \
-AIT_CRM_BOOTSTRAP_ADMIN_PASSWORD='change-me' \
-npm run db:bootstrap-auth-user
-```
-
-Import review now accepts either a signed-in user with import-review permission
-or the temporary `AIT_CRM_ADMIN_TOKEN` path. The temporary token path remains for
-internal scripts and emergency unlocks until full user/admin management exists.
+- AIT Signs WordPress/Divi ingestion remains deferred until the public form stack is stable and owned.
+- File and attachment workflows remain deferred until approved object storage is configured.
+- Financials and Reports support operational visibility but do not replace accounting.
+- Historical attendance import, student portal work, scheduling automation, and advanced attendance reporting are outside the first attendance release.
+- New providers, permission systems, or core architecture require a separate design and security review.
