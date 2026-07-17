@@ -346,6 +346,8 @@ def final_contact_actions(source_root: Path, snapshot: dict) -> tuple[list[dict]
                 "identity_key": identity_key,
                 "student_name": text(base.get("student_name")),
                 "primary_phone": primary_phone,
+                "primary_phone_policy": "none_deferred" if final_action == "defer_no_usable_identity" else "inactive_workbook_authoritative",
+                "phone_history_policy": "preserve_all_other_valid_numbers",
                 "historical_phone_options": "; ".join(dict.fromkeys(phone for phone in historical_phones if phone and phone != primary_phone)),
                 "final_contact_action": final_action,
                 "target_contact_id": target_id,

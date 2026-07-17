@@ -151,6 +151,8 @@ function planContactAction(manifest, row, snapshot, resolvedReferences) {
     duplicateContactIds: duplicateIds,
     identity,
     historicalPhones: splitIds(row.historical_phone_options),
+    primaryPhonePolicy: cleanText(row.primary_phone_policy),
+    phoneHistoryPolicy: cleanText(row.phone_history_policy),
     primaryPhoneOperation: phoneChanged ? 'replace_primary_preserve_previous' : 'ensure_primary_history',
     lifecycle: lifecyclePlan(manifest, row, target.id, snapshot),
     location,

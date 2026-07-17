@@ -17,7 +17,12 @@ function manifest(overrides = {}) {
     approvalState: 'held',
     sequence: { afterLane: null, attendanceSupported: false },
     expectedCounts: { contacts: 1, resolvedContacts: 1, deferredContacts: 0, courses: 1 },
-    contactActions: [{ idempotencyKey: 'mis-318:inactive:contact:a', final_contact_action: 'create_new_contact' }],
+    contactActions: [{
+      idempotencyKey: 'mis-318:inactive:contact:a',
+      final_contact_action: 'create_new_contact',
+      primary_phone_policy: 'inactive_workbook_authoritative',
+      phone_history_policy: 'preserve_all_other_valid_numbers',
+    }],
     classSectionActions: [],
     courseActions: [{ idempotencyKey: 'mis-318:inactive:course:a', proposed_course_action: 'insert_dropped_course_after_approval' }],
     ...overrides,

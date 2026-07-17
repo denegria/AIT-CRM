@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-16T23:26:36.106129+00:00",
+  "generatedAt": "2026-07-17T02:33:55.268768+00:00",
   "mode": "read_only_artifact_build",
   "productionFingerprint": {
     "neonBranchId": "br-purple-bar-aphafrgp",
@@ -98,37 +98,37 @@
       "role": "current_active_execution_manifest",
       "vaultPath": "private-imports/mis-318/manifests/execution/ait-usa-active-enrollment-actions-v1.json",
       "sizeBytes": 356209,
-      "sha256": "4ada7467809ef043af879d139f0362b6a1667c7036b80e945be12647219719a5"
+      "sha256": "55a17d991cbc14655f849964078117e414ecea032299d2156d7b85f75f07aa95"
     },
     {
       "role": "current_active_manifest",
       "vaultPath": "private-imports/mis-318/manifests/ait-usa-active-enrollment-manifest.xlsx",
-      "sizeBytes": 58444,
-      "sha256": "70d310b5567131194b65214644e2bd05a736d5e9a30ac13f7a349e2bd7569315"
+      "sizeBytes": 58448,
+      "sha256": "34e5223192c1f44fe3f0a6fae9e28a2638386c6acf77b092d11868a940b3c599"
     },
     {
       "role": "current_inactive_execution_manifest",
       "vaultPath": "private-imports/mis-318/manifests/execution/ait-usa-inactive-student-actions-v1.json",
-      "sizeBytes": 1376286,
-      "sha256": "93269e9469fb7129e3c839904407aa07bf606e5567534bec8c7f25805802bd78"
+      "sizeBytes": 1452901,
+      "sha256": "a511cc709ec53a3686fbf4bf64784f6e5e360fbdf4e463413337488db4dbefb6"
     },
     {
       "role": "current_inactive_manifest",
       "vaultPath": "private-imports/mis-318/manifests/ait-usa-inactive-student-final-action-manifest.xlsx",
-      "sizeBytes": 209602,
-      "sha256": "e40d9b939855205701fb432ece39a00306e224d363e38efc34b2f9a96f2c8ba4"
+      "sizeBytes": 215947,
+      "sha256": "81fb194c926d03ba7919f79738915083d7307ffd120d578cc00e6d4945121122"
     },
     {
       "role": "identity_resolution",
       "vaultPath": "private-imports/mis-318/sources/evidence/ait-usa-bound-brook-manual-contact-resolution-review.xlsx",
-      "sizeBytes": 122008,
-      "sha256": "c8a2140563c0435d21a341b890b29d450a6b90248b80806989760aa88a604f2d"
+      "sizeBytes": 126928,
+      "sha256": "e83ffdabd9faabf35410db868d72a3d7558c0f6c526e61b3d90e748b8a78577c"
     },
     {
       "role": "identity_resolution",
       "vaultPath": "private-imports/mis-318/sources/evidence/ait-usa-plainfield-manual-contact-resolution-review.xlsx",
-      "sizeBytes": 28671,
-      "sha256": "aeac2d7e5f8bbf7934b085a8fb709876f656dee74d06bee4caf066b751126212"
+      "sizeBytes": 29592,
+      "sha256": "6a33e37a699977913e18acf7ae5ca24f7ba127435308504d76788f3b56993752"
     },
     {
       "role": "original",

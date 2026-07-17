@@ -17,6 +17,8 @@ function inactiveManifest(overrides = {}) {
       candidate_id: 'candidate-a',
       student_name: 'Maria Student',
       primary_phone: '908-555-0100',
+      primary_phone_policy: 'inactive_workbook_authoritative',
+      phone_history_policy: 'preserve_all_other_valid_numbers',
       historical_phone_options: '908-555-0199',
       final_contact_action: 'reuse_existing_contact_exact',
       target_contact_id: '11111111-1111-4111-8111-111111111111',
@@ -50,6 +52,8 @@ test('dry-run preserves newer lifecycle and plans historical course without muta
 
   assert.equal(plan.approvalEligible, true);
   assert.equal(plan.contactActions[0].operation, 'reuse_contact');
+  assert.equal(plan.contactActions[0].primaryPhonePolicy, 'inactive_workbook_authoritative');
+  assert.equal(plan.contactActions[0].phoneHistoryPolicy, 'preserve_all_other_valid_numbers');
   assert.equal(plan.contactActions[0].primaryPhoneOperation, 'replace_primary_preserve_previous');
   assert.equal(plan.contactActions[0].lifecycle.operation, 'preserve');
   assert.equal(plan.contactActions[0].location.operation, 'set_manifest_location');
@@ -73,6 +77,19 @@ test('inactive manifest lifecycle protection is authoritative for nonterminal CR
 
   assert.equal(plan.contactActions[0].lifecycle.operation, 'preserve');
   assert.equal(plan.contactActions[0].lifecycle.liveStatus, 'Retargeting');
+});
+
+test('inactive manifest rejects an ambiguous primary-phone policy', () => {
+  const value = inactiveManifest({
+    contactActions: [{
+      ...inactiveManifest().contactActions[0],
+      primary_phone_policy: 'preserve_crm_primary',
+    }],
+  });
+  assert.throws(
+    () => buildRosterImportPlan(value, {}, { now: new Date('2026-07-17T00:00:00Z') }),
+    /workbook phone as authoritative primary/,
+  );
 });
 
 test('multiple active enrollment locations remain on course records instead of flattening Contact location', () => {
@@ -106,6 +123,8 @@ test('dry-run converts a newly arrived exact identity into reuse and skips repla
       identity_key: 'maria|9085550100',
       student_name: 'María Student',
       primary_phone: '(908) 555-0100',
+      primary_phone_policy: 'inactive_workbook_authoritative',
+      phone_history_policy: 'preserve_all_other_valid_numbers',
       final_contact_action: 'create_new_contact',
       planned_contact_reference: 'planned:maria',
     }],

@@ -71,6 +71,13 @@ export function validateRosterManifest(manifest, { now = new Date(), maxAgeMs = 
     assertCount(courseActions.length, counts.courses, 'courses');
     assertCount(contactActions.filter((row) => !cleanText(row.final_contact_action).startsWith('defer')).length, counts.resolvedContacts, 'resolvedContacts');
     assertCount(contactActions.filter((row) => cleanText(row.final_contact_action).startsWith('defer')).length, counts.deferredContacts, 'deferredContacts');
+    const actionableContacts = contactActions.filter((row) => !cleanText(row.final_contact_action).startsWith('defer'));
+    if (actionableContacts.some((row) => cleanText(row.primary_phone_policy) !== 'inactive_workbook_authoritative')) {
+      throw new Error('Every actionable inactive Contact must declare the workbook phone as authoritative primary.');
+    }
+    if (actionableContacts.some((row) => cleanText(row.phone_history_policy) !== 'preserve_all_other_valid_numbers')) {
+      throw new Error('Every actionable inactive Contact must preserve all other valid numbers as phone history.');
+    }
   } else {
     assertCount(courseActions.length, counts.enrollments, 'enrollments');
     assertCount(classSectionActions.length, counts.classSections, 'classSections');

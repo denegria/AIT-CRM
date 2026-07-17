@@ -37,6 +37,11 @@ collision-safe Contact merge slice `MIS-324`.
   vault paths, hashes, sizes, counts, lane state, and required product gates.
 - The original source workbooks remain immutable. All transformations must keep
   source sheet/cell lineage and pass the manifest validators.
+- For the inactive lane, a usable phone in the original workbook is the
+  owner-approved authoritative Contact primary. Existing CRM phones, absorbed
+  duplicate-Contact phones, and other valid source numbers remain phone
+  history; they are never discarded merely because the workbook phone becomes
+  primary.
 - Production data writes remain separately approval-gated.
 - Current product gates are tracked in `manifest-index.json`: controlled
   Computer/Math courses, Contact phone history, first-class class sections with
