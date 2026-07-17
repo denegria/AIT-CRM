@@ -4,9 +4,9 @@ AIT CRM is a private, multi-business operations platform for AIT. It combines cu
 
 The product is designed around AIT's operating rules rather than a generic CRM template: organization and business-unit boundaries, auditable changes, staged imports, scoped employee access, and reliable source attribution are first-class concerns.
 
-![Active Classes overview showing sessions, roster, and session notes](./docs/images/active-classes-overview.png)
+![AIT CRM dashboard showing operational priorities, team progress, and the calendar](./docs/images/dashboard.png)
 
-> Screenshots in this repository use synthetic staging records. They contain no customer phone numbers, email addresses, or other private contact data.
+> Screenshots in this repository use synthetic local demo records. Email and phone fields are visibly redacted where those columns appear; no production customer data is shown.
 
 ## Product capabilities
 
@@ -19,6 +19,20 @@ The product is designed around AIT's operating rules rather than a generic CRM t
 - **Administration** — account-managed roles, business-unit memberships, settings, reports, and operational diagnostics.
 
 Feature visibility is determined by the deployed release channel, the selected business unit, and server-enforced permissions.
+
+## Core workflows
+
+### Contact operations
+
+The Contacts workspace keeps identity, source, lifecycle, ownership, activity, and next-action context visible in one operational view.
+
+![Contacts workspace with synthetic records and redacted email and phone columns](./docs/images/contacts.png)
+
+### Pipeline management
+
+The Pipeline groups current work by business stage so employees can identify the next record, preserve ownership, and move work forward without losing Contact context.
+
+![Pipeline workspace showing synthetic AIT Signs records across operational stages](./docs/images/pipeline.png)
 
 ## Architecture
 

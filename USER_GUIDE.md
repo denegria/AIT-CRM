@@ -2,7 +2,7 @@
 
 AIT CRM adapts to your account role and selected business unit. You may see fewer navigation items or actions than another employee; that is intentional. Access is determined by the server, not by a visual mode switch.
 
-Screenshots in this guide use synthetic staging records and contain no customer contact information.
+Screenshots in this guide use synthetic local demo records. Email and phone fields are visibly redacted where they appear; no production customer data is shown.
 
 ## Sign in and select your scope
 
@@ -28,6 +28,24 @@ Administrators can work across permitted divisions. Coordinators, designers, and
 
 Workspace availability follows the deployed release channel and your account permissions.
 
+### Dashboard
+
+Use the Dashboard to scan current priorities before opening a detailed workspace. It combines operational counts, team progress, the calendar, and task context for the selected business unit.
+
+![Dashboard showing operational priorities, Team Monitor preview, and calendar](./docs/images/dashboard.png)
+
+### Contacts
+
+Contacts is the primary record directory. Search by the available identity or operational fields, use filters to narrow the current scope, and open a record before making an outreach or data decision.
+
+![Contacts workspace with synthetic records and redacted email and phone columns](./docs/images/contacts.png)
+
+### Pipeline
+
+Pipeline presents the same current work as a stage-based board. Use it to identify the next lead, review ownership, and move a record only when its real operating state has changed.
+
+![Pipeline workspace showing synthetic records across operational stages](./docs/images/pipeline.png)
+
 ## Daily contact and lead workflow
 
 1. Start from Dashboard, Tasks, or Pipeline to identify the next action.
@@ -51,6 +69,8 @@ The Overview tab contains only the information needed to orient the employee:
 - the attendance state for each session
 - a roster preview
 - a session note tied to the selected date
+
+![Active Classes overview showing sessions, roster preview, and session notes](./docs/images/active-classes-overview.png)
 
 Selecting another session changes the note and attendance context. A note-only session remains **Not started** until at least one attendance mark exists.
 
