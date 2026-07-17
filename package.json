@@ -42,7 +42,9 @@
     "db:studio": "drizzle-kit studio --config drizzle.config.mjs",
     "verify:production": "node scripts/verify-production-readiness.mjs",
     "verify:rbac": "node scripts/verify-rbac-boundaries.mjs",
-    "test:roster-import": "node --test src/lib/roster-import/*.test.js src/lib/contact-merge/*.test.js"
+    "test:roster-import": "node --test src/lib/roster-import/*.test.js src/lib/contact-merge/*.test.js",
+    "test:attendance": "node --test src/lib/attendance/*.test.js src/lib/crm/class-sections.test.js src/lib/crm/access.test.js",
+    "verify:attendance-schema": "node scripts/verify-attendance-schema.mjs"
   },
   "dependencies": {
     "drizzle-kit": "^0.31.10",

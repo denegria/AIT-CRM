@@ -4,7 +4,9 @@ import {
 import {
   bigint,
   boolean,
+  check,
   date,
+  foreignKey,
   integer,
   index,
   jsonb,
@@ -324,6 +326,11 @@ export const courseClassSections = pgTable('course_class_sections', {
   ),
   businessUnitStatusIdx: index('course_class_sections_business_unit_status_idx').on(table.businessUnitId, table.status),
   orgCourseIdx: index('course_class_sections_org_course_idx').on(table.organizationId, table.courseName),
+  attendanceScopeIdx: uniqueIndex('course_class_sections_attendance_scope_idx').on(
+    table.id,
+    table.organizationId,
+    table.businessUnitId,
+  ),
 }));
 
 export const contactCourseRecords = pgTable('contact_course_records', {
@@ -353,6 +360,91 @@ export const contactCourseRecords = pgTable('contact_course_records', {
   activeSectionEnrollmentIdx: uniqueIndex('contact_course_records_active_section_enrollment_idx')
     .on(table.organizationId, table.contactId, table.classSectionId)
     .where(sql`${table.status} = 'active' and ${table.classSectionId} is not null`),
+  attendanceScopeIdx: uniqueIndex('contact_course_records_attendance_scope_idx').on(
+    table.id,
+    table.organizationId,
+    table.businessUnitId,
+    table.classSectionId,
+  ),
+}));
+
+export const classSessions = pgTable('class_sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
+  classSectionId: uuid('class_section_id').notNull(),
+  sessionDate: date('session_date').notNull(),
+  scheduledStartTime: text('scheduled_start_time'),
+  scheduledEndTime: text('scheduled_end_time'),
+  status: text('status').notNull().default('open'),
+  revision: integer('revision').notNull().default(1),
+  sessionNote: text('session_note'),
+  submittedByUserId: uuid('submitted_by_user_id').references(() => users.id, { onDelete: 'restrict' }),
+  submittedAt: timestamp('submitted_at', { withTimezone: true }),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  sectionDateIdx: uniqueIndex('class_sessions_section_date_idx').on(table.classSectionId, table.sessionDate),
+  scopeIdx: uniqueIndex('class_sessions_attendance_scope_idx').on(
+    table.id,
+    table.organizationId,
+    table.businessUnitId,
+    table.classSectionId,
+  ),
+  businessUnitDateIdx: index('class_sessions_business_unit_date_idx').on(table.businessUnitId, table.sessionDate),
+  sectionScopeFk: foreignKey({
+    columns: [table.classSectionId, table.organizationId, table.businessUnitId],
+    foreignColumns: [courseClassSections.id, courseClassSections.organizationId, courseClassSections.businessUnitId],
+    name: 'class_sessions_section_scope_fk',
+  }).onDelete('restrict'),
+  statusCheck: check('class_sessions_status_check', sql`${table.status} in ('open', 'submitted')`),
+  revisionCheck: check('class_sessions_revision_check', sql`${table.revision} >= 1`),
+  submissionCheck: check(
+    'class_sessions_submission_check',
+    sql`(${table.status} = 'open' and ${table.submittedAt} is null and ${table.submittedByUserId} is null)
+      or (${table.status} = 'submitted' and ${table.submittedAt} is not null and ${table.submittedByUserId} is not null)`,
+  ),
+}));
+
+export const attendanceRecords = pgTable('attendance_records', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
+  classSessionId: uuid('class_session_id').notNull(),
+  classSectionId: uuid('class_section_id').notNull(),
+  enrollmentId: uuid('enrollment_id').notNull(),
+  status: text('status').notNull(),
+  note: text('note'),
+  markedByUserId: uuid('marked_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  sessionEnrollmentIdx: uniqueIndex('attendance_records_session_enrollment_idx').on(
+    table.classSessionId,
+    table.enrollmentId,
+  ),
+  sessionStatusIdx: index('attendance_records_session_status_idx').on(table.classSessionId, table.status),
+  sessionScopeFk: foreignKey({
+    columns: [table.classSessionId, table.organizationId, table.businessUnitId, table.classSectionId],
+    foreignColumns: [
+      classSessions.id,
+      classSessions.organizationId,
+      classSessions.businessUnitId,
+      classSessions.classSectionId,
+    ],
+    name: 'attendance_records_session_scope_fk',
+  }).onDelete('restrict'),
+  enrollmentScopeFk: foreignKey({
+    columns: [table.enrollmentId, table.organizationId, table.businessUnitId, table.classSectionId],
+    foreignColumns: [
+      contactCourseRecords.id,
+      contactCourseRecords.organizationId,
+      contactCourseRecords.businessUnitId,
+      contactCourseRecords.classSectionId,
+    ],
+    name: 'attendance_records_enrollment_scope_fk',
+  }).onDelete('restrict'),
+  statusCheck: check('attendance_records_status_check', sql`${table.status} in ('present', 'absent')`),
 }));
 
 export const rosterImportRuns = pgTable('roster_import_runs', {
@@ -1035,6 +1127,8 @@ export const allTables = {
   leads,
   courseClassSections,
   contactCourseRecords,
+  classSessions,
+  attendanceRecords,
   rosterImportRuns,
   rosterImportActions,
   contactMergeRuns,

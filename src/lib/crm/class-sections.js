@@ -1,9 +1,11 @@
 import { and, asc, eq } from 'drizzle-orm';
 import { courseClassSections } from '../../db/schema.js';
 import { canonicalAitUsaSchoolLocation } from '../school-locations.js';
+import { CANONICAL_WEEKDAYS, canonicalWeekday } from '../schedule-days.js';
 
 const MODALITIES = new Set(['in_person', 'online', 'hybrid']);
 const STATUSES = new Set(['planned', 'active', 'inactive']);
+export { CANONICAL_WEEKDAYS };
 
 function cleanText(value = '') {
   return String(value || '').trim().replace(/\s+/g, ' ');
@@ -14,9 +16,14 @@ function cleanObject(value) {
 }
 
 function cleanDays(value) {
-  return Array.isArray(value)
-    ? [...new Set(value.map(cleanText).filter(Boolean))]
-    : [];
+  if (!Array.isArray(value)) return [];
+  const days = value.map((day) => {
+    const cleaned = cleanText(day);
+    const canonical = canonicalWeekday(cleaned);
+    if (!canonical) throw new Error(`Class section schedule day is not supported: ${cleaned || '(blank)'}.`);
+    return canonical;
+  });
+  return [...new Set(days)];
 }
 
 function cleanTime(value) {

@@ -194,6 +194,8 @@ test('regular coordinator route policy allows only personal CRM workspace routes
   assert.equal(canUseRegularCoordinatorRoute('/tasks'), true);
   assert.equal(canUseRegularCoordinatorRoute('/work-orders'), true);
   assert.equal(canUseRegularCoordinatorRoute('/work-orders/work-order-1'), true);
+  assert.equal(canUseRegularCoordinatorRoute('/active-classes'), true);
+  assert.equal(canUseRegularCoordinatorRoute('/active-classes/section-1'), true);
 
   assert.equal(canUseRegularCoordinatorRoute('/financials'), false);
   assert.equal(canUseRegularCoordinatorRoute('/reports'), false);

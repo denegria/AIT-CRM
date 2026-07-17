@@ -41,4 +41,8 @@ test('class section payload and label keep section-owned context together', () =
 test('class sections reject invalid schedule data', () => {
   assert.throws(() => classSectionInput({ sectionKey: 'x', courseName: 'Math', startTime: '9am' }), /HH:MM/);
   assert.throws(() => classSectionInput({ sectionKey: 'x', courseName: 'Math', scheduledDaysPerWeek: 8 }), /between 1 and 7/);
+  assert.throws(
+    () => classSectionInput({ sectionKey: 'x', courseName: 'Math', scheduleDays: ['Mon'] }),
+    /schedule day is not supported/,
+  );
 });

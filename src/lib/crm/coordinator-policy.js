@@ -179,6 +179,7 @@ const REGULAR_COORDINATOR_ROUTE_PREFIXES = Object.freeze([
   '/pipeline',
   '/tasks',
   '/work-orders',
+  '/active-classes',
 ]);
 
 export function canUseRegularCoordinatorRoute(pathname = '') {
