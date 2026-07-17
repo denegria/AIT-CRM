@@ -269,7 +269,8 @@ try {
     checksPassed: failures.length === 0,
     failures,
   };
-  await fs.writeFile(args.output, `${JSON.stringify(output, null, 2)}\n`);
+  await fs.writeFile(args.output, `${JSON.stringify(output, null, 2)}\n`, { mode: 0o600 });
+  await fs.chmod(args.output, 0o600);
   process.stdout.write(`${JSON.stringify(output, null, 2)}\n`);
   if (failures.length) process.exitCode = 1;
 } finally {
