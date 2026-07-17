@@ -22,6 +22,8 @@ function inactiveManifest(overrides = {}) {
       target_contact_id: '11111111-1111-4111-8111-111111111111',
       planned_contact_reference: '11111111-1111-4111-8111-111111111111',
       active_roster_overlap: 'yes',
+      proposed_lifecycle_action: 'preserve_newer_or_active_lifecycle',
+      location: 'Bound Brook',
     }],
     classSectionActions: [],
     courseActions: [{
@@ -42,7 +44,7 @@ function inactiveManifest(overrides = {}) {
 test('dry-run preserves newer lifecycle and plans historical course without mutating input', () => {
   const manifest = inactiveManifest();
   const plan = buildRosterImportPlan(manifest, {
-    contacts: [{ id: '11111111-1111-4111-8111-111111111111', name: 'Maria Student', phone: '9085550199' }],
+    contacts: [{ id: '11111111-1111-4111-8111-111111111111', name: 'Maria Student', phone: '9085550199', address: 'Plainfield' }],
     latestLeadStatusByContact: { '11111111-1111-4111-8111-111111111111': 'Enrolled' },
   }, { now: new Date('2026-07-17T00:00:00Z') });
 
@@ -50,8 +52,50 @@ test('dry-run preserves newer lifecycle and plans historical course without muta
   assert.equal(plan.contactActions[0].operation, 'reuse_contact');
   assert.equal(plan.contactActions[0].primaryPhoneOperation, 'replace_primary_preserve_previous');
   assert.equal(plan.contactActions[0].lifecycle.operation, 'preserve');
+  assert.equal(plan.contactActions[0].location.operation, 'set_manifest_location');
+  assert.equal(plan.contactActions[0].location.desiredLocation, 'Bound Brook');
   assert.equal(plan.courseActions[0].operation, 'insert_course_record');
   assert.equal(manifest.contactActions[0].primary_phone, '908-555-0100');
+});
+
+test('inactive manifest lifecycle protection is authoritative for nonterminal CRM statuses', () => {
+  const manifest = inactiveManifest({
+    contactActions: [{
+      ...inactiveManifest().contactActions[0],
+      active_roster_overlap: 'no',
+      proposed_lifecycle_action: 'preserve_newer_or_active_lifecycle',
+    }],
+  });
+  const plan = buildRosterImportPlan(manifest, {
+    contacts: [{ id: '11111111-1111-4111-8111-111111111111', name: 'Maria Student', phone: '9085550100', address: 'Bound Brook' }],
+    latestLeadStatusByContact: { '11111111-1111-4111-8111-111111111111': 'Retargeting' },
+  }, { now: new Date('2026-07-17T00:00:00Z') });
+
+  assert.equal(plan.contactActions[0].lifecycle.operation, 'preserve');
+  assert.equal(plan.contactActions[0].lifecycle.liveStatus, 'Retargeting');
+});
+
+test('multiple active enrollment locations remain on course records instead of flattening Contact location', () => {
+  const manifest = inactiveManifest({
+    lane: 'active',
+    sequence: { afterLane: 'inactive', attendanceSupported: false, requiredPriorManifestSha256: 'a'.repeat(64) },
+    expectedCounts: { contacts: 1, enrollments: 0, classSections: 0 },
+    contactActions: [{
+      ...inactiveManifest().contactActions[0],
+      idempotencyKey: 'mis-318:active:contact:a',
+      locations: 'Bound Brook; Plainfield',
+      location: undefined,
+    }],
+    courseActions: [],
+  });
+  const plan = buildRosterImportPlan(manifest, {
+    contacts: [{ id: '11111111-1111-4111-8111-111111111111', name: 'Maria Student', phone: '9085550100', address: 'Plainfield' }],
+    completedManifestShas: ['a'.repeat(64)],
+  }, { now: new Date('2026-07-17T00:00:00Z') });
+
+  assert.equal(plan.approvalEligible, true);
+  assert.equal(plan.contactActions[0].location.operation, 'preserve');
+  assert.deepEqual(plan.contactActions[0].location.desiredLocations, ['Bound Brook', 'Plainfield']);
 });
 
 test('dry-run converts a newly arrived exact identity into reuse and skips replays', () => {

@@ -23,7 +23,11 @@ aborts the transaction. Known policies are:
   a row in that campaign.
 - OR Contact-level do-not-call and wrong-number flags, fill only missing
   canonical profile fields, then archive the duplicate Contact with the audit
-  run reference.
+  run reference. The archived source Contact retains its original
+  `source_label`; source-bearing Leads are reparented without rewriting their
+  `source_type`, `source_name`, or `source_detail`. A populated canonical
+  Contact source remains canonical rather than being overwritten by the
+  duplicate's label.
 
 Every apply is transaction-bound, advisory-locked, idempotent, and recorded in
 `contact_merge_runs`. The source Contact is not hard-deleted. A post-merge

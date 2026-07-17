@@ -20,14 +20,21 @@ try {
   );
   const businessUnitId = unit.rows[0].id;
   const contacts = await client.query(
-    `insert into contacts (organization_id, primary_business_unit_id, name, phone, is_do_not_call, is_wrong_number)
-     values ($1, $2, 'Canonical Student', '+19085550100', false, false),
-            ($1, $2, 'Duplicate Student', '+19085550101', true, true)
+    `insert into contacts (organization_id, primary_business_unit_id, name, phone, source_label, is_do_not_call, is_wrong_number)
+     values ($1, $2, 'Canonical Student', '+19085550100', 'Website', false, false),
+            ($1, $2, 'Duplicate Student', '+19085550101', 'A2 historical import', true, true)
      returning id, name`,
     [organizationId, businessUnitId],
   );
   const targetContactId = contacts.rows.find((row) => row.name === 'Canonical Student').id;
   const sourceContactId = contacts.rows.find((row) => row.name === 'Duplicate Student').id;
+  const sourceLead = await client.query(
+    `insert into leads
+      (organization_id, business_unit_id, contact_id, source_type, source_name, source_detail, status, current_stage)
+     values ($1, $2, $3, 'historical_import', 'A2 original source', 'A2 workbook row 42', 'Dropped / Quit', 'Dropped / Quit')
+     returning id`,
+    [organizationId, businessUnitId, sourceContactId],
+  );
   await client.query(
     `insert into contact_phone_numbers
       (organization_id, business_unit_id, contact_id, phone, normalized_phone, is_primary)
@@ -113,6 +120,11 @@ try {
   const result = await client.query(
     `select
        (select archived_at is not null from contacts where id = $2) as source_archived,
+       (select source_label from contacts where id = $2) as archived_source_label,
+       (select source_label from contacts where id = $1) as target_source_label,
+       (select contact_id = $1 from leads where id = $4) as source_lead_reparented,
+       (select source_name from leads where id = $4) as source_lead_name,
+       (select source_detail from leads where id = $4) as source_lead_detail,
        (select is_do_not_call and is_wrong_number from contacts where id = $1) as safety_flags_preserved,
        (select count(*)::int from contact_phone_numbers where contact_id = $1) as target_phones,
        (select consent_status from contact_channel_consents where contact_id = $1 and channel = 'sms') as consent,
@@ -122,10 +134,15 @@ try {
        (select count(*)::int from follow_up_sequence_enrollments where contact_id = $1) as enrollments,
        (select count(*)::int from sms_campaign_recipients where campaign_id = $3 and contact_id is null) as preserved_recipients,
        (select count(*)::int from tasks where contact_id = $1) as tasks`,
-    [targetContactId, sourceContactId, campaign.rows[0].id],
+    [targetContactId, sourceContactId, campaign.rows[0].id, sourceLead.rows[0].id],
   );
   assert.deepEqual(result.rows[0], {
     source_archived: true,
+    archived_source_label: 'A2 historical import',
+    target_source_label: 'Website',
+    source_lead_reparented: true,
+    source_lead_name: 'A2 original source',
+    source_lead_detail: 'A2 workbook row 42',
     safety_flags_preserved: true,
     target_phones: 2,
     consent: 'opted_out',

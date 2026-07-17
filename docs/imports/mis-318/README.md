@@ -12,7 +12,9 @@ tracked here without publishing student data.
 
 1. **Inactive students / dropped-course history** — final identity and course
    action manifest. Data apply is held pending product gates, dry-run review,
-   and explicit approval.
+   and explicit approval. Historical rows retain course and campus but do not
+   fabricate class-section assignments; their `class_section_id` remains null
+   unless a future evidence-backed reconciliation supplies a real section.
 2. **Active enrollments** — current-contact and active-course manifest generated
    from the corrected 147-student roster. Data apply is held pending identity
    review and product gates. The source class-section key is preserved so a

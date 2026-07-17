@@ -34,7 +34,7 @@ export async function resolveRosterImportScope(client, businessUnitName) {
 
 export async function loadRosterImportSnapshot(client, scope) {
   const contacts = await client.query(
-      `select id, name, phone, archived_at
+      `select id, name, phone, address, source_label, archived_at
          from contacts
         where organization_id = $1`,
       [scope.organizationId],
@@ -73,7 +73,14 @@ export async function loadRosterImportSnapshot(client, scope) {
       [scope.organizationId],
     );
   return {
-    contacts: contacts.rows.map((row) => ({ id: row.id, name: row.name, phone: row.phone, archivedAt: row.archived_at })),
+    contacts: contacts.rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      phone: row.phone,
+      address: row.address,
+      sourceLabel: row.source_label,
+      archivedAt: row.archived_at,
+    })),
     latestLeadStatusByContact: Object.fromEntries(leads.rows.map((row) => [row.contact_id, row.status])),
     classSections: sections.rows.map((row) => ({
       id: row.id,
@@ -170,10 +177,18 @@ async function applySection(client, scope, action) {
 async function ensureContact(client, scope, action) {
   if (action.operation === 'create_contact') {
     await client.query(
-      `insert into contacts (id, organization_id, primary_business_unit_id, name, phone, source_label)
-       values ($1, $2, $3, $4, $5, $6)
+      `insert into contacts (id, organization_id, primary_business_unit_id, name, phone, address, source_label)
+       values ($1, $2, $3, $4, $5, $6, $7)
        on conflict (id) do nothing`,
-      [action.targetContactId, scope.organizationId, scope.businessUnitId, action.identity.name, action.identity.phone, 'MIS-318 roster import'],
+      [
+        action.targetContactId,
+        scope.organizationId,
+        scope.businessUnitId,
+        action.identity.name,
+        action.identity.phone,
+        action.location?.operation === 'set_manifest_location' ? action.location.desiredLocation : null,
+        'MIS-318 roster import',
+      ],
     );
   }
   const current = await client.query(
@@ -221,6 +236,12 @@ async function ensureContact(client, scope, action) {
   }
   if (phoneDigits(existingPhone) !== action.identity.normalizedPhone) {
     await client.query('update contacts set phone = $1, updated_at = now() where id = $2 and organization_id = $3', [action.identity.phone, action.targetContactId, scope.organizationId]);
+  }
+  if (action.location?.operation === 'set_manifest_location') {
+    await client.query(
+      'update contacts set address = $1, updated_at = now() where id = $2 and organization_id = $3',
+      [action.location.desiredLocation, action.targetContactId, scope.organizationId],
+    );
   }
 }
 

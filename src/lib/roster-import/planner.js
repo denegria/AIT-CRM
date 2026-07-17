@@ -1,7 +1,8 @@
 import { deterministicImportUuid, validateRosterManifest } from './manifest.js';
 
 const UUID_PATTERN = /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
-const INACTIVE_LIFECYCLE_PROTECTIONS = new Set(['Enrolled', 'Follow Up', 'Not Interested', 'Course Completed']);
+const MANIFEST_LIFECYCLE_PRESERVE = 'preserve_newer_or_active_lifecycle';
+const SUPPORTED_CONTACT_LOCATIONS = new Set(['Bound Brook', 'Plainfield', 'Piscataway', 'Flemington', 'Online']);
 
 function cleanText(value = '') {
   return String(value || '').trim();
@@ -47,10 +48,40 @@ function lifecyclePlan(manifest, row, contactId, snapshot) {
       ? { operation: 'preserve', liveStatus, reason: 'active lane preserves an existing lifecycle' }
       : { operation: 'set_enrolled', liveStatus: '', reason: 'new active student needs an enrolled lifecycle' };
   }
-  if (cleanText(row.active_roster_overlap).toLowerCase() === 'yes' || INACTIVE_LIFECYCLE_PROTECTIONS.has(liveStatus)) {
-    return { operation: 'preserve', liveStatus, reason: 'active roster or newer CRM lifecycle is protected' };
+  if (
+    cleanText(row.active_roster_overlap).toLowerCase() === 'yes' ||
+    cleanText(row.proposed_lifecycle_action) === MANIFEST_LIFECYCLE_PRESERVE
+  ) {
+    return { operation: 'preserve', liveStatus, reason: 'approved manifest protects the active or newer CRM lifecycle' };
   }
   return { operation: 'set_dropped_quit', liveStatus, reason: 'inactive manifest requires dropped/quit after live recheck' };
+}
+
+function contactLocationPlan(row, liveTarget) {
+  const locations = [...new Set(
+    cleanText(row.location || row.locations)
+      .split(';')
+      .map((value) => cleanText(value))
+      .filter(Boolean),
+  )];
+  if (!locations.length) {
+    return { operation: 'preserve', liveLocation: cleanText(liveTarget?.address), desiredLocation: '', reason: 'manifest has no Contact location' };
+  }
+  const unsupported = locations.filter((location) => !SUPPORTED_CONTACT_LOCATIONS.has(location));
+  if (unsupported.length) {
+    return { operation: 'error', liveLocation: cleanText(liveTarget?.address), desiredLocation: '', reason: `unsupported Contact location: ${unsupported.join(', ')}` };
+  }
+  if (locations.length > 1) {
+    return { operation: 'preserve', liveLocation: cleanText(liveTarget?.address), desiredLocation: '', desiredLocations: locations, reason: 'multiple enrollment locations cannot be flattened into one Contact location' };
+  }
+  const desiredLocation = locations[0];
+  const liveLocation = cleanText(liveTarget?.address);
+  return {
+    operation: liveLocation === desiredLocation ? 'preserve' : 'set_manifest_location',
+    liveLocation,
+    desiredLocation,
+    reason: liveLocation === desiredLocation ? 'Contact location already matches manifest' : 'set Intended Learning Location from approved manifest',
+  };
 }
 
 function contactIdentity(row) {
@@ -107,6 +138,10 @@ function planContactAction(manifest, row, snapshot, resolvedReferences) {
   if (row.identity_key) resolvedReferences.set(cleanText(row.identity_key), target.id);
 
   const phoneChanged = Boolean(liveTarget && normalizedPhone(liveTarget.phone) !== identity.normalizedPhone);
+  const location = contactLocationPlan(row, liveTarget);
+  if (location.operation === 'error') {
+    return { idempotencyKey: row.idempotencyKey, entity: 'contact', state: 'error', operation: 'none', targetContactId: target.id, reason: location.reason };
+  }
   const result = {
     idempotencyKey: row.idempotencyKey,
     entity: 'contact',
@@ -118,6 +153,7 @@ function planContactAction(manifest, row, snapshot, resolvedReferences) {
     historicalPhones: splitIds(row.historical_phone_options),
     primaryPhoneOperation: phoneChanged ? 'replace_primary_preserve_previous' : 'ensure_primary_history',
     lifecycle: lifecyclePlan(manifest, row, target.id, snapshot),
+    location,
     reason: duplicateIds.length
       ? 'approved duplicate Contacts will be merged through the relationship-inventory service'
       : target.kind,
