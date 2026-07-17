@@ -16,7 +16,7 @@ const REQUIRED_TABLES = Object.freeze([
   'work_orders',
   'estimates',
   'import_batches',
-  'class_sections',
+  'course_class_sections',
   'class_sessions',
   'attendance_records',
 ]);
@@ -347,7 +347,7 @@ async function connectionStringFor(manifest, deps) {
     manifest.neon.branchId,
     '--project-id', manifest.neon.projectId,
     '--database-name', manifest.neon.databaseName,
-    '--ssl', 'require',
+    '--ssl', 'verify-full',
     '--no-color',
     '--no-analytics',
   ];

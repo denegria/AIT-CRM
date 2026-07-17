@@ -217,7 +217,7 @@ test('verify checks branch identity, required tables, RBAC membership, and migra
         return {
           rows: [
             'organizations', 'business_units', 'users', 'contacts', 'leads', 'work_orders',
-            'estimates', 'import_batches', 'class_sections', 'class_sessions', 'attendance_records',
+            'estimates', 'import_batches', 'course_class_sections', 'class_sessions', 'attendance_records',
           ].map((table_name) => ({ table_name })),
           rowCount: 11,
         };
