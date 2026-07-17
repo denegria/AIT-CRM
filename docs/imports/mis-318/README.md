@@ -42,6 +42,10 @@ collision-safe Contact merge slice `MIS-324`.
   duplicate-Contact phones, and other valid source numbers remain phone
   history; they are never discarded merely because the workbook phone becomes
   primary.
+- Structured course dates accept only valid ISO calendar dates. Ambiguous,
+  shifted, or note-like source values are preserved in raw date lineage fields
+  while the structured date remains blank; dry-run blocks any malformed value
+  that reaches an actionable structured date.
 - Production data writes remain separately approval-gated.
 - Current product gates are tracked in `manifest-index.json`: controlled
   Computer/Math courses, Contact phone history, first-class class sections with

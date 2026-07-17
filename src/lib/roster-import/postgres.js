@@ -307,7 +307,12 @@ async function applyCourse(client, scope, action) {
       row.notes || null,
       JSON.stringify({
         importIdempotencyKey: action.idempotencyKey,
-        manifestSource: { sheet: row.source_sheet || '', cell: row.source_cell || '' },
+        manifestSource: {
+          sheet: row.source_sheet || '',
+          cell: row.source_cell || '',
+          rawStartDate: row.raw_start_date || '',
+          rawEndDate: row.raw_end_date || '',
+        },
       }),
     ],
   );

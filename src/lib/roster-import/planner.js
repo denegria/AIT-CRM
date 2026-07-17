@@ -33,6 +33,14 @@ function isUuid(value) {
   return UUID_PATTERN.test(cleanText(value));
 }
 
+function isOptionalIsoDate(value) {
+  const candidate = cleanText(value);
+  if (!candidate) return true;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(candidate)) return false;
+  const parsed = new Date(`${candidate}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === candidate;
+}
+
 function plannedReference(row) {
   return cleanText(row.planned_contact_reference);
 }
@@ -203,6 +211,16 @@ function planCourseAction(manifest, row, snapshot, resolvedReferences, sectionPl
   const mappedCourse = cleanText(row.mapped_course);
   if (!mappedCourse) {
     return { idempotencyKey: row.idempotencyKey, entity: manifest.lane === 'active' ? 'enrollment' : 'course', state: 'held', operation: 'none', targetContactId: contactId, reason: 'course definition is unresolved' };
+  }
+  if (!isOptionalIsoDate(row.start_date) || !isOptionalIsoDate(row.end_date)) {
+    return {
+      idempotencyKey: row.idempotencyKey,
+      entity: manifest.lane === 'active' ? 'enrollment' : 'course',
+      state: 'error',
+      operation: 'none',
+      targetContactId: contactId,
+      reason: 'actionable course row contains a non-ISO structured date',
+    };
   }
   const duplicate = snapshot.courseRecords.find((record) => (
     record.metadataJson?.importIdempotencyKey === row.idempotencyKey ||

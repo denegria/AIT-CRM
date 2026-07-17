@@ -275,6 +275,17 @@ def split_ids(value) -> list[str]:
     return [part.strip() for part in text(value).split(";") if part.strip()]
 
 
+def structured_date(value) -> tuple[str, str]:
+    raw = text(value)
+    if not raw:
+        return "", ""
+    try:
+        parsed = date.fromisoformat(raw)
+    except ValueError:
+        return "", raw
+    return parsed.isoformat(), raw
+
+
 def final_contact_actions(source_root: Path, snapshot: dict) -> tuple[list[dict], dict[str, dict]]:
     contacts_by_id = {text(row.get("id")): row for row in snapshot["contacts"]}
     leads_by_contact = defaultdict(list)
@@ -415,6 +426,14 @@ def final_inactive_course_actions(source_root: Path, contact_by_identity: dict[s
         else:
             action = "insert_dropped_course_after_approval"
 
+        start_date, raw_start_date = structured_date(row.get("start_date"))
+        end_date, raw_end_date = structured_date(row.get("end_date"))
+        invalid_date_fields = []
+        if raw_start_date and not start_date:
+            invalid_date_fields.append("start_date")
+        if raw_end_date and not end_date:
+            invalid_date_fields.append("end_date")
+
         output.append({
             "location": text(row.get("location")),
             "source_sheet": text(row.get("source_sheet")),
@@ -430,8 +449,14 @@ def final_inactive_course_actions(source_root: Path, contact_by_identity: dict[s
             "course_mapping_status": mapping_status,
             "course_mapping_note": mapping_note,
             "course_status": "dropped",
-            "start_date": text(row.get("start_date")),
-            "end_date": text(row.get("end_date")),
+            "start_date": start_date,
+            "end_date": end_date,
+            "raw_start_date": raw_start_date,
+            "raw_end_date": raw_end_date,
+            "date_normalization_note": (
+                f"Unparseable source {', '.join(invalid_date_fields)} preserved in raw date fields; structured date left blank."
+                if invalid_date_fields else ""
+            ),
             "outcome_reason": text(row.get("outcome_reason")),
             "notes": text(row.get("course_notes")),
             "source_duplicate_role": "canonical" if index in canonical_duplicate_index else "duplicate" if index in noncanonical_duplicate_index else "unique",

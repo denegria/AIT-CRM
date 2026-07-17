@@ -79,6 +79,23 @@ test('inactive manifest lifecycle protection is authoritative for nonterminal CR
   assert.equal(plan.contactActions[0].lifecycle.liveStatus, 'Retargeting');
 });
 
+test('dry-run blocks malformed structured course dates before apply', () => {
+  const value = inactiveManifest({
+    courseActions: [{
+      ...inactiveManifest().courseActions[0],
+      start_date: 'PROSPECTO',
+      raw_start_date: 'PROSPECTO',
+    }],
+  });
+  const plan = buildRosterImportPlan(value, {
+    contacts: [{ id: '11111111-1111-4111-8111-111111111111', name: 'Maria Student', phone: '9085550100' }],
+  }, { now: new Date('2026-07-17T00:00:00Z') });
+
+  assert.equal(plan.approvalEligible, false);
+  assert.equal(plan.courseActions[0].state, 'error');
+  assert.match(plan.courseActions[0].reason, /non-ISO structured date/);
+});
+
 test('inactive manifest rejects an ambiguous primary-phone policy', () => {
   const value = inactiveManifest({
     contactActions: [{
