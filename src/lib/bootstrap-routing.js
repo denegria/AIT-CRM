@@ -1,5 +1,6 @@
 export const LEAN_SHELL_PATHS = Object.freeze([
   '/tasks',
+  '/active-classes',
   '/inbox',
   '/sms-campaigns',
   '/import-review',

@@ -7,6 +7,7 @@ test('high-traffic and service-backed routes avoid the full CRM bootstrap', () =
   assert.equal(bootstrapModeForPathname('/contacts'), 'contact-directory');
   assert.equal(bootstrapModeForPathname('/pipeline'), 'pipeline');
   assert.equal(bootstrapModeForPathname('/team-monitor'), 'team-monitor');
+  assert.equal(bootstrapModeForPathname('/active-classes'), 'lean-shell');
   for (const pathname of LEAN_SHELL_PATHS) {
     assert.equal(bootstrapModeForPathname(pathname), 'lean-shell');
   }

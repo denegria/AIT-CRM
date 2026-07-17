@@ -24,6 +24,7 @@ import { createCrmError } from '../crm/errors.js';
 import {
   assertScheduledSessionDate,
   attendanceSnapshotsEqual,
+  canManageSubmittedAttendance,
   canLinkAttendanceContacts,
   deriveAttendanceState,
   isAitUsaBusinessUnit,
@@ -384,6 +385,10 @@ export async function getAttendanceWorkspace({ db, session, sectionId, weekOf, s
         : null,
     })),
     canLinkContacts: exposeContactLinks,
+    capabilities: {
+      canEditOpenAttendance: true,
+      canReopenSubmittedAttendance: canManageSubmittedAttendance(session.user),
+    },
   };
 }
 
