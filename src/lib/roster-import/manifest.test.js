@@ -20,6 +20,7 @@ function manifest(overrides = {}) {
     contactActions: [{
       idempotencyKey: 'mis-318:inactive:contact:a',
       final_contact_action: 'create_new_contact',
+      primary_phone: '9085550100',
       primary_phone_policy: 'inactive_workbook_authoritative',
       phone_history_policy: 'preserve_all_other_valid_numbers',
     }],
