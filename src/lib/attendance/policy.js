@@ -31,7 +31,8 @@ export function canLinkAttendanceContacts(user = {}) {
 }
 
 export function isAitUsaBusinessUnit(value) {
-  return String(value || '').trim().toLowerCase() === 'ait usa';
+  const normalized = String(value || '').trim().toLowerCase();
+  return normalized === 'ait usa institute' || normalized === 'ait usa';
 }
 
 export function parseSessionDate(value) {

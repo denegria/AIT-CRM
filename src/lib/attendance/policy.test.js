@@ -7,6 +7,7 @@ import {
   canManageSubmittedAttendance,
   deriveAttendanceState,
   enrollmentEligibleOnDate,
+  isAitUsaBusinessUnit,
   isAttendanceEmployee,
   normalizeAttendanceMarks,
   normalizeExpectedRevision,
@@ -31,6 +32,12 @@ test('attendance role allowlist excludes other crm:write roles', () => {
   assert.equal(canManageSubmittedAttendance(user('senior_coordinator')), true);
   assert.equal(canLinkAttendanceContacts(user('account_coordinator')), false);
   assert.equal(canLinkAttendanceContacts(user('admin')), true);
+});
+
+test('attendance recognizes the canonical AIT USA Institute business unit', () => {
+  assert.equal(isAitUsaBusinessUnit('AIT USA Institute'), true);
+  assert.equal(isAitUsaBusinessUnit('AIT USA'), true);
+  assert.equal(isAitUsaBusinessUnit('AIT Signs'), false);
 });
 
 test('session dates are strict calendar dates with deterministic weekdays', () => {
