@@ -23,6 +23,7 @@ import {
   createMetaProviderConfig,
 } from '@/lib/messaging/providers/meta.js';
 import { createSmsCampaignSendConfigFromEnv } from '@/lib/messaging/providers/sms.js';
+import { externalIoDisabled } from '@/lib/runtime-safety.js';
 
 function getManualOutboundMetaConfig() {
   return createMetaProviderConfig({
@@ -31,6 +32,7 @@ function getManualOutboundMetaConfig() {
     pageAccessTokenMapRaw: process.env[META_PAGE_ACCESS_TOKEN_MAP_ENV],
     defaultWhatsAppAccessToken: process.env[META_WHATSAPP_ACCESS_TOKEN_ENV],
     whatsappAccessTokenMapRaw: process.env[META_WHATSAPP_ACCESS_TOKEN_MAP_ENV],
+    externalIoDisabled: externalIoDisabled(process.env),
   });
 }
 

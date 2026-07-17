@@ -135,6 +135,8 @@ The source of truth is Postgres. Before a risky data operation:
 
 For v1, do not use Google Sheets as the source of truth. It can be added later as a read-only backup/export layer if needed.
 
+For imports, migrations, or QA that needs current production-shaped data, use the guarded temporary-branch workflow in [Production-derived QA database branches](./qa-database-branches.md). Persistent staging remains synthetic and is not refreshed from production.
+
 ### Neon Branch Restore Drill
 
 Use a Neon branch drill for v1 recovery validation. Do not restore the production/root branch during a drill.

@@ -13,6 +13,7 @@ import {
   verifyMetaWebhookChallenge,
 } from '@/lib/messaging/providers/meta.js';
 import { ingestWhatsAppInboundEvents } from '@/lib/ingestion/whatsapp-inbound.js';
+import { externalIoDisabled, externalIoDisabledResponse } from '@/lib/runtime-safety.js';
 
 function jsonError(message, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -61,6 +62,9 @@ async function resolveOrganizationId(client) {
 }
 
 export async function GET(request) {
+  if (externalIoDisabled(process.env)) {
+    return NextResponse.json(externalIoDisabledResponse(), { status: 503 });
+  }
   const metaConfig = getWhatsAppProviderConfig();
   if (!verifyTokenConfigured(metaConfig)) {
     return jsonError(verifyTokenErrorMessage(), 503);
@@ -82,6 +86,9 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  if (externalIoDisabled(process.env)) {
+    return NextResponse.json(externalIoDisabledResponse(), { status: 503 });
+  }
   const metaConfig = getWhatsAppProviderConfig();
   if (!verifyTokenConfigured(metaConfig)) {
     return jsonError(verifyTokenErrorMessage(), 503);

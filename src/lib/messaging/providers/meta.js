@@ -15,6 +15,7 @@ export const META_WHATSAPP_ACCESS_TOKEN_MAP_ENV = 'META_WHATSAPP_ACCESS_TOKEN_MA
 export const META_GRAPH_API_VERSION = 'v24.0';
 export const META_PAGE_ACCESS_TOKEN_MISSING_REASON = `${META_PAGE_ACCESS_TOKEN_ENV} or ${META_PAGE_ACCESS_TOKEN_MAP_ENV} missing`;
 export const META_WHATSAPP_ACCESS_TOKEN_MISSING_REASON = `${META_WHATSAPP_ACCESS_TOKEN_ENV} or ${META_WHATSAPP_ACCESS_TOKEN_MAP_ENV} missing`;
+export const META_EXTERNAL_IO_DISABLED_REASON = 'External provider I/O is disabled for this environment.';
 
 export function parseMetaObjectMap(raw) {
   if (!raw) return {};
@@ -54,6 +55,7 @@ export function createMetaProviderConfig({
   defaultWhatsAppAccessToken = '',
   whatsappAccessTokenMapRaw = '',
   graphApiVersion = META_GRAPH_API_VERSION,
+  externalIoDisabled = false,
 } = {}) {
   return {
     verifyToken: facebookVerifyToken || whatsappVerifyToken || metaVerifyToken || '',
@@ -65,6 +67,16 @@ export function createMetaProviderConfig({
     defaultWhatsAppAccessToken: defaultWhatsAppAccessToken || '',
     whatsappAccessTokenMap: parseMetaWhatsAppAccessTokenMap(whatsappAccessTokenMapRaw),
     graphApiVersion: graphApiVersion || META_GRAPH_API_VERSION,
+    externalIoDisabled: Boolean(externalIoDisabled),
+  };
+}
+
+function externalIoBlock(config = {}) {
+  if (!config.externalIoDisabled) return null;
+  return {
+    ok: false,
+    code: 'EXTERNAL_IO_DISABLED',
+    reason: META_EXTERNAL_IO_DISABLED_REASON,
   };
 }
 
@@ -312,6 +324,8 @@ export async function sendMetaMessengerTextMessage({
   config = {},
   fetchImpl = globalThis.fetch,
 } = {}) {
+  const ioBlock = externalIoBlock(config);
+  if (ioBlock) return ioBlock;
   const tokenResult = resolveMetaPageAccessToken(pageId, config);
   if (!pageId || !recipientId || !String(text || '').trim() || !tokenResult.ok) {
     return {
@@ -351,6 +365,8 @@ export async function sendMetaWhatsAppTextMessage({
   config = {},
   fetchImpl = globalThis.fetch,
 } = {}) {
+  const ioBlock = externalIoBlock(config);
+  if (ioBlock) return ioBlock;
   const tokenResult = resolveMetaWhatsAppAccessToken(phoneNumberId, config);
   if (!phoneNumberId || !recipientWaId || !String(text || '').trim() || !tokenResult.ok) {
     return {
@@ -393,6 +409,8 @@ export async function sendMetaWhatsAppTemplateMessage({
   config = {},
   fetchImpl = globalThis.fetch,
 } = {}) {
+  const ioBlock = externalIoBlock(config);
+  if (ioBlock) return ioBlock;
   const tokenResult = resolveMetaWhatsAppAccessToken(phoneNumberId, config);
   if (!phoneNumberId || !recipientWaId || !String(templateName || '').trim() || !tokenResult.ok) {
     return {

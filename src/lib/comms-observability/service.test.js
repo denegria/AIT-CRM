@@ -59,6 +59,12 @@ test('provider diagnostics list blocked config reasons', () => {
   assert.equal(codes.includes('sms_business_unit_map_missing'), true);
 });
 
+test('provider diagnostics report the temporary-branch external I/O kill switch', () => {
+  const diagnostics = buildProviderConfigDiagnostics({ AIT_CRM_EXTERNAL_IO_DISABLED: 'true' });
+  assert.equal(diagnostics.externalIoDisabled, true);
+  assert.equal(diagnostics.blockers[0].code, 'external_io_disabled');
+});
+
 test('redacts identifiers and returns stable non-secret hashes', () => {
   assert.equal(redactIdentifier('page-1234567890'), 'page...7890');
   assert.equal(stableRedactedHash('page-1234567890'), stableRedactedHash('page-1234567890'));

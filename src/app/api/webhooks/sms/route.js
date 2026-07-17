@@ -7,6 +7,7 @@ import {
   validateSmsWebhookSharedSecret,
 } from '@/lib/messaging/providers/sms.js';
 import { ingestSmsProviderEvents } from '@/lib/ingestion/sms-provider-events.js';
+import { externalIoDisabled, externalIoDisabledResponse } from '@/lib/runtime-safety.js';
 
 function jsonError(message, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -45,6 +46,9 @@ async function parseWebhookPayload(request) {
 }
 
 export async function POST(request) {
+  if (externalIoDisabled(process.env)) {
+    return NextResponse.json(externalIoDisabledResponse(), { status: 503 });
+  }
   const smsConfig = createSmsProviderConfigFromEnv(process.env);
   if (!process.env.DATABASE_URL) {
     return jsonError('DATABASE_URL is required before SMS webhook processing can run.', 503);

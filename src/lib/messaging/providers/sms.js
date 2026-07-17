@@ -3,6 +3,7 @@ import {
   CONVERSATION_PROVIDERS,
   MESSAGE_DELIVERY_STATUSES,
 } from '../../conversations/constants.js';
+import { externalIoDisabled } from '../../runtime-safety.js';
 
 export const SMS_WEBHOOK_SHARED_SECRET_ENV = 'SMS_WEBHOOK_SHARED_SECRET';
 export const SMS_PROVIDER_ENV = 'SMS_PROVIDER';
@@ -154,18 +155,20 @@ export function createSmsProviderConfigFromEnv(env = process.env) {
 
 export function createSmsCampaignSendConfigFromEnv(env = process.env) {
   const vercelEnv = cleanLower(env.VERCEL_ENV);
+  const ioDisabled = externalIoDisabled(env);
   const productionSendAllowed = bool(env[SMS_CAMPAIGN_PRODUCTION_SEND_ENABLED_ENV]);
   const productionBlocked = vercelEnv === 'production' && !productionSendAllowed;
   return {
     provider: normalizeSmsProvider(env[SMS_PROVIDER_ENV] || CONVERSATION_PROVIDERS.TELNYX),
-    liveSendEnabled: bool(env[SMS_CAMPAIGN_LIVE_SEND_ENABLED_ENV]) && !productionBlocked,
-    testSendMode: bool(env[SMS_CAMPAIGN_LIVE_SEND_TEST_MODE_ENV]) && !productionBlocked,
+    liveSendEnabled: bool(env[SMS_CAMPAIGN_LIVE_SEND_ENABLED_ENV]) && !productionBlocked && !ioDisabled,
+    testSendMode: bool(env[SMS_CAMPAIGN_LIVE_SEND_TEST_MODE_ENV]) && !productionBlocked && !ioDisabled,
     maxRecipients: positiveInteger(env[SMS_CAMPAIGN_LIVE_SEND_MAX_RECIPIENTS_ENV], 1),
     recipientAllowlist: parseSmsPhoneList(env[SMS_CAMPAIGN_LIVE_SEND_RECIPIENT_ALLOWLIST_ENV]),
     telnyxApiKey: cleanText(env[TELNYX_API_KEY_ENV]),
     telnyxMessagingProfileId: cleanText(env[TELNYX_MESSAGING_PROFILE_ID_ENV]),
     telnyxFromNumber: normalizeSmsPhone(env[TELNYX_FROM_NUMBER_ENV]),
     productionBlocked,
+    externalIoDisabled: ioDisabled,
   };
 }
 

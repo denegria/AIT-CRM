@@ -11,6 +11,7 @@ import {
   sendTelnyxSmsMessage,
   smsPhoneDiagnostic,
 } from '@/lib/messaging/providers/sms.js';
+import { externalIoDisabledResponse } from '@/lib/runtime-safety.js';
 import {
   approveSmsCampaign,
   cancelSmsCampaign,
@@ -359,6 +360,9 @@ export async function POST(request) {
 
       if (action === 'refresh_delivery') {
         const sendConfig = createSmsCampaignSendConfigFromEnv(process.env);
+        if (sendConfig.externalIoDisabled) {
+          return NextResponse.json(externalIoDisabledResponse(), { status: 503 });
+        }
         if (sendConfig.provider !== 'telnyx' || !sendConfig.telnyxApiKey) {
           return NextResponse.json(
             { error: 'Telnyx credentials are required before refreshing SMS delivery status.' },
@@ -379,6 +383,9 @@ export async function POST(request) {
 
       if (action === 'diagnose_telnyx_sender') {
         const sendConfig = createSmsCampaignSendConfigFromEnv(process.env);
+        if (sendConfig.externalIoDisabled) {
+          return NextResponse.json(externalIoDisabledResponse(), { status: 503 });
+        }
         const sender = campaign.senderAccountId || sendConfig.telnyxFromNumber;
         if (sendConfig.provider !== 'telnyx' || !sendConfig.telnyxApiKey || !sender) {
           return NextResponse.json(

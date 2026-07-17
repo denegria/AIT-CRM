@@ -10,6 +10,7 @@ import {
   verifyWebsiteLeadSecret,
   websiteLeadAuthFailureDiagnostics,
 } from '@/lib/ingestion/website-leads.js';
+import { externalIoDisabled, externalIoDisabledResponse } from '@/lib/runtime-safety.js';
 
 const SECRET_ENV = 'WEBSITE_LEADS_WEBHOOK_SECRET';
 const BUSINESS_UNIT_MAP_ENV = 'WEBSITE_LEADS_BUSINESS_UNIT_MAP';
@@ -89,6 +90,9 @@ function websiteLeadSecretInputs(request) {
 }
 
 export async function GET() {
+  if (externalIoDisabled(process.env)) {
+    return NextResponse.json(externalIoDisabledResponse(), { status: 503 });
+  }
   return NextResponse.json({
     ok: true,
     configured: isConfigured(),
@@ -97,6 +101,9 @@ export async function GET() {
 }
 
 export async function POST(request) {
+  if (externalIoDisabled(process.env)) {
+    return NextResponse.json(externalIoDisabledResponse(), { status: 503 });
+  }
   if (!process.env.DATABASE_URL) {
     return jsonError('DATABASE_URL is required for website lead ingestion.', 503);
   }

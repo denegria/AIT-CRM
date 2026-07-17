@@ -21,6 +21,7 @@ import {
   parseFacebookLeadAdsFormBusinessUnitMap,
 } from '@/lib/ingestion/facebook-lead-ads.js';
 import { ingestMessengerInboundEvents } from '@/lib/ingestion/messenger-inbound.js';
+import { externalIoDisabled, externalIoDisabledResponse } from '@/lib/runtime-safety.js';
 
 function jsonError(message, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -94,6 +95,9 @@ function aggregateWebhookResults({ received, leadResult, messengerResult }) {
 }
 
 export async function GET(request) {
+  if (externalIoDisabled(process.env)) {
+    return NextResponse.json(externalIoDisabledResponse(), { status: 503 });
+  }
   const metaConfig = getMetaProviderConfig();
   if (!verifyTokenConfigured(metaConfig)) {
     return jsonError(verifyTokenErrorMessage(), 503);
@@ -115,6 +119,9 @@ export async function GET(request) {
 }
 
 export async function POST(request) {
+  if (externalIoDisabled(process.env)) {
+    return NextResponse.json(externalIoDisabledResponse(), { status: 503 });
+  }
   const metaConfig = getMetaProviderConfig();
   if (!verifyTokenConfigured(metaConfig)) {
     return jsonError(verifyTokenErrorMessage(), 503);

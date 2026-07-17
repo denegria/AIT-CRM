@@ -445,3 +445,24 @@ test('outbound sends fail closed before mocked fetch when tokens are missing', a
   assert.equal(result.ok, false);
   assert.equal(result.code, 'WHATSAPP_ACCESS_TOKEN_MISSING');
 });
+
+test('external I/O kill switch blocks Meta sends before provider fetch', async () => {
+  let called = false;
+  const result = await sendMetaMessengerTextMessage({
+    pageId: 'page-1',
+    recipientId: 'recipient-1',
+    text: 'Must not send',
+    config: createMetaProviderConfig({
+      defaultPageAccessToken: 'would-otherwise-send',
+      externalIoDisabled: true,
+    }),
+    fetchImpl: async () => {
+      called = true;
+      throw new Error('must not call provider');
+    },
+  });
+
+  assert.equal(called, false);
+  assert.equal(result.ok, false);
+  assert.equal(result.code, 'EXTERNAL_IO_DISABLED');
+});

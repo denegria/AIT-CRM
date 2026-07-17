@@ -64,6 +64,9 @@ yarn-error.log*
 # vercel
 .vercel
 
+# local production-derived QA branch manifests (metadata only; never commit)
+/.qa-branches/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

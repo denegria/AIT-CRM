@@ -22,6 +22,7 @@ import {
   WHATSAPP_VERIFY_TOKEN_ENV,
   parseMetaObjectMap,
 } from '../messaging/providers/meta.js';
+import { externalIoDisabled } from '../runtime-safety.js';
 
 const META_CHANNELS = ['messenger', 'whatsapp'];
 const SMS_CHANNELS = ['sms'];
@@ -108,6 +109,7 @@ function envPresent(env, ...names) {
 }
 
 export function buildProviderConfigDiagnostics(env = process.env) {
+  const ioDisabled = externalIoDisabled(env);
   const messengerTokenMap = parseMapSummary(env[META_PAGE_ACCESS_TOKEN_MAP_ENV]);
   const whatsappTokenMap = parseMapSummary(env[META_WHATSAPP_ACCESS_TOKEN_MAP_ENV]);
   const pageBuMap = parseMapSummary(env[META_PAGE_BUSINESS_UNIT_MAP_ENV]);
@@ -137,11 +139,13 @@ export function buildProviderConfigDiagnostics(env = process.env) {
   };
 
   return {
+    externalIoDisabled: ioDisabled,
     webhook,
     messenger,
     whatsapp,
     sms,
     blockers: [
+      ioDisabled ? providerBlock('external_io_disabled', 'External provider I/O is disabled for this environment.') : null,
       !webhook.verifyTokenConfigured ? providerBlock('webhook_verify_token_missing', 'Meta webhook verify token is not configured.') : null,
       !webhook.appSecretConfigured ? providerBlock('webhook_app_secret_missing', 'Meta webhook signature app secret is not configured.') : null,
       !messenger.defaultAccessTokenConfigured && messengerTokenMap.entryCount === 0

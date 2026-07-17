@@ -18,6 +18,7 @@ import {
   ingestFacebookLeadAdsEvents,
   parseFacebookLeadAdsFormBusinessUnitMap,
 } from '@/lib/ingestion/facebook-lead-ads.js';
+import { externalIoDisabled, externalIoDisabledResponse } from '@/lib/runtime-safety.js';
 
 const BACKFILL_FORM_ID = '1514075503748068';
 const BACKFILL_PAGE_ID = '637956449579628';
@@ -141,6 +142,9 @@ function backfillEventFromLead(lead, pageId) {
 export async function POST(request) {
   const { error, session } = await requirePermission(request, PERMISSIONS.IMPORT_REVIEW_WRITE);
   if (error) return error;
+  if (externalIoDisabled(process.env)) {
+    return NextResponse.json(externalIoDisabledResponse(), { status: 503 });
+  }
 
   const body = await readBody(request);
   const mode = normalizeMode(body.mode);

@@ -39,6 +39,16 @@ test('creates staging SMS send config with recipient allowlist and production bl
   assert.equal(production.liveSendEnabled, false);
   assert.equal(production.testSendMode, false);
   assert.equal(production.productionBlocked, true);
+
+  const qaBranch = createSmsCampaignSendConfigFromEnv({
+    VERCEL_ENV: 'preview',
+    AIT_CRM_EXTERNAL_IO_DISABLED: 'true',
+    SMS_CAMPAIGN_LIVE_SEND_ENABLED: 'true',
+    SMS_CAMPAIGN_LIVE_SEND_TEST_MODE: 'true',
+  });
+  assert.equal(qaBranch.liveSendEnabled, false);
+  assert.equal(qaBranch.testSendMode, false);
+  assert.equal(qaBranch.externalIoDisabled, true);
 });
 
 test('sends Telnyx SMS through v2 messages endpoint', async () => {
