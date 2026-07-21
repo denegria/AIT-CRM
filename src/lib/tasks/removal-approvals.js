@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, sql } from 'drizzle-orm';
 import {
   activityEvents,
   businessUnitMemberships,
@@ -16,6 +16,11 @@ import {
 } from '../crm/coordinator-policy.js';
 import { createCrmError } from '../crm/errors.js';
 import { TASK_EVENT_TYPES, TASK_STATUSES, TASK_TYPES } from './constants.js';
+import {
+  TASK_CANCELLATION_DECISIONS,
+  TASK_CANCELLATION_REASON_CODES,
+  taskCancellationDecision,
+} from './cancellation-policy.js';
 
 export const TASK_REMOVAL_APPROVAL_SOURCE_TYPE = 'task_removal_approval';
 export const TASK_REMOVAL_APPROVAL_NOTIFICATION_TYPE = 'task_removal_approval_requested';
@@ -83,6 +88,114 @@ export function assertCanReviewTaskRemovalApproval(session = {}) {
   if (!canReviewTaskRemovalApproval(session)) {
     throw createCrmError('Only senior coordinators and admins can review task removal approvals.', 403);
   }
+}
+
+export function assertTaskCancellationReason(reason) {
+  const normalizedReason = cleanText(reason);
+  if (!normalizedReason) {
+    throw createCrmError('Cancellation reason is required.', 400);
+  }
+  return normalizedReason;
+}
+
+function taskCancellationPolicyError(policy = {}) {
+  if (policy.reasonCode === TASK_CANCELLATION_REASON_CODES.CLOSED_TASK) {
+    return createCrmError('Only open, in-progress, or snoozed tasks can be canceled.', 409);
+  }
+  if (policy.reasonCode === TASK_CANCELLATION_REASON_CODES.APPROVAL_TASK) {
+    return createCrmError('Approval tasks must be decided through their approve or deny action.', 409);
+  }
+  if (policy.reasonCode === TASK_CANCELLATION_REASON_CODES.PENDING_APPROVAL) {
+    return createCrmError('This task already has a pending cancellation approval.', 409);
+  }
+  return createCrmError('Your role cannot cancel this task.', 403);
+}
+
+export async function cancelTaskDirectly({
+  db,
+  organizationId,
+  session,
+  existingTask,
+  reason,
+  now = new Date(),
+}) {
+  const policy = taskCancellationDecision({ session, task: existingTask });
+  if (policy.decision !== TASK_CANCELLATION_DECISIONS.DIRECT_CANCEL) {
+    throw taskCancellationPolicyError(policy);
+  }
+  const cancellationReason = assertTaskCancellationReason(reason);
+  const cancellationMetadata = {
+    decision: TASK_CANCELLATION_DECISIONS.DIRECT_CANCEL,
+    reasonCode: policy.reasonCode,
+    reason: cancellationReason,
+    actorUserId: session.user.id,
+    canceledAt: now.toISOString(),
+  };
+
+  return db.transaction(async (tx) => {
+    const updateConditions = [
+      eq(tasks.id, existingTask.id),
+      eq(tasks.organizationId, organizationId),
+      eq(tasks.status, existingTask.status),
+      sql`coalesce(${tasks.metadataJson}->'removalApproval'->>'decision', '') <> 'pending'`,
+    ];
+    if (existingTask.updatedAt) updateConditions.push(eq(tasks.updatedAt, existingTask.updatedAt));
+    const [task] = await tx
+      .update(tasks)
+      .set({
+        status: TASK_STATUSES.CANCELED,
+        canceledAt: now,
+        completedAt: null,
+        snoozedUntil: null,
+        updatedAt: now,
+        metadataJson: {
+          ...(existingTask.metadataJson || {}),
+          cancellation: cancellationMetadata,
+        },
+      })
+      .where(and(...updateConditions))
+      .returning();
+
+    if (!task) {
+      throw createCrmError('Task was already updated. Refresh the queue and try again.', 409);
+    }
+
+    await tx.insert(taskEvents).values({
+      taskId: task.id,
+      organizationId,
+      businessUnitId: task.businessUnitId,
+      eventType: TASK_EVENT_TYPES.CANCELED,
+      fromStatus: existingTask.status,
+      toStatus: task.status,
+      fromOwnerUserId: existingTask.ownerUserId || null,
+      toOwnerUserId: task.ownerUserId || null,
+      fromDueAt: existingTask.dueAt || null,
+      toDueAt: task.dueAt || null,
+      actorUserId: session.user.id,
+      message: `Canceled task: ${cancellationReason}`,
+      metadataJson: cancellationMetadata,
+      occurredAt: now,
+    });
+
+    await tx.insert(activityEvents).values({
+      organizationId,
+      businessUnitId: task.businessUnitId,
+      contactId: task.contactId || null,
+      leadId: task.leadId || null,
+      workOrderId: task.workOrderId || null,
+      eventType: 'task.canceled',
+      message: `Canceled task: ${cancellationReason}`,
+      metadataJson: {
+        ...cancellationMetadata,
+        taskId: task.id,
+        taskTitle: cleanText(task.title) || null,
+      },
+      actorUserId: session.user.id,
+      occurredAt: now,
+    });
+
+    return { task, cancellationDecision: policy };
+  });
 }
 
 export async function findOpenTaskRemovalApprovalTask(db, { organizationId, targetTaskId }) {

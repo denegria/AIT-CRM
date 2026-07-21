@@ -9,6 +9,7 @@ import {
   tasks,
 } from '../../db/schema.js';
 import { TASK_EVENT_TYPES, TASK_SOURCE_TYPES, TASK_STATUSES, TASK_TYPES } from './constants.js';
+import { taskCancellationDecision } from './cancellation-policy.js';
 import { createCrmError } from '../crm/errors.js';
 import { INBOUND_LEAD_SOURCE_TYPES } from '../crm/lead-provenance.js';
 import {
@@ -240,7 +241,7 @@ function followUpActivityEventValues({
   };
 }
 
-export function toTaskPayload(row) {
+export function toTaskPayload(row, { session = null } = {}) {
   if (!row) return null;
   return {
     id: row.id,
@@ -265,6 +266,7 @@ export function toTaskPayload(row) {
     sourceLabel: row.sourceLabel || '',
     metadataJson: row.metadataJson || {},
     previousFollowUp: row.previousFollowUp || null,
+    cancellationPolicy: session ? taskCancellationDecision({ session, task: row }) : null,
     createdAt: row.createdAt?.toISOString?.() || row.createdAt || null,
     updatedAt: row.updatedAt?.toISOString?.() || row.updatedAt || null,
   };

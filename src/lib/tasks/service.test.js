@@ -5,7 +5,32 @@ import {
   completeFollowUpTaskWithActivity,
   reconcileAutomatedInboundFollowUpTasks,
   recordFollowUpActivity,
+  toTaskPayload,
 } from './service.js';
+
+test('task payload exposes the server cancellation decision when a session is provided', () => {
+  const payload = toTaskPayload({
+    id: 'task-policy',
+    status: 'open',
+    taskType: 'manual_reminder',
+    priority: 'low',
+    ownerUserId: 'user-1',
+    createdByUserId: 'user-1',
+    sourceType: 'manual',
+    metadataJson: {},
+  }, {
+    session: {
+      user: {
+        id: 'user-1',
+        primaryRoleKey: 'account_coordinator',
+        roleKeys: ['account_coordinator'],
+      },
+    },
+  });
+
+  assert.equal(payload.cancellationPolicy.decision, 'direct_cancel');
+  assert.equal(payload.cancellationPolicy.requiresReason, true);
+});
 
 function followUpTask(overrides = {}) {
   return {

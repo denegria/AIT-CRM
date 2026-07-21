@@ -40,7 +40,12 @@ import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import FollowUpOutcomeDialog from '@/components/FollowUpOutcomeDialog';
+import { TaskCancellationDialog } from '@/components/TaskCancellationDialog';
 import { fetchTaskContactOptions } from '@/lib/tasks/contact-options-loader.js';
+import {
+  TASK_CANCELLATION_DECISIONS,
+  taskCancellationDecision,
+} from '@/lib/tasks/cancellation-policy.js';
 import s from './FollowUpQueue.module.css';
 
 const TASK_TYPE_OPTIONS = [
@@ -348,6 +353,7 @@ export default function FollowUpQueuePage() {
   const [editDraft, setEditDraft] = useState(() => editDraftFromTask({}));
   const [actionPanelTaskId, setActionPanelTaskId] = useState('');
   const [confirmTaskAction, setConfirmTaskAction] = useState(null);
+  const [cancellationDraft, setCancellationDraft] = useState(null);
 
   const fallbackAssignees = useMemo(() => {
     const mappedEmployees = (employees || []).map((employee) => ({
@@ -674,6 +680,7 @@ export default function FollowUpQueuePage() {
     setBusyTaskId(task.id);
     setError('');
     let createdNextTask = false;
+    let cancellationApprovalRequested = false;
     try {
       if (dataSource === 'postgres') {
         const response = await fetch('/api/tasks', {
@@ -683,6 +690,7 @@ export default function FollowUpQueuePage() {
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || 'Task update failed.');
+        cancellationApprovalRequested = Boolean(result.approvalRequested);
         const nextTask = normalizeTask(result.task, contacts);
         setQueueTasks((prev) => prev.map((row) => (row.id === task.id ? nextTask : row)));
         if (result.targetTask) {
@@ -732,7 +740,9 @@ export default function FollowUpQueuePage() {
               : action === 'request_cancel' || action === 'request_removal'
                 ? 'Task removal requested'
                 : action === 'cancel'
-                  ? 'Task canceled'
+                  ? cancellationApprovalRequested
+                    ? 'Task cancellation requested'
+                    : 'Task canceled'
                   : action === 'complete'
                     ? task.taskType === 'follow_up'
                       ? createdNextTask
@@ -764,9 +774,11 @@ export default function FollowUpQueuePage() {
           return next;
         });
       }
+      return true;
     } catch (err) {
       setError(err.message || 'Task update failed.');
       toast(err.message || 'Task update failed.');
+      return false;
     } finally {
       setBusyTaskId('');
     }
@@ -1199,6 +1211,22 @@ export default function FollowUpQueuePage() {
     if (!queuedAction) return;
     setConfirmTaskAction(null);
     applyTaskAction(queuedAction.task, queuedAction.action, queuedAction.payload);
+  }
+
+  function openTaskCancellation(task) {
+    const policy = task.cancellationPolicy || taskCancellationDecision({ session: { user: currentUser }, task });
+    if (policy.decision === TASK_CANCELLATION_DECISIONS.FORBIDDEN) return;
+    setError('');
+    setActionPanelTaskId('');
+    setCancellationDraft({ task, policy, reason: '' });
+  }
+
+  async function submitTaskCancellation() {
+    if (!cancellationDraft?.task) return;
+    const reason = String(cancellationDraft.reason || '').trim();
+    if (!reason) return;
+    const succeeded = await applyTaskAction(cancellationDraft.task, 'cancel', { reason });
+    if (succeeded) setCancellationDraft(null);
   }
 
   function openArchiveDecision(task, decision) {
@@ -1649,6 +1677,8 @@ export default function FollowUpQueuePage() {
             const isTaskRemovalApprovalTask = task.taskType === 'task_removal_approval';
             const showEditPanel = editTaskId === task.id;
             const removalApprovalPending = task.metadataJson?.removalApproval?.decision === 'pending';
+            const cancellationPolicy = task.cancellationPolicy || taskCancellationDecision({ session: { user: currentUser }, task });
+            const cancellationNeedsApproval = cancellationPolicy.decision === TASK_CANCELLATION_DECISIONS.APPROVAL_REQUIRED;
             const showAssignToMe = coordinatorUiPolicy.canManageCoordinatorAssignments &&
               !isArchiveApprovalTask &&
               !isTaskRemovalApprovalTask &&
@@ -1658,7 +1688,8 @@ export default function FollowUpQueuePage() {
             const showCancelAction = !isArchiveApprovalTask &&
               !isTaskRemovalApprovalTask &&
               !isTaskClosed(task) &&
-              !removalApprovalPending;
+              !removalApprovalPending &&
+              cancellationPolicy.decision !== TASK_CANCELLATION_DECISIONS.FORBIDDEN;
             return (
               <article key={task.id} className={`${s.queueItem} ${isOverdue ? s.queueItemOverdue : ''} ${isToday ? s.queueItemToday : ''}`}>
                 <div>
@@ -1840,19 +1871,13 @@ export default function FollowUpQueuePage() {
                       )}
                       {showCancelAction && (
                         <button
-                          className={`btn btn-sm ${coordinatorUiPolicy.ownerScoped ? '' : 'btn-danger'}`}
+                          className={`btn btn-sm ${cancellationNeedsApproval ? '' : 'btn-danger'}`}
                           type="button"
                           disabled={!access.canWriteCrm || busyTaskId === task.id}
-                          onClick={() => queueTaskActionConfirmation(
-                            task,
-                            coordinatorUiPolicy.ownerScoped ? 'request_cancel' : 'cancel',
-                            coordinatorUiPolicy.ownerScoped
-                              ? { reason: 'Task cancellation requested from the task queue.' }
-                              : {},
-                          )}
+                          onClick={() => openTaskCancellation(task)}
                         >
                           <X size={14} />
-                          {coordinatorUiPolicy.ownerScoped ? 'Request Cancel' : 'Cancel'}
+                          {cancellationNeedsApproval ? 'Request Cancel' : 'Cancel'}
                         </button>
                       )}
                     </div>
@@ -2026,6 +2051,17 @@ export default function FollowUpQueuePage() {
         message={confirmTaskAction?.message || ''}
         confirmLabel={confirmTaskAction?.confirmLabel || 'Confirm'}
         variant={confirmTaskAction?.variant || 'danger'}
+      />
+      <TaskCancellationDialog
+        open={Boolean(cancellationDraft?.task)}
+        task={cancellationDraft?.task}
+        policy={cancellationDraft?.policy}
+        reason={cancellationDraft?.reason || ''}
+        busy={busyTaskId === cancellationDraft?.task?.id}
+        error={cancellationDraft?.task ? error : ''}
+        onClose={() => setCancellationDraft(null)}
+        onReasonChange={(reason) => setCancellationDraft((current) => current ? { ...current, reason } : current)}
+        onSubmit={submitTaskCancellation}
       />
       <Modal
         open={Boolean(activeArchiveDecisionTask && activeArchiveDecisionDraft)}

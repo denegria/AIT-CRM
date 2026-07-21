@@ -61,10 +61,16 @@ import {
   decideArchiveApprovalTask,
 } from '@/lib/tasks/archive-approvals.js';
 import {
+  assertTaskCancellationReason,
+  cancelTaskDirectly,
   canReviewTaskRemovalApproval,
   createOrReuseTaskRemovalApprovalTask,
   decideTaskRemovalApprovalTask,
 } from '@/lib/tasks/removal-approvals.js';
+import {
+  TASK_CANCELLATION_DECISIONS,
+  taskCancellationDecision,
+} from '@/lib/tasks/cancellation-policy.js';
 import { filterAssignableEmployees } from '@/lib/crm/assignable-employees.js';
 import { loadTaskContactOptions } from '@/lib/tasks/contact-options.js';
 
@@ -408,7 +414,7 @@ export async function GET(request) {
         ...row,
         contactName: contactNameById.get(row.contactId) || '',
         previousFollowUp: previousFollowUps.get(row.contactId) || null,
-      })),
+      }, { session })),
       users: assignableUsers,
       contacts: taskContacts,
     });
@@ -467,7 +473,7 @@ export async function POST(request) {
       eventMessage: metadataJson.recurrence ? 'Created recurring task.' : 'Created task.',
     });
 
-    return NextResponse.json({ task: toTaskPayload(task) }, { status: 201 });
+    return NextResponse.json({ task: toTaskPayload(task, { session }) }, { status: 201 });
   } catch (err) {
     return crmErrorResponse(err);
   }
@@ -495,7 +501,9 @@ export async function PATCH(request) {
     if (!canAccessBusinessUnit(session, existingTask.businessUnitId)) {
       return NextResponse.json({ error: 'Insufficient business-unit access.' }, { status: 403 });
     }
-    if (isRegularCoordinatorSession(session) && existingTask.ownerUserId !== session.user.id) {
+    const action = String(body.action || '').trim();
+    const isCancellationAction = ['cancel', 'request_cancel', 'request_removal'].includes(action);
+    if (isRegularCoordinatorSession(session) && existingTask.ownerUserId !== session.user.id && !isCancellationAction) {
       return NextResponse.json({ error: 'Regular coordinators can only access tasks assigned to them.' }, { status: 403 });
     }
     if (stringParam(body.taskType) === TASK_TYPES.ARCHIVE_APPROVAL && existingTask.taskType !== TASK_TYPES.ARCHIVE_APPROVAL) {
@@ -504,8 +512,6 @@ export async function PATCH(request) {
     if (stringParam(body.taskType) === TASK_TYPES.TASK_REMOVAL_APPROVAL && existingTask.taskType !== TASK_TYPES.TASK_REMOVAL_APPROVAL) {
       return NextResponse.json({ error: 'Task removal approval tasks must be created from a task removal request.' }, { status: 400 });
     }
-    const action = String(body.action || '').trim();
-
     if (existingTask.taskType === TASK_TYPES.ARCHIVE_APPROVAL) {
       if (['approve_archive', 'deny_archive'].includes(action)) {
         const result = await decideArchiveApprovalTask({
@@ -517,10 +523,13 @@ export async function PATCH(request) {
           reason: body.reason || body.decisionReason || '',
         });
         return NextResponse.json({
-          task: toTaskPayload(result.task),
+          task: toTaskPayload(result.task, { session }),
           archivedContactId: result.archivedContact?.id || null,
           decision: result.decision,
         });
+      }
+      if (isCancellationAction) {
+        return NextResponse.json({ error: 'Approval tasks must be decided through their approve or deny action.' }, { status: 409 });
       }
       if (!canReviewArchiveApproval(session)) {
         return NextResponse.json({ error: 'Regular coordinators cannot review archive approval tasks.' }, { status: 403 });
@@ -541,10 +550,13 @@ export async function PATCH(request) {
           reason: body.reason || body.decisionReason || '',
         });
         return NextResponse.json({
-          task: toTaskPayload(result.task),
-          targetTask: toTaskPayload(result.targetTask),
+          task: toTaskPayload(result.task, { session }),
+          targetTask: toTaskPayload(result.targetTask, { session }),
           decision: result.decision,
         });
+      }
+      if (isCancellationAction) {
+        return NextResponse.json({ error: 'Approval tasks must be decided through their approve or deny action.' }, { status: 409 });
       }
       if (!canReviewTaskRemovalApproval(session)) {
         return NextResponse.json({ error: 'Regular coordinators cannot review task removal approval tasks.' }, { status: 403 });
@@ -554,20 +566,39 @@ export async function PATCH(request) {
       }
     }
 
-    if (isRegularCoordinatorSession(session) && ['cancel', 'request_cancel', 'request_removal'].includes(action)) {
-      const result = await createOrReuseTaskRemovalApprovalTask({
+    if (isCancellationAction) {
+      const reason = body.reason || body.decisionReason || '';
+      const policy = taskCancellationDecision({ session, task: existingTask });
+      if (policy.decision === TASK_CANCELLATION_DECISIONS.APPROVAL_REQUIRED) {
+        const cancellationReason = assertTaskCancellationReason(reason);
+        const result = await createOrReuseTaskRemovalApprovalTask({
+          db,
+          organizationId: session.user.organizationId,
+          session,
+          targetTask: existingTask,
+          reason: cancellationReason,
+        });
+        return NextResponse.json({
+          task: toTaskPayload(result.targetTask || existingTask, { session }),
+          approvalTask: toTaskPayload(result.task, { session }),
+          approvalRequested: true,
+          cancellationDecision: policy,
+          reused: result.reused,
+        }, { status: result.reused ? 200 : 202 });
+      }
+
+      const result = await cancelTaskDirectly({
         db,
         organizationId: session.user.organizationId,
         session,
-        targetTask: existingTask,
-        reason: body.reason || body.decisionReason || '',
+        existingTask,
+        reason,
       });
       return NextResponse.json({
-        task: toTaskPayload(result.targetTask || existingTask),
-        approvalTask: toTaskPayload(result.task),
-        approvalRequested: true,
-        reused: result.reused,
-      }, { status: result.reused ? 200 : 202 });
+        task: toTaskPayload(result.task, { session }),
+        approvalRequested: false,
+        cancellationDecision: result.cancellationDecision,
+      });
     }
 
     if (String(body.action || '').trim() === 'complete' && existingTask.taskType === TASK_TYPES.FOLLOW_UP) {
@@ -724,8 +755,8 @@ export async function PATCH(request) {
       });
 
       return NextResponse.json({
-        task: toTaskPayload(task),
-        nextTask: toTaskPayload(nextTask),
+        task: toTaskPayload(task, { session }),
+        nextTask: toTaskPayload(nextTask, { session }),
       });
     }
 
@@ -788,8 +819,8 @@ export async function PATCH(request) {
       });
 
       return NextResponse.json({
-        task: toTaskPayload(task),
-        nextTask: toTaskPayload(nextTask),
+        task: toTaskPayload(task, { session }),
+        nextTask: toTaskPayload(nextTask, { session }),
       });
     }
 
@@ -803,7 +834,7 @@ export async function PATCH(request) {
       eventMessage: transition.message,
     });
 
-    return NextResponse.json({ task: toTaskPayload(task) });
+    return NextResponse.json({ task: toTaskPayload(task, { session }) });
   } catch (err) {
     return crmErrorResponse(err);
   }

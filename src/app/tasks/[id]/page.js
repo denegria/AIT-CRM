@@ -12,10 +12,17 @@ import {
   ExternalLink,
   History,
   User,
+  X,
 } from 'lucide-react';
 import PageState, { PageStateAction } from '@/components/PageState';
 import { useRecordScopeRegistration } from '@/components/RecordScopeContext';
+import { TaskCancellationDialog } from '@/components/TaskCancellationDialog';
+import { useToast } from '@/components/Toast';
 import { useCRM } from '@/lib/store';
+import {
+  TASK_CANCELLATION_DECISIONS,
+  taskCancellationDecision,
+} from '@/lib/tasks/cancellation-policy.js';
 import { taskDateKey } from '@/lib/tasks/visibility.js';
 import s from './TaskDetail.module.css';
 
@@ -110,9 +117,14 @@ export default function TaskDetailPage() {
     loaded,
     scopeLabel,
   } = useCRM();
+  const { toast } = useToast();
   const [detail, setDetail] = useState(null);
   const [loading, setLoading] = useState(dataSource === 'postgres');
   const [error, setError] = useState('');
+  const [cancellationOpen, setCancellationOpen] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState('');
+  const [cancellationBusy, setCancellationBusy] = useState(false);
+  const [cancellationError, setCancellationError] = useState('');
   const taskId = params.id;
   const visibleContacts = allContacts?.length ? allContacts : contacts;
 
@@ -168,6 +180,17 @@ export default function TaskDetailPage() {
   const events = detail?.events || [];
   const ownerLabel = context.owner?.name || context.owner?.email || (task?.ownerUserId === currentUser?.id ? 'Me' : 'Unassigned');
   const createdByLabel = context.createdBy?.name || context.createdBy?.email || 'Unknown';
+  const cancellationPolicy = task?.cancellationPolicy || (task
+    ? taskCancellationDecision({ session: { user: currentUser }, task })
+    : null);
+  const cancellationNeedsApproval = cancellationPolicy?.decision === TASK_CANCELLATION_DECISIONS.APPROVAL_REQUIRED;
+  const cancellationPending = task?.metadataJson?.removalApproval?.decision === 'pending';
+  const canCancelTask = Boolean(
+    access.canWriteCrm &&
+    task &&
+    !cancellationPending &&
+    cancellationPolicy?.decision !== TASK_CANCELLATION_DECISIONS.FORBIDDEN
+  );
   const renderError = access.canReadCrm ? error : 'CRM read access is required.';
   const headerSubtitle = useMemo(() => {
     if (!task) return '';
@@ -177,6 +200,30 @@ export default function TaskDetailPage() {
       task.dueAt ? `Due ${formatDate(task.dueAt)}` : 'No due date',
     ].filter(Boolean).join(' - ');
   }, [context.businessUnit?.name, ownerLabel, scopeLabel, task]);
+
+  async function submitCancellation() {
+    const reason = String(cancellationReason || '').trim();
+    if (!task?.id || !reason || cancellationBusy) return;
+    setCancellationBusy(true);
+    setCancellationError('');
+    try {
+      const response = await fetch('/api/tasks', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id: task.id, action: 'cancel', reason }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Task cancellation failed.');
+      setDetail((current) => current ? { ...current, task: payload.task || current.task } : current);
+      setCancellationOpen(false);
+      setCancellationReason('');
+      toast(payload.approvalRequested ? 'Task cancellation requested' : 'Task canceled');
+    } catch (err) {
+      setCancellationError(err.message || 'Task cancellation failed.');
+    } finally {
+      setCancellationBusy(false);
+    }
+  }
 
   if (loading && access.canReadCrm) {
     return <PageState tone="loading" title="Loading task" copy="Preparing task details, linked records, and activity history." />;
@@ -201,6 +248,20 @@ export default function TaskDetailPage() {
       <div className={s.topBar}>
         <Link className={s.backLink} href="/tasks"><ArrowLeft size={16} /> Back to tasks</Link>
         <div className={s.actionRow}>
+          {canCancelTask && (
+            <button
+              className={`btn btn-sm ${cancellationNeedsApproval ? '' : 'btn-danger'}`}
+              type="button"
+              onClick={() => {
+                setCancellationError('');
+                setCancellationReason('');
+                setCancellationOpen(true);
+              }}
+            >
+              <X size={14} />
+              {cancellationNeedsApproval ? 'Request Cancel' : 'Cancel'}
+            </button>
+          )}
           <Link className="btn btn-sm" href={queueHref(task)}>
             <ClipboardList size={14} />
             Open Queue
@@ -347,6 +408,18 @@ export default function TaskDetailPage() {
           </section>
         </aside>
       </div>
+
+      <TaskCancellationDialog
+        open={cancellationOpen && canCancelTask}
+        task={task}
+        policy={cancellationPolicy}
+        reason={cancellationReason}
+        busy={cancellationBusy}
+        error={cancellationError}
+        onClose={() => setCancellationOpen(false)}
+        onReasonChange={setCancellationReason}
+        onSubmit={submitCancellation}
+      />
     </div>
   );
 }

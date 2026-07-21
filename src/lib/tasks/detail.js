@@ -130,7 +130,7 @@ export async function loadTaskDetail({ db, organizationId, session, taskId }) {
   const canOpenWorkOrder = workOrder ? canAccessWorkOrder(session, workOrder) : false;
 
   return {
-    task: toTaskPayload(task),
+    task: toTaskPayload(task, { session }),
     context: {
       businessUnit: businessUnit ? compactRecord(businessUnit) : null,
       owner: owner ? compactRecord(owner) : null,
