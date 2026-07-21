@@ -96,6 +96,119 @@
   line-height: 1.2;
 }
 
+.statusPanel,
+.approvalPanel {
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border-subtle));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--accent-muted) 34%, var(--bg-secondary));
+  box-shadow: var(--shadow-sm);
+}
+
+.statusPanel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+}
+
+.statusPanelPending {
+  border-color: color-mix(in srgb, var(--warning) 36%, var(--border-subtle));
+  background: color-mix(in srgb, var(--warning-muted) 44%, var(--bg-secondary));
+}
+
+.statusIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  color: var(--warning);
+  border-radius: 999px;
+  background: var(--bg-secondary);
+}
+
+.statusBody,
+.approvalPanel {
+  display: grid;
+  gap: 8px;
+}
+
+.statusEyebrow {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.statusBody h2,
+.approvalHeader h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+  line-height: 1.25;
+}
+
+.statusBody p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+
+.statusHint {
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 650;
+}
+
+.approvalHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.approvalHeader > div {
+  display: grid;
+  gap: 5px;
+}
+
+.approvalGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 4px 0;
+}
+
+.approvalGrid > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-primary) 78%, var(--bg-secondary));
+}
+
+.approvalGrid dt {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  font-weight: 720;
+  text-transform: uppercase;
+}
+
+.approvalGrid dd {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.approvalGrid .approvalReason {
+  grid-column: 1 / -1;
+}
+
 .description {
   margin: 0;
   color: var(--text-secondary);
@@ -265,5 +378,13 @@
 
   .taskTitle {
     font-size: var(--text-2xl);
+  }
+
+  .approvalGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .approvalGrid .approvalReason {
+    grid-column: auto;
   }
 }

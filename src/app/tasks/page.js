@@ -13,6 +13,7 @@ import {
   Plus,
   RefreshCcw,
   Repeat2,
+  ShieldAlert,
   X,
   UserPlus,
 } from 'lucide-react';
@@ -41,7 +42,12 @@ import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import FollowUpOutcomeDialog from '@/components/FollowUpOutcomeDialog';
 import { TaskCancellationDialog } from '@/components/TaskCancellationDialog';
+import { TaskRemovalDecisionDialog } from '@/components/TaskRemovalDecisionDialog';
 import { fetchTaskContactOptions } from '@/lib/tasks/contact-options-loader.js';
+import {
+  canReviewTaskRemovalApprovals,
+  taskRemovalApprovalState,
+} from '@/lib/tasks/removal-approval-view.js';
 import {
   TASK_CANCELLATION_DECISIONS,
   taskCancellationDecision,
@@ -306,6 +312,10 @@ export default function FollowUpQueuePage() {
   const searchParams = useSearchParams();
   const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
   const canReviewArchiveApprovalTasks = useMemo(() => canReviewArchiveApprovals(currentUser), [currentUser]);
+  const canReviewTaskRemovalApprovalTasks = useMemo(
+    () => canReviewTaskRemovalApprovals(currentUser),
+    [currentUser],
+  );
   const lockedTaskOwnerFilter = coordinatorUiPolicy.ownerScoped && currentUser?.id ? '__me' : '';
   const prefillSignatureRef = useRef('');
   const newTaskTriggerRef = useRef(null);
@@ -1252,7 +1262,8 @@ export default function FollowUpQueuePage() {
   }
 
   function openRemovalDecision(task, decision) {
-    if (!canReviewArchiveApprovalTasks) return;
+    if (!canReviewTaskRemovalApprovalTasks) return;
+    setError('');
     setActionPanelTaskId('');
     setArchiveDecisionDrafts({});
     setRemovalDecisionDrafts({
@@ -1281,6 +1292,14 @@ export default function FollowUpQueuePage() {
     status: 'all',
     link: 'all',
   });
+  const showCancellationApprovals = () => setFilters((current) => ({
+    ...current,
+    due: 'open',
+    ownerUserId: 'all',
+    taskType: 'task_removal_approval',
+    status: 'all',
+    link: 'all',
+  }));
   const activeTaskScope = (() => {
     const parts = [optionLabel(DUE_OPTIONS, filters.due)];
     if (filters.ownerUserId === '__me') {
@@ -1568,6 +1587,16 @@ export default function FollowUpQueuePage() {
           </div>
           <div className={s.queueHeaderActions}>
             <span className={s.queueCount} aria-live="polite">{loading ? 'Loading tasks' : `${filteredTasks.length} shown`}</span>
+            {canReviewTaskRemovalApprovalTasks && (
+              <button
+                className={`btn btn-sm ${filters.taskType === 'task_removal_approval' ? 'btn-primary' : ''}`}
+                type="button"
+                onClick={showCancellationApprovals}
+              >
+                <ShieldAlert size={14} />
+                Cancellation Approvals
+              </button>
+            )}
             <button className="btn btn-sm" type="button" onClick={resetFilters}>
               <FilterX size={14} />
               Reset
@@ -1676,7 +1705,8 @@ export default function FollowUpQueuePage() {
             const isArchiveApprovalTask = task.taskType === 'archive_approval';
             const isTaskRemovalApprovalTask = task.taskType === 'task_removal_approval';
             const showEditPanel = editTaskId === task.id;
-            const removalApprovalPending = task.metadataJson?.removalApproval?.decision === 'pending';
+            const removalApproval = taskRemovalApprovalState(task);
+            const removalApprovalPending = removalApproval?.decision === 'pending';
             const cancellationPolicy = task.cancellationPolicy || taskCancellationDecision({ session: { user: currentUser }, task });
             const cancellationNeedsApproval = cancellationPolicy.decision === TASK_CANCELLATION_DECISIONS.APPROVAL_REQUIRED;
             const showAssignToMe = coordinatorUiPolicy.canManageCoordinatorAssignments &&
@@ -1691,7 +1721,7 @@ export default function FollowUpQueuePage() {
               !removalApprovalPending &&
               cancellationPolicy.decision !== TASK_CANCELLATION_DECISIONS.FORBIDDEN;
             return (
-              <article key={task.id} className={`${s.queueItem} ${isOverdue ? s.queueItemOverdue : ''} ${isToday ? s.queueItemToday : ''}`}>
+              <article key={task.id} className={`${s.queueItem} ${isTaskRemovalApprovalTask ? s.queueItemApproval : ''} ${isOverdue ? s.queueItemOverdue : ''} ${isToday ? s.queueItemToday : ''}`}>
                 <div>
                   <Link className={`${s.taskTitle} ${s.taskTitleLink}`} href={`/tasks/${encodeURIComponent(task.id)}`}>
                     {task.title}
@@ -1712,6 +1742,30 @@ export default function FollowUpQueuePage() {
                     <span className="badge badge-draft">{titleCase(task.taskType)}</span>
                     {task.recurrence && <span className="badge badge-pending">{recurrenceLabel(task.recurrence)}</span>}
                   </div>
+                  {isTaskRemovalApprovalTask && (
+                    <div className={s.approvalSummary}>
+                      <strong>{task.metadataJson?.targetTaskTitle || 'Protected task cancellation'}</strong>
+                      <span>{task.metadataJson?.requestedReason || 'No reason recorded.'}</span>
+                      <small>
+                        {task.metadataJson?.requesterName || task.metadataJson?.requesterEmail || 'Coordinator'}
+                        {' · '}{task.ownerUserId ? 'Assigned review' : 'Shared queue'}
+                      </small>
+                    </div>
+                  )}
+                  {!isTaskRemovalApprovalTask && removalApproval && (
+                    <div className={`${s.cancellationState} ${removalApprovalPending ? s.cancellationStatePending : ''}`}>
+                      <strong>
+                        {removalApprovalPending
+                          ? 'Cancellation pending'
+                          : removalApproval.decision === 'denied'
+                            ? 'Cancellation denied'
+                            : removalApproval.decision === 'superseded'
+                              ? 'Cancellation request closed'
+                              : 'Cancellation approved'}
+                      </strong>
+                      <span>{removalApproval.decisionReason || removalApproval.requestedReason || 'Awaiting reviewer decision.'}</span>
+                    </div>
+                  )}
                 </div>
                 <div className={s.taskSchedule}>
                   <div className={s.compactLabel}>Due</div>
@@ -1729,7 +1783,7 @@ export default function FollowUpQueuePage() {
                 </div>
                 <div className={s.assigneeSelect}>
                   <span className={s.compactLabel}>Owner</span>
-                  {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
+                  {coordinatorUiPolicy.canManageCoordinatorAssignments && !isTaskRemovalApprovalTask ? (
                     <select
                       className="select"
                       value={task.ownerUserId || ''}
@@ -1740,11 +1794,35 @@ export default function FollowUpQueuePage() {
                       {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
                     </select>
                   ) : (
-                    <div className={s.dueText}>{assignee?.name || assignee?.email || 'Me'}</div>
+                    <div className={s.dueText}>
+                      {isTaskRemovalApprovalTask && !task.ownerUserId
+                        ? 'Shared queue'
+                        : assignee?.name || assignee?.email || 'Me'}
+                    </div>
                   )}
                   {assignee?.email && <span className={s.mutedText}>{assignee.email}</span>}
                 </div>
                 <div className={s.actions}>
+                  {isTaskRemovalApprovalTask && canReviewTaskRemovalApprovalTasks && !isTaskClosed(task) && (
+                    <>
+                      <button
+                        className="btn btn-sm"
+                        type="button"
+                        disabled={!access.canWriteCrm || busyTaskId === task.id}
+                        onClick={() => openRemovalDecision(task, 'deny')}
+                      >
+                        <X size={14} /> Deny
+                      </button>
+                      <button
+                        className="btn btn-sm btn-primary"
+                        type="button"
+                        disabled={!access.canWriteCrm || busyTaskId === task.id}
+                        onClick={() => openRemovalDecision(task, 'approve')}
+                      >
+                        <CheckCircle2 size={14} /> Approve
+                      </button>
+                    </>
+                  )}
                   {task.taskType === 'follow_up' && !isTaskClosed(task) && (
                     <button
                       className="btn btn-sm btn-primary"
@@ -1756,7 +1834,7 @@ export default function FollowUpQueuePage() {
                       Log outcome
                     </button>
                   )}
-                  <Link className={`btn btn-sm ${task.taskType === 'follow_up' && !isTaskClosed(task) ? '' : 'btn-primary'}`} href={`/tasks/${encodeURIComponent(task.id)}`}>
+                  <Link className={`btn btn-sm ${(task.taskType === 'follow_up' && !isTaskClosed(task)) || isTaskRemovalApprovalTask ? '' : 'btn-primary'}`} href={`/tasks/${encodeURIComponent(task.id)}`}>
                     <ListTodo size={14} />
                     Review
                   </Link>
@@ -1776,9 +1854,6 @@ export default function FollowUpQueuePage() {
                     <MoreHorizontal size={14} />
                     Actions
                   </button>
-                  {removalApprovalPending && (
-                    <span className="badge badge-pending">Cancel Requested</span>
-                  )}
                 </div>
                 {actionPanelTaskId === task.id && (
                   <div className={s.taskActionsPanel} id={`task-actions-${task.id}`} aria-label={`Task actions for ${task.title}`}>
@@ -1828,26 +1903,7 @@ export default function FollowUpQueuePage() {
                           </button>
                         </>
                       ) : isTaskRemovalApprovalTask ? (
-                        <>
-                          <button
-                            className="btn btn-sm"
-                            type="button"
-                            disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task) || !canReviewArchiveApprovalTasks}
-                            onClick={() => openRemovalDecision(task, 'deny')}
-                          >
-                            <X size={14} />
-                            Deny
-                          </button>
-                          <button
-                            className="btn btn-sm btn-primary"
-                            type="button"
-                            disabled={!access.canWriteCrm || busyTaskId === task.id || isTaskClosed(task) || !canReviewArchiveApprovalTasks}
-                            onClick={() => openRemovalDecision(task, 'approve')}
-                          >
-                            <CheckCircle2 size={14} />
-                            Approve
-                          </button>
-                        </>
+                        <span className={s.mutedText}>Use the approval actions on this request.</span>
                       ) : task.taskType === 'follow_up' ? (
                         <button
                           className="btn btn-sm"
@@ -2140,83 +2196,22 @@ export default function FollowUpQueuePage() {
           </label>
         </div>
       </Modal>
-      <Modal
+      <TaskRemovalDecisionDialog
         open={Boolean(activeRemovalDecisionTask && activeRemovalDecisionDraft)}
+        task={activeRemovalDecisionTask}
+        decision={activeRemovalDecisionDraft?.decision || 'approve'}
+        reason={activeRemovalDecisionDraft?.reason || ''}
+        busy={busyTaskId === activeRemovalDecisionTask?.id}
+        error={error}
         onClose={() => busyTaskId !== activeRemovalDecisionTask?.id && setRemovalDecisionDrafts({})}
-        title={activeRemovalDecisionDraft?.decision === 'approve' ? 'Approve task removal?' : 'Deny task removal?'}
-        variant="dialog"
-        panelClassName={s.dangerDecisionDialog}
-        footer={(
-          <>
-            <button
-              className="btn"
-              type="button"
-              disabled={busyTaskId === activeRemovalDecisionTask?.id}
-              onClick={() => setRemovalDecisionDrafts({})}
-            >
-              Cancel
-            </button>
-            <button
-              className={`btn ${activeRemovalDecisionDraft?.decision === 'approve' ? 'btn-primary' : 'btn-danger'}`}
-              type="button"
-              disabled={
-                !activeRemovalDecisionTask ||
-                busyTaskId === activeRemovalDecisionTask.id ||
-                (activeRemovalDecisionDraft?.decision === 'deny' && !String(activeRemovalDecisionDraft?.reason || '').trim())
-              }
-              onClick={() => activeRemovalDecisionTask && submitRemovalDecision(activeRemovalDecisionTask)}
-            >
-              <CheckCircle2 size={14} />
-              {activeRemovalDecisionDraft?.decision === 'approve' ? 'Approve Removal' : 'Deny Removal'}
-            </button>
-          </>
-        )}
-      >
-        <div className={s.dangerDecisionBody}>
-          <div className={s.dangerDecisionNotice}>
-            <span className={s.dangerDecisionEyebrow}>
-              {activeRemovalDecisionDraft?.decision === 'approve' ? 'Final task removal approval' : 'Task removal denial'}
-            </span>
-            <strong>
-              {activeRemovalDecisionDraft?.decision === 'approve'
-                ? `Remove "${activeRemovalDecisionTask?.title || 'this task'}"?`
-                : `Deny removal for "${activeRemovalDecisionTask?.title || 'this task'}"?`}
-            </strong>
-            <p>
-              {activeRemovalDecisionDraft?.decision === 'approve'
-                ? 'Approving closes the requested task removal. Use this only when the task should leave active work.'
-                : 'Denial keeps the task available and records why the removal request was rejected.'}
-            </p>
-          </div>
-          {activeRemovalDecisionTask?.metadataJson?.requestedReason && (
-            <div className={s.dangerDecisionRequest}>
-              <span>Requested reason</span>
-              <p>{activeRemovalDecisionTask.metadataJson.requestedReason}</p>
-            </div>
-          )}
-          <label className={s.dangerDecisionField}>
-            <span className="form-label">
-              {activeRemovalDecisionDraft?.decision === 'approve' ? 'Approval Reason' : 'Denial Reason *'}
-            </span>
-            <textarea
-              className="textarea"
-              rows={4}
-              value={activeRemovalDecisionDraft?.reason || ''}
-              disabled={busyTaskId === activeRemovalDecisionTask?.id}
-              placeholder={activeRemovalDecisionDraft?.decision === 'approve' ? 'Why is this task removal approved?' : 'Explain why this task should remain active.'}
-              onChange={(event) => {
-                if (!removalDecisionTaskId) return;
-                setRemovalDecisionDrafts({
-                  [removalDecisionTaskId]: {
-                    ...activeRemovalDecisionDraft,
-                    reason: event.target.value,
-                  },
-                });
-              }}
-            />
-          </label>
-        </div>
-      </Modal>
+        onReasonChange={(reason) => {
+          if (!removalDecisionTaskId) return;
+          setRemovalDecisionDrafts({
+            [removalDecisionTaskId]: { ...activeRemovalDecisionDraft, reason },
+          });
+        }}
+        onSubmit={() => activeRemovalDecisionTask && submitRemovalDecision(activeRemovalDecisionTask)}
+      />
       <Modal
         open={createDiscardConfirmationOpen}
         onClose={closeCreateDiscardConfirmation}

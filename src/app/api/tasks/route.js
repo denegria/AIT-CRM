@@ -393,7 +393,10 @@ export async function GET(request) {
       businessUnitIds,
       filters,
     });
-    const taskContactIds = rows.map((row) => row.contactId).filter(Boolean);
+    const visibleRows = canReviewTaskRemovalApproval(session)
+      ? rows
+      : rows.filter((row) => row.taskType !== TASK_TYPES.TASK_REMOVAL_APPROVAL);
+    const taskContactIds = visibleRows.map((row) => row.contactId).filter(Boolean);
     const [assignableUsers, taskContacts, previousFollowUps] = await Promise.all([
       listAssignableUsers(db, session),
       taskContactIds.length
@@ -410,7 +413,7 @@ export async function GET(request) {
     ]);
     const contactNameById = new Map(taskContacts.map((contact) => [contact.id, contact.name]));
     return NextResponse.json({
-      tasks: rows.map((row) => toTaskPayload({
+      tasks: visibleRows.map((row) => toTaskPayload({
         ...row,
         contactName: contactNameById.get(row.contactId) || '',
         previousFollowUp: previousFollowUps.get(row.contactId) || null,
@@ -559,11 +562,9 @@ export async function PATCH(request) {
         return NextResponse.json({ error: 'Approval tasks must be decided through their approve or deny action.' }, { status: 409 });
       }
       if (!canReviewTaskRemovalApproval(session)) {
-        return NextResponse.json({ error: 'Regular coordinators cannot review task removal approval tasks.' }, { status: 403 });
+        return NextResponse.json({ error: 'Only senior coordinators and admins can review task removal approval tasks.' }, { status: 403 });
       }
-      if (['complete', 'cancel'].includes(action)) {
-        return NextResponse.json({ error: 'Use approve or deny for task removal approval tasks.' }, { status: 400 });
-      }
+      return NextResponse.json({ error: 'Use approve or deny for task removal approval tasks.' }, { status: 400 });
     }
 
     if (isCancellationAction) {

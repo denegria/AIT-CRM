@@ -16,6 +16,7 @@ import {
   AUTOMATED_INBOUND_FOLLOW_UP_SOURCE_LABEL,
   planAutomatedInboundFollowUpReconciliation,
 } from './integrity-policy.js';
+import { supersedeOpenTaskRemovalApprovalInTransaction } from './removal-approvals.js';
 
 export { AUTOMATED_INBOUND_FOLLOW_UP_SOURCE_LABEL, isEligibleAutomatedInboundFollowUpTask } from './integrity-policy.js';
 
@@ -166,7 +167,7 @@ export async function reconcileAutomatedInboundFollowUpTasks(tx, {
         ? isNotNull(tasks.ownerUserId)
         : or(isNull(tasks.ownerUserId), ne(tasks.ownerUserId, ownerUserId)));
     }
-    const [task] = await tx
+    let [task] = await tx
       .update(tasks)
       .set(patch)
       .where(and(...updateConditions))
@@ -190,6 +191,17 @@ export async function reconcileAutomatedInboundFollowUpTasks(tx, {
         lifecycleStatus,
       },
     }));
+    if (action === 'cancel') {
+      const superseded = await supersedeOpenTaskRemovalApprovalInTransaction(tx, {
+        organizationId,
+        actorUserId,
+        previousTask: existingTask,
+        task,
+        reason: reason || 'Target task was canceled by a valid workflow.',
+        now,
+      });
+      task = superseded.targetTask || task;
+    }
     changedTasks.push(task);
   }
 
@@ -389,7 +401,7 @@ export async function updateTaskWithEvents({
   metadataJson = {},
 }) {
   return db.transaction(async (tx) => {
-    const [task] = await tx
+    let [task] = await tx
       .update(tasks)
       .set(taskPatch)
       .where(and(eq(tasks.id, existingTask.id), eq(tasks.organizationId, organizationId)))
@@ -414,6 +426,17 @@ export async function updateTaskWithEvents({
       metadataJson,
     }));
 
+    if (![TASK_STATUSES.OPEN, TASK_STATUSES.IN_PROGRESS, TASK_STATUSES.SNOOZED].includes(task.status)) {
+      const superseded = await supersedeOpenTaskRemovalApprovalInTransaction(tx, {
+        organizationId,
+        actorUserId,
+        previousTask: existingTask,
+        task,
+        reason: `Target task moved to ${task.status}.`,
+      });
+      task = superseded.targetTask || task;
+    }
+
     return { task };
   });
 }
@@ -428,7 +451,7 @@ export async function completeRecurringTaskWithNextTask({
   nextTaskMetadataJson = {},
 }) {
   return db.transaction(async (tx) => {
-    const [task] = await tx
+    let [task] = await tx
       .update(tasks)
       .set(taskPatch)
       .where(and(
@@ -464,6 +487,15 @@ export async function completeRecurringTaskWithNextTask({
       message: 'Completed recurring task.',
       metadataJson: { nextDueAt: nextDueAt.toISOString() },
     }));
+
+    const superseded = await supersedeOpenTaskRemovalApprovalInTransaction(tx, {
+      organizationId,
+      actorUserId,
+      previousTask: existingTask,
+      task,
+      reason: 'Target task was completed through its recurring workflow.',
+    });
+    task = superseded.targetTask || task;
 
     const [nextTask] = await tx
       .insert(tasks)
@@ -528,7 +560,7 @@ export async function completeFollowUpTaskWithActivity({
   cancelOpenFollowUpsContext = {},
 }) {
   return db.transaction(async (tx) => {
-    const [task] = await tx
+    let [task] = await tx
       .update(tasks)
       .set(taskPatch)
       .where(and(
@@ -575,6 +607,15 @@ export async function completeFollowUpTaskWithActivity({
       body: followUpActivity.noteBody || followUpActivity.message,
       authorUserId: actorUserId,
     });
+
+    const superseded = await supersedeOpenTaskRemovalApprovalInTransaction(tx, {
+      organizationId,
+      actorUserId,
+      previousTask: existingTask,
+      task,
+      reason: 'Target task was completed through the follow-up outcome workflow.',
+    });
+    task = superseded.targetTask || task;
 
     if (contactPatch && task.contactId) {
       await tx

@@ -4,8 +4,10 @@ import {
   assertTaskCancellationReason,
   canReviewTaskRemovalApproval,
   cancelTaskDirectly,
+  chooseTaskRemovalReviewer,
   createOrReuseTaskRemovalApprovalTask,
   decideTaskRemovalApprovalTask,
+  supersedeOpenTaskRemovalApprovalInTransaction,
 } from './removal-approvals.js';
 import {
   TASK_PRIORITIES,
@@ -37,8 +39,12 @@ class SelectBuilder {
   innerJoin() { return this; }
   where() { return this; }
   orderBy() { return this; }
+  for() { return this; }
   limit() {
     return Promise.resolve(this.db.selectRows.shift() || []);
+  }
+  then(resolve) {
+    return Promise.resolve(this.db.selectRows.shift() || []).then(resolve);
   }
 }
 
@@ -105,6 +111,23 @@ const targetTask = {
   metadataJson: { existing: true },
 };
 
+function targetWithPendingApproval(approvalTaskId = 'approval-task', overrides = {}) {
+  return {
+    ...targetTask,
+    ...overrides,
+    metadataJson: {
+      ...(targetTask.metadataJson || {}),
+      ...(overrides.metadataJson || {}),
+      removalApproval: {
+        approvalTaskId,
+        decision: 'pending',
+        requesterUserId: 'user-1',
+        requestedReason: 'Duplicate.',
+      },
+    },
+  };
+}
+
 test('direct cancellation requires a reason', () => {
   assert.throws(
     () => assertTaskCancellationReason('  '),
@@ -143,7 +166,7 @@ test('eligible direct cancellation closes the task and records auditable reason 
 });
 
 test('regular coordinator task removal requests create reviewer-owned approval tasks', async () => {
-  const reviewer = { id: 'senior-1', name: 'Senior One', email: 'senior@example.com' };
+  const reviewer = { id: 'senior-1', name: 'Senior One', email: 'senior@example.com', isPrimary: true };
   const updatedTargetTask = {
     ...targetTask,
     metadataJson: {
@@ -152,7 +175,7 @@ test('regular coordinator task removal requests create reviewer-owned approval t
     },
   };
   const db = fakeDb({
-    selectRows: [[], [reviewer]],
+    selectRows: [[targetTask], [], [reviewer], []],
     insertReturnRows: [
       [{
         id: 'approval-task',
@@ -189,6 +212,70 @@ test('regular coordinator task removal requests create reviewer-owned approval t
   assert.equal(notification.href, '/tasks/approval-task');
 });
 
+test('reviewer routing falls back to an administrator when no senior is eligible', async () => {
+  const admin = { id: 'admin-1', name: 'Admin One', email: 'admin@example.com' };
+  const updatedTargetTask = targetWithPendingApproval('approval-task');
+  const db = fakeDb({
+    selectRows: [[targetTask], [], [], [admin], []],
+    insertReturnRows: [
+      [{
+        id: 'approval-task',
+        organizationId: 'org-1',
+        businessUnitId: 'bu-1',
+        taskType: TASK_TYPES.TASK_REMOVAL_APPROVAL,
+        status: TASK_STATUSES.OPEN,
+        ownerUserId: admin.id,
+        metadataJson: {},
+      }],
+      [{ id: 'notification-1' }],
+    ],
+    updateReturnRows: [[updatedTargetTask]],
+  });
+
+  const result = await createOrReuseTaskRemovalApprovalTask({
+    db,
+    organizationId: 'org-1',
+    session: session(),
+    targetTask,
+    reason: 'Duplicate task.',
+  });
+
+  assert.equal(result.reviewer.id, 'admin-1');
+  assert.equal(result.reviewer.tier, 'admin');
+  assert.equal(result.task.ownerUserId, 'admin-1');
+  assert.equal(db.inserted[0].metadataJson.reviewerTier, 'admin');
+});
+
+test('reviewer routing leaves the approval in the shared queue when no candidate exists', async () => {
+  const updatedTargetTask = targetWithPendingApproval('approval-task');
+  const db = fakeDb({
+    selectRows: [[targetTask], [], [], []],
+    insertReturnRows: [[{
+      id: 'approval-task',
+      organizationId: 'org-1',
+      businessUnitId: 'bu-1',
+      taskType: TASK_TYPES.TASK_REMOVAL_APPROVAL,
+      status: TASK_STATUSES.OPEN,
+      ownerUserId: null,
+      metadataJson: {},
+    }]],
+    updateReturnRows: [[updatedTargetTask]],
+  });
+
+  const result = await createOrReuseTaskRemovalApprovalTask({
+    db,
+    organizationId: 'org-1',
+    session: session(),
+    targetTask,
+    reason: 'Duplicate task.',
+  });
+
+  assert.equal(result.reviewer, null);
+  assert.equal(result.task.ownerUserId, null);
+  assert.equal(db.inserted[0].metadataJson.reviewerTier, 'shared_queue');
+  assert.equal(db.inserted.some((row) => row.type === 'task_removal_approval_requested'), false);
+});
+
 test('regular coordinator task removal requests reuse an existing open approval task', async () => {
   const existingApproval = {
     id: 'approval-existing',
@@ -196,9 +283,11 @@ test('regular coordinator task removal requests reuse an existing open approval 
     businessUnitId: 'bu-1',
     taskType: TASK_TYPES.TASK_REMOVAL_APPROVAL,
     status: TASK_STATUSES.OPEN,
+    ownerUserId: 'senior-1',
     metadataJson: { decision: 'pending', targetTaskId: targetTask.id },
   };
-  const db = fakeDb({ selectRows: [[existingApproval]] });
+  const pendingTarget = targetWithPendingApproval(existingApproval.id);
+  const db = fakeDb({ selectRows: [[pendingTarget], [existingApproval]] });
 
   const result = await createOrReuseTaskRemovalApprovalTask({
     db,
@@ -210,7 +299,22 @@ test('regular coordinator task removal requests reuse an existing open approval 
 
   assert.equal(result.reused, true);
   assert.equal(result.task.id, 'approval-existing');
-  assert.equal(db.inserted.length, 0);
+  assert.equal(db.inserted.some((row) => row.taskType === TASK_TYPES.TASK_REMOVAL_APPROVAL), false);
+});
+
+test('reviewer selection is least-loaded, primary-aware, and deterministic', () => {
+  const reviewer = chooseTaskRemovalReviewer([
+    { id: 'senior-b', openApprovalCount: 2, isPrimary: true, lastAssignedAt: '2026-07-20T00:00:00Z' },
+    { id: 'senior-c', openApprovalCount: 1, isPrimary: false, lastAssignedAt: null },
+    { id: 'senior-a', openApprovalCount: 1, isPrimary: true, lastAssignedAt: '2026-07-21T00:00:00Z' },
+  ]);
+  assert.equal(reviewer.id, 'senior-a');
+
+  const oldest = chooseTaskRemovalReviewer([
+    { id: 'senior-b', openApprovalCount: 0, isPrimary: true, lastAssignedAt: '2026-07-21T00:00:00Z' },
+    { id: 'senior-a', openApprovalCount: 0, isPrimary: true, lastAssignedAt: null },
+  ]);
+  assert.equal(oldest.id, 'senior-a');
 });
 
 test('only senior coordinators and admins can review task removal approvals', async () => {
@@ -247,11 +351,12 @@ test('approval cancels target task and completes approval task', async () => {
       targetTaskTitle: targetTask.title,
     },
   };
+  const pendingTarget = targetWithPendingApproval(approvalTask.id);
   const db = fakeDb({
-    selectRows: [[targetTask]],
+    selectRows: [[pendingTarget], [approvalTask]],
     updateReturnRows: [
+      [{ ...pendingTarget, status: TASK_STATUSES.CANCELED }],
       [{ ...approvalTask, status: TASK_STATUSES.COMPLETED }],
-      [{ ...targetTask, status: TASK_STATUSES.CANCELED }],
     ],
   });
 
@@ -267,9 +372,12 @@ test('approval cancels target task and completes approval task', async () => {
   assert.equal(result.decision, 'approve');
   assert.equal(result.task.status, TASK_STATUSES.COMPLETED);
   assert.equal(result.targetTask.status, TASK_STATUSES.CANCELED);
-  assert.equal(db.updated[0].status, TASK_STATUSES.COMPLETED);
-  assert.equal(db.updated[1].status, TASK_STATUSES.CANCELED);
-  assert.equal(db.updated[1].metadataJson.removalApproval.decision, 'approved');
+  assert.equal(db.updated[0].status, TASK_STATUSES.CANCELED);
+  assert.equal(db.updated[0].metadataJson.removalApproval.decision, 'approved');
+  assert.equal(db.updated[1].status, TASK_STATUSES.COMPLETED);
+  const notification = db.inserted.find((row) => row.type === 'task_removal_approval_decided');
+  assert.equal(notification.userId, 'user-1');
+  assert.equal(notification.href, '/tasks/task-target');
 });
 
 test('denial closes approval task without canceling target task', async () => {
@@ -286,8 +394,13 @@ test('denial closes approval task without canceling target task', async () => {
       targetTaskTitle: targetTask.title,
     },
   };
+  const pendingTarget = targetWithPendingApproval(approvalTask.id);
   const db = fakeDb({
-    updateReturnRows: [[{ ...approvalTask, status: TASK_STATUSES.CANCELED }]],
+    selectRows: [[pendingTarget], [approvalTask]],
+    updateReturnRows: [
+      [pendingTarget],
+      [{ ...approvalTask, status: TASK_STATUSES.CANCELED }],
+    ],
   });
 
   const result = await decideTaskRemovalApprovalTask({
@@ -301,7 +414,79 @@ test('denial closes approval task without canceling target task', async () => {
 
   assert.equal(result.decision, 'deny');
   assert.equal(result.task.status, TASK_STATUSES.CANCELED);
-  assert.equal(result.targetTask, null);
-  assert.equal(db.updated.length, 1);
-  assert.equal(db.updated[0].metadataJson.decision, 'denied');
+  assert.equal(result.targetTask.status, TASK_STATUSES.OPEN);
+  assert.equal(db.updated.length, 2);
+  assert.equal(db.updated[0].metadataJson.removalApproval.decision, 'denied');
+  assert.equal(db.updated[1].metadataJson.decision, 'denied');
+});
+
+test('a stale decision supersedes an open approval when the target already closed', async () => {
+  const approvalTask = {
+    id: 'approval-task',
+    organizationId: 'org-1',
+    businessUnitId: 'bu-1',
+    ownerUserId: 'senior-1',
+    taskType: TASK_TYPES.TASK_REMOVAL_APPROVAL,
+    status: TASK_STATUSES.OPEN,
+    metadataJson: {
+      requesterUserId: 'user-1',
+      targetTaskId: targetTask.id,
+      targetTaskTitle: targetTask.title,
+    },
+  };
+  const closedTarget = targetWithPendingApproval(approvalTask.id, { status: TASK_STATUSES.COMPLETED });
+  const db = fakeDb({
+    selectRows: [[closedTarget], [approvalTask]],
+    updateReturnRows: [
+      [{ ...approvalTask, status: TASK_STATUSES.CANCELED }],
+      [closedTarget],
+    ],
+  });
+
+  const result = await decideTaskRemovalApprovalTask({
+    db,
+    organizationId: 'org-1',
+    session: session(['senior_coordinator'], { id: 'senior-1' }),
+    existingTask: approvalTask,
+    decision: 'approve',
+  });
+
+  assert.equal(result.decision, 'superseded');
+  assert.equal(result.task.metadataJson.decision, 'superseded');
+  assert.equal(result.targetTask.metadataJson.removalApproval.decision, 'superseded');
+});
+
+test('a valid target completion supersedes its pending approval in the same transaction', async () => {
+  const approvalTask = {
+    id: 'approval-task',
+    organizationId: 'org-1',
+    businessUnitId: 'bu-1',
+    taskType: TASK_TYPES.TASK_REMOVAL_APPROVAL,
+    status: TASK_STATUSES.OPEN,
+    metadataJson: { requesterUserId: 'user-1', targetTaskId: targetTask.id },
+  };
+  const previousTask = targetWithPendingApproval(approvalTask.id);
+  const completedTask = { ...previousTask, status: TASK_STATUSES.COMPLETED };
+  const db = fakeDb({
+    selectRows: [[approvalTask]],
+    updateReturnRows: [
+      [{ ...approvalTask, status: TASK_STATUSES.CANCELED }],
+      [completedTask],
+    ],
+  });
+
+  const result = await supersedeOpenTaskRemovalApprovalInTransaction(db, {
+    organizationId: 'org-1',
+    actorUserId: 'user-1',
+    previousTask,
+    task: completedTask,
+    reason: 'Target task was completed.',
+    now: new Date('2026-07-21T19:00:00.000Z'),
+  });
+
+  assert.equal(result.approvalTask.metadataJson.decision, 'superseded');
+  assert.equal(result.targetTask.metadataJson.removalApproval.decision, 'superseded');
+  const notification = db.inserted.find((row) => row.type === 'task_removal_approval_decided');
+  assert.equal(notification.userId, 'user-1');
+  assert.equal(notification.metadataJson.decision, 'superseded');
 });

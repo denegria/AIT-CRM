@@ -7,16 +7,19 @@ import {
   ArrowLeft,
   BriefcaseBusiness,
   CalendarClock,
+  CheckCircle2,
   CheckSquare,
   ClipboardList,
   ExternalLink,
   History,
+  ShieldAlert,
   User,
   X,
 } from 'lucide-react';
 import PageState, { PageStateAction } from '@/components/PageState';
 import { useRecordScopeRegistration } from '@/components/RecordScopeContext';
 import { TaskCancellationDialog } from '@/components/TaskCancellationDialog';
+import { TaskRemovalDecisionDialog } from '@/components/TaskRemovalDecisionDialog';
 import { useToast } from '@/components/Toast';
 import { useCRM } from '@/lib/store';
 import {
@@ -24,6 +27,10 @@ import {
   taskCancellationDecision,
 } from '@/lib/tasks/cancellation-policy.js';
 import { taskDateKey } from '@/lib/tasks/visibility.js';
+import {
+  canReviewTaskRemovalApprovals,
+  taskRemovalApprovalState,
+} from '@/lib/tasks/removal-approval-view.js';
 import s from './TaskDetail.module.css';
 
 function titleCase(value) {
@@ -125,6 +132,10 @@ export default function TaskDetailPage() {
   const [cancellationReason, setCancellationReason] = useState('');
   const [cancellationBusy, setCancellationBusy] = useState(false);
   const [cancellationError, setCancellationError] = useState('');
+  const [removalDecision, setRemovalDecision] = useState(null);
+  const [removalDecisionReason, setRemovalDecisionReason] = useState('');
+  const [removalDecisionBusy, setRemovalDecisionBusy] = useState(false);
+  const [removalDecisionError, setRemovalDecisionError] = useState('');
   const taskId = params.id;
   const visibleContacts = allContacts?.length ? allContacts : contacts;
 
@@ -184,7 +195,16 @@ export default function TaskDetailPage() {
     ? taskCancellationDecision({ session: { user: currentUser }, task })
     : null);
   const cancellationNeedsApproval = cancellationPolicy?.decision === TASK_CANCELLATION_DECISIONS.APPROVAL_REQUIRED;
-  const cancellationPending = task?.metadataJson?.removalApproval?.decision === 'pending';
+  const removalApproval = taskRemovalApprovalState(task);
+  const cancellationPending = removalApproval?.decision === 'pending';
+  const isTaskRemovalApproval = task?.taskType === 'task_removal_approval';
+  const removalApprovalMetadata = isTaskRemovalApproval ? task?.metadataJson || {} : null;
+  const canReviewRemovalApproval = Boolean(
+    access.canWriteCrm &&
+    isTaskRemovalApproval &&
+    ['open', 'in_progress', 'snoozed'].includes(task?.status) &&
+    canReviewTaskRemovalApprovals(currentUser)
+  );
   const canCancelTask = Boolean(
     access.canWriteCrm &&
     task &&
@@ -225,6 +245,46 @@ export default function TaskDetailPage() {
     }
   }
 
+  function openRemovalDecision(decision) {
+    if (!canReviewRemovalApproval) return;
+    setRemovalDecision(decision);
+    setRemovalDecisionReason(decision === 'approve'
+      ? removalApprovalMetadata?.requestedReason || 'Task cancellation approved.'
+      : '');
+    setRemovalDecisionError('');
+  }
+
+  async function submitRemovalDecision() {
+    if (!task?.id || !removalDecision || removalDecisionBusy) return;
+    setRemovalDecisionBusy(true);
+    setRemovalDecisionError('');
+    try {
+      const response = await fetch('/api/tasks', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: task.id,
+          action: removalDecision === 'approve' ? 'approve_task_removal' : 'deny_task_removal',
+          reason: removalDecisionReason,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Cancellation decision failed.');
+      setDetail((current) => current ? { ...current, task: payload.task || current.task } : current);
+      setRemovalDecision(null);
+      setRemovalDecisionReason('');
+      toast(payload.decision === 'superseded'
+        ? 'Cancellation request closed because the task already changed'
+        : payload.decision === 'approve'
+          ? 'Task cancellation approved'
+          : 'Task cancellation denied');
+    } catch (err) {
+      setRemovalDecisionError(err.message || 'Cancellation decision failed.');
+    } finally {
+      setRemovalDecisionBusy(false);
+    }
+  }
+
   if (loading && access.canReadCrm) {
     return <PageState tone="loading" title="Loading task" copy="Preparing task details, linked records, and activity history." />;
   }
@@ -248,6 +308,16 @@ export default function TaskDetailPage() {
       <div className={s.topBar}>
         <Link className={s.backLink} href="/tasks"><ArrowLeft size={16} /> Back to tasks</Link>
         <div className={s.actionRow}>
+          {canReviewRemovalApproval && (
+            <>
+              <button className="btn btn-sm" type="button" onClick={() => openRemovalDecision('deny')}>
+                <X size={14} /> Deny
+              </button>
+              <button className="btn btn-sm btn-primary" type="button" onClick={() => openRemovalDecision('approve')}>
+                <CheckCircle2 size={14} /> Approve
+              </button>
+            </>
+          )}
           {canCancelTask && (
             <button
               className={`btn btn-sm ${cancellationNeedsApproval ? '' : 'btn-danger'}`}
@@ -286,6 +356,56 @@ export default function TaskDetailPage() {
 
       <div className={s.layout}>
         <main className={s.mainStack}>
+          {!isTaskRemovalApproval && removalApproval && (
+            <section className={`${s.statusPanel} ${cancellationPending ? s.statusPanelPending : ''}`}>
+              <div className={s.statusIcon}><ShieldAlert size={20} /></div>
+              <div className={s.statusBody}>
+                <span className={s.statusEyebrow}>Cancellation request</span>
+                <h2>
+                  {cancellationPending
+                    ? 'Cancellation pending review'
+                    : removalApproval.decision === 'denied'
+                      ? 'Cancellation denied'
+                      : removalApproval.decision === 'superseded'
+                        ? 'Cancellation request closed'
+                        : 'Cancellation approved'}
+                </h2>
+                <p>{removalApproval.decisionReason || removalApproval.requestedReason || 'Awaiting an eligible reviewer.'}</p>
+                {cancellationPending && (
+                  <span className={s.statusHint}>You can keep working this task. Completing it automatically closes the request.</span>
+                )}
+              </div>
+            </section>
+          )}
+
+          {isTaskRemovalApproval && (
+            <section className={s.approvalPanel}>
+              <div className={s.approvalHeader}>
+                <div>
+                  <span className={s.statusEyebrow}>Protected task cancellation</span>
+                  <h2>{removalApprovalMetadata?.targetTaskTitle || 'Cancellation approval'}</h2>
+                </div>
+                <span className={`badge ${task.status === 'open' ? 'badge-pending' : badgeClass(task.status)}`}>
+                  {titleCase(removalApprovalMetadata?.decision || task.status)}
+                </span>
+              </div>
+              <dl className={s.approvalGrid}>
+                <div><dt>Requested by</dt><dd>{removalApprovalMetadata?.requesterName || removalApprovalMetadata?.requesterEmail || 'Coordinator'}</dd></div>
+                <div><dt>Requested</dt><dd>{formatDateTime(removalApprovalMetadata?.requestedAt)}</dd></div>
+                <div><dt>Review lane</dt><dd>{task.ownerUserId ? ownerLabel : 'Shared approval queue'}</dd></div>
+                <div className={s.approvalReason}><dt>Requested reason</dt><dd>{removalApprovalMetadata?.requestedReason || 'No reason recorded.'}</dd></div>
+                {removalApprovalMetadata?.decisionReason && (
+                  <div className={s.approvalReason}><dt>Decision note</dt><dd>{removalApprovalMetadata.decisionReason}</dd></div>
+                )}
+              </dl>
+              {removalApprovalMetadata?.targetTaskId && (
+                <Link className="btn btn-sm" href={`/tasks/${encodeURIComponent(removalApprovalMetadata.targetTaskId)}`}>
+                  <ExternalLink size={14} /> Open target task
+                </Link>
+              )}
+            </section>
+          )}
+
           <section className={s.panel}>
             <h2 className={s.panelTitle}><CheckSquare size={17} /> Task</h2>
             {task.description ? (
@@ -419,6 +539,17 @@ export default function TaskDetailPage() {
         onClose={() => setCancellationOpen(false)}
         onReasonChange={setCancellationReason}
         onSubmit={submitCancellation}
+      />
+      <TaskRemovalDecisionDialog
+        open={Boolean(removalDecision && canReviewRemovalApproval)}
+        task={task}
+        decision={removalDecision || 'approve'}
+        reason={removalDecisionReason}
+        busy={removalDecisionBusy}
+        error={removalDecisionError}
+        onClose={() => !removalDecisionBusy && setRemovalDecision(null)}
+        onReasonChange={setRemovalDecisionReason}
+        onSubmit={submitRemovalDecision}
       />
     </div>
   );
