@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useRef, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useCRM } from '@/lib/store';
@@ -29,6 +29,7 @@ import {
 } from '@/lib/crm/course-records.js';
 import { appendContactNote, contactDetailPageState, loadContactTimeline } from '@/lib/contacts/detail-loader.js';
 import { useRecordScopeRegistration } from '@/components/RecordScopeContext';
+import { InternalNoteComposer } from '@/components/ContactTimelineNoteFields';
 
 const SNAPSHOT_ICONS = {
   estimate: BriefcaseBusiness,
@@ -199,7 +200,13 @@ function timelineFilterCategory(item) {
 }
 
 function timelineCategoryLabel(item) {
+  if (timelineCategory(item) === 'note') return 'Internal note';
   return item.presentation?.categoryLabel || item.typeLabel || item.type || 'Activity';
+}
+
+function timelineNoteAuthor(item) {
+  if (timelineCategory(item) !== 'note') return '';
+  return item.actor?.name || 'Unknown user';
 }
 
 function timelineIcon(item) {
@@ -472,6 +479,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   }, [currentUser, employees]);
   const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
   const [noteInput, setNoteInput] = useState('');
+  const [noteSaving, setNoteSaving] = useState(false);
+  const noteSaveInFlight = useRef(false);
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [followUpDraft, setFollowUpDraft] = useState(null);
   const [followUpTask, setFollowUpTask] = useState(null);
@@ -1532,28 +1541,32 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     );
   }
 
-  const addNote = () => {
-    if (!noteInput.trim()) return;
-    if (!access.canWriteCrm) return;
+  const addNote = async (event) => {
+    event?.preventDefault();
+    if (!noteInput.trim() || !access.canWriteCrm || noteSaving || noteSaveInFlight.current) return;
     const newNote = {
       text: noteInput,
       createdAt: new Date().toISOString(),
       id: crypto.randomUUID()
     };
-    const save = dataSource === 'postgres'
-      ? appendContactNote(contact.id, newNote.text)
-      : updateContact(contact.id, {
-          notes: Array.isArray(contact.notes) ? [...contact.notes, newNote] : [newNote],
-        });
-    save
-      .then(() => {
-        setNoteInput('');
-        setTimelineReloadKey((key) => key + 1);
-        toast('Note added');
-      })
-      .catch((error) => {
-        toast(error.message || 'Note save failed', 'error');
-      });
+    noteSaveInFlight.current = true;
+    setNoteSaving(true);
+    try {
+      const save = dataSource === 'postgres'
+        ? appendContactNote(contact.id, newNote.text)
+        : updateContact(contact.id, {
+            notes: Array.isArray(contact.notes) ? [...contact.notes, newNote] : [newNote],
+          });
+      await save;
+      setNoteInput('');
+      setTimelineReloadKey((key) => key + 1);
+      toast('Note added');
+    } catch (error) {
+      toast(error.message || 'Note save failed', 'error');
+    } finally {
+      noteSaveInFlight.current = false;
+      setNoteSaving(false);
+    }
   };
 
   const submitManualSend = () => {
@@ -1865,8 +1878,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     const dateParts = timelineDateParts(item);
                     const provenance = item.presentation?.provenance;
                     const record = item.record;
+                    const noteAuthor = timelineNoteAuthor(item);
                     const visibleDetails = [
-                      item.actor?.name ? `By ${item.actor.name}` : '',
+                      noteAuthor ? `By ${noteAuthor}` : (item.actor?.name ? `By ${item.actor.name}` : ''),
                       item.businessUnit?.name || '',
                       item.presentation?.sourceGroupLabel || '',
                       ...(item.linkedRecords || [])
@@ -1963,22 +1977,21 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   )}
                 </div>}
 
-                <div className={s.noteBox}>
-                  <textarea
-                    placeholder="Type an internal note..."
-                    value={noteInput}
-                    onChange={e => setNoteInput(e.target.value)}
-                    disabled={!access.canWriteCrm}
-                  />
-                  <div className={s.noteBoxFooter}>
-                    <button className="btn btn-primary btn-sm" onClick={addNote} disabled={!access.canWriteCrm}>
-                      <Plus size={14} /> Add Note
-                    </button>
-                    <button className="btn btn-sm" type="button" onClick={openFollowUpModal} disabled={!access.canWriteCrm}>
-                      <AlertCircle size={14} /> Log Follow-up
-                    </button>
-                  </div>
-                </div>
+                <InternalNoteComposer
+                  value={noteInput}
+                  onChange={(event) => setNoteInput(event.target.value)}
+                  canWrite={access.canWriteCrm}
+                  pending={noteSaving}
+                  onSubmit={addNote}
+                  onOpenFollowUp={openFollowUpModal}
+                  classNames={{
+                    noteBox: s.noteBox,
+                    noteBoxHeader: s.noteBoxHeader,
+                    noteBoxLabel: s.noteBoxLabel,
+                    noteBoxHelp: s.noteBoxHelp,
+                    noteBoxFooter: s.noteBoxFooter,
+                  }}
+                />
               </div>
             )}
 

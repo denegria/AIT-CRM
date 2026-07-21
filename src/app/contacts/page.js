@@ -59,6 +59,7 @@ import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import TimeframeFilterPanel from '@/components/TimeframeFilterPanel';
+import { ContactDialogInitialTimelineNote } from '@/components/ContactTimelineNoteFields';
 import { Activity, AlertCircle, BadgeDollarSign, Check, Clock3, ListFilter, PhoneOff, RotateCcw, UserRoundCheck, UsersRound, X } from 'lucide-react';
 
 const empty = {
@@ -535,7 +536,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   };
   const openEdit = (row) => {
     if (!canWrite) return;
-    setForm({ ...row, appendNote: '' });
+    setForm({ ...row });
     setFormError('');
     setDrawer(row);
   };
@@ -570,8 +571,12 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     const payload = { ...form };
     delete payload.notes;
     delete payload.timeline;
-    payload.appendNote = String(payload.appendNote || '').trim();
-    if (!payload.appendNote) delete payload.appendNote;
+    if (drawer === 'new') {
+      payload.appendNote = String(payload.appendNote || '').trim();
+      if (!payload.appendNote) delete payload.appendNote;
+    } else {
+      delete payload.appendNote;
+    }
     if (coordinatorUiPolicy.lockedOwnerUserId) {
       payload.assignedTo = coordinatorUiPolicy.lockedOwnerUserId;
     }
@@ -1508,23 +1513,11 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                 />
               </div>
             )}
-            <div className="form-group">
-              <label className="form-label" htmlFor="contact-dialog-append-note">
-                {drawer === 'new' ? 'Initial timeline note' : 'Append timeline note'}
-              </label>
-              <textarea
-                id="contact-dialog-append-note"
-                className="input contact-dialog-notes"
-                rows={3}
-                value={form.appendNote || ''}
-                onChange={e => setForm(f => ({ ...f, appendNote: e.target.value }))}
-              />
-              <div className="contact-dialog-note-help">
-                {drawer === 'new'
-                  ? 'Optional. This note will be added to the new contact timeline.'
-                  : 'Optional. This adds a new timeline entry and preserves existing note history.'}
-              </div>
-            </div>
+            <ContactDialogInitialTimelineNote
+              isNewContact={drawer === 'new'}
+              value={form.appendNote || ''}
+              onChange={(event) => setForm((current) => ({ ...current, appendNote: event.target.value }))}
+            />
           </section>
 
           {canWrite && drawer && drawer !== 'new' && (
