@@ -47,12 +47,25 @@ export function followUpEventTypeForOutcome(outcome) {
   return `follow_up.${normalizeFollowUpOutcome(outcome)}`;
 }
 
-export function followUpOutcomeRequiresNextDue(outcome) {
+export function followUpOutcomeSuggestsNextDue(outcome) {
   return [
     FOLLOW_UP_OUTCOMES.NO_ANSWER,
     FOLLOW_UP_OUTCOMES.LEFT_VOICEMAIL,
     FOLLOW_UP_OUTCOMES.NEEDS_NEXT_FOLLOW_UP,
   ].includes(outcome);
+}
+
+export function followUpQuickDueDate(days, now = new Date()) {
+  const offset = Number(days);
+  const date = now instanceof Date ? new Date(now) : new Date(now);
+  if (!Number.isInteger(offset) || offset < 1 || Number.isNaN(date.getTime())) {
+    throw followUpError('Quick follow-up date requires a positive day offset and valid date.');
+  }
+  date.setDate(date.getDate() + offset);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 export function followUpOutcomeClosesFollowUp(outcome) {
@@ -89,10 +102,6 @@ export function normalizeFollowUpCompletionPayload({
   if (!note) {
     throw followUpError('Follow-up note is required to complete this task.');
   }
-  if (followUpOutcomeRequiresNextDue(outcome) && !nextDueAt) {
-    throw followUpError('Next follow-up date is required for this outcome.');
-  }
-
   return {
     outcome,
     outcomeLabel: followUpOutcomeLabel(outcome),

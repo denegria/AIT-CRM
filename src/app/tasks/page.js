@@ -673,6 +673,7 @@ export default function FollowUpQueuePage() {
     if (!access.canWriteCrm) return;
     setBusyTaskId(task.id);
     setError('');
+    let createdNextTask = false;
     try {
       if (dataSource === 'postgres') {
         const response = await fetch('/api/tasks', {
@@ -689,6 +690,7 @@ export default function FollowUpQueuePage() {
           setQueueTasks((prev) => prev.map((row) => (row.id === normalizedTargetTask.id ? normalizedTargetTask : row)));
         }
         if (result.nextTask) {
+          createdNextTask = true;
           const normalizedNextTask = normalizeTask(result.nextTask, contacts);
           setQueueTasks((prev) => [normalizedNextTask, ...prev]);
           addTask({
@@ -732,7 +734,11 @@ export default function FollowUpQueuePage() {
                 : action === 'cancel'
                   ? 'Task canceled'
                   : action === 'complete'
-                    ? 'Task completed'
+                    ? task.taskType === 'follow_up'
+                      ? createdNextTask
+                        ? 'Follow-up completed · next task scheduled'
+                        : 'Follow-up completed · no next task scheduled'
+                      : 'Task completed'
                     : action === 'snooze'
                       ? 'Task snoozed'
                       : 'Task assigned');

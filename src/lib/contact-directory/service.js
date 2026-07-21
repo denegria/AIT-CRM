@@ -50,21 +50,6 @@ import {
 export const CONTACT_DIRECTORY_PAGE_SIZE = 50;
 export const CONTACT_DIRECTORY_MAX_PAGE_SIZE = 100;
 
-const FOLLOW_UP_TEXT_NEEDLES = Object.freeze([
-  'follow up',
-  'follow-up',
-  'seguimiento',
-  'llamada',
-  'llamo',
-  'llamó',
-  'called',
-  'voicemail',
-  'no contesta',
-  'no answer',
-  'whatsapp',
-  'mensaje',
-  'texted',
-]);
 const SYSTEM_HISTORY_PATTERN = '^mis-[0-9]+[[:space:]]+.*(cleanup|consolidation|correction|merge|merged|backfill|parser|audit|source-row|artifact|data-fix)';
 const SYSTEM_APPROVAL_PATTERN = '^mis-[0-9]+[[:space:]]+approved';
 
@@ -102,10 +87,6 @@ function isSystemHistorySql(column) {
   )`;
 }
 
-function containsFollowUpTextSql(column) {
-  return or(...FOLLOW_UP_TEXT_NEEDLES.map((needle) => ilike(column, `%${needle}%`)));
-}
-
 function followUpEventConditionSql() {
   return or(
     ilike(activityEvents.eventType, '%follow_up%'),
@@ -114,7 +95,6 @@ function followUpEventConditionSql() {
     ilike(activityEvents.eventType, '%sms%'),
     ilike(activityEvents.eventType, '%whatsapp%'),
     ilike(activityEvents.eventType, '%message%'),
-    containsFollowUpTextSql(activityEvents.message),
   );
 }
 
@@ -222,32 +202,15 @@ function buildNonSignsTouchAggregates(db) {
     .from(activityEvents)
     .groupBy(activityEvents.organizationId, activityEvents.contactId)
     .as('contact_activity_touch');
-  const followUpNotes = db
-    .select({
-      organizationId: notes.organizationId,
-      contactId: notes.contactId,
-      followUpNoteTime: sql`max(${notes.createdAt}) filter (
-        where ${validCandidateTimeSql(notes.createdAt)}
-          and not ${isSystemHistorySql(notes.body)}
-          and ${containsFollowUpTextSql(notes.body)}
-      )`.as('follow_up_note_time'),
-    })
-    .from(notes)
-    .groupBy(notes.organizationId, notes.contactId)
-    .as('contact_follow_up_note_touch');
-  return { messages, activities, followUpNotes };
+  return { messages, activities };
 }
 
-function nonSignsTouchSql({ touchAggregates, includeFollowUpNotes = false } = {}) {
+function nonSignsTouchSql({ touchAggregates } = {}) {
   const messageTime = touchAggregates.messages.messageTime;
   const followUpActivityTime = touchAggregates.activities.followUpActivityTime;
-  const followUpNoteTime = includeFollowUpNotes
-    ? touchAggregates.followUpNotes.followUpNoteTime
-    : sql`null::timestamptz`;
   const touchActivityTime = touchAggregates.activities.touchActivityTime;
   const touchTime = greatestSql(messageTime, touchActivityTime);
-  if (!includeFollowUpNotes) return touchTime;
-  return sql`coalesce(${greatestSql(messageTime, followUpActivityTime, followUpNoteTime)}, ${touchTime})`;
+  return sql`coalesce(${greatestSql(messageTime, followUpActivityTime)}, ${touchTime})`;
 }
 
 function businessUnitConditionSql(ids = []) {
@@ -258,12 +221,8 @@ function contactLastTouchSql(latestLead, businessUnitRows = [], touchAggregates)
   const signsIds = businessUnitRows
     .filter((unit) => workflowKeyForBusinessUnit(unit) === WORKFLOW_KEYS.AIT_SIGNS)
     .map((unit) => unit.id);
-  const usaIds = businessUnitRows
-    .filter((unit) => workflowKeyForBusinessUnit(unit) === WORKFLOW_KEYS.AIT_USA)
-    .map((unit) => unit.id);
   return sql`case
     when ${businessUnitConditionSql(signsIds)} then ${aitSignsLastTouchSql()}
-    when ${businessUnitConditionSql(usaIds)} then ${nonSignsTouchSql({ touchAggregates, includeFollowUpNotes: true })}
     else ${nonSignsTouchSql({ touchAggregates })}
   end`;
 }

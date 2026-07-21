@@ -1282,7 +1282,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       }
       setTimelineFilter('all');
       setTimelineReloadKey((key) => key + 1);
-      toast(payload.taskMatched ? 'Follow-up task completed' : 'Follow-up logged');
+      const resultLabel = payload.taskMatched ? 'Follow-up task completed' : 'Follow-up logged';
+      toast(payload.nextTask
+        ? `${resultLabel} · next task scheduled`
+        : `${resultLabel} · no next task scheduled`);
     } catch (error) {
       const message = error.message || 'Follow-up log failed.';
       setFollowUpError(message);

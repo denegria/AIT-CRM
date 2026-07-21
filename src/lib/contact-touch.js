@@ -108,6 +108,7 @@ function isFollowUpTouch({ eventType = '', text = '', kind = '' } = {}) {
   ) {
     return true;
   }
+  if (kind !== 'note') return false;
   return [
     'follow up',
     'follow-up',
@@ -228,9 +229,9 @@ export function summarizeContactTouch({
         ...candidate,
         label: 'History',
       }, referenceTime);
-    }
-    if (isFollowUpTouch(candidate)) {
-      addCandidate(followUpCandidates, candidate, referenceTime);
+      if (isFollowUpTouch(candidate)) {
+        addCandidate(followUpCandidates, candidate, referenceTime);
+      }
     }
   }
 

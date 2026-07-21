@@ -9,7 +9,8 @@ import {
   followUpActivityMessage,
   followUpEventTypeForOutcome,
   followUpOutcomeClosesFollowUp,
-  followUpOutcomeRequiresNextDue,
+  followUpOutcomeSuggestsNextDue,
+  followUpQuickDueDate,
   leadStatusForFollowUpOutcome,
   normalizeFollowUpCompletionPayload,
 } from './follow-up.js';
@@ -57,34 +58,29 @@ test('requires a written note to complete follow-up tasks', () => {
   );
 });
 
-test('requires next date for explicit next-follow-up outcome', () => {
-  assert.throws(
-    () => normalizeFollowUpCompletionPayload({
-      task: followUpTask(),
-      payload: { outcome: FOLLOW_UP_OUTCOMES.NEEDS_NEXT_FOLLOW_UP, note: 'Call again.' },
-      now,
-    }),
-    /Next follow-up date is required/,
-  );
-});
-
-test('requires a next date for continuation outcomes', () => {
+test('continuation outcomes recommend but do not require a next date', () => {
   for (const outcome of [
     FOLLOW_UP_OUTCOMES.NO_ANSWER,
     FOLLOW_UP_OUTCOMES.LEFT_VOICEMAIL,
     FOLLOW_UP_OUTCOMES.NEEDS_NEXT_FOLLOW_UP,
   ]) {
-    assert.equal(followUpOutcomeRequiresNextDue(outcome), true);
-    assert.throws(
-      () => normalizeFollowUpCompletionPayload({
-        task: followUpTask(),
-        payload: { outcome, note: 'Continue outreach.' },
-        now,
-      }),
-      /Next follow-up date is required/,
-    );
+    assert.equal(followUpOutcomeSuggestsNextDue(outcome), true);
+    const payload = normalizeFollowUpCompletionPayload({
+      task: followUpTask(),
+      payload: { outcome, note: 'Continue outreach.' },
+      now,
+    });
+    assert.equal(payload.nextDueAt, null);
+    assert.equal(payload.createNextTask, false);
   }
-  assert.equal(followUpOutcomeRequiresNextDue(FOLLOW_UP_OUTCOMES.REACHED_INTERESTED), false);
+  assert.equal(followUpOutcomeSuggestsNextDue(FOLLOW_UP_OUTCOMES.REACHED_INTERESTED), false);
+});
+
+test('quick due dates offer tomorrow, two-day, and three-day choices', () => {
+  const reference = new Date('2026-07-21T12:00:00.000Z');
+  assert.equal(followUpQuickDueDate(1, reference), '2026-07-22');
+  assert.equal(followUpQuickDueDate(2, reference), '2026-07-23');
+  assert.equal(followUpQuickDueDate(3, reference), '2026-07-24');
 });
 
 test('closed follow-up outcomes do not create another follow-up task', () => {

@@ -5,7 +5,8 @@ import { CheckCircle2 } from 'lucide-react';
 import Modal from './Modal';
 import {
   followUpOutcomeClosesFollowUp,
-  followUpOutcomeRequiresNextDue,
+  followUpOutcomeSuggestsNextDue,
+  followUpQuickDueDate,
 } from '@/lib/tasks/follow-up.js';
 
 export const FOLLOW_UP_OUTCOME_OPTIONS = Object.freeze([
@@ -18,6 +19,12 @@ export const FOLLOW_UP_OUTCOME_OPTIONS = Object.freeze([
   ['wrong_number', 'Wrong number'],
   ['do_not_contact', 'Do not contact'],
   ['enrolled_or_won', 'Enrolled / won'],
+]);
+
+const QUICK_DUE_OPTIONS = Object.freeze([
+  Object.freeze({ days: 1, label: 'Tomorrow' }),
+  Object.freeze({ days: 2, label: '2 days' }),
+  Object.freeze({ days: 3, label: '3 days' }),
 ]);
 
 export default function FollowUpOutcomeDialog({
@@ -37,9 +44,8 @@ export default function FollowUpOutcomeDialog({
 }) {
   const id = useId().replaceAll(':', '');
   if (!open || !draft) return null;
-  const requiresNextDue = followUpOutcomeRequiresNextDue(draft.outcome);
+  const suggestsNextDue = followUpOutcomeSuggestsNextDue(draft.outcome);
   const closesFollowUp = followUpOutcomeClosesFollowUp(draft.outcome);
-  const nextDueMissing = requiresNextDue && !draft.nextDueDate;
   const fieldId = (name) => `${id}-${name}`;
 
   return (
@@ -56,7 +62,7 @@ export default function FollowUpOutcomeDialog({
             className="btn btn-primary"
             type="button"
             onClick={onSubmit}
-            disabled={busy || !draft.note.trim() || nextDueMissing}
+            disabled={busy || !draft.note.trim()}
           >
             <CheckCircle2 size={16} /> {busy ? 'Saving...' : 'Save Outcome'}
           </button>
@@ -133,13 +139,13 @@ export default function FollowUpOutcomeDialog({
                 <span className="contact-dialog-section-index">2</span>
                 <div>
                   <h2>What happens next?</h2>
-                  <p>{requiresNextDue ? 'This outcome needs a dated next commitment.' : 'Set a date when another follow-up is needed.'}</p>
+                  <p>{suggestsNextDue ? 'Schedule the next attempt now, or leave it in the coverage queue.' : 'Set a date when another follow-up is needed.'}</p>
                 </div>
               </div>
               <div className="grid-2">
                 <div className="form-group">
                   <label className="form-label" htmlFor={fieldId('next-due')}>
-                    Next Due {requiresNextDue ? '(required)' : '(optional)'}
+                    Next Due (optional)
                   </label>
                   <input
                     id={fieldId('next-due')}
@@ -147,12 +153,43 @@ export default function FollowUpOutcomeDialog({
                     type="date"
                     value={draft.nextDueDate}
                     disabled={busy}
-                    required={requiresNextDue}
-                    aria-invalid={nextDueMissing}
                     onChange={(event) => onChange({ nextDueDate: event.target.value })}
                   />
+                  <div className="follow-up-quick-dates" role="group" aria-label="Quick next due date choices">
+                    {QUICK_DUE_OPTIONS.map((option) => {
+                      const value = followUpQuickDueDate(option.days);
+                      return (
+                        <button
+                          key={option.days}
+                          className="follow-up-quick-date"
+                          type="button"
+                          disabled={busy}
+                          aria-pressed={draft.nextDueDate === value}
+                          onClick={() => onChange({ nextDueDate: value })}
+                        >
+                          {option.label}
+                        </button>
+                      );
+                    })}
+                    <button
+                      className="follow-up-quick-date"
+                      type="button"
+                      disabled={busy}
+                      aria-pressed={!draft.nextDueDate}
+                      onClick={() => onChange({ nextDueDate: '' })}
+                    >
+                      No date
+                    </button>
+                  </div>
+                  {!draft.nextDueDate && (
+                    <p className={`follow-up-next-due-note ${suggestsNextDue ? 'is-warning' : ''}`} role={suggestsNextDue ? 'status' : undefined}>
+                      {suggestsNextDue
+                        ? 'No next task will be scheduled. Eligible contacts remain visible in Needs next follow-up.'
+                        : 'Leave blank to log the outcome without scheduling another task.'}
+                    </p>
+                  )}
                 </div>
-                {canManageAssignments && (
+                {canManageAssignments && draft.nextDueDate && (
                   <div className="form-group">
                     <label className="form-label" htmlFor={fieldId('next-owner')}>Next Owner</label>
                     <select

@@ -81,6 +81,27 @@ test('summarizeContactTouch uses AIT USA website submission as initial last touc
   assert.equal(summary.latestComment, 'Internal note after profile edit.');
 });
 
+test('summarizeContactTouch never parses AIT USA internal-note text as Last Touch', () => {
+  const summary = summarizeContactTouch({
+    contact: { createdAt: new Date('2026-06-01T15:00:00.000Z') },
+    businessUnit: { name: 'AIT USA Institute' },
+    referenceTime: new Date('2026-06-04T20:00:00.000Z').getTime(),
+    notes: [{
+      body: 'Called student, no answer; follow up tomorrow.',
+      createdAt: new Date('2026-06-04T16:00:00.000Z'),
+    }],
+    activityEvents: [{
+      eventType: 'website_lead_captured',
+      message: 'Website lead submitted.',
+      occurredAt: new Date('2026-06-01T14:00:00.000Z'),
+    }],
+  });
+
+  assert.equal(summary.lastTouch, '2026-06-01');
+  assert.equal(summary.lastFollowUpTouch, '');
+  assert.equal(summary.latestComment, 'Called student, no answer; follow up tomorrow.');
+});
+
 test('summarizeContactTouch uses AIT Signs job history dates and exposes edit separately', () => {
   const summary = summarizeContactTouch({
     contact: {

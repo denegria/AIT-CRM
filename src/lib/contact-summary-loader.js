@@ -23,22 +23,6 @@ import {
 import { contactBootstrapSummarySelection } from './bootstrap-contract.js';
 import { TASK_STATUSES, TASK_TYPES } from './tasks/constants.js';
 
-const FOLLOW_UP_TEXT_NEEDLES = Object.freeze([
-  'follow up',
-  'follow-up',
-  'seguimiento',
-  'llamada',
-  'llamo',
-  'llamó',
-  'called',
-  'voicemail',
-  'no contesta',
-  'no answer',
-  'whatsapp',
-  'mensaje',
-  'texted',
-]);
-
 const SYSTEM_HISTORY_PATTERN = '^mis-[0-9]+[[:space:]]+.*(cleanup|consolidation|correction|merge|merged|backfill|parser|audit|source-row|artifact|data-fix)';
 const SYSTEM_APPROVAL_PATTERN = '^mis-[0-9]+[[:space:]]+approved';
 
@@ -66,10 +50,6 @@ function isSystemHistory(column) {
   )`;
 }
 
-function containsFollowUpText(column) {
-  return or(...FOLLOW_UP_TEXT_NEEDLES.map((needle) => ilike(column, `%${needle}%`)));
-}
-
 function isTouchEventType(column) {
   return or(
     sql`lower(coalesce(${column}, '')) = 'website_lead_captured'`,
@@ -90,7 +70,6 @@ function isFollowUpEvent(row) {
     ilike(row.eventType, '%sms%'),
     ilike(row.eventType, '%whatsapp%'),
     ilike(row.eventType, '%message%'),
-    containsFollowUpText(row.message),
   );
 }
 
@@ -128,20 +107,13 @@ async function latestNoteCandidates(db, contactIds) {
     not(isSystemHistory(notesTable.body)),
   );
 
-  const [latestRows, followUpRows] = await Promise.all([
-    db
-      .selectDistinctOn([notesTable.contactId], selection)
-      .from(notesTable)
-      .where(baseWhere)
-      .orderBy(notesTable.contactId, desc(notesTable.createdAt), desc(notesTable.body)),
-    db
-      .selectDistinctOn([notesTable.contactId], selection)
-      .from(notesTable)
-      .where(and(baseWhere, containsFollowUpText(notesTable.body)))
-      .orderBy(notesTable.contactId, desc(notesTable.createdAt), desc(notesTable.body)),
-  ]);
+  const latestRows = await db
+    .selectDistinctOn([notesTable.contactId], selection)
+    .from(notesTable)
+    .where(baseWhere)
+    .orderBy(notesTable.contactId, desc(notesTable.createdAt), desc(notesTable.body));
 
-  return mergeContactSummaryCandidateRows(latestRows, followUpRows);
+  return latestRows.map(withoutRowId);
 }
 
 async function latestActivityCandidates(db, contactIds) {
