@@ -152,6 +152,21 @@
   line-height: 1.15;
   border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
 }
+.cardCoverage {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 20px;
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--warning) 28%, var(--border-subtle));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--warning-muted) 68%, var(--bg-secondary));
+  color: var(--warning);
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1.15;
+}
 .cardName {
   overflow-wrap: anywhere;
   font-weight: 600; font-size: var(--text-sm);
@@ -300,6 +315,21 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.cardFollowUpAction {
+  flex: 0 0 auto;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  padding: 3px 0;
+}
+.cardFollowUpAction:hover,
+.cardFollowUpAction:focus-visible {
+  text-decoration: underline;
 }
 .userAvatar {
   width: 20px; height: 20px;

@@ -219,6 +219,7 @@ test('pipeline filter params preserve date, owner, status, source, course, activ
     courseFilter: 'OSHA',
     locationFilter: 'Flemington',
     activityFilter: 'recent_7',
+    coverageFilter: 'all',
     search: 'anna',
     leadDateScope: 'custom',
     leadDateFrom: '2026-02-01',
@@ -228,6 +229,15 @@ test('pipeline filter params preserve date, owner, status, source, course, activ
   assert.equal(
     pipelineFilterQuery({ ...pipelineFilterStateFromParams(params), includeLeadDateScope: true }),
     'leadDateScope=custom&leadDateFrom=2026-02-01&leadDateTo=2026-05-30&owner=unassigned&status=New+Lead&source=Website&course=OSHA&location=Flemington&activity=recent_7&q=anna&compact=0',
+  );
+});
+
+test('pipeline filter params preserve follow-up coverage', () => {
+  const params = new URLSearchParams('coverage=needs_next_follow_up');
+  assert.equal(pipelineFilterStateFromParams(params).coverageFilter, 'needs_next_follow_up');
+  assert.equal(
+    pipelineFilterQuery(pipelineFilterStateFromParams(params)),
+    'coverage=needs_next_follow_up',
   );
 });
 

@@ -264,6 +264,7 @@ export function toTaskPayload(row) {
     sourceId: row.sourceId || '',
     sourceLabel: row.sourceLabel || '',
     metadataJson: row.metadataJson || {},
+    previousFollowUp: row.previousFollowUp || null,
     createdAt: row.createdAt?.toISOString?.() || row.createdAt || null,
     updatedAt: row.updatedAt?.toISOString?.() || row.updatedAt || null,
   };
@@ -295,6 +296,44 @@ export async function listTasks({
     .from(tasks)
     .where(and(...conditions))
     .orderBy(asc(tasks.dueAt), desc(tasks.createdAt));
+}
+
+export async function loadLatestFollowUpOutcomePreviews({
+  db,
+  organizationId,
+  contactIds = [],
+  businessUnitIds = null,
+}) {
+  const visibleContactIds = [...new Set(contactIds.filter(Boolean))];
+  if (!visibleContactIds.length) return new Map();
+  const conditions = [
+    eq(activityEvents.organizationId, organizationId),
+    inArray(activityEvents.contactId, visibleContactIds),
+    sql`lower(coalesce(${activityEvents.eventType}, '')) ~ '^follow_up\\.[a-z_]+$'`,
+  ];
+  if (Array.isArray(businessUnitIds)) {
+    if (!businessUnitIds.length) return new Map();
+    conditions.push(inArray(activityEvents.businessUnitId, businessUnitIds));
+  }
+  const eventTime = sql`coalesce(${activityEvents.occurredAt}, ${activityEvents.createdAt})`;
+  const rows = await db
+    .selectDistinctOn([activityEvents.contactId], {
+      contactId: activityEvents.contactId,
+      eventType: activityEvents.eventType,
+      message: activityEvents.message,
+      metadataJson: activityEvents.metadataJson,
+      occurredAt: eventTime,
+    })
+    .from(activityEvents)
+    .where(and(...conditions))
+    .orderBy(activityEvents.contactId, desc(eventTime), desc(activityEvents.createdAt), desc(activityEvents.id));
+
+  return new Map(rows.map((row) => [row.contactId, {
+    outcome: row.metadataJson?.outcome || String(row.eventType || '').replace(/^follow_up\./, ''),
+    outcomeLabel: row.metadataJson?.outcomeLabel || '',
+    note: row.metadataJson?.note || row.message || '',
+    occurredAt: row.occurredAt?.toISOString?.() || row.occurredAt || null,
+  }]));
 }
 
 export async function createTaskWithEvents({

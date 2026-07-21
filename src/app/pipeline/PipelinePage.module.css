@@ -1447,6 +1447,19 @@
     border: 1px solid color-mix(in srgb, currentColor 14%, transparent);
   }
 
+  .mobileCoverageChip {
+    display: inline-flex;
+    width: fit-content;
+    max-width: 100%;
+    padding: 3px 7px;
+    border: 1px solid color-mix(in srgb, var(--warning) 30%, var(--border-subtle));
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--warning-muted) 60%, var(--bg-secondary));
+    color: var(--warning);
+    font-size: 10px;
+    font-weight: 800;
+  }
+
   .mobileCardTools {
     display: grid;
     grid-template-columns: 1fr;

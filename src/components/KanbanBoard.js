@@ -133,6 +133,7 @@ export default function KanbanBoard({
   columns,
   onMove,
   onEdit,
+  onLogFollowUp,
   showMobileMoveControls = true,
   compact = false,
   fitColumns = false,
@@ -249,6 +250,12 @@ export default function KanbanBoard({
                     {item.needsFirstOutreach && (
                       <span className={s.cardUrgency}><AlertCircle size={12} /> New</span>
                     )}
+                    {(item.needsFirstContact || item.needsNextFollowUp) && (
+                      <span className={s.cardCoverage}>
+                        <AlertCircle size={12} />
+                        {item.needsFirstContact ? 'First contact' : 'Next follow-up'}
+                      </span>
+                    )}
                   </div>
                   <div className={s.cardName}>{item.name}</div>
                   {isAitUsa(item) && enrollmentLine(item) && (
@@ -295,6 +302,18 @@ export default function KanbanBoard({
                       <div className={s.userAvatar}>{item.assignedLabel?.charAt(0) || <UserRound size={11} />}</div>
                       <span>{item.assignedLabel || 'Unassigned'}</span>
                     </div>
+                    {onLogFollowUp && (item.needsFirstContact || item.needsNextFollowUp) && (
+                      <button
+                        className={s.cardFollowUpAction}
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onLogFollowUp(item);
+                        }}
+                      >
+                        Log follow-up
+                      </button>
+                    )}
                   </div>
                   {onMove && showMobileMoveControls && (
                     <label className={s.cardMove} onClick={(event) => event.stopPropagation()}>

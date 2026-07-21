@@ -30,6 +30,7 @@ import {
   DEFAULT_CONTACT_LEAD_DATE_TO,
   DEFAULT_PIPELINE_ACTIVITY_FILTER,
   DEFAULT_PIPELINE_COMPACT_MODE,
+  DEFAULT_PIPELINE_COVERAGE_FILTER,
   DEFAULT_PIPELINE_COURSE_FILTER,
   DEFAULT_PIPELINE_LOCATION_FILTER,
   DEFAULT_PIPELINE_OWNER_FILTER,
@@ -39,6 +40,11 @@ import {
   pipelineFilterQuery,
   pipelineFilterStateFromParams,
 } from '@/lib/contact-directory-filters';
+import {
+  contactMatchesFollowUpCoverage,
+  FOLLOW_UP_COVERAGE_OPTIONS,
+  followUpCoverageLabel,
+} from '@/lib/follow-up-coverage.js';
 import { schoolLocationForContact } from '@/lib/school-locations';
 import { matchesSearchValues } from '@/lib/search/match.js';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
@@ -67,6 +73,7 @@ const PIPELINE_FILTER_CHIP_LABELS = {
   course: 'Course',
   location: 'Learning Location',
   activity: 'Activity',
+  coverage: 'Follow-up Coverage',
   search: 'Search',
   cards: 'Cards',
 };
@@ -232,6 +239,7 @@ export default function PipelinePage() {
     courseFilter,
     locationFilter,
     activityFilter,
+    coverageFilter,
     search,
     leadDateScope,
     leadDateFrom,
@@ -277,6 +285,7 @@ export default function PipelinePage() {
     });
   }, [coordinatorUiPolicy.ownerScoped, parsedFilters.locationFilter, parsedFilters.ownerFilter, searchParams, updatePipelineFilterQuery]);
   const setStatusFilter = (value) => updatePipelineFilterQuery({ statusFilter: value });
+  const setCoverageFilter = (value) => updatePipelineFilterQuery({ coverageFilter: value });
   const setOwnerFilter = (value) => {
     if (coordinatorUiPolicy.ownerScoped) return;
     updatePipelineFilterQuery({
@@ -434,7 +443,7 @@ export default function PipelinePage() {
   );
 
   const normalizedSearch = search.trim().toLowerCase();
-  const pipelineRows = useMemo(() => pipelineScopedRows.filter((contact) => {
+  const pipelineRowsWithoutCoverage = useMemo(() => pipelineScopedRows.filter((contact) => {
     const statusOwnerCourseMatch = contactMatchesStatusOwnerCourse(contact, {
       statusFilter,
       ownerFilter,
@@ -450,6 +459,16 @@ export default function PipelinePage() {
       (activityFilter === 'recent_7' && touchAge <= 7);
     return statusOwnerCourseMatch && sourceMatch && locationMatch && activityMatch && matchesSearch(contact, normalizedSearch);
   }), [activityFilter, courseFilter, effectiveLocationFilter, normalizedSearch, ownerFilter, pipelineScopedRows, sourceFilter, statusFilter]);
+  const pipelineRows = useMemo(
+    () => pipelineRowsWithoutCoverage.filter((contact) => contactMatchesFollowUpCoverage(contact, coverageFilter)),
+    [coverageFilter, pipelineRowsWithoutCoverage],
+  );
+  const coverageCounts = useMemo(() => Object.fromEntries(
+    FOLLOW_UP_COVERAGE_OPTIONS.map((option) => [
+      option.id,
+      pipelineRowsWithoutCoverage.filter((contact) => contactMatchesFollowUpCoverage(contact, option.id)).length,
+    ]),
+  ), [pipelineRowsWithoutCoverage]);
   const closedOutcomeColumns = useMemo(
     () => normalizedColumns.filter((column) => column.isTerminal && !column.isOperational).sort(closedOutcomeSort),
     [normalizedColumns],
@@ -478,12 +497,12 @@ export default function PipelinePage() {
     : pipelineRows.filter((contact) => contact.status === mobileStageFilter);
   const nextLead = useMemo(() => (
     [...pipelineRows]
-      .filter((contact) => (
+      .filter((contact) => coverageFilter !== DEFAULT_PIPELINE_COVERAGE_FILTER || (
         isPipelineNewLeadBucket(contact) ||
         matchesPipelineQuickFilter(contact, 'unassigned')
       ))
       .sort((left, right) => nextLeadScore(right) - nextLeadScore(left))[0] || null
-  ), [pipelineRows]);
+  ), [coverageFilter, pipelineRows]);
   const selectedRows = useMemo(() => pipelineRows.filter((contact) => selectedIds.includes(contact.id)), [pipelineRows, selectedIds]);
   const selectedOwnerLabel = useMemo(() => {
     if (coordinatorUiPolicy.ownerScoped) return 'My Pipeline';
@@ -550,6 +569,11 @@ export default function PipelinePage() {
       label: optionLabel(PIPELINE_ACTIVITY_OPTIONS, activityFilter),
       onRemove: () => setActivityFilter(DEFAULT_PIPELINE_ACTIVITY_FILTER),
     } : null,
+    coverageFilter !== DEFAULT_PIPELINE_COVERAGE_FILTER ? {
+      key: 'coverage',
+      label: FOLLOW_UP_COVERAGE_OPTIONS.find((option) => option.id === coverageFilter)?.label || coverageFilter,
+      onRemove: () => setCoverageFilter(DEFAULT_PIPELINE_COVERAGE_FILTER),
+    } : null,
     search !== DEFAULT_PIPELINE_SEARCH ? {
       key: 'search',
       label: `Search: ${search}`,
@@ -572,6 +596,7 @@ export default function PipelinePage() {
     courseFilter !== DEFAULT_PIPELINE_COURSE_FILTER ||
     effectiveLocationFilter !== DEFAULT_PIPELINE_LOCATION_FILTER ||
     activityFilter !== DEFAULT_PIPELINE_ACTIVITY_FILTER ||
+    coverageFilter !== DEFAULT_PIPELINE_COVERAGE_FILTER ||
     search !== DEFAULT_PIPELINE_SEARCH ||
     compactMode !== DEFAULT_PIPELINE_COMPACT_MODE;
   const filterSections = [
@@ -610,6 +635,11 @@ export default function PipelinePage() {
       label: 'Activity',
       summary: optionLabel(PIPELINE_ACTIVITY_OPTIONS, activityFilter),
     },
+    isAitUsaPipeline ? {
+      id: 'coverage',
+      label: 'Follow-up Coverage',
+      summary: FOLLOW_UP_COVERAGE_OPTIONS.find((option) => option.id === coverageFilter)?.label || 'All covered and uncovered',
+    } : null,
   ].filter(Boolean);
   const pipelineScopeName = pipelineBusinessUnit?.name || currentBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`;
   const pipelineSummaryCopy = `${pipelineRows.length.toLocaleString()} matching pipeline cards in ${pipelineScopeName}`;
@@ -622,6 +652,7 @@ export default function PipelinePage() {
       courseFilter: DEFAULT_PIPELINE_COURSE_FILTER,
       locationFilter: DEFAULT_PIPELINE_LOCATION_FILTER,
       activityFilter: DEFAULT_PIPELINE_ACTIVITY_FILTER,
+      coverageFilter: DEFAULT_PIPELINE_COVERAGE_FILTER,
       search: DEFAULT_PIPELINE_SEARCH,
       leadDateScope: CONTACT_LEAD_DATE_SCOPE_ALL,
       leadDateFrom: DEFAULT_CONTACT_LEAD_DATE_FROM,
@@ -643,6 +674,10 @@ export default function PipelinePage() {
         toast('Stage updated');
       })
       .catch((error) => toast(error?.message || 'Stage update failed.', 'error'));
+  };
+  const openLogFollowUp = (contact) => {
+    if (!contact?.id) return;
+    router.push(`/contacts/${encodeURIComponent(contact.id)}?action=log-follow-up`);
   };
   const assignSelectedToMe = () => {
     if (!currentUser?.id || !selectedRows.length || !coordinatorUiPolicy.canManageCoordinatorAssignments) return;
@@ -767,7 +802,7 @@ export default function PipelinePage() {
                       ))}
                     </div>
 
-                    <div className={`${s.filterDetail} ${['timeframe', 'owner', 'status', 'source', 'course', 'location', 'activity'].includes(activeFilterSection) ? s.filterDetailCompact : ''}`}>
+                    <div className={`${s.filterDetail} ${['timeframe', 'owner', 'status', 'source', 'course', 'location', 'activity', 'coverage'].includes(activeFilterSection) ? s.filterDetailCompact : ''}`}>
                       {activeFilterSection === 'timeframe' && (
                         <section className={s.filterBlock}>
                           <div className={s.filterHeading}>Timeframe</div>
@@ -1008,6 +1043,38 @@ export default function PipelinePage() {
                           </div>
                         </section>
                       )}
+
+                      {activeFilterSection === 'coverage' && isAitUsaPipeline && (
+                        <section className={s.filterBlock}>
+                          <div className={s.filterHeading}>Follow-up Coverage</div>
+                          <div className={s.optionList} role="listbox" aria-label="Pipeline follow-up coverage filters">
+                            <button
+                              type="button"
+                              className={`${s.optionTile} ${coverageFilter === DEFAULT_PIPELINE_COVERAGE_FILTER ? s.active : ''}`}
+                              onClick={() => setCoverageFilter(DEFAULT_PIPELINE_COVERAGE_FILTER)}
+                              aria-selected={coverageFilter === DEFAULT_PIPELINE_COVERAGE_FILTER}
+                              role="option"
+                            >
+                              <span>All coverage states</span>
+                              <strong>{pipelineRowsWithoutCoverage.length}</strong>
+                            </button>
+                            {FOLLOW_UP_COVERAGE_OPTIONS.map((option) => (
+                              <button
+                                key={option.id}
+                                type="button"
+                                className={`${s.optionTile} ${coverageFilter === option.id ? s.active : ''}`}
+                                onClick={() => setCoverageFilter(option.id)}
+                                aria-selected={coverageFilter === option.id}
+                                role="option"
+                              >
+                                <span>{option.label}</span>
+                                <strong>{coverageCounts[option.id] || 0}</strong>
+                                <small>{option.description}</small>
+                              </button>
+                            ))}
+                          </div>
+                        </section>
+                      )}
                     </div>
                   </div>
 
@@ -1089,6 +1156,7 @@ export default function PipelinePage() {
               columns={activePipelineColumns}
               onMove={canWrite ? movePipelineCard : undefined}
               onEdit={(item) => router.push(`/contacts/${item.id}`)}
+              onLogFollowUp={canWrite ? openLogFollowUp : undefined}
               showMobileMoveControls={false}
               compact={compactMode}
               fitColumns
@@ -1132,6 +1200,7 @@ export default function PipelinePage() {
             columns={activePipelineColumns}
             onMove={canWrite ? movePipelineCard : undefined}
             onEdit={(item) => router.push(`/contacts/${item.id}`)}
+            onLogFollowUp={canWrite ? openLogFollowUp : undefined}
             showMobileMoveControls={false}
             compact={compactMode}
             selectedIds={selectedIds}
@@ -1187,6 +1256,9 @@ export default function PipelinePage() {
                 )}
                 <button className={s.mobileCardMain} type="button" onClick={() => router.push(`/contacts/${contact.id}`)}>
                   <span className={s.mobileCardStage}>{contact.needsFirstOutreach && contact.status ? contact.status : (contact.currentStage || contact.status)}</span>
+                  {followUpCoverageLabel(contact) && (
+                    <span className={s.mobileCoverageChip}>{followUpCoverageLabel(contact)}</span>
+                  )}
                   <strong>{contact.name}</strong>
                   <small>{mobileCardMeta(contact)}</small>
                   <span className={s.mobileTriageGrid} aria-label={`Triage context for ${contact.name}`}>
@@ -1206,6 +1278,11 @@ export default function PipelinePage() {
                 </button>
                 {canWrite && (
                   <div className={s.mobileCardTools}>
+                    {followUpCoverageLabel(contact) && (
+                      <button className="btn btn-sm btn-primary" type="button" onClick={() => openLogFollowUp(contact)}>
+                        Log follow-up
+                      </button>
+                    )}
                     <button
                       className="btn btn-sm"
                       type="button"

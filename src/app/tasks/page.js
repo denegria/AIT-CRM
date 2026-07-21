@@ -39,6 +39,7 @@ import {
 import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import FollowUpOutcomeDialog from '@/components/FollowUpOutcomeDialog';
 import { fetchTaskContactOptions } from '@/lib/tasks/contact-options-loader.js';
 import s from './FollowUpQueue.module.css';
 
@@ -82,18 +83,6 @@ const LINK_OPTIONS = [
 const DUE_OPTION_VALUES = new Set(DUE_OPTIONS.map(([value]) => value));
 const STATUS_OPTION_VALUES = new Set(STATUS_OPTIONS.map(([value]) => value));
 const LINK_OPTION_VALUES = new Set(LINK_OPTIONS.map(([value]) => value));
-
-const FOLLOW_UP_OUTCOME_OPTIONS = [
-  ['reached_interested', 'Reached - interested'],
-  ['left_voicemail', 'Left voicemail'],
-  ['no_answer', 'No answer'],
-  ['appointment_scheduled', 'Appointment scheduled'],
-  ['needs_next_follow_up', 'Needs next follow-up'],
-  ['reached_not_interested', 'Reached - not interested'],
-  ['wrong_number', 'Wrong number'],
-  ['do_not_contact', 'Do not contact'],
-  ['enrolled_or_won', 'Enrolled / won'],
-];
 
 const TASK_CREATE_TYPE_OPTIONS = TASK_TYPE_OPTIONS.filter(([value]) => !['all', 'archive_approval', 'task_removal_approval'].includes(value));
 const TASK_PRIORITY_OPTIONS = [
@@ -1168,6 +1157,7 @@ export default function FollowUpQueuePage() {
 
   function toggleFollowUpCompletion(taskId) {
     const nextTaskId = completionTaskId === taskId ? '' : taskId;
+    setError('');
     setCompletionTaskId(nextTaskId);
     if (nextTaskId) setEditTaskId((currentEditTaskId) => (currentEditTaskId === taskId ? '' : currentEditTaskId));
   }
@@ -1286,6 +1276,12 @@ export default function FollowUpQueuePage() {
   const activeRemovalDecisionDraft = removalDecisionTaskId ? removalDecisionDrafts[removalDecisionTaskId] : null;
   const activeRemovalDecisionTask = removalDecisionTaskId
     ? queueTasks.find((task) => task.id === removalDecisionTaskId)
+    : null;
+  const activeFollowUpTask = completionTaskId
+    ? queueTasks.find((task) => task.id === completionTaskId && task.taskType === 'follow_up')
+    : null;
+  const activeFollowUpDraft = activeFollowUpTask
+    ? followUpDraft(activeFollowUpTask.id, activeFollowUpTask)
     : null;
   if (!access.canReadCrm) {
     return (
@@ -1643,8 +1639,6 @@ export default function FollowUpQueuePage() {
             const isOverdue = key && key < todayKey() && !isTaskClosed(task);
             const isToday = key === todayKey() && !isTaskClosed(task);
             const assignee = visibleAssignees.find((user) => user.id === task.ownerUserId);
-            const draft = followUpDraft(task.id, task);
-            const showFollowUpCompletion = completionTaskId === task.id && task.taskType === 'follow_up';
             const isArchiveApprovalTask = task.taskType === 'archive_approval';
             const isTaskRemovalApprovalTask = task.taskType === 'task_removal_approval';
             const showEditPanel = editTaskId === task.id;
@@ -1666,6 +1660,15 @@ export default function FollowUpQueuePage() {
                     {task.title}
                   </Link>
                   {task.description && <div className={s.taskDescription}>{task.description}</div>}
+                  {filters.taskType === 'follow_up' && task.previousFollowUp && (
+                    <div className={s.followUpPreview}>
+                      <strong>
+                        {task.previousFollowUp.outcomeLabel || titleCase(task.previousFollowUp.outcome)}
+                        {' · '}{formatDate(task.previousFollowUp.occurredAt)}
+                      </strong>
+                      <span>{task.previousFollowUp.note}</span>
+                    </div>
+                  )}
                   <div className={s.metaLine}>
                     <span className={`badge ${taskBadgeClass(task)}`}>{titleCase(task.status)}</span>
                     <span className={`badge badge-${task.priority}`}>{titleCase(task.priority)}</span>
@@ -1705,7 +1708,18 @@ export default function FollowUpQueuePage() {
                   {assignee?.email && <span className={s.mutedText}>{assignee.email}</span>}
                 </div>
                 <div className={s.actions}>
-                  <Link className="btn btn-sm btn-primary" href={`/tasks/${encodeURIComponent(task.id)}`}>
+                  {task.taskType === 'follow_up' && !isTaskClosed(task) && (
+                    <button
+                      className="btn btn-sm btn-primary"
+                      type="button"
+                      disabled={!access.canWriteCrm || busyTaskId === task.id}
+                      onClick={() => toggleFollowUpCompletion(task.id)}
+                    >
+                      <CheckCircle2 size={14} />
+                      Log outcome
+                    </button>
+                  )}
+                  <Link className={`btn btn-sm ${task.taskType === 'follow_up' && !isTaskClosed(task) ? '' : 'btn-primary'}`} href={`/tasks/${encodeURIComponent(task.id)}`}>
                     <ListTodo size={14} />
                     Review
                   </Link>
@@ -1933,153 +1947,6 @@ export default function FollowUpQueuePage() {
                     </div>
                   </form>
                 )}
-                {showFollowUpCompletion && (
-                  <div className={s.completionPanel}>
-                    <label className={s.filterGroup}>
-                      <span className="form-label">Outcome</span>
-                      <select
-                        className="select"
-                        value={draft.outcome}
-                        disabled={busyTaskId === task.id}
-                        onChange={(event) => updateFollowUpDraft(task.id, { outcome: event.target.value })}
-                      >
-                        {FOLLOW_UP_OUTCOME_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                      </select>
-                    </label>
-                    <label className={s.filterGroup}>
-                      <span className="form-label">Channel</span>
-                      <select
-                        className="select"
-                        value={draft.channel}
-                        disabled={busyTaskId === task.id}
-                        onChange={(event) => updateFollowUpDraft(task.id, { channel: event.target.value })}
-                      >
-                        <option value="phone">Phone</option>
-                        <option value="sms">SMS</option>
-                        <option value="whatsapp">WhatsApp</option>
-                        <option value="email">Email</option>
-                        <option value="in_person">In person</option>
-                        <option value="other">Other</option>
-                      </select>
-                    </label>
-                    <label className={s.filterGroup}>
-                      <span className="form-label">Attempted</span>
-                      <input
-                        className="input"
-                        value={draft.contactMethod}
-                        placeholder="Phone or email used"
-                        disabled={busyTaskId === task.id}
-                        onChange={(event) => updateFollowUpDraft(task.id, { contactMethod: event.target.value })}
-                      />
-                    </label>
-                    <label className={s.filterGroup}>
-                      <span className="form-label">Next Due</span>
-                      <input
-                        className="input"
-                        type="date"
-                        value={draft.nextDueDate}
-                        disabled={busyTaskId === task.id}
-                        onChange={(event) => updateFollowUpDraft(task.id, { nextDueDate: event.target.value })}
-                      />
-                    </label>
-                    {coordinatorUiPolicy.canManageCoordinatorAssignments && (
-                      <label className={s.filterGroup}>
-                        <span className="form-label">Next Owner</span>
-                        <select
-                          className="select"
-                          value={draft.nextOwnerUserId}
-                          disabled={busyTaskId === task.id}
-                          onChange={(event) => updateFollowUpDraft(task.id, { nextOwnerUserId: event.target.value })}
-                        >
-                          <option value="" disabled>Select owner</option>
-                          {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
-                        </select>
-                      </label>
-                    )}
-                    <div className={s.profileFields}>
-                      <label className={s.filterGroup}>
-                        <span className="form-label">Program</span>
-                        <input
-                          className="input"
-                          value={draft.leadProfile?.programInterest || ''}
-                          disabled={busyTaskId === task.id}
-                          onChange={(event) => updateFollowUpLeadProfile(task.id, 'programInterest', event.target.value)}
-                        />
-                      </label>
-                      <label className={s.filterGroup}>
-                        <span className="form-label">Student Location</span>
-                        <input
-                          className="input"
-                          value={draft.leadProfile?.locationPreference || ''}
-                          disabled={busyTaskId === task.id}
-                          onChange={(event) => updateFollowUpLeadProfile(task.id, 'locationPreference', event.target.value)}
-                        />
-                      </label>
-                      <label className={s.filterGroup}>
-                        <span className="form-label">Preferred Day</span>
-                        <input
-                          className="input"
-                          value={draft.leadProfile?.preferredDay || ''}
-                          disabled={busyTaskId === task.id}
-                          onChange={(event) => updateFollowUpLeadProfile(task.id, 'preferredDay', event.target.value)}
-                        />
-                      </label>
-                      <label className={s.filterGroup}>
-                        <span className="form-label">Schedule</span>
-                        <input
-                          className="input"
-                          value={draft.leadProfile?.preferredSchedule || ''}
-                          disabled={busyTaskId === task.id}
-                          onChange={(event) => updateFollowUpLeadProfile(task.id, 'preferredSchedule', event.target.value)}
-                        />
-                      </label>
-                      <label className={s.filterGroup}>
-                        <span className="form-label">Test</span>
-                        <input
-                          className="input"
-                          value={draft.leadProfile?.testInterest || ''}
-                          disabled={busyTaskId === task.id}
-                          onChange={(event) => updateFollowUpLeadProfile(task.id, 'testInterest', event.target.value)}
-                        />
-                      </label>
-                      <label className={s.filterGroup}>
-                        <span className="form-label">Level</span>
-                        <input
-                          className="input"
-                          value={draft.leadProfile?.educationLevel || ''}
-                          disabled={busyTaskId === task.id}
-                          onChange={(event) => updateFollowUpLeadProfile(task.id, 'educationLevel', event.target.value)}
-                        />
-                      </label>
-                      <label className={s.filterGroup}>
-                        <span className="form-label">School</span>
-                        <input
-                          className="input"
-                          value={draft.leadProfile?.schoolName || ''}
-                          disabled={busyTaskId === task.id}
-                          onChange={(event) => updateFollowUpLeadProfile(task.id, 'schoolName', event.target.value)}
-                        />
-                      </label>
-                    </div>
-                    <label className={s.completionNote}>
-                      <span className="form-label">Note Required</span>
-                      <textarea
-                        className="textarea"
-                        rows={2}
-                        value={draft.note}
-                        disabled={busyTaskId === task.id}
-                        onChange={(event) => updateFollowUpDraft(task.id, { note: event.target.value })}
-                      />
-                    </label>
-                    <div className={s.completionActions}>
-                      <button className="btn btn-sm" type="button" onClick={() => setCompletionTaskId('')} disabled={busyTaskId === task.id}>Cancel</button>
-                      <button className="btn btn-sm btn-primary" type="button" onClick={() => submitFollowUpCompletion(task)} disabled={busyTaskId === task.id || !draft.note.trim()}>
-                        <CheckCircle2 size={14} />
-                        Save Outcome
-                      </button>
-                    </div>
-                  </div>
-                )}
               </article>
             );
           })}
@@ -2122,6 +1989,29 @@ export default function FollowUpQueuePage() {
           </section>
         )}
       </section>
+      <FollowUpOutcomeDialog
+        open={Boolean(activeFollowUpTask && activeFollowUpDraft)}
+        onClose={() => busyTaskId !== activeFollowUpTask?.id && setCompletionTaskId('')}
+        onSubmit={() => activeFollowUpTask && submitFollowUpCompletion(activeFollowUpTask)}
+        draft={activeFollowUpDraft}
+        onChange={(patch) => activeFollowUpTask && updateFollowUpDraft(activeFollowUpTask.id, patch)}
+        onProfileChange={(field, value) => activeFollowUpTask && updateFollowUpLeadProfile(activeFollowUpTask.id, field, value)}
+        busy={busyTaskId === activeFollowUpTask?.id}
+        error={activeFollowUpTask ? error : ''}
+        taskMatchText={activeFollowUpTask
+          ? `Completes this task: ${activeFollowUpTask.title || 'Follow-up'} (${formatDate(activeFollowUpTask.dueAt)}).`
+          : ''}
+        ownerOptions={visibleAssignees.map((user) => ({
+          id: user.id,
+          label: user.name || user.email || 'Unnamed User',
+        }))}
+        canManageAssignments={coordinatorUiPolicy.canManageCoordinatorAssignments}
+        showProfile={Boolean(
+          activeFollowUpTask &&
+          accessibleContacts.find((contact) => contact.id === activeFollowUpTask.contactId)?.workflowKey === 'ait_usa'
+        )}
+        title="Log follow-up outcome"
+      />
       <ConfirmDialog
         open={!!confirmTaskAction}
         onClose={() => setConfirmTaskAction(null)}

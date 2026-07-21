@@ -52,6 +52,7 @@ import {
   completeFollowUpTaskWithActivity,
   createTaskWithEvents,
   listTasks,
+  loadLatestFollowUpOutcomePreviews,
   toTaskPayload,
   updateTaskWithEvents,
 } from '@/lib/tasks/service.js';
@@ -387,17 +388,26 @@ export async function GET(request) {
       filters,
     });
     const taskContactIds = rows.map((row) => row.contactId).filter(Boolean);
-    const [assignableUsers, taskContacts] = await Promise.all([
+    const [assignableUsers, taskContacts, previousFollowUps] = await Promise.all([
       listAssignableUsers(db, session),
       taskContactIds.length
         ? loadTaskContactOptions({ db, session, contactIds: taskContactIds })
         : Promise.resolve([]),
+      filters.taskType === TASK_TYPES.FOLLOW_UP
+        ? loadLatestFollowUpOutcomePreviews({
+            db,
+            organizationId: session.user.organizationId,
+            contactIds: taskContactIds,
+            businessUnitIds,
+          })
+        : Promise.resolve(new Map()),
     ]);
     const contactNameById = new Map(taskContacts.map((contact) => [contact.id, contact.name]));
     return NextResponse.json({
       tasks: rows.map((row) => toTaskPayload({
         ...row,
         contactName: contactNameById.get(row.contactId) || '',
+        previousFollowUp: previousFollowUps.get(row.contactId) || null,
       })),
       users: assignableUsers,
       contacts: taskContacts,

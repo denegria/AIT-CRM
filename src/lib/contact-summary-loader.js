@@ -5,6 +5,7 @@ import {
   eq,
   ilike,
   inArray,
+  isNotNull,
   not,
   or,
   sql,
@@ -17,8 +18,10 @@ import {
   leadStatusHistory as leadStatusHistoryTable,
   notes as notesTable,
   paymentSnapshots as paymentSnapshotsTable,
+  tasks as tasksTable,
 } from '../db/schema.js';
 import { contactBootstrapSummarySelection } from './bootstrap-contract.js';
+import { TASK_STATUSES, TASK_TYPES } from './tasks/constants.js';
 
 const FOLLOW_UP_TEXT_NEEDLES = Object.freeze([
   'follow up',
@@ -237,6 +240,7 @@ export async function loadContactBootstrapSummaryRows({
     contactCourseRecordRows,
     leadStatusHistoryRows,
     paymentLinkRows,
+    followUpCommitmentRows,
   ] = await Promise.all([
     allSummaryRows(db, notesTable, 'notes', signsContactIds, [desc(notesTable.createdAt)]),
     latestNoteCandidates(db, nonSignsContactIds),
@@ -275,6 +279,31 @@ export async function loadContactBootstrapSummaryRows({
           ))
           .where(contactIdScope(activityEventsTable, visibleContactIds))
       : Promise.resolve([]),
+    visibleContactIds.length
+      ? db
+          .selectDistinctOn([tasksTable.contactId], {
+            contactId: tasksTable.contactId,
+            taskType: tasksTable.taskType,
+            status: tasksTable.status,
+            dueAt: tasksTable.dueAt,
+          })
+          .from(tasksTable)
+          .where(and(
+            contactIdScope(tasksTable, visibleContactIds),
+            inArray(tasksTable.taskType, [
+              TASK_TYPES.FIRST_OUTREACH,
+              TASK_TYPES.FOLLOW_UP,
+              TASK_TYPES.APPOINTMENT,
+            ]),
+            inArray(tasksTable.status, [
+              TASK_STATUSES.OPEN,
+              TASK_STATUSES.IN_PROGRESS,
+              TASK_STATUSES.SNOOZED,
+            ]),
+            isNotNull(tasksTable.dueAt),
+          ))
+          .orderBy(tasksTable.contactId, asc(tasksTable.dueAt), desc(tasksTable.createdAt))
+      : Promise.resolve([]),
   ]);
 
   return {
@@ -285,5 +314,6 @@ export async function loadContactBootstrapSummaryRows({
     contactCourseRecordRows,
     leadStatusHistoryRows,
     paymentLinkRows,
+    followUpCommitmentRows,
   };
 }

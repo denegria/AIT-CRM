@@ -102,7 +102,7 @@ const CONTACT_SEGMENT_GROUPS = [
   {
     id: 'follow_up_signals',
     label: 'Follow-up Signals',
-    facets: ['active', 'no_recent_touch'],
+    facets: ['needs_first_contact', 'needs_next_follow_up', 'active', 'no_recent_touch'],
   },
   {
     id: 'contact_quality',
@@ -128,6 +128,16 @@ const CONTACT_SEGMENT_META = {
   },
   no_recent_touch: {
     description: 'No touch in the last 30 days',
+    icon: Clock3,
+  },
+  needs_first_contact: {
+    label: 'Needs first contact',
+    description: 'No genuine interaction or dated next commitment',
+    icon: UserRoundCheck,
+  },
+  needs_next_follow_up: {
+    label: 'Needs next follow-up',
+    description: 'Prior interaction but no dated next commitment',
     icon: Clock3,
   },
   invalid_phone: {
@@ -724,11 +734,13 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           facets: group.facets.map((facet) => ({
             id: facet.id,
             label: facet.label,
-            count: facet.id === 'all' ? deferredDirectory.total : null,
+            count: facet.id === 'all'
+              ? deferredDirectory.total
+              : deferredDirectory.filterMetadata.facetCounts?.[facet.id] ?? null,
           })),
         }))
       : buildContactDirectoryFacetGroups(baseFilteredContacts, facetContext),
-    [activeWorkflow?.key, baseFilteredContacts, contactDirectoryIsDeferred, deferredDirectory.total, facetContext],
+    [activeWorkflow?.key, baseFilteredContacts, contactDirectoryIsDeferred, deferredDirectory.filterMetadata.facetCounts, deferredDirectory.total, facetContext],
   );
   const effectiveDirectoryFacet = directoryFacet || 'all';
   const visibleSegmentGroups = useMemo(

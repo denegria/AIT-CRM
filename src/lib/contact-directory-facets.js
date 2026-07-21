@@ -9,6 +9,10 @@ import {
   isAitSignsContact,
   isContactDoNotContactBucket,
 } from './contact-workflow-buckets.js';
+import {
+  contactMatchesFollowUpCoverage,
+  FOLLOW_UP_COVERAGE_FILTERS,
+} from './follow-up-coverage.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const RECENT_TOUCH_WINDOW_DAYS = 30;
@@ -127,7 +131,19 @@ export const CONTACT_DIRECTORY_FACET_GROUPS = [
     id: WORKFLOW_KEYS.AIT_USA,
     label: 'Enrollment',
     workflowKey: WORKFLOW_KEYS.AIT_USA,
-    facets: AIT_USA_CONTACT_BUCKETS,
+    facets: [
+      {
+        id: FOLLOW_UP_COVERAGE_FILTERS.NEEDS_FIRST_CONTACT,
+        label: 'Needs first contact',
+        matches: (contact) => contactMatchesFollowUpCoverage(contact, FOLLOW_UP_COVERAGE_FILTERS.NEEDS_FIRST_CONTACT),
+      },
+      {
+        id: FOLLOW_UP_COVERAGE_FILTERS.NEEDS_NEXT_FOLLOW_UP,
+        label: 'Needs next follow-up',
+        matches: (contact) => contactMatchesFollowUpCoverage(contact, FOLLOW_UP_COVERAGE_FILTERS.NEEDS_NEXT_FOLLOW_UP),
+      },
+      ...AIT_USA_CONTACT_BUCKETS,
+    ],
   },
 ];
 

@@ -22,6 +22,7 @@ import {
   leads,
   notes,
   paymentSnapshots,
+  tasks,
   users,
   workOrders,
 } from '@/db/schema.js';
@@ -127,6 +128,65 @@ function touchEventConditionSql() {
     ilike(activityEvents.eventType, '%whatsapp%'),
     ilike(activityEvents.eventType, '%manual_outbound%'),
   );
+}
+
+function genuineHumanInteractionSql() {
+  return sql`(
+    exists (
+      select 1 from ${conversationMessages}
+      where ${conversationMessages.organizationId} = ${contacts.organizationId}
+        and ${conversationMessages.contactId} = ${contacts.id}
+    )
+    or exists (
+      select 1 from ${activityEvents}
+      where ${activityEvents.organizationId} = ${contacts.organizationId}
+        and ${activityEvents.contactId} = ${contacts.id}
+        and (
+          lower(coalesce(${activityEvents.eventType}, '')) ~ '^follow_up\\.[a-z_]+$'
+          or lower(coalesce(${activityEvents.eventType}, '')) like '%manual_outbound%'
+          or lower(coalesce(${activityEvents.eventType}, '')) like '%call%'
+          or lower(coalesce(${activityEvents.eventType}, '')) like '%sms%'
+          or lower(coalesce(${activityEvents.eventType}, '')) like '%whatsapp%'
+          or lower(coalesce(${activityEvents.eventType}, '')) like '%message%'
+        )
+    )
+  )`;
+}
+
+function activeDatedCommitmentSql() {
+  return sql`exists (
+    select 1 from ${tasks}
+    where ${tasks.organizationId} = ${contacts.organizationId}
+      and ${tasks.contactId} = ${contacts.id}
+      and ${tasks.businessUnitId} = ${contacts.primaryBusinessUnitId}
+      and ${tasks.taskType} in ('first_outreach', 'follow_up', 'appointment')
+      and ${tasks.status} in ('open', 'in_progress', 'snoozed')
+      and ${tasks.dueAt} is not null
+  )`;
+}
+
+function followUpCoverageEligibleSql(latestLead, workflowKey) {
+  if (workflowKey !== WORKFLOW_KEYS.AIT_USA) return sql`false`;
+  const status = normalizedSql(sql`coalesce(${latestLead.currentStage}, ${latestLead.status})`);
+  return sql`(
+    ${status} in ('new lead', 'follow up')
+    and ${contacts.archivedAt} is null
+    and ${contacts.isDoNotCall} = false
+    and ${contacts.isWrongNumber} = false
+  )`;
+}
+
+function followUpCoverageCondition(facet, latestLead, workflowKey) {
+  const eligible = followUpCoverageEligibleSql(latestLead, workflowKey);
+  const hasHumanInteraction = genuineHumanInteractionSql();
+  const hasActiveDatedCommitment = activeDatedCommitmentSql();
+  if (facet === 'needs_first_contact') {
+    return sql`${eligible} and not (${hasHumanInteraction}) and not (${hasActiveDatedCommitment})`;
+  }
+  if (facet === 'needs_next_follow_up') {
+    return sql`${eligible} and (${hasHumanInteraction}) and not (${hasActiveDatedCommitment})`;
+  }
+  return undefined;
 }
 
 function greatestSql(...expressions) {
@@ -508,7 +568,7 @@ function courseCondition(value, latestLead) {
   )`;
 }
 
-function facetCondition(value, latestLead, session) {
+function facetCondition(value, latestLead, session, workflowKey) {
   const facet = clean(value);
   const status = normalizedSql(sql`coalesce(${latestLead.currentStage}, ${latestLead.status})`);
   const assignedUserId = latestLead.assignedUserId;
@@ -516,6 +576,8 @@ function facetCondition(value, latestLead, session) {
   const closedStatuses = ['lost', 'completed', 'not interested', 'course completed', 'dropped / quit'];
   const statusIs = (label) => eq(status, label.toLowerCase());
   if (!facet || facet === 'all') return undefined;
+  const coverage = followUpCoverageCondition(facet, latestLead, workflowKey);
+  if (coverage) return coverage;
   if (facet === 'mine') return eq(assignedUserId, session.user.id);
   if (facet === 'unassigned') return isNull(assignedUserId);
   if (facet === 'needs_first_outreach') return sql`${status} in ('new lead', 'intake')`;
@@ -572,7 +634,7 @@ function facetCondition(value, latestLead, session) {
   return undefined;
 }
 
-function directoryConditions({ searchParams, latestLead, session, workflowKey, excludeClosedCurrent = true }) {
+function directoryConditions({ searchParams, latestLead, session, workflowKey, excludeClosedCurrent = true, skipFacet = false }) {
   const conditions = [scopedContactWhere(contacts, session)];
   const businessUnitId = clean(searchParams.get('businessUnitId'));
   if (businessUnitId === 'unassigned') conditions.push(isNull(contacts.primaryBusinessUnitId));
@@ -640,7 +702,7 @@ function directoryConditions({ searchParams, latestLead, session, workflowKey, e
     excludeClosedCurrent,
   });
   if (date) conditions.push(date);
-  const facet = facetCondition(searchParams.get('facet'), latestLead, session);
+  const facet = skipFacet ? undefined : facetCondition(searchParams.get('facet'), latestLead, session, workflowKey);
   if (facet) conditions.push(facet);
   return conditions;
 }
@@ -679,6 +741,14 @@ async function contactDirectoryQueryContext({ db, session, searchParams, busines
     workflowKey,
     excludeClosedCurrent,
   });
+  const coverageConditions = directoryConditions({
+    searchParams,
+    latestLead,
+    session,
+    workflowKey,
+    excludeClosedCurrent,
+    skipFacet: true,
+  });
   return {
     businessUnitRows: units,
     requestedBusinessUnitId,
@@ -688,6 +758,7 @@ async function contactDirectoryQueryContext({ db, session, searchParams, busines
     touchAggregates,
     latestLead,
     where: and(...conditions),
+    coverageWhere: and(...coverageConditions),
   };
 }
 
@@ -773,6 +844,8 @@ export async function loadContactDirectoryPage({
     touchAggregates,
     latestLead,
     where,
+    coverageWhere,
+    workflowKey,
   } = context;
   const offset = (page - 1) * pageSize;
 
@@ -803,7 +876,17 @@ export async function loadContactDirectoryPage({
     .limit(pageSize)
     .offset(offset);
 
-  const [idRows, countRows, courseOptions] = await Promise.all([
+  const coverageCountsQuery = workflowKey === WORKFLOW_KEYS.AIT_USA
+    ? db
+        .select({
+          needsFirstContact: sql`count(*) filter (where ${followUpCoverageCondition('needs_first_contact', latestLead, workflowKey)})`,
+          needsNextFollowUp: sql`count(*) filter (where ${followUpCoverageCondition('needs_next_follow_up', latestLead, workflowKey)})`,
+        })
+        .from(contacts)
+        .leftJoin(latestLead, eq(latestLead.contactId, contacts.id))
+        .where(coverageWhere)
+    : Promise.resolve([{ needsFirstContact: 0, needsNextFollowUp: 0 }]);
+  const [idRows, countRows, courseOptions, coverageCountRows] = await Promise.all([
     idQuery,
     db
       .select({ value: count() })
@@ -811,7 +894,12 @@ export async function loadContactDirectoryPage({
       .leftJoin(latestLead, eq(latestLead.contactId, contacts.id))
       .where(where),
     loadCourseOptions({ db, session, businessUnitId: requestedBusinessUnitId }),
+    coverageCountsQuery,
   ]);
+  const facetCounts = {
+    needs_first_contact: Number(coverageCountRows[0]?.needsFirstContact || 0),
+    needs_next_follow_up: Number(coverageCountRows[0]?.needsNextFollowUp || 0),
+  };
   const contactIds = idRows.map((row) => row.id);
   const total = Number(countRows[0]?.value || 0);
   if (!contactIds.length) {
@@ -819,7 +907,7 @@ export async function loadContactDirectoryPage({
       contacts: [],
       workOrders: [],
       financials: [],
-      filterMetadata: { courseOptions },
+      filterMetadata: { courseOptions, facetCounts },
       page,
       pageSize,
       total,
@@ -873,6 +961,7 @@ export async function loadContactDirectoryPage({
       contactPeople: summaryRows.contactPeopleRows,
       courseRecords: summaryRows.contactCourseRecordRows,
       leadStatusHistory: summaryRows.leadStatusHistoryRows,
+      followUpCommitments: summaryRows.followUpCommitmentRows,
     },
   );
   const orderById = new Map(contactIds.map((id, index) => [id, index]));
@@ -883,7 +972,7 @@ export async function loadContactDirectoryPage({
     contacts: mappedContacts,
     workOrders: mapWorkOrders(workOrderRows, contactLookup),
     financials: mapFinancials(estimateRows, linkedPaymentRows, contactLookup, documentRows),
-    filterMetadata: { courseOptions },
+    filterMetadata: { courseOptions, facetCounts },
     page,
     pageSize,
     total,

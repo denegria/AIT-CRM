@@ -6,7 +6,7 @@ const EMPTY_RESULT = Object.freeze({
   contacts: [],
   workOrders: [],
   financials: [],
-  filterMetadata: { courseOptions: [] },
+  filterMetadata: { courseOptions: [], facetCounts: {} },
   page: 1,
   pageSize: 50,
   total: 0,

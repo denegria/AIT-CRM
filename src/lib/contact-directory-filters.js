@@ -40,6 +40,7 @@ export const DEFAULT_PIPELINE_SOURCE_FILTER = 'all';
 export const DEFAULT_PIPELINE_COURSE_FILTER = DEFAULT_CONTACT_COURSE_FILTER;
 export const DEFAULT_PIPELINE_LOCATION_FILTER = DEFAULT_CONTACT_LOCATION_FILTER;
 export const DEFAULT_PIPELINE_ACTIVITY_FILTER = 'all';
+export const DEFAULT_PIPELINE_COVERAGE_FILTER = 'all';
 export const DEFAULT_PIPELINE_SEARCH = '';
 export const DEFAULT_PIPELINE_COMPACT_MODE = true;
 
@@ -443,6 +444,7 @@ export function pipelineFilterStateFromParams(searchParams) {
     courseFilter: courseFromContactParams(searchParams) || DEFAULT_PIPELINE_COURSE_FILTER,
     locationFilter: locationFromContactParams(searchParams) || DEFAULT_PIPELINE_LOCATION_FILTER,
     activityFilter: clean(paramValue(searchParams, 'activity')) || DEFAULT_PIPELINE_ACTIVITY_FILTER,
+    coverageFilter: clean(paramValue(searchParams, 'coverage')) || DEFAULT_PIPELINE_COVERAGE_FILTER,
     search: clean(paramValue(searchParams, 'q')) || DEFAULT_PIPELINE_SEARCH,
     leadDateScope: leadDateScopeFromContactParams(searchParams),
     leadDateFrom: leadDateFromContactParams(searchParams),
@@ -458,6 +460,7 @@ export function pipelineFilterQuery({
   courseFilter = DEFAULT_PIPELINE_COURSE_FILTER,
   locationFilter = DEFAULT_PIPELINE_LOCATION_FILTER,
   activityFilter = DEFAULT_PIPELINE_ACTIVITY_FILTER,
+  coverageFilter = DEFAULT_PIPELINE_COVERAGE_FILTER,
   search = DEFAULT_PIPELINE_SEARCH,
   leadDateScope = DEFAULT_CONTACT_LEAD_DATE_SCOPE,
   leadDateFrom = DEFAULT_CONTACT_LEAD_DATE_FROM,
@@ -483,6 +486,7 @@ export function pipelineFilterQuery({
   const learningLocation = canonicalAitUsaSchoolLocation(locationFilter);
   if (learningLocation) params.set('location', learningLocation);
   if (activityFilter && activityFilter !== DEFAULT_PIPELINE_ACTIVITY_FILTER) params.set('activity', activityFilter);
+  if (coverageFilter && coverageFilter !== DEFAULT_PIPELINE_COVERAGE_FILTER) params.set('coverage', coverageFilter);
   if (search) params.set('q', search);
   if (compactMode !== DEFAULT_PIPELINE_COMPACT_MODE) params.set('compact', compactMode ? '1' : '0');
   return params.toString();

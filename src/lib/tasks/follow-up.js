@@ -47,6 +47,23 @@ export function followUpEventTypeForOutcome(outcome) {
   return `follow_up.${normalizeFollowUpOutcome(outcome)}`;
 }
 
+export function followUpOutcomeRequiresNextDue(outcome) {
+  return [
+    FOLLOW_UP_OUTCOMES.NO_ANSWER,
+    FOLLOW_UP_OUTCOMES.LEFT_VOICEMAIL,
+    FOLLOW_UP_OUTCOMES.NEEDS_NEXT_FOLLOW_UP,
+  ].includes(outcome);
+}
+
+export function followUpOutcomeClosesFollowUp(outcome) {
+  return [
+    FOLLOW_UP_OUTCOMES.REACHED_NOT_INTERESTED,
+    FOLLOW_UP_OUTCOMES.DO_NOT_CONTACT,
+    FOLLOW_UP_OUTCOMES.WRONG_NUMBER,
+    FOLLOW_UP_OUTCOMES.ENROLLED_OR_WON,
+  ].includes(outcome);
+}
+
 export function normalizeFollowUpCompletionPayload({
   task,
   payload = {},
@@ -60,26 +77,20 @@ export function normalizeFollowUpCompletionPayload({
   const note = cleanText(payload.note || payload.followUpNote || payload.message);
   const channel = cleanText(payload.channel || payload.followUpChannel || 'manual');
   const contactMethod = cleanText(payload.contactMethod || payload.phone || payload.email);
-  const nextDueAt = payload.nextDueAt || payload.nextFollowUpAt
+  const closesFollowUp = followUpOutcomeClosesFollowUp(outcome);
+  const nextDueAt = !closesFollowUp && (payload.nextDueAt || payload.nextFollowUpAt)
     ? parseFollowUpDateTime(payload.nextDueAt || payload.nextFollowUpAt, 'nextDueAt')
     : null;
   const occurredAt = payload.occurredAt
     ? parseFollowUpDateTime(payload.occurredAt, 'occurredAt')
     : now;
-  const closesFollowUp = [
-    FOLLOW_UP_OUTCOMES.REACHED_NOT_INTERESTED,
-    FOLLOW_UP_OUTCOMES.DO_NOT_CONTACT,
-    FOLLOW_UP_OUTCOMES.WRONG_NUMBER,
-    FOLLOW_UP_OUTCOMES.ENROLLED_OR_WON,
-  ].includes(outcome);
-  const createNextTask = (!closesFollowUp && Boolean(nextDueAt)) ||
-    outcome === FOLLOW_UP_OUTCOMES.NEEDS_NEXT_FOLLOW_UP;
+  const createNextTask = Boolean(nextDueAt);
 
-  if (outcome === FOLLOW_UP_OUTCOMES.NEEDS_NEXT_FOLLOW_UP && !nextDueAt) {
-    throw followUpError('Next follow-up date is required for this outcome.');
-  }
   if (!note) {
     throw followUpError('Follow-up note is required to complete this task.');
+  }
+  if (followUpOutcomeRequiresNextDue(outcome) && !nextDueAt) {
+    throw followUpError('Next follow-up date is required for this outcome.');
   }
 
   return {

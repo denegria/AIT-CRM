@@ -1,7 +1,7 @@
 'use client';
-import { useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
@@ -30,6 +30,7 @@ import {
 import { appendContactNote, contactDetailPageState, loadContactTimeline } from '@/lib/contacts/detail-loader.js';
 import { useRecordScopeRegistration } from '@/components/RecordScopeContext';
 import { InternalNoteComposer } from '@/components/ContactTimelineNoteFields';
+import FollowUpOutcomeDialog from '@/components/FollowUpOutcomeDialog';
 
 const SNAPSHOT_ICONS = {
   estimate: BriefcaseBusiness,
@@ -111,18 +112,6 @@ function classSectionDisplayLabel(section = {}) {
     section.status !== 'active' ? 'Inactive' : '',
   ].filter(Boolean).join(' · ');
 }
-
-const FOLLOW_UP_OUTCOME_OPTIONS = [
-  ['reached_interested', 'Reached - interested'],
-  ['left_voicemail', 'Left voicemail'],
-  ['no_answer', 'No answer'],
-  ['appointment_scheduled', 'Appointment scheduled'],
-  ['needs_next_follow_up', 'Needs next follow-up'],
-  ['reached_not_interested', 'Reached - not interested'],
-  ['wrong_number', 'Wrong number'],
-  ['do_not_contact', 'Do not contact'],
-  ['enrolled_or_won', 'Enrolled / won'],
-];
 
 function newManualSendRequestId() {
   return crypto.randomUUID();
@@ -414,6 +403,7 @@ function nextWorkflowStatus(currentStatus = '', statuses = []) {
 export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { toast } = useToast();
   const isClientMode = mode === 'clients';
   const singularLabel = isClientMode ? 'Client' : 'Contact';
@@ -481,6 +471,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [noteInput, setNoteInput] = useState('');
   const [noteSaving, setNoteSaving] = useState(false);
   const noteSaveInFlight = useRef(false);
+  const followUpActionHandledRef = useRef('');
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [followUpDraft, setFollowUpDraft] = useState(null);
   const [followUpTask, setFollowUpTask] = useState(null);
@@ -1200,7 +1191,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     }));
   };
 
-  const openFollowUpModal = () => {
+  const openFollowUpModal = useCallback(() => {
     if (!contact?.id || !access.canWriteCrm) return;
     setFollowUpDraft(defaultFollowUpDraft(contact, currentUser, ownerOptions));
     setFollowUpTask(null);
@@ -1217,7 +1208,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       .catch((error) => {
         setFollowUpError(error.message || 'Follow-up task lookup failed.');
       });
-  };
+  }, [access.canWriteCrm, contact, currentUser, dataSource, ownerOptions]);
 
   const closeFollowUpModal = () => {
     if (followUpBusy) return;
@@ -1225,7 +1216,20 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     setFollowUpDraft(null);
     setFollowUpTask(null);
     setFollowUpError('');
+    if (searchParams.get('action') === 'log-follow-up') {
+      const next = new URLSearchParams(searchParams.toString());
+      next.delete('action');
+      router.replace(next.toString() ? `?${next.toString()}` : `/contacts/${contact.id}`, { scroll: false });
+    }
   };
+
+  useEffect(() => {
+    if (searchParams.get('action') !== 'log-follow-up' || !contact?.id || !access.canWriteCrm) return;
+    const signature = `${contact.id}:log-follow-up`;
+    if (followUpActionHandledRef.current === signature) return;
+    followUpActionHandledRef.current = signature;
+    openFollowUpModal();
+  }, [access.canWriteCrm, contact?.id, openFollowUpModal, searchParams]);
 
   const updateFollowUpDraft = (patch) => {
     setFollowUpDraft((current) => ({
@@ -1273,6 +1277,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       setFollowUpOpen(false);
       setFollowUpDraft(null);
       setFollowUpTask(null);
+      if (searchParams.get('action') === 'log-follow-up') {
+        router.replace(`/contacts/${contact.id}`, { scroll: false });
+      }
       setTimelineFilter('all');
       setTimelineReloadKey((key) => key + 1);
       toast(payload.taskMatched ? 'Follow-up task completed' : 'Follow-up logged');
@@ -2738,204 +2745,22 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         </Modal>
       )}
 
-      {followUpOpen && followUpDraft && (
-        <Modal
-          open={followUpOpen}
-          onClose={closeFollowUpModal}
-          title="Log Follow-up"
-          variant="dialog"
-          panelClassName="follow-up-dialog-panel"
-          footer={(
-            <>
-              <button className="btn" type="button" onClick={closeFollowUpModal} disabled={followUpBusy}>Cancel</button>
-              <button
-                className="btn btn-primary"
-                type="button"
-                onClick={submitFollowUpLog}
-                disabled={followUpBusy || !followUpDraft.note.trim()}
-              >
-                <CheckCircle2 size={16} /> {followUpBusy ? 'Saving...' : 'Save Outcome'}
-              </button>
-            </>
-          )}
-        >
-          <div className="follow-up-dialog-form">
-            <div className="follow-up-task-match">
-              <div>
-                <strong>Task match</strong>
-                <p>
-                  {followUpTask
-                    ? `Completes oldest open follow-up task: ${followUpTask.title || 'Follow-up'} (${taskDateLabel(followUpTask.dueAt)}).`
-                    : 'No open follow-up task was found. This will log follow-up history directly.'}
-                </p>
-              </div>
-            </div>
-
-            <div className="follow-up-workflow-grid">
-              <div className="follow-up-workflow-stack">
-                <section className="follow-up-dialog-section">
-                  <div className="contact-dialog-section-header">
-                    <span className="contact-dialog-section-index">1</span>
-                    <div>
-                      <h2>What happened?</h2>
-                      <p>Capture the result and the channel used before setting the next action.</p>
-                    </div>
-                  </div>
-                  <div className="grid-2">
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="follow-up-outcome">Outcome</label>
-                      <select
-                        id="follow-up-outcome"
-                        className="input select"
-                        value={followUpDraft.outcome}
-                        disabled={followUpBusy}
-                        onChange={(event) => updateFollowUpDraft({ outcome: event.target.value })}
-                      >
-                        {FOLLOW_UP_OUTCOME_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-                      </select>
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="follow-up-channel">Channel</label>
-                      <select
-                        id="follow-up-channel"
-                        className="input select"
-                        value={followUpDraft.channel}
-                        disabled={followUpBusy}
-                        onChange={(event) => updateFollowUpDraft({ channel: event.target.value })}
-                      >
-                        <option value="phone">Phone</option>
-                        <option value="sms">SMS</option>
-                        <option value="whatsapp">WhatsApp</option>
-                        <option value="email">Email</option>
-                        <option value="in_person">In person</option>
-                        <option value="other">Other</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="follow-up-attempted">Attempted</label>
-                    <input
-                      id="follow-up-attempted"
-                      className="input"
-                      value={followUpDraft.contactMethod}
-                      disabled={followUpBusy}
-                      placeholder="Phone or email used"
-                      onChange={(event) => updateFollowUpDraft({ contactMethod: event.target.value })}
-                    />
-                  </div>
-                </section>
-
-                <section className="follow-up-dialog-section">
-                  <div className="contact-dialog-section-header">
-                    <span className="contact-dialog-section-index">2</span>
-                    <div>
-                      <h2>What happens next?</h2>
-                      <p>Set the next follow-up date and owner so the work stays accountable.</p>
-                    </div>
-                  </div>
-                  <div className="grid-2">
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="follow-up-next-due">Next Due</label>
-                      <input
-                        id="follow-up-next-due"
-                        className="input"
-                        type="date"
-                        value={followUpDraft.nextDueDate}
-                        disabled={followUpBusy}
-                        onChange={(event) => updateFollowUpDraft({ nextDueDate: event.target.value })}
-                      />
-                    </div>
-                    {coordinatorUiPolicy.canManageCoordinatorAssignments && (
-                      <div className="form-group">
-                        <label className="form-label" htmlFor="follow-up-next-owner">Next Owner</label>
-                        <select
-                          id="follow-up-next-owner"
-                          className="input select"
-                          value={followUpDraft.nextOwnerUserId}
-                          disabled={followUpBusy}
-                          onChange={(event) => updateFollowUpDraft({ nextOwnerUserId: event.target.value })}
-                        >
-                          <option value="" disabled>Select owner</option>
-                          {ownerOptions.map((owner) => (
-                            <option key={owner.id} value={owner.id}>{owner.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-                  </div>
-                </section>
-              </div>
-
-              <section className="follow-up-dialog-section follow-up-note-section">
-                <div className="contact-dialog-section-header">
-                  <span className="contact-dialog-section-index">3</span>
-                  <div>
-                    <h2>Required note</h2>
-                    <p>Write the operator-readable summary that explains the outcome.</p>
-                  </div>
-                </div>
-                <textarea
-                  id="follow-up-note"
-                  className="textarea follow-up-note-input"
-                  rows={8}
-                  value={followUpDraft.note}
-                  disabled={followUpBusy}
-                  placeholder="Example: Spoke with Maria. Interested in evening ESL, asked for Saturday availability, follow up Friday with schedule options."
-                  onChange={(event) => updateFollowUpDraft({ note: event.target.value })}
-                />
-              </section>
-            </div>
-
-            {isAitUsaContact && (
-              <details className="follow-up-profile-disclosure">
-                <summary>
-                  <span>Update enrollment profile</span>
-                  <small>Optional fields from the conversation</small>
-                </summary>
-                <div className="follow-up-profile-fields">
-                  <div className="grid-2">
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="follow-up-program">Program</label>
-                      <input id="follow-up-program" className="input" value={followUpDraft.leadProfile?.programInterest || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('programInterest', event.target.value)} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="follow-up-location">Student Location</label>
-                      <input id="follow-up-location" className="input" value={followUpDraft.leadProfile?.locationPreference || ''} disabled={followUpBusy} placeholder="City, municipality, or address" onChange={(event) => updateFollowUpLeadProfile('locationPreference', event.target.value)} />
-                    </div>
-                  </div>
-                  <div className="grid-2">
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="follow-up-preferred-day">Preferred Day</label>
-                      <input id="follow-up-preferred-day" className="input" value={followUpDraft.leadProfile?.preferredDay || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('preferredDay', event.target.value)} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="follow-up-schedule">Schedule</label>
-                      <input id="follow-up-schedule" className="input" value={followUpDraft.leadProfile?.preferredSchedule || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('preferredSchedule', event.target.value)} />
-                    </div>
-                  </div>
-                  <div className="grid-2">
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="follow-up-test">Test</label>
-                      <input id="follow-up-test" className="input" value={followUpDraft.leadProfile?.testInterest || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('testInterest', event.target.value)} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="follow-up-level">Level</label>
-                      <input id="follow-up-level" className="input" value={followUpDraft.leadProfile?.educationLevel || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('educationLevel', event.target.value)} />
-                    </div>
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="follow-up-school">School</label>
-                    <input id="follow-up-school" className="input" value={followUpDraft.leadProfile?.schoolName || ''} disabled={followUpBusy} onChange={(event) => updateFollowUpLeadProfile('schoolName', event.target.value)} />
-                  </div>
-                </div>
-              </details>
-            )}
-
-            {followUpError && <div className={s.followUpError}>{followUpError}</div>}
-          </div>
-        </Modal>
-      )}
-
+      <FollowUpOutcomeDialog
+        open={followUpOpen}
+        onClose={closeFollowUpModal}
+        onSubmit={submitFollowUpLog}
+        draft={followUpDraft}
+        onChange={updateFollowUpDraft}
+        onProfileChange={updateFollowUpLeadProfile}
+        busy={followUpBusy}
+        error={followUpError}
+        taskMatchText={followUpTask
+          ? `Completes oldest open follow-up task: ${followUpTask.title || 'Follow-up'} (${taskDateLabel(followUpTask.dueAt)}).`
+          : 'No open follow-up task was found. This will log follow-up history directly.'}
+        ownerOptions={ownerOptions}
+        canManageAssignments={coordinatorUiPolicy.canManageCoordinatorAssignments}
+        showProfile={isAitUsaContact}
+      />
       {/* Edit Profile Dialog */}
       {isEditModalOpen && editForm && (
         <Modal

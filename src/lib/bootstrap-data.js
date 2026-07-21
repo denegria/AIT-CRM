@@ -58,6 +58,10 @@ import {
 import { loadContactBootstrapSummaryRows } from './contact-summary-loader.js';
 import { latestStructuredFollowUpAt } from './structured-follow-up.js';
 import { buildTeamMonitorBootstrapPayload } from './team-monitor-bootstrap.js';
+import {
+  followUpCoverageForContact,
+  isGenuineHumanActivityEvent,
+} from './follow-up-coverage.js';
 
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const toBootstrapBusinessUnitPayload = (row) => toBusinessUnitPayload(row, { emptyColor: null });
@@ -244,6 +248,7 @@ export function mapContacts(
   const peopleByContactId = rowsByContactId(relatedRows.contactPeople || []);
   const courseRecordsByContactId = rowsByContactId(relatedRows.courseRecords || []);
   const leadStatusHistoryByContactId = rowsByContactId(relatedRows.leadStatusHistory || []);
+  const followUpCommitmentsByContactId = rowsByContactId(relatedRows.followUpCommitments || []);
 
   return contactRows.map((contact, index) => {
     const lead = leadByContactId.get(contact.id);
@@ -327,6 +332,21 @@ export function mapContacts(
       lead,
       workflow,
     });
+    const followUpCoverage = followUpCoverageForContact({
+      ...contact,
+      workflowKey: workflow.workflowKey,
+      status: workflow.status,
+      currentStage: workflow.currentStage,
+      tags: workflow.tags,
+      processPills: enrollmentSignals?.process?.pills || [],
+      contactabilityStatus: enrollmentSignals?.contactability?.status || '',
+      qualityDisposition: enrollmentSignals?.quality?.disposition || '',
+    }, {
+      hasHumanInteraction:
+        contactConversationMessages.length > 0 ||
+        contactEvents.some(isGenuineHumanActivityEvent),
+      hasActiveDatedCommitment: (followUpCommitmentsByContactId.get(contact.id) || []).length > 0,
+    });
 
     return toContactListPayload({
       id: contact.id,
@@ -391,6 +411,9 @@ export function mapContacts(
       contactabilityStatus: enrollmentSignals?.contactability?.status || '',
       qualityDisposition: enrollmentSignals?.quality?.disposition || '',
       processPills: enrollmentSignals?.process?.pills || [],
+      followUpCoverage,
+      needsFirstContact: followUpCoverage.needsFirstContact,
+      needsNextFollowUp: followUpCoverage.needsNextFollowUp,
       linkedPeopleCount: contactPeople.length,
       linkedPeoplePreview: contactPeople.slice(0, 3).map((person) => person.name).filter(Boolean).join(', '),
       primaryLinkedPerson: contactPeople.find((person) => person.isPrimary)?.name || contactPeople[0]?.name || '',
@@ -838,6 +861,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
       contactCourseRecordRows,
       leadStatusHistoryRows,
       paymentLinkRows,
+      followUpCommitmentRows,
     } = await loadContactBootstrapSummaryRows({
       db,
       visibleContactIds,
@@ -863,6 +887,7 @@ export const getBootstrapData = cache(async function getBootstrapData(session = 
         contactPeople: contactPeopleRows,
         courseRecords: contactCourseRecordRows,
         leadStatusHistory: leadStatusHistoryRows,
+        followUpCommitments: followUpCommitmentRows,
       },
     );
     const contactLookup = new Map([

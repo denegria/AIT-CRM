@@ -8,6 +8,8 @@ import {
   contactPatchForFollowUpOutcome,
   followUpActivityMessage,
   followUpEventTypeForOutcome,
+  followUpOutcomeClosesFollowUp,
+  followUpOutcomeRequiresNextDue,
   leadStatusForFollowUpOutcome,
   normalizeFollowUpCompletionPayload,
 } from './follow-up.js';
@@ -59,11 +61,30 @@ test('requires next date for explicit next-follow-up outcome', () => {
   assert.throws(
     () => normalizeFollowUpCompletionPayload({
       task: followUpTask(),
-      payload: { outcome: FOLLOW_UP_OUTCOMES.NEEDS_NEXT_FOLLOW_UP },
+      payload: { outcome: FOLLOW_UP_OUTCOMES.NEEDS_NEXT_FOLLOW_UP, note: 'Call again.' },
       now,
     }),
     /Next follow-up date is required/,
   );
+});
+
+test('requires a next date for continuation outcomes', () => {
+  for (const outcome of [
+    FOLLOW_UP_OUTCOMES.NO_ANSWER,
+    FOLLOW_UP_OUTCOMES.LEFT_VOICEMAIL,
+    FOLLOW_UP_OUTCOMES.NEEDS_NEXT_FOLLOW_UP,
+  ]) {
+    assert.equal(followUpOutcomeRequiresNextDue(outcome), true);
+    assert.throws(
+      () => normalizeFollowUpCompletionPayload({
+        task: followUpTask(),
+        payload: { outcome, note: 'Continue outreach.' },
+        now,
+      }),
+      /Next follow-up date is required/,
+    );
+  }
+  assert.equal(followUpOutcomeRequiresNextDue(FOLLOW_UP_OUTCOMES.REACHED_INTERESTED), false);
 });
 
 test('closed follow-up outcomes do not create another follow-up task', () => {
@@ -78,7 +99,9 @@ test('closed follow-up outcomes do not create another follow-up task', () => {
   });
 
   assert.equal(payload.createNextTask, false);
-  assert.equal(payload.nextDueAt.toISOString(), '2026-06-04T13:00:00.000Z');
+  assert.equal(payload.nextDueAt, null);
+  assert.equal(followUpOutcomeClosesFollowUp(FOLLOW_UP_OUTCOMES.DO_NOT_CONTACT), true);
+  assert.equal(followUpOutcomeClosesFollowUp(FOLLOW_UP_OUTCOMES.NO_ANSWER), false);
 });
 
 test('maps follow-up outcomes to stable event types and readable messages', () => {
