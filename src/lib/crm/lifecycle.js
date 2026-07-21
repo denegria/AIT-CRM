@@ -234,6 +234,23 @@ export function normalizeLifecycleStatus(value, options = {}) {
   return STATUS_ALIASES.get(cleaned.toLowerCase()) || null;
 }
 
+export function lifecycleInputsForStatuses(statuses = [], options = {}) {
+  const workflowKey = options.workflowKey || workflowKeyForBusinessUnit(options.businessUnit || options.businessUnitName || '');
+  const workflow = lifecycleWorkflowForKey(workflowKey);
+  const targets = new Set((statuses || [])
+    .map((status) => normalizeLifecycleStatus(status, { workflowKey }) || cleanStatus(status))
+    .filter(Boolean));
+  const inputs = new Set(
+    workflow.statuses
+      .filter((status) => targets.has(status))
+      .map((status) => cleanStatus(status).toLowerCase()),
+  );
+  for (const [input, status] of WORKFLOW_ALIASES[workflow.key] || []) {
+    if (targets.has(status)) inputs.add(input);
+  }
+  return [...inputs];
+}
+
 export function requireLifecycleStatus(value, options = {}) {
   const status = normalizeLifecycleStatus(value, options);
   if (!status) {

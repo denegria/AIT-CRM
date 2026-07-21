@@ -5,6 +5,7 @@ import {
   lifecycleWorkflowForBusinessUnit,
   isClientAccountBusinessUnit,
   isNoFurtherProspectingLifecycleStatus,
+  lifecycleInputsForStatuses,
   normalizeLifecycleStatus,
   requireLifecycleStatus,
   workflowKeyForBusinessUnit,
@@ -43,6 +44,25 @@ test('lifecycle workflows resolve division-specific statuses', () => {
   assert.equal(normalizeLifecycleStatus('do not contact', { businessUnit: { name: 'AIT USA Institute' } }), 'Not Interested');
   assert.equal(normalizeLifecycleStatus('proposal sent', { businessUnit: { name: 'AIT Signs' } }), 'Estimate');
   assert.equal(normalizeLifecycleStatus('in production', { businessUnit: { name: 'AIT Signs' } }), 'Fulfillment');
+});
+
+test('lifecycleInputsForStatuses exposes canonical and alias inputs for server-side policy', () => {
+  const activeInputs = lifecycleInputsForStatuses(['New Lead', 'Follow Up'], { workflowKey: 'ait_usa' });
+  assert.equal(activeInputs.includes('new lead'), true);
+  assert.equal(activeInputs.includes('needs first outreach'), true);
+  assert.equal(activeInputs.includes('contacted'), true);
+  assert.equal(activeInputs.includes('proposal sent'), true);
+  assert.equal(activeInputs.includes('enrolled'), false);
+
+  const terminalInputs = lifecycleInputsForStatuses(
+    ['Enrolled', 'Dropped / Quit', 'Retargeting', 'Not Interested', 'Course Completed'],
+    { workflowKey: 'ait_usa' },
+  );
+  assert.equal(terminalInputs.includes('closed won'), true);
+  assert.equal(terminalInputs.includes('withdrawn'), true);
+  assert.equal(terminalInputs.includes('do not contact'), true);
+  assert.equal(terminalInputs.includes('course completed'), true);
+  assert.equal(terminalInputs.includes('follow up'), false);
 });
 
 test('requireLifecycleStatus rejects arbitrary lifecycle strings', () => {

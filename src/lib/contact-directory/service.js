@@ -39,7 +39,11 @@ import {
   scopedContactWhere,
   scopedOrgWhere,
 } from '@/lib/crm/access.js';
-import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from '@/lib/crm/lifecycle.js';
+import {
+  lifecycleInputsForStatuses,
+  WORKFLOW_KEYS,
+  workflowKeyForBusinessUnit,
+} from '@/lib/crm/lifecycle.js';
 import { searchPattern, searchPhoneDigits } from '@/lib/search/match.js';
 import { canonicalAitUsaSchoolLocation } from '@/lib/school-locations.js';
 import {
@@ -52,6 +56,15 @@ export const CONTACT_DIRECTORY_MAX_PAGE_SIZE = 100;
 
 const SYSTEM_HISTORY_PATTERN = '^mis-[0-9]+[[:space:]]+.*(cleanup|consolidation|correction|merge|merged|backfill|parser|audit|source-row|artifact|data-fix)';
 const SYSTEM_APPROVAL_PATTERN = '^mis-[0-9]+[[:space:]]+approved';
+const AIT_USA_ACTIVE_LIFECYCLE_INPUTS = lifecycleInputsForStatuses(
+  ['New Lead', 'Follow Up'],
+  { workflowKey: WORKFLOW_KEYS.AIT_USA },
+);
+const AIT_USA_TERMINAL_LIFECYCLE_INPUTS = lifecycleInputsForStatuses(
+  ['Enrolled', 'Dropped / Quit', 'Retargeting', 'Not Interested', 'Course Completed'],
+  { workflowKey: WORKFLOW_KEYS.AIT_USA },
+);
+const AIT_USA_TERMINAL_STATUS_PATTERN = '(retarget|drop|withdraw|quit|stopped attending|not interested|uninterested|do not contact|complete|fulfilled|graduat|passed|enroll|matric|won)';
 
 function clean(value = '') {
   return String(value || '').trim();
@@ -64,6 +77,14 @@ function positiveInteger(value, fallback) {
 
 function normalizedSql(column) {
   return sql`regexp_replace(lower(trim(coalesce(${column}, ''))), '[_-]+', ' ', 'g')`;
+}
+
+function collapsedNormalizedSql(column) {
+  return sql`regexp_replace(${normalizedSql(column)}, '[[:space:]]+', ' ', 'g')`;
+}
+
+function sqlInValues(expression, values) {
+  return sql`${expression} in (${sql.join(values.map((value) => sql`${value}`), sql`, `)})`;
 }
 
 function nullableNormalizedSql(column) {
@@ -147,9 +168,21 @@ function activeDatedCommitmentSql() {
 
 function followUpCoverageEligibleSql(latestLead, workflowKey) {
   if (workflowKey !== WORKFLOW_KEYS.AIT_USA) return sql`false`;
-  const status = normalizedSql(sql`coalesce(${latestLead.currentStage}, ${latestLead.status})`);
+  const stage = collapsedNormalizedSql(latestLead.currentStage);
+  const status = collapsedNormalizedSql(latestLead.status);
+  const canonicalActiveStage = sqlInValues(stage, AIT_USA_ACTIVE_LIFECYCLE_INPUTS);
+  const canonicalTerminalStage = sqlInValues(stage, AIT_USA_TERMINAL_LIFECYCLE_INPUTS);
+  const canonicalTerminalStatus = sqlInValues(status, AIT_USA_TERMINAL_LIFECYCLE_INPUTS);
+  const canonicalActive = sql`case
+    when ${canonicalActiveStage} then true
+    when ${canonicalTerminalStage} then false
+    when ${canonicalTerminalStatus}
+      or ${status} ~ ${AIT_USA_TERMINAL_STATUS_PATTERN}
+      or ${status} in ('lost', 'closed lost') then false
+    else true
+  end`;
   return sql`(
-    ${status} in ('new lead', 'follow up')
+    ${canonicalActive}
     and ${contacts.archivedAt} is null
     and ${contacts.isDoNotCall} = false
     and ${contacts.isWrongNumber} = false
