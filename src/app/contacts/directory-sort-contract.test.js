@@ -30,7 +30,7 @@ test('directory requests carry route kind, sort state, and page without broad cl
 });
 
 test('server ordering happens before pagination with stable id ties', () => {
-  const orderIndex = serviceSource.indexOf('.orderBy(...contactDirectoryOrderBy({ sort, latestLead, businessUnitRows }))');
+  const orderIndex = serviceSource.indexOf('.orderBy(...contactDirectoryOrderBy({ sort, latestLead, businessUnitRows, touchAggregates }))');
   const limitIndex = serviceSource.indexOf('.limit(pageSize)', orderIndex);
   const offsetIndex = serviceSource.indexOf('.offset(offset)', limitIndex);
   assert.ok(orderIndex >= 0, 'server orderBy is present');

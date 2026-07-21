@@ -133,41 +133,58 @@ function greatestSql(...expressions) {
   return sql`greatest(${sql.join(expressions, sql`, `)})`;
 }
 
-function nonSignsTouchSql({ includeFollowUpNotes = false } = {}) {
-  const messageTime = sql`(
-    select max(${conversationMessages.occurredAt})
-    from ${conversationMessages}
-    where ${conversationMessages.contactId} = ${contacts.id}
-      and ${conversationMessages.organizationId} = ${contacts.organizationId}
-      and ${validCandidateTimeSql(conversationMessages.occurredAt, conversationMessages.createdAt)}
-  )`;
-  const followUpActivityTime = sql`(
-    select max(coalesce(${activityEvents.occurredAt}, ${activityEvents.createdAt}))
-    from ${activityEvents}
-    where ${activityEvents.contactId} = ${contacts.id}
-      and ${activityEvents.organizationId} = ${contacts.organizationId}
-      and ${validCandidateTimeSql(activityEvents.occurredAt, activityEvents.createdAt)}
-      and not ${isSystemHistorySql(activityEvents.message)}
-      and ${followUpEventConditionSql()}
-  )`;
-  const followUpNoteTime = includeFollowUpNotes ? sql`(
-    select max(${notes.createdAt})
-    from ${notes}
-    where ${notes.contactId} = ${contacts.id}
-      and ${notes.organizationId} = ${contacts.organizationId}
-      and ${validCandidateTimeSql(notes.createdAt)}
-      and not ${isSystemHistorySql(notes.body)}
-      and ${containsFollowUpTextSql(notes.body)}
-  )` : sql`null::timestamptz`;
-  const touchActivityTime = sql`(
-    select max(coalesce(${activityEvents.occurredAt}, ${activityEvents.createdAt}))
-    from ${activityEvents}
-    where ${activityEvents.contactId} = ${contacts.id}
-      and ${activityEvents.organizationId} = ${contacts.organizationId}
-      and ${validCandidateTimeSql(activityEvents.occurredAt, activityEvents.createdAt)}
-      and not ${isSystemHistorySql(activityEvents.message)}
-      and ${touchEventConditionSql()}
-  )`;
+function buildNonSignsTouchAggregates(db) {
+  const messages = db
+    .select({
+      organizationId: conversationMessages.organizationId,
+      contactId: conversationMessages.contactId,
+      messageTime: sql`max(${conversationMessages.occurredAt})`.as('message_time'),
+    })
+    .from(conversationMessages)
+    .where(validCandidateTimeSql(conversationMessages.occurredAt, conversationMessages.createdAt))
+    .groupBy(conversationMessages.organizationId, conversationMessages.contactId)
+    .as('contact_message_touch');
+  const activities = db
+    .select({
+      organizationId: activityEvents.organizationId,
+      contactId: activityEvents.contactId,
+      followUpActivityTime: sql`max(coalesce(${activityEvents.occurredAt}, ${activityEvents.createdAt})) filter (
+        where ${validCandidateTimeSql(activityEvents.occurredAt, activityEvents.createdAt)}
+          and not ${isSystemHistorySql(activityEvents.message)}
+          and ${followUpEventConditionSql()}
+      )`.as('follow_up_activity_time'),
+      touchActivityTime: sql`max(coalesce(${activityEvents.occurredAt}, ${activityEvents.createdAt})) filter (
+        where ${validCandidateTimeSql(activityEvents.occurredAt, activityEvents.createdAt)}
+          and not ${isSystemHistorySql(activityEvents.message)}
+          and ${touchEventConditionSql()}
+      )`.as('touch_activity_time'),
+    })
+    .from(activityEvents)
+    .groupBy(activityEvents.organizationId, activityEvents.contactId)
+    .as('contact_activity_touch');
+  const followUpNotes = db
+    .select({
+      organizationId: notes.organizationId,
+      contactId: notes.contactId,
+      followUpNoteTime: sql`max(${notes.createdAt}) filter (
+        where ${validCandidateTimeSql(notes.createdAt)}
+          and not ${isSystemHistorySql(notes.body)}
+          and ${containsFollowUpTextSql(notes.body)}
+      )`.as('follow_up_note_time'),
+    })
+    .from(notes)
+    .groupBy(notes.organizationId, notes.contactId)
+    .as('contact_follow_up_note_touch');
+  return { messages, activities, followUpNotes };
+}
+
+function nonSignsTouchSql({ touchAggregates, includeFollowUpNotes = false } = {}) {
+  const messageTime = touchAggregates.messages.messageTime;
+  const followUpActivityTime = touchAggregates.activities.followUpActivityTime;
+  const followUpNoteTime = includeFollowUpNotes
+    ? touchAggregates.followUpNotes.followUpNoteTime
+    : sql`null::timestamptz`;
+  const touchActivityTime = touchAggregates.activities.touchActivityTime;
   const touchTime = greatestSql(messageTime, touchActivityTime);
   if (!includeFollowUpNotes) return touchTime;
   return sql`coalesce(${greatestSql(messageTime, followUpActivityTime, followUpNoteTime)}, ${touchTime})`;
@@ -177,7 +194,7 @@ function businessUnitConditionSql(ids = []) {
   return ids.length ? inArray(contacts.primaryBusinessUnitId, ids) : sql`false`;
 }
 
-function contactLastTouchSql(latestLead, businessUnitRows = []) {
+function contactLastTouchSql(latestLead, businessUnitRows = [], touchAggregates) {
   const signsIds = businessUnitRows
     .filter((unit) => workflowKeyForBusinessUnit(unit) === WORKFLOW_KEYS.AIT_SIGNS)
     .map((unit) => unit.id);
@@ -186,8 +203,8 @@ function contactLastTouchSql(latestLead, businessUnitRows = []) {
     .map((unit) => unit.id);
   return sql`case
     when ${businessUnitConditionSql(signsIds)} then ${aitSignsLastTouchSql()}
-    when ${businessUnitConditionSql(usaIds)} then ${nonSignsTouchSql({ includeFollowUpNotes: true })}
-    else ${nonSignsTouchSql()}
+    when ${businessUnitConditionSql(usaIds)} then ${nonSignsTouchSql({ touchAggregates, includeFollowUpNotes: true })}
+    else ${nonSignsTouchSql({ touchAggregates })}
   end`;
 }
 
@@ -219,7 +236,7 @@ function inquirySourceSql(latestLead) {
   end`;
 }
 
-function contactDirectorySortExpression({ sortKey, latestLead, businessUnitRows }) {
+function contactDirectorySortExpression({ sortKey, latestLead, businessUnitRows, touchAggregates }) {
   const expressions = {
     name: nullableNormalizedSql(contacts.name),
     email: nullableNormalizedSql(contacts.email),
@@ -242,17 +259,18 @@ function contactDirectorySortExpression({ sortKey, latestLead, businessUnitRows 
     )`),
     schoolLocation: nullableNormalizedSql(contacts.address),
     inquirySource: inquirySourceSql(latestLead),
-    lastTouch: contactLastTouchSql(latestLead, businessUnitRows),
+    lastTouch: touchAggregates ? contactLastTouchSql(latestLead, businessUnitRows, touchAggregates) : null,
     lastEdited: sql`coalesce(${contacts.updatedAt}, ${contacts.createdAt})`,
   };
   return expressions[sortKey] || null;
 }
 
-function contactDirectoryOrderBy({ sort, latestLead, businessUnitRows }) {
+function contactDirectoryOrderBy({ sort, latestLead, businessUnitRows, touchAggregates }) {
   const expression = contactDirectorySortExpression({
     sortKey: sort.key,
     latestLead,
     businessUnitRows,
+    touchAggregates,
   });
   if (!expression) return [desc(contacts.createdAt), desc(contacts.id)];
   const orderedExpression = sort.direction === 'desc'
@@ -647,6 +665,7 @@ async function contactDirectoryQueryContext({ db, session, searchParams, busines
     direction: searchParams.get('direction'),
     mode: directoryMode,
   });
+  const touchAggregates = sort.key === 'lastTouch' ? buildNonSignsTouchAggregates(db) : null;
   const latestLead = db
     .selectDistinctOn([leads.contactId])
     .from(leads)
@@ -666,6 +685,7 @@ async function contactDirectoryQueryContext({ db, session, searchParams, busines
     workflowKey,
     directoryMode,
     sort,
+    touchAggregates,
     latestLead,
     where: and(...conditions),
   };
@@ -750,22 +770,41 @@ export async function loadContactDirectoryPage({
     requestedBusinessUnitId,
     directoryMode,
     sort,
+    touchAggregates,
     latestLead,
     where,
   } = context;
   const offset = (page - 1) * pageSize;
 
+  let idQuery = db
+    .select({ id: contacts.id })
+    .from(contacts)
+    .leftJoin(latestLead, eq(latestLead.contactId, contacts.id))
+    .leftJoin(users, eq(users.id, latestLead.assignedUserId))
+    .leftJoin(businessUnits, eq(businessUnits.id, contacts.primaryBusinessUnitId));
+  if (touchAggregates) {
+    idQuery = idQuery
+      .leftJoin(touchAggregates.messages, and(
+        eq(touchAggregates.messages.contactId, contacts.id),
+        eq(touchAggregates.messages.organizationId, contacts.organizationId),
+      ))
+      .leftJoin(touchAggregates.activities, and(
+        eq(touchAggregates.activities.contactId, contacts.id),
+        eq(touchAggregates.activities.organizationId, contacts.organizationId),
+      ))
+      .leftJoin(touchAggregates.followUpNotes, and(
+        eq(touchAggregates.followUpNotes.contactId, contacts.id),
+        eq(touchAggregates.followUpNotes.organizationId, contacts.organizationId),
+      ));
+  }
+  idQuery = idQuery
+    .where(where)
+    .orderBy(...contactDirectoryOrderBy({ sort, latestLead, businessUnitRows, touchAggregates }))
+    .limit(pageSize)
+    .offset(offset);
+
   const [idRows, countRows, courseOptions] = await Promise.all([
-    db
-      .select({ id: contacts.id })
-      .from(contacts)
-      .leftJoin(latestLead, eq(latestLead.contactId, contacts.id))
-      .leftJoin(users, eq(users.id, latestLead.assignedUserId))
-      .leftJoin(businessUnits, eq(businessUnits.id, contacts.primaryBusinessUnitId))
-      .where(where)
-      .orderBy(...contactDirectoryOrderBy({ sort, latestLead, businessUnitRows }))
-      .limit(pageSize)
-      .offset(offset),
+    idQuery,
     db
       .select({ value: count() })
       .from(contacts)
