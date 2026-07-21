@@ -11,12 +11,16 @@ const EMPTY_RESULT = Object.freeze({
   pageSize: 50,
   total: 0,
   totalPages: 1,
+  directoryMode: 'contacts',
+  sortKey: '',
+  sortDirection: 'desc',
 });
 
 export function useDeferredContactDirectory({
   enabled = false,
   searchParams,
   businessUnitId = '',
+  directoryKind = 'contacts',
   refreshKey = 0,
 } = {}) {
   const [search, setSearch] = useState('');
@@ -32,7 +36,7 @@ export function useDeferredContactDirectory({
     return () => clearTimeout(timeout);
   }, [search]);
 
-  const pageScope = `${businessUnitId}|${debouncedSearch}|${filterQuery}`;
+  const pageScope = `${businessUnitId}|${directoryKind}|${debouncedSearch}|${filterQuery}`;
   const page = pagination.scope === pageScope ? pagination.page : 1;
   const setPage = useCallback((nextPage) => {
     setPagination((current) => {
@@ -49,11 +53,12 @@ export function useDeferredContactDirectory({
     params.set('view', 'directory');
     params.set('page', String(page));
     params.set('pageSize', '50');
+    params.set('directoryKind', directoryKind);
     if (businessUnitId) params.set('businessUnitId', businessUnitId);
     if (debouncedSearch) params.set('q', debouncedSearch);
     else params.delete('q');
     return `/api/contacts?${params.toString()}`;
-  }, [businessUnitId, debouncedSearch, filterQuery, page]);
+  }, [businessUnitId, debouncedSearch, directoryKind, filterQuery, page]);
 
   const load = useCallback((signal) => {
     if (!enabled) return Promise.resolve(null);

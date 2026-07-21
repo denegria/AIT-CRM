@@ -55,6 +55,10 @@ import {
 } from '@/lib/school-locations';
 import { useToast } from '@/components/Toast';
 import { useDeferredContactDirectory } from '@/lib/contacts/directory-loader.js';
+import {
+  contactDirectorySortStateFromParams,
+  normalizeContactDirectorySort,
+} from '@/lib/contacts/directory-sort.js';
 import DataTable from '@/components/DataTable';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -376,6 +380,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     effectiveOwnerFilter !== DEFAULT_CONTACT_OWNER_FILTER &&
     !hasExplicitLeadDateFilter;
   const effectiveLeadDateScope = effectiveLeadDateScopeForContactParams(searchParams);
+  const preservedDirectorySort = contactDirectorySortStateFromParams(searchParams);
   const updateFilterQuery = useCallback((patch) => {
     const patchHasLeadDateScope =
       Object.prototype.hasOwnProperty.call(patch, 'leadDateScope') ||
@@ -384,7 +389,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     const includeLeadDateScope = Object.prototype.hasOwnProperty.call(patch, 'includeLeadDateScope')
       ? patch.includeLeadDateScope
       : hasExplicitLeadDateFilter || patchHasLeadDateScope;
-    const nextQuery = contactFilterQuery({
+    const filterQuery = contactFilterQuery({
       statusFilter,
       ownerFilter: coordinatorUiPolicy.ownerScoped ? DEFAULT_CONTACT_OWNER_FILTER : ownerFilter,
       directoryFacet,
@@ -397,8 +402,14 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       locationFilter,
       ...patch,
     });
+    const nextParams = new URLSearchParams(filterQuery);
+    if (preservedDirectorySort.key) {
+      nextParams.set('sort', preservedDirectorySort.key);
+      nextParams.set('direction', preservedDirectorySort.direction);
+    }
+    const nextQuery = nextParams.toString();
     router.replace(nextQuery ? `${routeBase}?${nextQuery}` : routeBase, { scroll: false });
-  }, [coordinatorUiPolicy.ownerScoped, courseFilter, directoryFacet, hasExplicitLeadDateFilter, leadDateFrom, leadDateScope, leadDateTo, locationFilter, ownerFilter, routeBase, router, sourceFilter, statusFilter]);
+  }, [coordinatorUiPolicy.ownerScoped, courseFilter, directoryFacet, hasExplicitLeadDateFilter, leadDateFrom, leadDateScope, leadDateTo, locationFilter, ownerFilter, preservedDirectorySort.direction, preservedDirectorySort.key, routeBase, router, sourceFilter, statusFilter]);
   useEffect(() => {
     if (!coordinatorUiPolicy.ownerScoped || (!searchParams.has('owner') && !searchParams.has('ownerUserId'))) return;
     updateFilterQuery({ ownerFilter: DEFAULT_CONTACT_OWNER_FILTER });
@@ -434,6 +445,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     enabled: contactDirectoryIsDeferred,
     searchParams,
     businessUnitId: currentBusinessUnitId,
+    directoryKind: isClientsMode ? 'clients' : 'contacts',
     refreshKey: directoryRefreshKey,
   });
   const refreshDirectory = useCallback(() => {
@@ -475,6 +487,20 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     workflowKey: activeWorkflow?.key,
     isSingleDivisionScope: Boolean(currentScopedBusinessUnitId),
   });
+  const directorySort = contactDirectorySortStateFromParams(searchParams, { mode: columnMode });
+  const setDirectorySort = useCallback(({ key, direction }) => {
+    const nextSort = normalizeContactDirectorySort({ key, direction, mode: columnMode });
+    const params = new URLSearchParams(searchParams.toString());
+    if (nextSort.key) {
+      params.set('sort', nextSort.key);
+      params.set('direction', nextSort.direction);
+    } else {
+      params.delete('sort');
+      params.delete('direction');
+    }
+    const nextQuery = params.toString();
+    router.replace(nextQuery ? `${routeBase}?${nextQuery}` : routeBase, { scroll: false });
+  }, [columnMode, routeBase, router, searchParams]);
   const isAitUsaDirectory = activeWorkflow?.key === WORKFLOW_KEYS.AIT_USA;
   const effectiveLocationFilter = isAitUsaDirectory ? locationFilter : DEFAULT_CONTACT_LOCATION_FILTER;
   const ownerOptions = useMemo(() => {
@@ -602,7 +628,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const columns = [
     { key: 'name', label: isClientsMode ? 'Client' : 'Name', sortable: true, editable: true },
     ...(columnMode !== 'ait_signs' ? [{ key: 'email', label: 'Email', sortable: true, editable: true }] : []),
-    { key: 'phone', label: 'Phone', editable: true },
+    { key: 'phone', label: 'Phone', sortable: true, editable: true },
     ...(columnMode === 'ait_signs' ? [
       { key: 'sourceCategoryText', label: 'Source', sortable: true, render: (row) => <SourceCell row={row} /> },
       { key: 'linkedPeopleSummary', label: 'People', sortable: true, render: (row) => <PeopleCell row={row} /> },
@@ -936,6 +962,9 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           searchPlaceholder={`Search ${pluralLabel.toLowerCase()} by name, phone, source, location, or course`}
           searchValue={contactDirectoryIsDeferred ? deferredDirectory.search : undefined}
           onSearchChange={contactDirectoryIsDeferred ? deferredDirectory.setSearch : undefined}
+          sortKey={contactDirectoryIsDeferred ? directorySort.key : undefined}
+          sortDirection={contactDirectoryIsDeferred ? directorySort.direction : undefined}
+          onSortChange={contactDirectoryIsDeferred ? setDirectorySort : undefined}
           toolbarAfterSearch={(
             <div className="contacts-filter-popover-anchor">
               <button

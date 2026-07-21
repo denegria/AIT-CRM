@@ -32,12 +32,18 @@ export default function DataTable({
   onSelect,
   mobileFields,
   mobileBadges,
+  sortKey: controlledSortKey,
+  sortDirection: controlledSortDirection,
+  onSortChange,
 }) {
   const [localSearch, setLocalSearch] = useState('');
   const search = searchValue === undefined ? localSearch : searchValue;
   const setSearch = onSearchChange || setLocalSearch;
-  const [sortKey, setSortKey] = useState(null);
-  const [sortDir, setSortDir] = useState('asc');
+  const [localSortKey, setLocalSortKey] = useState(null);
+  const [localSortDirection, setLocalSortDirection] = useState('asc');
+  const controlledSort = typeof onSortChange === 'function';
+  const sortKey = controlledSort ? controlledSortKey || '' : localSortKey;
+  const sortDirection = controlledSort ? controlledSortDirection || 'asc' : localSortDirection;
   const [editCell, setEditCell] = useState(null); // {rowId, key}
   const [editVal, setEditVal] = useState('');
   const [confirm, setConfirm] = useState(null); // { title, message, onConfirm }
@@ -61,19 +67,24 @@ export default function DataTable({
       const q = search.toLowerCase();
       rows = rows.filter(r => columns.some(c => String(r[c.key] || '').toLowerCase().includes(q)));
     }
-    if (sortKey) {
+    if (!controlledSort && sortKey) {
       rows = [...rows].sort((a, b) => {
         const av = a[sortKey] || '', bv = b[sortKey] || '';
         const cmp = typeof av === 'number' ? av - bv : String(av).localeCompare(String(bv));
-        return sortDir === 'asc' ? cmp : -cmp;
+        return sortDirection === 'asc' ? cmp : -cmp;
       });
     }
     return rows;
-  }, [data, search, sortKey, sortDir, columns, onSearchChange]);
+  }, [columns, controlledSort, data, onSearchChange, search, sortDirection, sortKey]);
 
   const toggleSort = (key) => {
-    if (sortKey === key) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortKey(key); setSortDir('asc'); }
+    const direction = sortKey === key && sortDirection === 'asc' ? 'desc' : 'asc';
+    if (controlledSort) {
+      onSortChange({ key, direction });
+      return;
+    }
+    setLocalSortKey(key);
+    setLocalSortDirection(direction);
   };
 
   const startEdit = (rowId, key, val) => { setEditCell({ rowId, key }); setEditVal(val || ''); };
@@ -210,10 +221,20 @@ export default function DataTable({
               </th>
             )}
             {visibleColumns.map(c => (
-              <th key={c.key} onClick={() => c.sortable !== false && toggleSort(c.key)}>
+              <th
+                key={c.key}
+                aria-sort={sortKey === c.key ? (sortDirection === 'asc' ? 'ascending' : 'descending') : undefined}
+                tabIndex={c.sortable !== false ? 0 : undefined}
+                onClick={() => c.sortable !== false && toggleSort(c.key)}
+                onKeyDown={(event) => {
+                  if (c.sortable === false || !['Enter', ' '].includes(event.key)) return;
+                  event.preventDefault();
+                  toggleSort(c.key);
+                }}
+              >
                 <div style={{display:'flex', alignItems:'center', gap:4}}>
                   {c.label}
-                  {sortKey === c.key && (sortDir === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
+                  {sortKey === c.key && (sortDirection === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
                 </div>
               </th>
             ))}
