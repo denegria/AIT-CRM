@@ -41,6 +41,7 @@ export default function FollowUpOutcomeDialog({
   canManageAssignments = false,
   showProfile = false,
   title = 'Log Follow-up',
+  returnFocusRef,
 }) {
   const id = useId().replaceAll(':', '');
   if (!open || !draft) return null;
@@ -55,6 +56,7 @@ export default function FollowUpOutcomeDialog({
       title={title}
       variant="dialog"
       panelClassName="follow-up-dialog-panel"
+      returnFocusRef={returnFocusRef}
       footer={(
         <>
           <button className="btn" type="button" onClick={onClose} disabled={busy}>Cancel</button>

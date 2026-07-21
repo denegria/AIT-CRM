@@ -15,4 +15,5 @@ test('task removal state is read from target metadata', () => {
   const state = { approvalTaskId: 'approval-1', decision: 'pending' };
   assert.deepEqual(taskRemovalApprovalState({ metadataJson: { removalApproval: state } }), state);
   assert.equal(taskRemovalApprovalState({}), null);
+  assert.equal(taskRemovalApprovalState(null), null);
 });

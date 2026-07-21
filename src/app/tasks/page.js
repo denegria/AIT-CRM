@@ -319,6 +319,7 @@ export default function FollowUpQueuePage() {
   const lockedTaskOwnerFilter = coordinatorUiPolicy.ownerScoped && currentUser?.id ? '__me' : '';
   const prefillSignatureRef = useRef('');
   const newTaskTriggerRef = useRef(null);
+  const followUpOutcomeTriggerRef = useRef(null);
   const createFormRef = useRef(null);
   const createDiscardConfirmedRef = useRef(false);
   const [queueTasks, setQueueTasks] = useState([]);
@@ -1183,8 +1184,9 @@ export default function FollowUpQueuePage() {
     createDiscardConfirmedRef.current = false;
   }
 
-  function toggleFollowUpCompletion(taskId) {
+  function toggleFollowUpCompletion(taskId, trigger = null) {
     const nextTaskId = completionTaskId === taskId ? '' : taskId;
+    if (nextTaskId && trigger) followUpOutcomeTriggerRef.current = trigger;
     setError('');
     setCompletionTaskId(nextTaskId);
     if (nextTaskId) setEditTaskId((currentEditTaskId) => (currentEditTaskId === taskId ? '' : currentEditTaskId));
@@ -1828,7 +1830,7 @@ export default function FollowUpQueuePage() {
                       className="btn btn-sm btn-primary"
                       type="button"
                       disabled={!access.canWriteCrm || busyTaskId === task.id}
-                      onClick={() => toggleFollowUpCompletion(task.id)}
+                      onClick={(event) => toggleFollowUpCompletion(task.id, event.currentTarget)}
                     >
                       <CheckCircle2 size={14} />
                       Log outcome
@@ -2098,6 +2100,7 @@ export default function FollowUpQueuePage() {
           accessibleContacts.find((contact) => contact.id === activeFollowUpTask.contactId)?.workflowKey === 'ait_usa'
         )}
         title="Log follow-up outcome"
+        returnFocusRef={followUpOutcomeTriggerRef}
       />
       <ConfirmDialog
         open={!!confirmTaskAction}

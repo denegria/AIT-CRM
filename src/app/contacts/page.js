@@ -185,6 +185,11 @@ function matchesOwnerSearch(owner, query) {
   return haystack.includes(query.trim().toLowerCase());
 }
 
+const ALWAYS_VISIBLE_SEGMENT_IDS = new Set([
+  'needs_first_contact',
+  'needs_next_follow_up',
+]);
+
 function buildVisibleSegmentGroups(facetGroups = [], activeFacetId = 'all') {
   const facetById = new Map(
     facetGroups.flatMap((group) => group.facets.map((facet) => [facet.id, facet])),
@@ -195,7 +200,11 @@ function buildVisibleSegmentGroups(facetGroups = [], activeFacetId = 'all') {
       ...group,
       facets: group.facets
         .map((id) => facetById.get(id))
-        .filter((facet) => facet && (facet.count > 0 || activeFacetId === facet.id)),
+        .filter((facet) => facet && (
+          facet.count > 0 ||
+          activeFacetId === facet.id ||
+          ALWAYS_VISIBLE_SEGMENT_IDS.has(facet.id)
+        )),
     }))
     .filter((group) => group.facets.length > 0);
   const visibleIds = new Set(['all', ...groups.flatMap((group) => group.facets.map((facet) => facet.id))]);

@@ -40,3 +40,9 @@ test('server ordering happens before pagination with stable id ties', () => {
   assert.match(serviceSource, /desc nulls last/);
   assert.match(serviceSource, /asc nulls last/);
 });
+
+test('Last Touch joins only the current touch aggregate shape', () => {
+  assert.match(serviceSource, /touchAggregates\.messages/);
+  assert.match(serviceSource, /touchAggregates\.activities/);
+  assert.doesNotMatch(serviceSource, /touchAggregates\.followUpNotes/);
+});

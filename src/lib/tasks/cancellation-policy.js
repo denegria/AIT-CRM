@@ -63,7 +63,6 @@ function hasPrivilegedCancellationRole(session = {}) {
   return [
     ROLE_KEYS.ADMIN,
     ROLE_KEYS.SENIOR_COORDINATOR,
-    ROLE_KEYS.SALES_MANAGER,
   ].some((roleKey) => userHasRole(session.user, roleKey));
 }
 

@@ -856,10 +856,6 @@ export async function loadContactDirectoryPage({
       .leftJoin(touchAggregates.activities, and(
         eq(touchAggregates.activities.contactId, contacts.id),
         eq(touchAggregates.activities.organizationId, contacts.organizationId),
-      ))
-      .leftJoin(touchAggregates.followUpNotes, and(
-        eq(touchAggregates.followUpNotes.contactId, contacts.id),
-        eq(touchAggregates.followUpNotes.organizationId, contacts.organizationId),
       ));
   }
   idQuery = idQuery

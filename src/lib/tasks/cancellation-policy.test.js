@@ -59,11 +59,11 @@ const cases = [
     reasonCode: TASK_CANCELLATION_REASON_CODES.PRIVILEGED_ROLE,
   },
   {
-    name: 'sales manager cancels protected work directly',
+    name: 'legacy sales manager is not granted cancellation authority',
     session: session(['sales_manager']),
     task: task({ ownerUserId: 'user-2', createdByUserId: 'user-2' }),
-    decision: TASK_CANCELLATION_DECISIONS.DIRECT_CANCEL,
-    reasonCode: TASK_CANCELLATION_REASON_CODES.PRIVILEGED_ROLE,
+    decision: TASK_CANCELLATION_DECISIONS.FORBIDDEN,
+    reasonCode: TASK_CANCELLATION_REASON_CODES.ROLE_NOT_PERMITTED,
   },
   {
     name: 'admin cancels protected work directly',

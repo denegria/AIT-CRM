@@ -6,5 +6,5 @@ export function canReviewTaskRemovalApprovals(user = {}) {
   return roleKeys.includes('admin') || roleKeys.includes('senior_coordinator');
 }
 export function taskRemovalApprovalState(task = {}) {
-  return task.metadataJson?.removalApproval || null;
+  return task?.metadataJson?.removalApproval || null;
 }
