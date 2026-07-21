@@ -105,6 +105,23 @@
   font-size: var(--text-sm);
   padding: 7px 8px;
 }
+.recordScopeValue {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  display: flex;
+  align-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border-default));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-secondary));
+  color: var(--text-primary);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  padding: 7px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .bottom {
   padding: 12px;
   border-top: 1px solid var(--border-subtle);
@@ -279,6 +296,11 @@
     height: 34px;
     padding: 5px 8px;
     font-size: 16px;
+  }
+  .mobileScopeBar .recordScopeValue {
+    height: 34px;
+    padding: 5px 8px;
+    font-size: 14px;
   }
   .navSection {
     display: block;

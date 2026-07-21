@@ -6,18 +6,21 @@ import NotificationBell from '@/components/NotificationBell';
 import PageState, { PageStateAction } from '@/components/PageState';
 import SessionSwitchGuard from '@/components/SessionSwitchGuard';
 import Sidebar from '@/components/Sidebar';
+import { RecordScopeProvider, useRecordScope } from '@/components/RecordScopeContext';
 import { canUseCoordinatorRoute, canUseWorkOrdersForBusinessUnit } from '@/lib/crm/coordinator-policy.js';
 import { useCRM } from '@/lib/store';
 
-export default function AppShell({ children }) {
+function AppShellContent({ children }) {
   const pathname = usePathname();
   const { accessibleBusinessUnits, currentBusinessUnit, currentUser, loaded } = useCRM();
+  const { recordBusinessUnit } = useRecordScope();
+  const routeBusinessUnit = recordBusinessUnit || currentBusinessUnit;
   const isPublicJoinPage = pathname === '/join';
-  const hasMobileScopeBar = accessibleBusinessUnits?.length > 0;
+  const hasMobileScopeBar = Boolean(recordBusinessUnit?.id || accessibleBusinessUnits?.length > 0);
   const isWorkOrdersRoute = pathname === '/work-orders' || pathname.startsWith('/work-orders/');
   const canUseRoute = isPublicJoinPage || (
     canUseCoordinatorRoute(currentUser, pathname) &&
-    (!isWorkOrdersRoute || canUseWorkOrdersForBusinessUnit(currentUser, currentBusinessUnit))
+    (!isWorkOrdersRoute || canUseWorkOrdersForBusinessUnit(currentUser, routeBusinessUnit))
   );
 
   if (isPublicJoinPage) {
@@ -47,5 +50,13 @@ export default function AppShell({ children }) {
         </main>
       </div>
     </>
+  );
+}
+
+export default function AppShell({ children }) {
+  return (
+    <RecordScopeProvider>
+      <AppShellContent>{children}</AppShellContent>
+    </RecordScopeProvider>
   );
 }

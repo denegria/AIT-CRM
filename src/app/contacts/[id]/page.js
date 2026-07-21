@@ -28,6 +28,7 @@ import {
   isTerminalCourseRecordStatus,
 } from '@/lib/crm/course-records.js';
 import { appendContactNote, contactDetailPageState, loadContactTimeline } from '@/lib/contacts/detail-loader.js';
+import { useRecordScopeRegistration } from '@/components/RecordScopeContext';
 
 const SNAPSHOT_ICONS = {
   estimate: BriefcaseBusiness,
@@ -540,6 +541,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     ownerOptions.find((owner) => owner.id === assignedOwnerId) || null
   ), [assignedOwnerId, ownerOptions]);
   const contactBusinessUnit = businessUnits.find((unit) => unit.id === contact?.businessUnitId || unit.id === contact?.primaryBusinessUnitId);
+  useRecordScopeRegistration(contactBusinessUnit, contact?.id ? `contact:${contact.id}` : '');
   const financialContext = useMemo(() => ({ contact, businessUnit: contactBusinessUnit }), [contact, contactBusinessUnit]);
   const estimateTotal = useMemo(() => estimateForm.items.reduce((sum, item) => (
     sum + moneyValue(item.qty || 1) * moneyValue(item.rate)
@@ -1140,8 +1142,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       editForm.status !== contact.status &&
       isEnrolledWorkflowStatus(editForm.status) &&
       !activeCourseRecord;
+    const profilePatch = { ...editForm };
+    delete profilePatch.notes;
+    delete profilePatch.timeline;
     updateContact(contact.id, {
-      ...editForm,
+      ...profilePatch,
       ...(coordinatorUiPolicy.lockedOwnerUserId ? { assignedTo: coordinatorUiPolicy.lockedOwnerUserId } : {}),
       statusChangeReason: isClosedStatusReopen ? editForm.statusChangeReason : '',
       ...(editForm.leadProfile ? { leadProfile: editForm.leadProfile } : {}),

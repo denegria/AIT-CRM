@@ -14,6 +14,7 @@ import {
   User,
 } from 'lucide-react';
 import PageState, { PageStateAction } from '@/components/PageState';
+import { useRecordScopeRegistration } from '@/components/RecordScopeContext';
 import { useCRM } from '@/lib/store';
 import { taskDateKey } from '@/lib/tasks/visibility.js';
 import s from './TaskDetail.module.css';
@@ -163,6 +164,7 @@ export default function TaskDetailPage() {
 
   const task = detail?.task || null;
   const context = detail?.context || {};
+  useRecordScopeRegistration(context.businessUnit, task?.id ? `task:${task.id}` : '');
   const events = detail?.events || [];
   const ownerLabel = context.owner?.name || context.owner?.email || (task?.ownerUserId === currentUser?.id ? 'Me' : 'Unassigned');
   const createdByLabel = context.createdBy?.name || context.createdBy?.email || 'Unknown';

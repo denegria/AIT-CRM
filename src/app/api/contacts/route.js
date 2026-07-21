@@ -189,14 +189,11 @@ function parseNoteDate(value) {
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
-function normalizeNoteInputs(rawNotes) {
-  if (!Array.isArray(rawNotes)) return [];
-  return rawNotes
-    .map((note) => ({
-      body: String(note?.text || note?.body || '').trim(),
-      createdAt: parseNoteDate(note?.createdAt || note?.timestamp || note?.date),
-    }))
-    .filter((note) => note.body);
+function normalizeAppendNoteInput(rawNote) {
+  const body = typeof rawNote === 'object' && rawNote !== null
+    ? String(rawNote.body || rawNote.text || '').trim()
+    : String(rawNote || '').trim();
+  return body ? { body } : null;
 }
 
 function normalizeFollowUpNoteInput(rawFollowUpNote) {
@@ -261,9 +258,10 @@ export async function POST(request) {
     return crmErrorResponse(error);
   }
 
-  const { contact, lead } = await createContactWithLead({
+  const { contact, lead, noteRows } = await createContactWithLead({
     db,
     organizationId: session.user.organizationId,
+    actorUserId: session.user.id,
     contactValues: {
       primaryBusinessUnitId: businessUnitId,
       name,
@@ -281,9 +279,10 @@ export async function POST(request) {
       assignedUserId,
       ...leadProfilePatchToDrizzleValues(leadProfilePatchFromPayload(body, { allowClear: false })),
     } : null,
+    initialNote: normalizeAppendNoteInput(body.appendNote || body.initialNote),
   });
 
-  return NextResponse.json({ contact: toContactPayload(contact, lead, [], businessUnit) }, { status: 201 });
+  return NextResponse.json({ contact: toContactPayload(contact, lead, noteRows, businessUnit) }, { status: 201 });
 }
 
 export async function PATCH(request) {
@@ -291,6 +290,9 @@ export async function PATCH(request) {
   if (error) return error;
 
   const body = await request.json().catch(() => ({}));
+  if (Array.isArray(body.notes)) {
+    return NextResponse.json({ error: 'Contact notes are append-only. Submit appendNote to add a timeline note.' }, { status: 400 });
+  }
   const id = String(body.id || '').trim();
   if (!isUuid(id)) {
     return NextResponse.json({ error: 'A valid contact id is required.' }, { status: 400 });
@@ -447,9 +449,7 @@ export async function PATCH(request) {
       existingLead: lead,
       leadPatch,
       leadStatusChange,
-      replaceNotes: Array.isArray(body.notes)
-        ? { noteInputs: normalizeNoteInputs(body.notes) }
-        : null,
+      appendNote: normalizeAppendNoteInput(body.appendNote),
       addFollowUpNote: normalizeFollowUpNoteInput(body.followUpNote),
     });
   } catch (error) {

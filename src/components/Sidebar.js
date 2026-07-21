@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { publishLogout } from '@/lib/auth/session-sync.js';
+import { useRecordScope } from '@/components/RecordScopeContext';
 import { roleLabel } from '@/lib/roles.js';
 import { useCRM } from '@/lib/store';
 import { canUseTeamMonitorWorkspace, canUseWorkOrdersForBusinessUnit, coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
@@ -91,6 +92,9 @@ export default function Sidebar() {
     setCurrentBusinessUnitId,
     scopeLabel,
   } = useCRM();
+  const { recordBusinessUnit } = useRecordScope();
+  const displayedBusinessUnit = recordBusinessUnit || currentBusinessUnit;
+  const isRecordScope = Boolean(recordBusinessUnit?.id);
 
   const handleLogout = async () => {
     await fetch('/api/auth/logout', { method: 'POST' }).catch(() => null);
@@ -103,19 +107,21 @@ export default function Sidebar() {
     window.location.reload();
   };
 
-  const isClientViewScope = currentBusinessUnitId !== 'all' && isClientAccountBusinessUnit(currentBusinessUnit);
+  const isClientViewScope = isRecordScope
+    ? isClientAccountBusinessUnit(displayedBusinessUnit)
+    : currentBusinessUnitId !== 'all' && isClientAccountBusinessUnit(currentBusinessUnit);
   const canUseFinancialsWorkspace = Boolean(access.canReadSettings || access.canReadReports || role === 'admin');
   const canReadMessagingInbox = Boolean(access.canReadMessagingInbox);
   const canManageSmsCampaigns = Boolean(access.canManageSmsCampaigns);
-  const hasBusinessUnitScope = accessibleBusinessUnits?.length > 0;
-  const divisionBrand = useMemo(() => divisionBrandFor(currentBusinessUnit), [currentBusinessUnit]);
+  const hasBusinessUnitScope = Boolean(recordBusinessUnit?.id || accessibleBusinessUnits?.length > 0);
+  const divisionBrand = useMemo(() => divisionBrandFor(displayedBusinessUnit), [displayedBusinessUnit]);
   const monitorCurrentUser = useMemo(() => currentUser || { id: 'emp-1', primaryRoleKey: role }, [currentUser, role]);
   const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
   const canUseWorkOrders = useMemo(
-    () => canUseWorkOrdersForBusinessUnit(currentUser, currentBusinessUnit),
-    [currentBusinessUnit, currentUser],
+    () => canUseWorkOrdersForBusinessUnit(currentUser, displayedBusinessUnit),
+    [currentUser, displayedBusinessUnit],
   );
-  const isAitUsaScope = isAitUsaBusinessUnit(currentBusinessUnit?.name);
+  const isAitUsaScope = isAitUsaBusinessUnit(displayedBusinessUnit?.name);
 
   useEffect(() => {
     document.title = divisionBrand.title;
@@ -170,19 +176,28 @@ export default function Sidebar() {
     </Link>
   );
 
-  const renderScopeSelect = () => (
-    <select
-      className={s.scopeSelect}
-      value={currentBusinessUnitId}
-      onChange={(event) => setCurrentBusinessUnitId(event.target.value)}
-      aria-label={`${scopeLabel} scope`}
-    >
-      <option value="unassigned" title="Shows records that have not been assigned to any division">No Division</option>
-      {accessibleBusinessUnits.map((unit) => (
-        <option key={unit.id} value={unit.id}>{unit.name}</option>
-      ))}
-    </select>
-  );
+  const renderScopeControl = () => {
+    if (isRecordScope) {
+      return (
+        <div className={s.recordScopeValue} aria-label={`Record division: ${displayedBusinessUnit.name}`}>
+          {displayedBusinessUnit.name}
+        </div>
+      );
+    }
+    return (
+      <select
+        className={s.scopeSelect}
+        value={currentBusinessUnitId}
+        onChange={(event) => setCurrentBusinessUnitId(event.target.value)}
+        aria-label={`${scopeLabel} scope`}
+      >
+        <option value="unassigned" title="Shows records that have not been assigned to any division">No Division</option>
+        {accessibleBusinessUnits.map((unit) => (
+          <option key={unit.id} value={unit.id}>{unit.name}</option>
+        ))}
+      </select>
+    );
+  };
 
   return (
     <aside className={`${s.sidebar} ${hasBusinessUnitScope ? s.hasMobileScope : ''}`}>
@@ -198,9 +213,9 @@ export default function Sidebar() {
         <div className={s.mobileScopeBar}>
           <div className={s.mobileScopeTitle}>
             <Building2 size={14} />
-            <span>{currentBusinessUnit?.name || scopeLabel}</span>
+            <span>{isRecordScope ? 'Record division' : currentBusinessUnit?.name || scopeLabel}</span>
           </div>
-          {renderScopeSelect()}
+          {renderScopeControl()}
         </div>
       )}
       <nav className={s.navSection}>
@@ -208,9 +223,9 @@ export default function Sidebar() {
           <div className={s.scopePanel}>
             <div className={s.scopeTitle}>
               <Building2 size={14} />
-              <span>{scopeLabel}</span>
+              <span>{isRecordScope ? 'Record division' : scopeLabel}</span>
             </div>
-            {renderScopeSelect()}
+            {renderScopeControl()}
           </div>
         )}
         <div className={s.navLabel}>Menu</div>

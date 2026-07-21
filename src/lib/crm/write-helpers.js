@@ -58,8 +58,10 @@ function businessUnitEventValues({ organizationId, actorUserId, businessUnit, ev
 export async function createContactWithLead({
   db,
   organizationId,
+  actorUserId,
   contactValues,
   leadValues = null,
+  initialNote = null,
 }) {
   return db.transaction(async (tx) => {
     const [contact] = await tx
@@ -82,7 +84,22 @@ export async function createContactWithLead({
         .returning();
     }
 
-    return { contact, lead };
+    let noteRows = [];
+    if (initialNote?.body) {
+      const [note] = await tx
+        .insert(notes)
+        .values({
+          organizationId,
+          businessUnitId: contact.primaryBusinessUnitId,
+          contactId: contact.id,
+          body: initialNote.body,
+          authorUserId: actorUserId,
+        })
+        .returning();
+      noteRows = [note];
+    }
+
+    return { contact, lead, noteRows };
   });
 }
 
@@ -95,7 +112,7 @@ export async function updateContactWithLeadAndNotes({
   existingLead = null,
   leadPatch = null,
   leadStatusChange = null,
-  replaceNotes = null,
+  appendNote = null,
   addFollowUpNote = null,
 }) {
   return db.transaction(async (tx) => {
@@ -174,22 +191,15 @@ export async function updateContactWithLeadAndNotes({
     }
 
     let noteRows = await notesForContact(tx, organizationId, contactId);
-    if (replaceNotes) {
-      await tx
-        .delete(notes)
-        .where(and(eq(notes.contactId, contactId), eq(notes.organizationId, organizationId)));
-
-      noteRows = replaceNotes.noteInputs.length
-        ? await tx.insert(notes).values(replaceNotes.noteInputs.map((note) => ({
-            organizationId,
-            businessUnitId: contact.primaryBusinessUnitId,
-            contactId,
-            body: note.body,
-            authorUserId: actorUserId,
-            createdAt: note.createdAt,
-            updatedAt: note.createdAt,
-          }))).returning()
-        : [];
+    if (appendNote?.body) {
+      const [note] = await tx.insert(notes).values({
+        organizationId,
+        businessUnitId: contact.primaryBusinessUnitId,
+        contactId,
+        body: appendNote.body,
+        authorUserId: actorUserId,
+      }).returning();
+      noteRows = [note, ...noteRows];
     }
 
     if (addFollowUpNote?.body) {

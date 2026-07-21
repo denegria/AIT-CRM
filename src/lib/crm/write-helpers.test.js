@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { updateContactWithLeadAndNotes } from './write-helpers.js';
+import { createContactWithLead, updateContactWithLeadAndNotes } from './write-helpers.js';
 
 function returningChain(value) {
   return {
@@ -91,7 +91,49 @@ test('updateContactWithLeadAndNotes writes follow-up note activity events', asyn
   assert.deepEqual(result.activityEventRows, []);
 });
 
-test('updateContactWithLeadAndNotes keeps regular notes as notes only', async () => {
+test('createContactWithLead creates an initial note in the contact transaction', async () => {
+  const insertedValues = [];
+  const contact = { id: 'contact-1', primaryBusinessUnitId: 'bu-ait-usa' };
+  const lead = { id: 'lead-1', contactId: 'contact-1', businessUnitId: 'bu-ait-usa' };
+  const note = { id: 'note-1', contactId: 'contact-1', body: 'Interested in evening classes.' };
+  const returnedRows = [[contact], [lead], [note]];
+  const tx = {
+    insert() {
+      return {
+        values(value) {
+          const index = insertedValues.push(value) - 1;
+          return {
+            returning() {
+              return Promise.resolve(returnedRows[index]);
+            },
+          };
+        },
+      };
+    },
+  };
+  const db = { transaction: (callback) => callback(tx) };
+
+  const result = await createContactWithLead({
+    db,
+    organizationId: 'org-1',
+    actorUserId: 'user-1',
+    contactValues: { primaryBusinessUnitId: 'bu-ait-usa', name: 'Maria' },
+    leadValues: { businessUnitId: 'bu-ait-usa', status: 'New Lead' },
+    initialNote: { body: 'Interested in evening classes.' },
+  });
+
+  assert.equal(insertedValues.length, 3);
+  assert.deepEqual(insertedValues[2], {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-ait-usa',
+    contactId: 'contact-1',
+    body: 'Interested in evening classes.',
+    authorUserId: 'user-1',
+  });
+  assert.deepEqual(result.noteRows, [note]);
+});
+
+test('updateContactWithLeadAndNotes appends a regular note without replacing history', async () => {
   const insertedValues = [];
   const deletedTables = [];
   const contact = {
@@ -99,13 +141,15 @@ test('updateContactWithLeadAndNotes keeps regular notes as notes only', async ()
     organizationId: 'org-1',
     primaryBusinessUnitId: 'bu-ait-usa',
   };
-  const createdAt = new Date('2026-06-12T13:33:00.000Z');
+  const existingNote = { id: 'existing-note', body: 'Existing history.' };
+  let selectCalls = 0;
   const tx = {
     update() {
       return returningChain([contact]);
     },
     select() {
-      return selectChain([]);
+      selectCalls += 1;
+      return selectChain(selectCalls === 1 ? [existingNote] : []);
     },
     delete(table) {
       deletedTables.push(table);
@@ -140,18 +184,16 @@ test('updateContactWithLeadAndNotes keeps regular notes as notes only', async ()
     organizationId: 'org-1',
     actorUserId: 'user-1',
     contactId: 'contact-1',
-    contactPatch: { updatedAt: createdAt },
-    replaceNotes: {
-      noteInputs: [{
-        body: 'Classes Monday, Wednesday, and Friday.',
-        createdAt,
-      }],
-    },
+    contactPatch: { updatedAt: new Date('2026-06-12T13:33:00.000Z') },
+    appendNote: { body: 'Classes Monday, Wednesday, and Friday.' },
   });
 
-  assert.equal(deletedTables.length, 1);
+  assert.equal(deletedTables.length, 0);
   assert.equal(insertedValues.length, 1);
-  assert.equal(insertedValues[0][0].body, 'Classes Monday, Wednesday, and Friday.');
-  assert.equal(insertedValues[0][0].createdAt, createdAt);
+  assert.equal(insertedValues[0].body, 'Classes Monday, Wednesday, and Friday.');
+  assert.deepEqual(result.noteRows.map((row) => row.body), [
+    'Classes Monday, Wednesday, and Friday.',
+    'Existing history.',
+  ]);
   assert.deepEqual(result.activityEventRows, []);
 });

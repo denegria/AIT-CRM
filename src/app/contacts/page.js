@@ -73,7 +73,7 @@ const empty = {
   assignedTo: '',
   tags: [],
   nextAction: '',
-  notes: [],
+  appendNote: '',
 };
 
 const CONTACT_FILTER_CHIP_LABELS = {
@@ -533,7 +533,12 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     setFormError('');
     setDrawer('new');
   };
-  const openEdit = (row) => { if (!canWrite) return; setForm({ ...row }); setFormError(''); setDrawer(row); };
+  const openEdit = (row) => {
+    if (!canWrite) return;
+    setForm({ ...row, appendNote: '' });
+    setFormError('');
+    setDrawer(row);
+  };
   const close = () => { setDrawer(null); setFormError(''); };
   const requestDelete = () => {
     if (!canWrite || !drawer || drawer === 'new') return;
@@ -562,9 +567,14 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       return;
     }
     setFormError('');
-    const payload = coordinatorUiPolicy.lockedOwnerUserId
-      ? { ...form, assignedTo: coordinatorUiPolicy.lockedOwnerUserId }
-      : form;
+    const payload = { ...form };
+    delete payload.notes;
+    delete payload.timeline;
+    payload.appendNote = String(payload.appendNote || '').trim();
+    if (!payload.appendNote) delete payload.appendNote;
+    if (coordinatorUiPolicy.lockedOwnerUserId) {
+      payload.assignedTo = coordinatorUiPolicy.lockedOwnerUserId;
+    }
     if (drawer === 'new') {
       addContact(payload)
         .then(() => {
@@ -1499,23 +1509,21 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
               </div>
             )}
             <div className="form-group">
-              <label className="form-label">Notes</label>
-              <textarea className="input contact-dialog-notes" rows={3}
-                value={Array.isArray(form.notes) ? (form.notes[form.notes.length - 1]?.text || '') : form.notes}
-                onChange={e => {
-                  const text = e.target.value;
-                  setForm(f => {
-                    const newNotes = Array.isArray(f.notes) ? [...f.notes] : [{ text: f.notes, date: new Date().toISOString().slice(0,10) }];
-                    if (newNotes.length > 0) {
-                      newNotes[newNotes.length - 1] = { ...newNotes[newNotes.length - 1], text, date: new Date().toISOString().slice(0,10) };
-                    } else {
-                      newNotes.push({ text, date: new Date().toISOString().slice(0,10) });
-                    }
-                    return { ...f, notes: newNotes };
-                  });
-                }}
+              <label className="form-label" htmlFor="contact-dialog-append-note">
+                {drawer === 'new' ? 'Initial timeline note' : 'Append timeline note'}
+              </label>
+              <textarea
+                id="contact-dialog-append-note"
+                className="input contact-dialog-notes"
+                rows={3}
+                value={form.appendNote || ''}
+                onChange={e => setForm(f => ({ ...f, appendNote: e.target.value }))}
               />
-              <div className="contact-dialog-note-help">Editing the latest note. Full timeline available in Contact Details.</div>
+              <div className="contact-dialog-note-help">
+                {drawer === 'new'
+                  ? 'Optional. This note will be added to the new contact timeline.'
+                  : 'Optional. This adds a new timeline entry and preserves existing note history.'}
+              </div>
             </div>
           </section>
 
