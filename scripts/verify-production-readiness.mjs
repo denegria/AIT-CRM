@@ -1,4 +1,5 @@
 import { Client } from 'pg';
+import { databaseSslMode, databaseUrlUsesFullVerification } from '../src/db/database-url.js';
 
 const baseUrl = (process.env.AIT_CRM_BASE_URL || 'https://ait-crm-pi.vercel.app').replace(/\/$/, '');
 const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN || process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || '';
@@ -129,6 +130,12 @@ async function main() {
   } else {
     requireEnv('AIT_CRM_SESSION_SECRET');
     requireEnv('DATABASE_URL');
+    const sslMode = databaseSslMode(process.env.DATABASE_URL);
+    addCheck(
+      'DATABASE_URL enforces full TLS verification',
+      databaseUrlUsesFullVerification(process.env.DATABASE_URL),
+      sslMode ? `sslmode=${sslMode}` : 'sslmode missing or invalid',
+    );
     if (skipSensitiveEnv) {
       addCheck('sensitive Meta env check skipped', true, 'SKIP_SENSITIVE_ENV=1');
     } else {

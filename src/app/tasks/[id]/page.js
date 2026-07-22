@@ -305,7 +305,7 @@ export default function TaskDetailPage() {
 
   return (
     <div className={s.detailShell}>
-      <div className={s.topBar}>
+      <div className={`${s.topBar} app-notification-safe`}>
         <Link className={s.backLink} href="/tasks"><ArrowLeft size={16} /> Back to tasks</Link>
         <div className={s.actionRow}>
           {canReviewRemovalApproval && (

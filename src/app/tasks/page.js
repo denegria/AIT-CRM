@@ -342,6 +342,7 @@ export default function FollowUpQueuePage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createBusy, setCreateBusy] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [createErrorField, setCreateErrorField] = useState('');
   const [createDraft, setCreateDraft] = useState(() => defaultCreateDraft({
     currentBusinessUnitId,
     accessibleBusinessUnits,
@@ -878,6 +879,7 @@ export default function FollowUpQueuePage() {
     setCreateInitialDraft(nextDraft);
     setCreateContactSearch('');
     setCreateError('');
+    setCreateErrorField('');
     createDiscardConfirmedRef.current = false;
     setCreateDiscardConfirmationOpen(false);
     setCreateOpen(true);
@@ -885,7 +887,7 @@ export default function FollowUpQueuePage() {
 
   function updateCreateDraft(patch) {
     setCreateDraft((prev) => ({ ...prev, ...patch }));
-    if (createError) setCreateError('');
+    clearCreateValidationError(Object.keys(patch));
   }
 
   function updateCreateBusinessUnit(businessUnitId) {
@@ -899,7 +901,7 @@ export default function FollowUpQueuePage() {
       };
     });
     setCreateContactSearch('');
-    if (createError) setCreateError('');
+    clearCreateValidationError(['businessUnitId']);
   }
 
   function updateCreateContact(contactId) {
@@ -912,7 +914,7 @@ export default function FollowUpQueuePage() {
       businessUnitId,
     }));
     setCreateContactSearch(selectedOption?.label || '');
-    if (createError) setCreateError('');
+    clearCreateValidationError(['contactId', 'businessUnitId']);
   }
 
   function openEditPanel(task) {
@@ -984,6 +986,7 @@ export default function FollowUpQueuePage() {
       setCreateInitialDraft(nextDraft);
       setCreateContactSearch(selectedContact.name || selectedContact.client || '');
       setCreateError('');
+      setCreateErrorField('');
       createDiscardConfirmedRef.current = false;
       setCreateDiscardConfirmationOpen(false);
       setCreateOpen(true);
@@ -1005,17 +1008,18 @@ export default function FollowUpQueuePage() {
       showCreateValidationError('Task owner is required.', 'ownerUserId');
       return;
     }
-    if (!createDraft.dueDate) {
-      showCreateValidationError('Task due date is required.', 'dueDate');
-      return;
-    }
     if (!createDraft.businessUnitId) {
       showCreateValidationError(`${scopeLabel} is required.`, 'businessUnitId');
+      return;
+    }
+    if (!createDraft.dueDate) {
+      showCreateValidationError('Task due date is required.', 'dueDate');
       return;
     }
 
     setCreateBusy(true);
     setCreateError('');
+    setCreateErrorField('');
     try {
       const response = await fetch('/api/tasks', {
         method: 'POST',
@@ -1046,6 +1050,7 @@ export default function FollowUpQueuePage() {
     } catch (err) {
       const message = err.message || 'Task creation failed.';
       setCreateError(message);
+      setCreateErrorField('');
       toast(message);
     } finally {
       setCreateBusy(false);
@@ -1156,9 +1161,18 @@ export default function FollowUpQueuePage() {
 
   function showCreateValidationError(message, fieldName) {
     setCreateError(message);
+    setCreateErrorField(fieldName);
     window.requestAnimationFrame(() => {
       createFormRef.current?.elements.namedItem(fieldName)?.focus();
     });
+  }
+
+  function clearCreateValidationError(changedFields = []) {
+    if (!createError) return;
+    if (!createErrorField || changedFields.includes(createErrorField)) {
+      setCreateError('');
+      setCreateErrorField('');
+    }
   }
 
   function closeCreateDialog() {
@@ -1176,6 +1190,7 @@ export default function FollowUpQueuePage() {
   function discardCreateDraft() {
     createDiscardConfirmedRef.current = true;
     setCreateError('');
+    setCreateErrorField('');
   }
 
   function closeCreateDiscardConfirmation() {
@@ -1401,6 +1416,12 @@ export default function FollowUpQueuePage() {
             <span className={s.createRequired}>* Required</span>
           </div>
 
+          {createError && (
+            <div id="new-task-form-error" className={s.createError} role="alert">
+              {createError}
+            </div>
+          )}
+
           <section className={`${s.createSection} ${s.createWhat}`}>
             <div className={s.createSectionHeader}>
               <span className={s.createSectionIndex}>1</span>
@@ -1409,14 +1430,18 @@ export default function FollowUpQueuePage() {
                 <p className={s.createSectionCopy}>Name the work and set its urgency.</p>
               </div>
             </div>
-            <label>
+            <label htmlFor="new-task-title">
               <span className="form-label">Title *</span>
               <input
+                id="new-task-title"
                 className="input"
                 name="title"
                 value={createDraft.title}
                 required
                 aria-required="true"
+                aria-invalid={createErrorField === 'title' ? 'true' : undefined}
+                aria-describedby={createErrorField === 'title' ? 'new-task-form-error' : undefined}
+                aria-errormessage={createErrorField === 'title' ? 'new-task-form-error' : undefined}
                 autoFocus
                 disabled={createBusy}
                 onChange={(event) => updateCreateDraft({ title: event.target.value })}
@@ -1448,9 +1473,21 @@ export default function FollowUpQueuePage() {
               </div>
             </div>
             {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
-              <label>
+              <label htmlFor="new-task-owner">
                 <span className="form-label">Owner *</span>
-                <select className="select" name="ownerUserId" value={createDraft.ownerUserId} disabled={createBusy} onChange={(event) => updateCreateDraft({ ownerUserId: event.target.value })}>
+                <select
+                  id="new-task-owner"
+                  className="select"
+                  name="ownerUserId"
+                  value={createDraft.ownerUserId}
+                  required
+                  aria-required="true"
+                  aria-invalid={createErrorField === 'ownerUserId' ? 'true' : undefined}
+                  aria-describedby={createErrorField === 'ownerUserId' ? 'new-task-form-error' : undefined}
+                  aria-errormessage={createErrorField === 'ownerUserId' ? 'new-task-form-error' : undefined}
+                  disabled={createBusy}
+                  onChange={(event) => updateCreateDraft({ ownerUserId: event.target.value })}
+                >
                   <option value="" disabled>Select owner</option>
                   {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
                 </select>
@@ -1458,9 +1495,21 @@ export default function FollowUpQueuePage() {
             ) : (
               <input type="hidden" value={coordinatorUiPolicy.lockedOwnerUserId || createDraft.ownerUserId} readOnly />
             )}
-            <label>
+            <label htmlFor="new-task-business-unit">
               <span className="form-label">{scopeLabel} *</span>
-              <select className="select" name="businessUnitId" value={createDraft.businessUnitId} disabled={createBusy} onChange={(event) => updateCreateBusinessUnit(event.target.value)}>
+              <select
+                id="new-task-business-unit"
+                className="select"
+                name="businessUnitId"
+                value={createDraft.businessUnitId}
+                required
+                aria-required="true"
+                aria-invalid={createErrorField === 'businessUnitId' ? 'true' : undefined}
+                aria-describedby={createErrorField === 'businessUnitId' ? 'new-task-form-error' : undefined}
+                aria-errormessage={createErrorField === 'businessUnitId' ? 'new-task-form-error' : undefined}
+                disabled={createBusy}
+                onChange={(event) => updateCreateBusinessUnit(event.target.value)}
+              >
                 {accessibleBusinessUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
               </select>
             </label>
@@ -1475,14 +1524,19 @@ export default function FollowUpQueuePage() {
               </div>
             </div>
             <div className={s.createSplit}>
-              <label>
+              <label htmlFor="new-task-due-date">
                 <span className="form-label">Due Date *</span>
                 <input
+                  id="new-task-due-date"
                   className="input"
                   name="dueDate"
                   type="date"
                   value={createDraft.dueDate}
                   required
+                  aria-required="true"
+                  aria-invalid={createErrorField === 'dueDate' ? 'true' : undefined}
+                  aria-describedby={createErrorField === 'dueDate' ? 'new-task-form-error' : undefined}
+                  aria-errormessage={createErrorField === 'dueDate' ? 'new-task-form-error' : undefined}
                   disabled={createBusy}
                   onChange={(event) => updateCreateDraft({ dueDate: event.target.value })}
                 />
@@ -1548,7 +1602,6 @@ export default function FollowUpQueuePage() {
             </label>
           </section>
 
-          {createError && <div className={s.createError} role="alert">{createError}</div>}
         </form>
       </Modal>
 
