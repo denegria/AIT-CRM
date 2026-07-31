@@ -25,7 +25,10 @@ export async function ingestAitUsaCrmEvent(client, { organizationId, businessUni
 
     const contact = event.contact || {};
     const contactId = await upsertEventContact(client, { organizationId, businessUnitId, contact });
-    const leadId = await findOrCreateEventLead(client, { organizationId, businessUnitId, contactId, event });
+    let leadId = await findExistingEventLead(client, { organizationId, contactId });
+    if (!leadId && FOLLOW_UP_EVENTS.has(event.eventType)) {
+      leadId = await createEventLead(client, { organizationId, businessUnitId, contactId, event });
+    }
     const metadata = safeEventMetadata(event);
     await client.query(
       `insert into activity_events
@@ -80,12 +83,16 @@ async function upsertEventContact(client, { organizationId, businessUnitId, cont
   return inserted.rows[0]?.id || null;
 }
 
-async function findOrCreateEventLead(client, { organizationId, businessUnitId, contactId, event }) {
+async function findExistingEventLead(client, { organizationId, contactId }) {
   const existing = await client.query(
     `select id from leads where organization_id = $1 and contact_id = $2 order by created_at asc limit 1`,
     [organizationId, contactId],
   );
   if (existing.rows[0]?.id) return existing.rows[0].id;
+  return null;
+}
+
+async function createEventLead(client, { organizationId, businessUnitId, contactId, event }) {
   const created = await client.query(
     `insert into leads (organization_id, business_unit_id, contact_id, source_type, source_name, status, current_stage, original_notes)
      values ($1, $2, $3, 'website_lead', 'AIT USA Refresh', 'New Lead', 'New Lead', $4) returning id`,

@@ -7,6 +7,7 @@ import {
   aitUsaEventToWebsiteLeadBody,
   validateAitUsaCrmEvent,
 } from './aitusa-crm-events.js';
+import { ingestAitUsaCrmEvent } from './aitusa-crm-event-ingestion.js';
 
 function event(overrides = {}) {
   return {
@@ -61,4 +62,48 @@ test('keeps legacy source-labelled website leads on the legacy path', async () =
   const route = await readFile(new URL('../../app/api/webhooks/website-leads/route.js', import.meta.url), 'utf8');
   assert.match(route, /const isAitUsaEvent = body\?\.schemaVersion === AITUSA_CRM_EVENT_SCHEMA_VERSION/);
   assert.doesNotMatch(route, /source === 'AIT USA Refresh' \|\|/);
+});
+
+function createEventClient({ leadRows = [] } = {}) {
+  const calls = [];
+  let leadRead = 0;
+  return {
+    calls,
+    async query(statement, values = []) {
+      const sql = String(statement);
+      calls.push({ sql, values });
+      if (sql.includes('from activity_events')) return { rows: [] };
+      if (sql.includes('from contacts')) return { rows: [{ id: 'contact-1' }] };
+      if (sql.includes('update contacts')) return { rows: [] };
+      if (sql.includes('from leads')) return { rows: [leadRows[leadRead++]].filter(Boolean) };
+      if (sql.includes('insert into leads')) return { rows: [{ id: 'lead-created-1' }] };
+      return { rows: [] };
+    },
+  };
+}
+
+test('non-follow-up events attach an existing lead but never create one', async () => {
+  const client = createEventClient({ leadRows: [] });
+  const result = await ingestAitUsaCrmEvent(client, {
+    organizationId: 'org-1', businessUnitId: 'unit-1', event: event({ eventType: 'ai_practice_completed' }),
+  });
+  assert.equal(result.leadId, null);
+  assert.equal(client.calls.some((call) => call.sql.includes('insert into leads')), false);
+  assert.equal(client.calls.some((call) => call.sql.includes('insert into notifications')), false);
+  assert.equal(client.calls.some((call) => call.sql.includes('insert into tasks')), false);
+});
+
+test('placement completion and advisor handoff share one correlation-scoped follow-up key', async () => {
+  const client = createEventClient({ leadRows: [null, { id: 'lead-created-1' }] });
+  const first = event({ eventType: 'placement_completed', idempotencyKey: 'aitusa:placement-completed:fixture-001' });
+  const second = event({ eventType: 'advisor_handoff_requested', idempotencyKey: 'aitusa:advisor-handoff:fixture-001' });
+  await ingestAitUsaCrmEvent(client, { organizationId: 'org-1', businessUnitId: 'unit-1', event: first });
+  await ingestAitUsaCrmEvent(client, { organizationId: 'org-1', businessUnitId: 'unit-1', event: second });
+  assert.equal(client.calls.filter((call) => call.sql.includes('insert into leads')).length, 1);
+  const followUpKeys = client.calls
+    .filter((call) => call.sql.includes('insert into notifications') || call.sql.includes('insert into tasks'))
+    .map((call) => call.values.at(-1) || call.values.at(-2))
+    .filter((value) => typeof value === 'string' && value.includes(':follow-up'));
+  assert.equal(new Set(followUpKeys).size, 1);
+  assert.equal(followUpKeys[0], 'aitusa:claim:fixture-001:follow-up');
 });
