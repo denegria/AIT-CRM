@@ -61,6 +61,8 @@ test('rejects forbidden fields before legacy lead normalization or audit persist
 test('keeps legacy source-labelled website leads on the legacy path', async () => {
   const route = await readFile(new URL('../../app/api/webhooks/website-leads/route.js', import.meta.url), 'utf8');
   assert.match(route, /const isAitUsaEvent = body\?\.schemaVersion === AITUSA_CRM_EVENT_SCHEMA_VERSION/);
+  assert.match(route, /isAitUsaEvent \? AITUSA_SECRET_ENV : SECRET_ENV/);
+  assert.match(route, /AITUSA_CRM_WEBHOOK_SECRET/);
   assert.doesNotMatch(route, /source === 'AIT USA Refresh' \|\|/);
 });
 

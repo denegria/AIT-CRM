@@ -18,6 +18,7 @@ import {
 import { ingestAitUsaCrmEvent } from '@/lib/ingestion/aitusa-crm-event-ingestion.js';
 
 const SECRET_ENV = 'WEBSITE_LEADS_WEBHOOK_SECRET';
+const AITUSA_SECRET_ENV = 'AITUSA_CRM_WEBHOOK_SECRET';
 const BUSINESS_UNIT_MAP_ENV = 'WEBSITE_LEADS_BUSINESS_UNIT_MAP';
 
 function jsonError(message, status) {
@@ -26,6 +27,10 @@ function jsonError(message, status) {
 
 function isConfigured() {
   return Boolean(process.env.DATABASE_URL && process.env[SECRET_ENV]);
+}
+
+function isAitUsaConfigured() {
+  return Boolean(process.env.DATABASE_URL && process.env[AITUSA_SECRET_ENV]);
 }
 
 function formDataToObject(formData) {
@@ -101,6 +106,7 @@ export async function GET() {
   return NextResponse.json({
     ok: true,
     configured: isConfigured(),
+    aitUsaEventsConfigured: isAitUsaConfigured(),
     acceptedSecretLocations: WEBSITE_LEAD_ACCEPTED_SECRET_LOCATIONS,
   });
 }
@@ -112,29 +118,29 @@ export async function POST(request) {
   if (!process.env.DATABASE_URL) {
     return jsonError('DATABASE_URL is required for website lead ingestion.', 503);
   }
-  if (!process.env[SECRET_ENV]) {
-    return jsonError(SECRET_ENV + ' is required for website lead ingestion.', 503);
-  }
-
   const body = await parseWebhookBody(request);
+  const isAitUsaEvent = body?.schemaVersion === AITUSA_CRM_EVENT_SCHEMA_VERSION;
+  const secretEnvironment = isAitUsaEvent ? AITUSA_SECRET_ENV : SECRET_ENV;
+  if (!process.env[secretEnvironment]) {
+    return jsonError(secretEnvironment + ' is required for website lead ingestion.', 503);
+  }
   const secretInputs = websiteLeadSecretInputs(request);
   if (!verifyWebsiteLeadSecret({
     ...secretInputs,
     body,
-    expectedSecret: process.env[SECRET_ENV],
+    expectedSecret: process.env[secretEnvironment],
   })) {
     console.warn('website_leads_auth_failed', websiteLeadAuthFailureDiagnostics({
       ...secretInputs,
       contentType: request.headers.get('content-type') || '',
       body,
-      expectedSecret: process.env[SECRET_ENV],
+      expectedSecret: process.env[secretEnvironment],
     }));
     return jsonError('Invalid website lead webhook secret.', 401);
   }
 
   // Legacy AIT USA forms used these source labels before the event protocol.
   // Only the explicit schema marker opts into the strict event branch.
-  const isAitUsaEvent = body?.schemaVersion === AITUSA_CRM_EVENT_SCHEMA_VERSION;
   const aitUsaEvent = isAitUsaEvent
     ? validateAitUsaCrmEvent(body)
     : null;
