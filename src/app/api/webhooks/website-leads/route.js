@@ -11,6 +11,11 @@ import {
   websiteLeadAuthFailureDiagnostics,
 } from '@/lib/ingestion/website-leads.js';
 import { externalIoDisabled, externalIoDisabledResponse } from '@/lib/runtime-safety.js';
+import {
+  AITUSA_CRM_EVENT_SCHEMA_VERSION,
+  aitUsaEventToWebsiteLeadBody,
+  validateAitUsaCrmEvent,
+} from '@/lib/ingestion/aitusa-crm-events.js';
 
 const SECRET_ENV = 'WEBSITE_LEADS_WEBHOOK_SECRET';
 const BUSINESS_UNIT_MAP_ENV = 'WEBSITE_LEADS_BUSINESS_UNIT_MAP';
@@ -127,7 +132,17 @@ export async function POST(request) {
     return jsonError('Invalid website lead webhook secret.', 401);
   }
 
-  const { payload, lead } = normalizeWebsiteLeadSubmission(body);
+  const isAitUsaEvent = body?.schemaVersion === AITUSA_CRM_EVENT_SCHEMA_VERSION ||
+    body?.source === 'AIT USA Refresh' || body?.sourceKey === 'aitusa_refresh';
+  const aitUsaEvent = isAitUsaEvent
+    ? validateAitUsaCrmEvent(body)
+    : null;
+  if (aitUsaEvent && !aitUsaEvent.ok) {
+    return jsonError(`Invalid AIT USA CRM event: ${aitUsaEvent.error}`, 422);
+  }
+  const { payload, lead } = normalizeWebsiteLeadSubmission(
+    aitUsaEvent ? aitUsaEventToWebsiteLeadBody(aitUsaEvent.event) : body,
+  );
 
   if (!payload || !lead) {
     return jsonError('JSON object body is required.', 400);
