@@ -13,9 +13,9 @@ import {
 import { externalIoDisabled, externalIoDisabledResponse } from '@/lib/runtime-safety.js';
 import {
   AITUSA_CRM_EVENT_SCHEMA_VERSION,
-  aitUsaEventToWebsiteLeadBody,
   validateAitUsaCrmEvent,
 } from '@/lib/ingestion/aitusa-crm-events.js';
+import { ingestAitUsaCrmEvent } from '@/lib/ingestion/aitusa-crm-event-ingestion.js';
 
 const SECRET_ENV = 'WEBSITE_LEADS_WEBHOOK_SECRET';
 const BUSINESS_UNIT_MAP_ENV = 'WEBSITE_LEADS_BUSINESS_UNIT_MAP';
@@ -132,17 +132,34 @@ export async function POST(request) {
     return jsonError('Invalid website lead webhook secret.', 401);
   }
 
-  const isAitUsaEvent = body?.schemaVersion === AITUSA_CRM_EVENT_SCHEMA_VERSION ||
-    body?.source === 'AIT USA Refresh' || body?.sourceKey === 'aitusa_refresh';
+  // Legacy AIT USA forms used these source labels before the event protocol.
+  // Only the explicit schema marker opts into the strict event branch.
+  const isAitUsaEvent = body?.schemaVersion === AITUSA_CRM_EVENT_SCHEMA_VERSION;
   const aitUsaEvent = isAitUsaEvent
     ? validateAitUsaCrmEvent(body)
     : null;
   if (aitUsaEvent && !aitUsaEvent.ok) {
     return jsonError(`Invalid AIT USA CRM event: ${aitUsaEvent.error}`, 422);
   }
-  const { payload, lead } = normalizeWebsiteLeadSubmission(
-    aitUsaEvent ? aitUsaEventToWebsiteLeadBody(aitUsaEvent.event) : body,
-  );
+  if (aitUsaEvent?.ok) {
+    try {
+      return await withClient(async (client) => {
+        const organizationId = await getOrganizationId(client);
+        if (!organizationId) return jsonError('No CRM organization exists.', 503);
+        const businessUnitId = await resolveWebsiteLeadBusinessUnitId(client, {
+          organizationId,
+          lead: { sourceKey: 'aitusa_refresh', sourceName: 'AIT USA Refresh' },
+          businessUnitMap: parseJsonEnv(BUSINESS_UNIT_MAP_ENV),
+        });
+        if (!businessUnitId) return jsonError('No active business unit exists for website lead ingestion.', 503);
+        const result = await ingestAitUsaCrmEvent(client, { organizationId, businessUnitId, event: aitUsaEvent.event });
+        return NextResponse.json({ ok: true, acknowledged: result.acknowledged === true, duplicate: result.duplicate, contactId: result.contactId, leadId: result.leadId }, { status: result.duplicate ? 202 : 201 });
+      });
+    } catch (error) {
+      return jsonError(error.message || 'Failed to ingest AIT USA CRM event.', 500);
+    }
+  }
+  const { payload, lead } = normalizeWebsiteLeadSubmission(body);
 
   if (!payload || !lead) {
     return jsonError('JSON object body is required.', 400);
