@@ -24,6 +24,13 @@ export async function ingestAitUsaCrmEvent(client, { organizationId, businessUni
     }
 
     const contact = event.contact || {};
+    const contactIdentity = contactIdentityLockKey(contact);
+    if (contactIdentity) {
+      await client.query(
+        'select pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [`aitusa-crm-contact:${organizationId}:${contactIdentity}`],
+      );
+    }
     const contactId = await upsertEventContact(client, { organizationId, businessUnitId, contact });
     let leadId = await findExistingEventLead(client, { organizationId, contactId });
     if (!leadId && FOLLOW_UP_EVENTS.has(event.eventType)) {
@@ -59,6 +66,13 @@ export async function ingestAitUsaCrmEvent(client, { organizationId, businessUni
     await client.query('rollback').catch(() => {});
     throw error;
   }
+}
+
+function contactIdentityLockKey(contact) {
+  const email = typeof contact.email === 'string' ? contact.email.trim().toLowerCase() : '';
+  if (email) return `email:${email}`;
+  const phone = typeof contact.phone === 'string' ? contact.phone.replace(/[^0-9+]/g, '') : '';
+  return phone ? `phone:${phone}` : null;
 }
 
 async function upsertEventContact(client, { organizationId, businessUnitId, contact }) {

@@ -95,6 +95,22 @@ test('non-follow-up events attach an existing lead but never create one', async 
   assert.equal(client.calls.some((call) => call.sql.includes('insert into tasks')), false);
 });
 
+test('serializes concurrent first-contact upserts by normalized contact identity', async () => {
+  const client = createEventClient();
+  await ingestAitUsaCrmEvent(client, {
+    organizationId: 'org-1',
+    businessUnitId: 'unit-1',
+    event: event({ contact: { firstName: 'Ana', email: ' Ana@Example.COM ' } }),
+  });
+  const contactLocks = client.calls.filter(
+    (call) => call.sql.includes('pg_advisory_xact_lock') &&
+      String(call.values[0] || '').startsWith('aitusa-crm-contact:'),
+  );
+  assert.deepEqual(contactLocks.map((call) => call.values), [
+    ['aitusa-crm-contact:org-1:email:ana@example.com'],
+  ]);
+});
+
 test('placement completion and advisor handoff share one correlation-scoped follow-up key', async () => {
   const client = createEventClient({ leadRows: [null, { id: 'lead-created-1' }] });
   const first = event({ eventType: 'placement_completed', idempotencyKey: 'aitusa:placement-completed:fixture-001' });
