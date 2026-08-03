@@ -30,7 +30,7 @@ test('accepts only the fixed AIT USA CRM event whitelist', () => {
   assert.equal(result.ok, true);
   const lead = aitUsaEventToWebsiteLeadBody(result.event);
   assert.equal(lead.externalId, 'aitusa:advisor-handoff:fixture-001');
-  assert.equal(lead.communicationConsent.email, false);
+  assert.equal(lead.communicationConsent.contact, false);
   assert.equal(lead.email, 'ana@example.com');
   assert.equal(Object.hasOwn(lead, 'rawAnswers'), false);
 });
@@ -44,9 +44,69 @@ test('rejects wrong-type, oversized, and forbidden nested values before persiste
 
 test('allows the complete server event taxonomy without generic browser fields', () => {
   for (const eventType of AITUSA_CRM_EVENT_TYPES) {
-    const result = validateAitUsaCrmEvent({ ...event(), eventType, eventId: `aitusa:${eventType}:fixture-001`, idempotencyKey: `aitusa:${eventType}:fixture-001` });
+    const isLeadEvent = eventType === 'contact_form_submitted' || eventType === 'callback_requested';
+    const result = validateAitUsaCrmEvent({
+      ...event(),
+      eventType,
+      eventId: `aitusa:${eventType}:fixture-001`,
+      idempotencyKey: `aitusa:${eventType}:fixture-001`,
+      ...(isLeadEvent ? {
+        consent: { advisorContact: true, sms: false, policyVersion: 'fixture-v1' },
+        lead: { formType: eventType === 'callback_requested' ? 'callback_request' : 'contact_form', interest: 'ingles-presencial' },
+      } : {}),
+    });
     assert.equal(result.ok, true, eventType);
   }
+});
+
+test('normalizes full contact and callback events into distinct website lead intake', () => {
+  const contactEvent = event({
+    eventType: 'contact_form_submitted',
+    eventId: 'aitusa:contact-form:fixture-001',
+    idempotencyKey: 'aitusa:contact-form:fixture-001',
+    source: { product: 'aitusa_refresh', surface: 'public_site', path: '/contactanos', version: 'mis-221-v2' },
+    contact: { firstName: 'Ana', email: 'ana@example.com', phone: '+17325550123' },
+    consent: { advisorContact: true, sms: true, policyVersion: 'privacy-v2', smsDisclosureVersion: 'sms-v1', consentedAt: '2026-08-03T19:00:00.000Z' },
+    lead: { formType: 'contact_form', interest: 'ingles-presencial', preferredMode: 'Presencial', preferredSchedule: 'Noche', location: 'Bound Brook', ageGroup: 'Adulto', message: 'Quiero saber horarios.' },
+  });
+  const callbackEvent = {
+    ...contactEvent,
+    eventType: 'callback_requested',
+    eventId: 'aitusa:callback:fixture-001',
+    idempotencyKey: 'aitusa:callback:fixture-001',
+    consent: { advisorContact: true, policyVersion: 'privacy-v2' },
+    lead: { ...contactEvent.lead, formType: 'callback_request', message: 'Solicitud de llamada.' },
+  };
+
+  const contact = validateAitUsaCrmEvent(contactEvent);
+  const callback = validateAitUsaCrmEvent(callbackEvent);
+  assert.equal(contact.ok, true);
+  assert.equal(callback.ok, true);
+
+  const contactLead = aitUsaEventToWebsiteLeadBody(contact.event);
+  const callbackLead = aitUsaEventToWebsiteLeadBody(callback.event);
+  assert.equal(contactLead.submissionType, 'website_lead');
+  assert.equal(contactLead.formName, 'AIT USA Contact Form');
+  assert.equal(contactLead.communicationConsent.contact, true);
+  assert.equal(contactLead.communicationConsent.sms, true);
+  assert.equal(contactLead.preferredSchedule, 'Noche');
+  assert.equal(contactLead.age, 'Adulto');
+  assert.equal(callbackLead.submissionType, 'contact_cta');
+  assert.equal(callbackLead.formName, 'AIT USA Request a Call');
+  assert.equal(Object.hasOwn(callbackLead.communicationConsent, 'sms'), false);
+  assert.equal(callbackLead.communicationPreference, 'phone');
+});
+
+test('requires explicit advisor-contact permission for lead events', () => {
+  const result = validateAitUsaCrmEvent(event({
+    eventType: 'callback_requested',
+    eventId: 'aitusa:callback:fixture-002',
+    idempotencyKey: 'aitusa:callback:fixture-002',
+    consent: { advisorContact: false, policyVersion: 'privacy-v2' },
+    lead: { formType: 'callback_request', interest: 'ingles-presencial' },
+  }));
+  assert.equal(result.ok, false);
+  assert.equal(result.error, 'event_lead_advisor_contact_required');
 });
 
 test('rejects forbidden fields before legacy lead normalization or audit persistence', () => {

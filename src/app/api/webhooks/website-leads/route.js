@@ -13,6 +13,8 @@ import {
 import { externalIoDisabled, externalIoDisabledResponse } from '@/lib/runtime-safety.js';
 import {
   AITUSA_CRM_EVENT_SCHEMA_VERSION,
+  aitUsaEventToWebsiteLeadBody,
+  isAitUsaLeadEvent,
   validateAitUsaCrmEvent,
 } from '@/lib/ingestion/aitusa-crm-events.js';
 import { ingestAitUsaCrmEvent } from '@/lib/ingestion/aitusa-crm-event-ingestion.js';
@@ -152,12 +154,34 @@ export async function POST(request) {
       return await withClient(async (client) => {
         const organizationId = await getOrganizationId(client);
         if (!organizationId) return jsonError('No CRM organization exists.', 503);
+        const leadBody = isAitUsaLeadEvent(aitUsaEvent.event)
+          ? aitUsaEventToWebsiteLeadBody(aitUsaEvent.event)
+          : null;
+        const normalizedLead = leadBody ? normalizeWebsiteLeadSubmission(leadBody) : null;
         const businessUnitId = await resolveWebsiteLeadBusinessUnitId(client, {
           organizationId,
-          lead: { sourceKey: 'aitusa_refresh', sourceName: 'AIT USA Refresh' },
+          lead: normalizedLead?.lead || { sourceKey: 'aitusa_refresh', sourceName: 'AIT USA Refresh' },
           businessUnitMap: parseJsonEnv(BUSINESS_UNIT_MAP_ENV),
         });
         if (!businessUnitId) return jsonError('No active business unit exists for website lead ingestion.', 503);
+        if (normalizedLead) {
+          if (!hasWebsiteLeadContactSignal(normalizedLead.lead)) {
+            return jsonError('At least one of email, phone, or message is required.', 400);
+          }
+          const result = await ingestWebsiteLeadSubmission(client, {
+            organizationId,
+            businessUnitId,
+            body: normalizedLead.payload,
+            lead: normalizedLead.lead,
+          });
+          return NextResponse.json({
+            ok: true,
+            acknowledged: true,
+            duplicate: result.duplicate,
+            contactId: result.contactId,
+            leadId: result.leadId,
+          }, { status: result.duplicate ? 202 : 201 });
+        }
         const result = await ingestAitUsaCrmEvent(client, { organizationId, businessUnitId, event: aitUsaEvent.event });
         return NextResponse.json({ ok: true, acknowledged: result.acknowledged === true, duplicate: result.duplicate, contactId: result.contactId, leadId: result.leadId }, { status: result.duplicate ? 202 : 201 });
       });

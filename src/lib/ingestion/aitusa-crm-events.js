@@ -1,6 +1,8 @@
 export const AITUSA_CRM_EVENT_SCHEMA_VERSION = 'aitusa-crm-event-v1';
 
 export const AITUSA_CRM_EVENT_TYPES = Object.freeze([
+  'contact_form_submitted',
+  'callback_requested',
   'placement_started',
   'placement_completed',
   'result_claimed',
@@ -15,12 +17,13 @@ export const AITUSA_CRM_EVENT_TYPES = Object.freeze([
 const EVENT_KEYS = new Set([
   'schemaVersion', 'eventId', 'eventType', 'idempotencyKey', 'correlationId',
   'occurredAt', 'source', 'contact', 'consent', 'ageBand', 'goalKeys',
-  'placement', 'practice', 'utm',
+  'lead', 'placement', 'practice', 'utm',
 ]);
 const NESTED_KEYS = Object.freeze({
   source: new Set(['product', 'surface', 'path', 'version']),
   contact: new Set(['firstName', 'email', 'phone']),
-  consent: new Set(['email', 'sms', 'whatsapp', 'advisorContactEmail', 'policyVersion']),
+  consent: new Set(['email', 'sms', 'whatsapp', 'advisorContactEmail', 'advisorContact', 'policyVersion', 'smsDisclosureVersion', 'consentedAt']),
+  lead: new Set(['formType', 'interest', 'preferredMode', 'preferredSchedule', 'location', 'ageGroup', 'message']),
   placement: new Set(['resultId', 'resultStatus', 'recommendedLevelKey', 'recommendedLevelLabel', 'answeredQuestionCount', 'skippedQuestionCount', 'advisorConfirmationRequired', 'scoringContractVersion']),
   practice: new Set(['sessionId', 'state', 'scenario', 'useCase', 'focusCode', 'outcomeCode', 'limitCode', 'turnCount', 'planVersion']),
   utm: new Set(['source', 'medium', 'campaign', 'term', 'content']),
@@ -58,23 +61,30 @@ export function validateAitUsaCrmEvent(body) {
 export function aitUsaEventToWebsiteLeadBody(event) {
   const contact = event.contact || {};
   const consent = event.consent || {};
+  const lead = event.lead || {};
+  const isCallback = event.eventType === 'callback_requested';
   return {
-    submissionType: 'website_lead',
+    submissionType: isCallback ? 'contact_cta' : 'website_lead',
     source: 'AIT USA Refresh',
+    sourceName: isCallback ? 'AIT USA Request a Call' : 'AIT USA Contact Form',
     sourceKey: 'aitusa_refresh',
+    formName: isCallback ? 'AIT USA Request a Call' : 'AIT USA Contact Form',
     externalId: event.idempotencyKey,
     submittedAt: event.occurredAt,
     firstName: contact.firstName,
     email: contact.email,
     phone: contact.phone,
+    location: lead.location,
+    interest: lead.interest,
+    preferredMode: lead.preferredMode,
+    preferredSchedule: lead.preferredSchedule,
+    age: lead.ageGroup,
+    message: lead.message,
     communicationConsent: {
-      // Advisor follow-up approval is purpose-specific. It must never be
-      // promoted into a general email-marketing/communication opt-in.
-      email: consent.email === true,
-      sms: consent.sms === true,
-      whatsapp: consent.whatsapp === true,
+      contact: consent.advisorContact === true,
+      ...(typeof consent.sms === 'boolean' ? { sms: consent.sms } : {}),
     },
-    communicationPreference: consent.advisorContactEmail === true ? 'email' : undefined,
+    communicationPreference: isCallback ? (contact.phone ? 'phone' : 'email') : 'any',
     placement: event.placement,
     status: 'New Lead',
     currentStage: 'New Lead',
@@ -101,9 +111,19 @@ function validateNestedValues(body) {
     if (contact.phone !== undefined && !safePhone(contact.phone)) return 'event_contact_phone_invalid';
   }
   if (body.consent !== undefined) {
-    for (const key of ['email', 'sms', 'whatsapp', 'advisorContactEmail']) if (body.consent[key] !== undefined && typeof body.consent[key] !== 'boolean') return `event_consent_${key}_invalid`;
+    for (const key of ['email', 'sms', 'whatsapp', 'advisorContactEmail', 'advisorContact']) if (body.consent[key] !== undefined && typeof body.consent[key] !== 'boolean') return `event_consent_${key}_invalid`;
     if (body.consent.policyVersion !== undefined && !safeText(body.consent.policyVersion, 80)) return 'event_consent_policy_version_invalid';
+    if (body.consent.smsDisclosureVersion !== undefined && !safeText(body.consent.smsDisclosureVersion, 80)) return 'event_consent_sms_disclosure_version_invalid';
+    if (body.consent.consentedAt !== undefined && !isIsoDate(body.consent.consentedAt)) return 'event_consent_consented_at_invalid';
   }
+  if (body.lead !== undefined) {
+    const lead = body.lead;
+    if (!['contact_form', 'callback_request'].includes(lead.formType)) return 'event_lead_form_type_invalid';
+    for (const key of ['interest', 'preferredMode', 'preferredSchedule', 'location', 'ageGroup']) if (lead[key] !== undefined && !safeText(lead[key], 160)) return `event_lead_${key}_invalid`;
+    if (lead.message !== undefined && !safeText(lead.message, 800)) return 'event_lead_message_invalid';
+  }
+  if (isAitUsaLeadEvent(body) && body.lead === undefined) return 'event_lead_required';
+  if (isAitUsaLeadEvent(body) && body.consent?.advisorContact !== true) return 'event_lead_advisor_contact_required';
   if (body.ageBand !== undefined && !['under_13', 'age_13_plus'].includes(body.ageBand)) return 'event_age_band_invalid';
   if (body.placement !== undefined) {
     const p = body.placement;
@@ -118,6 +138,10 @@ function validateNestedValues(body) {
   }
   if (body.utm !== undefined) for (const value of Object.values(body.utm)) if (!safeText(value, 160)) return 'event_utm_invalid';
   return null;
+}
+
+export function isAitUsaLeadEvent(event) {
+  return event?.eventType === 'contact_form_submitted' || event?.eventType === 'callback_requested';
 }
 
 function findForbiddenKey(value, prefix = '') {
