@@ -19,6 +19,7 @@
     "test:admin": "node --test src/lib/admin/*.test.js",
     "test:lifecycle": "node --test src/lib/crm/lifecycle.test.js",
     "test:tasks": "node --test src/lib/tasks/*.test.js",
+    "test:follow-up-outcome": "TSX_TSCONFIG_PATH=jsconfig.json node --import tsx --import ./scripts/register-test-module-hooks.mjs --test src/components/FollowUpOutcomeDialog.test.jsx src/app/tasks/follow-up-route-validation.test.js src/lib/tasks/follow-up.test.js src/lib/tasks/service.test.js",
     "test:release-polish": "node --test src/app/tasks/task-polish-ui.test.js src/db/database-url.test.js",
     "test:follow-up-sequences": "node --test src/lib/follow-up-sequences/*.test.js",
     "test:comms-observability": "node --test src/lib/comms-observability/*.test.js",
@@ -65,6 +66,8 @@
   },
   "devDependencies": {
     "eslint": "^9",
-    "eslint-config-next": "16.2.4"
+    "eslint-config-next": "16.2.4",
+    "jsdom": "^26.1.0",
+    "tsx": "^4.21.0"
   }
 }

@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  FOLLOW_UP_CHANNELS,
   FOLLOW_UP_OUTCOMES,
   TASK_TYPES,
 } from './constants.js';
@@ -12,7 +13,9 @@ import {
   followUpOutcomeSuggestsNextDue,
   followUpQuickDueDate,
   leadStatusForFollowUpOutcome,
+  normalizeFollowUpChannel,
   normalizeFollowUpCompletionPayload,
+  normalizeFollowUpOutcome,
 } from './follow-up.js';
 
 const now = new Date('2026-06-03T14:00:00.000Z');
@@ -51,11 +54,31 @@ test('requires a written note to complete follow-up tasks', () => {
   assert.throws(
     () => normalizeFollowUpCompletionPayload({
       task: followUpTask(),
-      payload: { outcome: FOLLOW_UP_OUTCOMES.NO_ANSWER },
+      payload: {
+        outcome: FOLLOW_UP_OUTCOMES.NO_ANSWER,
+        channel: FOLLOW_UP_CHANNELS.PHONE,
+      },
       now,
     }),
     /Follow-up note is required/,
   );
+});
+
+test('requires explicit known outcome and channel values without inventing defaults', () => {
+  for (const payload of [
+    { note: 'Attempted outreach.', channel: FOLLOW_UP_CHANNELS.PHONE },
+    { outcome: 'unknown_outcome', note: 'Attempted outreach.', channel: FOLLOW_UP_CHANNELS.PHONE },
+    { outcome: FOLLOW_UP_OUTCOMES.NO_ANSWER, note: 'Attempted outreach.' },
+    { outcome: FOLLOW_UP_OUTCOMES.NO_ANSWER, note: 'Attempted outreach.', channel: 'manual' },
+  ]) {
+    assert.throws(
+      () => normalizeFollowUpCompletionPayload({ task: followUpTask(), payload, now }),
+      /Follow-up (outcome|channel) is required|Select a valid follow-up (outcome|channel)/,
+    );
+  }
+
+  assert.equal(normalizeFollowUpOutcome(FOLLOW_UP_OUTCOMES.REACHED_INTERESTED), FOLLOW_UP_OUTCOMES.REACHED_INTERESTED);
+  assert.equal(normalizeFollowUpChannel(FOLLOW_UP_CHANNELS.PHONE), FOLLOW_UP_CHANNELS.PHONE);
 });
 
 test('continuation outcomes recommend but do not require a next date', () => {
@@ -67,7 +90,7 @@ test('continuation outcomes recommend but do not require a next date', () => {
     assert.equal(followUpOutcomeSuggestsNextDue(outcome), true);
     const payload = normalizeFollowUpCompletionPayload({
       task: followUpTask(),
-      payload: { outcome, note: 'Continue outreach.' },
+      payload: { outcome, note: 'Continue outreach.', channel: FOLLOW_UP_CHANNELS.PHONE },
       now,
     });
     assert.equal(payload.nextDueAt, null);
@@ -89,6 +112,7 @@ test('closed follow-up outcomes do not create another follow-up task', () => {
     payload: {
       outcome: FOLLOW_UP_OUTCOMES.DO_NOT_CONTACT,
       note: 'Asked not to be contacted again.',
+      channel: FOLLOW_UP_CHANNELS.PHONE,
       nextDueAt: '2026-06-04T13:00:00.000Z',
     },
     now,
@@ -146,7 +170,11 @@ test('rejects structured completion for non-follow-up tasks', () => {
   assert.throws(
     () => normalizeFollowUpCompletionPayload({
       task: followUpTask({ taskType: TASK_TYPES.MANUAL_REMINDER }),
-      payload: { outcome: FOLLOW_UP_OUTCOMES.NO_ANSWER, note: 'No answer.' },
+      payload: {
+        outcome: FOLLOW_UP_OUTCOMES.NO_ANSWER,
+        note: 'No answer.',
+        channel: FOLLOW_UP_CHANNELS.PHONE,
+      },
       now,
     }),
     /only supports follow-up tasks/,

@@ -1,4 +1,5 @@
 import {
+  FOLLOW_UP_CHANNEL_VALUES,
   FOLLOW_UP_OUTCOMES,
   FOLLOW_UP_OUTCOME_VALUES,
   TASK_TYPES,
@@ -33,10 +34,24 @@ function cleanText(value = '') {
 
 export function normalizeFollowUpOutcome(value) {
   const outcome = String(value || '').trim();
-  if (!FOLLOW_UP_OUTCOME_VALUES.includes(outcome)) {
+  if (!outcome) {
     throw followUpError('Follow-up outcome is required.');
   }
+  if (!FOLLOW_UP_OUTCOME_VALUES.includes(outcome)) {
+    throw followUpError('Select a valid follow-up outcome.');
+  }
   return outcome;
+}
+
+export function normalizeFollowUpChannel(value) {
+  const channel = String(value || '').trim();
+  if (!channel) {
+    throw followUpError('Follow-up channel is required.');
+  }
+  if (!FOLLOW_UP_CHANNEL_VALUES.includes(channel)) {
+    throw followUpError('Select a valid follow-up channel.');
+  }
+  return channel;
 }
 
 export function followUpOutcomeLabel(outcome) {
@@ -88,7 +103,7 @@ export function normalizeFollowUpCompletionPayload({
 
   const outcome = normalizeFollowUpOutcome(payload.outcome || payload.followUpOutcome);
   const note = cleanText(payload.note || payload.followUpNote || payload.message);
-  const channel = cleanText(payload.channel || payload.followUpChannel || 'manual');
+  const channel = normalizeFollowUpChannel(payload.channel || payload.followUpChannel);
   const contactMethod = cleanText(payload.contactMethod || payload.phone || payload.email);
   const closesFollowUp = followUpOutcomeClosesFollowUp(outcome);
   const nextDueAt = !closesFollowUp && (payload.nextDueAt || payload.nextFollowUpAt)

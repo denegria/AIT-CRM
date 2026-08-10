@@ -57,6 +57,15 @@ export const FOLLOW_UP_OUTCOMES = Object.freeze({
   NEEDS_NEXT_FOLLOW_UP: 'needs_next_follow_up',
 });
 
+export const FOLLOW_UP_CHANNELS = Object.freeze({
+  PHONE: 'phone',
+  SMS: 'sms',
+  WHATSAPP: 'whatsapp',
+  EMAIL: 'email',
+  IN_PERSON: 'in_person',
+  OTHER: 'other',
+});
+
 export const TASK_RECURRENCE_FREQUENCIES = Object.freeze({
   NONE: 'none',
   DAILY: 'daily',
@@ -71,6 +80,7 @@ export const TASK_PRIORITY_VALUES = Object.freeze(Object.values(TASK_PRIORITIES)
 export const TASK_EVENT_TYPE_VALUES = Object.freeze(Object.values(TASK_EVENT_TYPES));
 export const TASK_SOURCE_TYPE_VALUES = Object.freeze(Object.values(TASK_SOURCE_TYPES));
 export const FOLLOW_UP_OUTCOME_VALUES = Object.freeze(Object.values(FOLLOW_UP_OUTCOMES));
+export const FOLLOW_UP_CHANNEL_VALUES = Object.freeze(Object.values(FOLLOW_UP_CHANNELS));
 export const TASK_RECURRENCE_FREQUENCY_VALUES = Object.freeze(Object.values(TASK_RECURRENCE_FREQUENCIES));
 
 export const DEFAULT_TASK_STATUS = TASK_STATUSES.OPEN;

@@ -35,6 +35,7 @@ import {
   buildContactFollowUpLookup,
   followUpSubmissionTaskId,
 } from '@/lib/tasks/follow-up-selection.js';
+import { initialFollowUpDraftFields } from '@/lib/tasks/follow-up-draft.js';
 
 const SNAPSHOT_ICONS = {
   estimate: BriefcaseBusiness,
@@ -379,11 +380,7 @@ function taskDateLabel(value) {
 
 function defaultFollowUpDraft(contact = {}, currentUser = null, ownerOptions = []) {
   return {
-    outcome: 'reached_interested',
-    channel: 'phone',
-    contactMethod: '',
-    note: '',
-    nextDueDate: '',
+    ...initialFollowUpDraftFields(),
     nextOwnerUserId: currentUser?.id || ownerOptions[0]?.id || '',
     leadProfile: {
       programInterest: contact?.programInterest || '',

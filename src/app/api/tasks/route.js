@@ -495,8 +495,10 @@ export async function POST(request) {
   }
 }
 
-export async function PATCH(request) {
-  const { error, session } = await requirePermission(request, PERMISSIONS.CRM_WRITE);
+export async function PATCH(request, runtime = {}) {
+  const requirePermissionForRequest = runtime.requirePermissionForRequest || requirePermission;
+  const getDbForRequest = runtime.getDbForRequest || getDb;
+  const { error, session } = await requirePermissionForRequest(request, PERMISSIONS.CRM_WRITE);
   if (error) return error;
 
   const body = await request.json().catch(() => ({}));
@@ -505,7 +507,7 @@ export async function PATCH(request) {
     return NextResponse.json({ error: 'A valid task id is required.' }, { status: 400 });
   }
 
-  const db = getDb();
+  const db = getDbForRequest();
   try {
     const [existingTask] = await db
       .select()
@@ -614,6 +616,12 @@ export async function PATCH(request) {
     }
 
     if (String(body.action || '').trim() === 'complete' && existingTask.taskType === TASK_TYPES.FOLLOW_UP) {
+      const now = new Date();
+      const completion = normalizeFollowUpCompletionPayload({
+        task: existingTask,
+        payload: body,
+        now,
+      });
       const requestedContactId = optionalUuid(body.contactId, 'contactId');
       const requestedLeadId = optionalUuid(body.leadId, 'leadId');
       assertExactFollowUpTaskSelection({
@@ -639,13 +647,7 @@ export async function PATCH(request) {
           leadId,
         ),
       });
-      const now = new Date();
       const effectiveOwnerUserId = existingTask.ownerUserId || session.user.id;
-      const completion = normalizeFollowUpCompletionPayload({
-        task: existingTask,
-        payload: body,
-        now,
-      });
       const businessUnit = await resolveBusinessUnitById(db, session, existingTask.businessUnitId);
       const lead = exactContext.lead;
       const suggestedLeadStatus = leadStatusForFollowUpOutcome(completion.outcome, businessUnit);
@@ -764,6 +766,8 @@ export async function PATCH(request) {
           source: 'task_follow_up_completion',
           lifecycleStatus: leadStatusChange?.toStatus || null,
         },
+        followUpOutcome: completion.outcome,
+        followUpChannel: completion.channel,
         profileActivity: leadProfileUpdateSummary
           ? {
               eventType: 'lead_profile.updated',

@@ -56,6 +56,7 @@ import {
   assertExactFollowUpTaskSelection,
   clearedFollowUpTaskEntryHref,
 } from '@/lib/tasks/follow-up-selection.js';
+import { initialFollowUpDraftFields } from '@/lib/tasks/follow-up-draft.js';
 import s from './FollowUpQueue.module.css';
 
 const TASK_TYPE_OPTIONS = [
@@ -842,11 +843,7 @@ export default function FollowUpQueuePage() {
       ...(savedDraft.leadProfile || {}),
     };
     return {
-      outcome: 'reached_interested',
-      channel: 'phone',
-      contactMethod: '',
-      note: '',
-      nextDueDate: '',
+      ...initialFollowUpDraftFields(),
       nextOwnerUserId: task?.ownerUserId || defaultOwnerUserId(currentUser, visibleAssignees),
       ...savedDraft,
       leadProfile,
@@ -857,11 +854,7 @@ export default function FollowUpQueuePage() {
     setFollowUpDrafts((prev) => ({
       ...prev,
       [taskId]: {
-        outcome: 'reached_interested',
-        channel: 'phone',
-        contactMethod: '',
-        note: '',
-        nextDueDate: '',
+        ...initialFollowUpDraftFields(),
         leadProfile: {},
         ...(prev[taskId] || {}),
         ...patch,
@@ -873,11 +866,7 @@ export default function FollowUpQueuePage() {
     setFollowUpDrafts((prev) => ({
       ...prev,
       [taskId]: {
-        outcome: 'reached_interested',
-        channel: 'phone',
-        contactMethod: '',
-        note: '',
-        nextDueDate: '',
+        ...initialFollowUpDraftFields(),
         ...(prev[taskId] || {}),
         leadProfile: {
           ...(prev[taskId]?.leadProfile || {}),

@@ -20,6 +20,7 @@ import {
   createFollowUpSelectionError,
   FOLLOW_UP_SELECTION_ERROR_CODES,
 } from './follow-up-selection.js';
+import { normalizeFollowUpChannel, normalizeFollowUpOutcome } from './follow-up.js';
 import { supersedeOpenTaskRemovalApprovalInTransaction } from './removal-approvals.js';
 
 export { AUTOMATED_INBOUND_FOLLOW_UP_SOURCE_LABEL, isEligibleAutomatedInboundFollowUpTask } from './integrity-policy.js';
@@ -563,7 +564,11 @@ export async function completeFollowUpTaskWithActivity({
   nextTaskEventMetadata = {},
   cancelOpenFollowUps = false,
   cancelOpenFollowUpsContext = {},
+  followUpOutcome,
+  followUpChannel,
 }) {
+  normalizeFollowUpOutcome(followUpOutcome);
+  normalizeFollowUpChannel(followUpChannel);
   return db.transaction(async (tx) => {
     if ([TASK_STATUSES.COMPLETED, TASK_STATUSES.CANCELED].includes(existingTask.status)) {
       throw createFollowUpSelectionError(
@@ -739,7 +744,11 @@ export async function recordFollowUpActivity({
   nextTaskEventMetadata = {},
   cancelOpenFollowUps = false,
   cancelOpenFollowUpsContext = {},
+  followUpOutcome,
+  followUpChannel,
 }) {
+  normalizeFollowUpOutcome(followUpOutcome);
+  normalizeFollowUpChannel(followUpChannel);
   return db.transaction(async (tx) => {
     await tx.insert(activityEvents).values({
       organizationId,

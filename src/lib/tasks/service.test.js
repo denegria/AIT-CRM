@@ -337,6 +337,8 @@ test('structured follow-up completion cancels linked automated tasks through aud
     followUpActivity: { eventType: 'follow_up.reached_not_interested', message: 'Not interested.' },
     cancelOpenFollowUps: true,
     cancelOpenFollowUpsContext: { source: 'follow_up_completion', lifecycleStatus: 'Not Interested' },
+    followUpOutcome: 'reached_not_interested',
+    followUpChannel: 'phone',
   });
 
   const canceledEvent = inserts.find((value) => value.eventType === 'canceled');
@@ -364,6 +366,8 @@ test('structured follow-up activity cancellation uses the same audited mechanics
     followUpActivity: { eventType: 'follow_up.reached_not_interested', message: 'Not interested.' },
     cancelOpenFollowUps: true,
     cancelOpenFollowUpsContext: { source: 'follow_up_activity', lifecycleStatus: 'Not Interested' },
+    followUpOutcome: 'reached_not_interested',
+    followUpChannel: 'phone',
   });
 
   const canceledEvent = inserts.find((value) => value.eventType === 'canceled');
@@ -418,6 +422,8 @@ test('exact follow-up completion updates one selected task once and a stale retr
       message: 'Reached and interested.',
       noteBody: 'Reached and interested.',
     },
+    followUpOutcome: 'reached_interested',
+    followUpChannel: 'phone',
   };
 
   const first = await completeFollowUpTaskWithActivity(input);
@@ -470,9 +476,62 @@ test('generic outreach leaves existing and concurrently-created follow-up tasks 
       message: 'Attempted outreach; no answer.',
     },
     cancelOpenFollowUps: false,
+    followUpOutcome: 'no_answer',
+    followUpChannel: 'phone',
   });
 
   assert.equal(inserts.length, 2);
   assert.equal(existingTask.status, 'open');
   assert.equal(concurrentTask.status, 'open');
+});
+
+test('follow-up write services reject omitted or unknown outcome and channel before a transaction or write', async () => {
+  for (const invalid of [
+    { followUpOutcome: '', followUpChannel: 'phone' },
+    { followUpOutcome: 'invented_positive', followUpChannel: 'phone' },
+    { followUpOutcome: 'no_answer', followUpChannel: '' },
+    { followUpOutcome: 'no_answer', followUpChannel: 'manual' },
+  ]) {
+    const calls = { transactions: 0, inserts: 0, updates: 0 };
+    const db = {
+      transaction(callback) {
+        calls.transactions += 1;
+        return callback({
+          insert() {
+            calls.inserts += 1;
+            throw new Error('Invalid input must not insert.');
+          },
+          update() {
+            calls.updates += 1;
+            throw new Error('Invalid input must not update.');
+          },
+        });
+      },
+    };
+
+    await assert.rejects(
+      completeFollowUpTaskWithActivity({
+        db,
+        organizationId: 'org-1',
+        actorUserId: 'actor-1',
+        existingTask: followUpTask(),
+        taskPatch: { status: 'completed' },
+        followUpActivity: { eventType: 'follow_up.no_answer', message: 'No answer.' },
+        ...invalid,
+      }),
+      /required|valid/,
+    );
+    await assert.rejects(
+      recordFollowUpActivity({
+        db,
+        organizationId: 'org-1',
+        actorUserId: 'actor-1',
+        context: { businessUnitId: 'bu-1', contactId: 'contact-1', leadId: 'lead-1' },
+        followUpActivity: { eventType: 'follow_up.no_answer', message: 'No answer.' },
+        ...invalid,
+      }),
+      /required|valid/,
+    );
+    assert.deepEqual(calls, { transactions: 0, inserts: 0, updates: 0 });
+  }
 });

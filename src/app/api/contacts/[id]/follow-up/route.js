@@ -270,16 +270,24 @@ export async function GET(request, { params }) {
   }
 }
 
-export async function POST(request, { params }) {
-  const { error, session } = await requirePermission(request, PERMISSIONS.CRM_WRITE);
+export async function POST(request, { params }, runtime = {}) {
+  const requirePermissionForRequest = runtime.requirePermissionForRequest || requirePermission;
+  const getDbForRequest = runtime.getDbForRequest || getDb;
+  const { error, session } = await requirePermissionForRequest(request, PERMISSIONS.CRM_WRITE);
   if (error) return error;
 
   const { id } = await params;
   const body = await request.json().catch(() => ({}));
-  const db = getDb();
   const now = new Date();
 
   try {
+    const completion = normalizeFollowUpCompletionPayload({
+      task: { taskType: TASK_TYPES.FOLLOW_UP },
+      payload: body,
+      now,
+    });
+    completion.rawPayload = body;
+    const db = getDbForRequest();
     const contact = await resolveContactById({
       db,
       session,
@@ -349,13 +357,6 @@ export async function POST(request, { params }) {
     }
     const businessUnit = await resolveBusinessUnitById(db, session, businessUnitId);
     if (!businessUnit) throw createCrmError('Business unit not found.', 404);
-
-    const completion = normalizeFollowUpCompletionPayload({
-      task: existingTask || { taskType: TASK_TYPES.FOLLOW_UP },
-      payload: body,
-      now,
-    });
-    completion.rawPayload = body;
 
     const source = existingTask ? 'contact_log_follow_up_task' : 'contact_log_follow_up';
     const transition = buildFollowUpTransition({
@@ -437,6 +438,8 @@ export async function POST(request, { params }) {
           source: 'follow_up_completion',
           lifecycleStatus: transition.leadStatusChange?.toStatus || null,
         },
+        followUpOutcome: completion.outcome,
+        followUpChannel: completion.channel,
         profileActivity: transition.profileActivity,
         nextTaskValues,
         nextTaskEventMetadata: compactObject({
@@ -473,6 +476,8 @@ export async function POST(request, { params }) {
       leadPatch: transition.leadPatch,
       leadStatusChange: transition.leadStatusChange,
       cancelOpenFollowUps: false,
+      followUpOutcome: completion.outcome,
+      followUpChannel: completion.channel,
       profileActivity: transition.profileActivity,
       nextTaskValues,
       nextTaskEventMetadata: compactObject({

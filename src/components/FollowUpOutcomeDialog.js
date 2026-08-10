@@ -1,6 +1,6 @@
 'use client';
 
-import { useId } from 'react';
+import { useId, useRef, useState } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import Modal from './Modal';
 import {
@@ -27,6 +27,31 @@ const QUICK_DUE_OPTIONS = Object.freeze([
   Object.freeze({ days: 3, label: '3 days' }),
 ]);
 
+export const FOLLOW_UP_CHANNEL_OPTIONS = Object.freeze([
+  ['phone', 'Phone'],
+  ['sms', 'SMS'],
+  ['whatsapp', 'WhatsApp'],
+  ['email', 'Email'],
+  ['in_person', 'In person'],
+  ['other', 'Other'],
+]);
+
+export function requiredFollowUpField(draft = {}) {
+  if (!FOLLOW_UP_OUTCOME_OPTIONS.some(([value]) => value === draft.outcome)) {
+    return {
+      field: 'outcome',
+      message: draft.outcome ? 'Select a valid outcome.' : 'Select an outcome.',
+    };
+  }
+  if (!FOLLOW_UP_CHANNEL_OPTIONS.some(([value]) => value === draft.channel)) {
+    return {
+      field: 'channel',
+      message: draft.channel ? 'Select a valid channel.' : 'Select a channel.',
+    };
+  }
+  return null;
+}
+
 export default function FollowUpOutcomeDialog({
   open,
   onClose,
@@ -45,26 +70,58 @@ export default function FollowUpOutcomeDialog({
   returnFocusRef,
 }) {
   const id = useId().replaceAll(':', '');
+  const outcomeRef = useRef(null);
+  const channelRef = useRef(null);
+  const [validationError, setValidationError] = useState(null);
+
   if (!open || !draft) return null;
   const suggestsNextDue = followUpOutcomeSuggestsNextDue(draft.outcome);
   const closesFollowUp = followUpOutcomeClosesFollowUp(draft.outcome);
   const fieldId = (name) => `${id}-${name}`;
+  const formId = fieldId('form');
+
+  const updateDraft = (patch) => {
+    if (validationError?.field && Object.prototype.hasOwnProperty.call(patch, validationError.field)) {
+      setValidationError(null);
+    }
+    onChange(patch);
+  };
+
+  const handleClose = () => {
+    setValidationError(null);
+    onClose();
+  };
+
+  const handleSubmit = (event) => {
+    event?.preventDefault?.();
+    const nextError = requiredFollowUpField(draft);
+    if (nextError) {
+      setValidationError(nextError);
+      window.requestAnimationFrame(() => {
+        (nextError.field === 'outcome' ? outcomeRef : channelRef).current?.focus();
+      });
+      return;
+    }
+    setValidationError(null);
+    onSubmit();
+  };
 
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={handleClose}
       title={title}
       variant="dialog"
       panelClassName="follow-up-dialog-panel"
       returnFocusRef={returnFocusRef}
       footer={(
         <>
-          <button className="btn" type="button" onClick={onClose} disabled={busy}>Cancel</button>
+          <button className="btn" type="button" onClick={handleClose} disabled={busy}>Cancel</button>
           <button
             className="btn btn-primary"
-            type="button"
-            onClick={onSubmit}
+            type="submit"
+            form={formId}
+            onClick={handleSubmit}
             disabled={busy || submitDisabled || !draft.note.trim()}
           >
             <CheckCircle2 size={16} /> {busy ? 'Saving...' : 'Save Outcome'}
@@ -72,7 +129,7 @@ export default function FollowUpOutcomeDialog({
         </>
       )}
     >
-      <div className="follow-up-dialog-form">
+      <form id={formId} className="follow-up-dialog-form" noValidate onSubmit={handleSubmit}>
         {taskMatchText && (
           <div className="follow-up-task-match">
             <div>
@@ -96,32 +153,49 @@ export default function FollowUpOutcomeDialog({
                 <div className="form-group">
                   <label className="form-label" htmlFor={fieldId('outcome')}>Outcome</label>
                   <select
+                    ref={outcomeRef}
                     id={fieldId('outcome')}
                     className="input select"
                     value={draft.outcome}
                     disabled={busy}
+                    required
+                    aria-required="true"
+                    aria-invalid={validationError?.field === 'outcome'}
+                    aria-describedby={validationError?.field === 'outcome' ? fieldId('outcome-error') : undefined}
                     data-autofocus
-                    onChange={(event) => onChange({ outcome: event.target.value })}
+                    onChange={(event) => updateDraft({ outcome: event.target.value })}
                   >
+                    <option value="" disabled>Select an outcome</option>
                     {FOLLOW_UP_OUTCOME_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                   </select>
+                  {validationError?.field === 'outcome' && (
+                    <p id={fieldId('outcome-error')} className="form-error" role="alert" aria-live="assertive">
+                      {validationError.message}
+                    </p>
+                  )}
                 </div>
                 <div className="form-group">
                   <label className="form-label" htmlFor={fieldId('channel')}>Channel</label>
                   <select
+                    ref={channelRef}
                     id={fieldId('channel')}
                     className="input select"
                     value={draft.channel}
                     disabled={busy}
-                    onChange={(event) => onChange({ channel: event.target.value })}
+                    required
+                    aria-required="true"
+                    aria-invalid={validationError?.field === 'channel'}
+                    aria-describedby={validationError?.field === 'channel' ? fieldId('channel-error') : undefined}
+                    onChange={(event) => updateDraft({ channel: event.target.value })}
                   >
-                    <option value="phone">Phone</option>
-                    <option value="sms">SMS</option>
-                    <option value="whatsapp">WhatsApp</option>
-                    <option value="email">Email</option>
-                    <option value="in_person">In person</option>
-                    <option value="other">Other</option>
+                    <option value="" disabled>Select a channel</option>
+                    {FOLLOW_UP_CHANNEL_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                   </select>
+                  {validationError?.field === 'channel' && (
+                    <p id={fieldId('channel-error')} className="form-error" role="alert" aria-live="assertive">
+                      {validationError.message}
+                    </p>
+                  )}
                 </div>
               </div>
               <div className="form-group">
@@ -132,7 +206,7 @@ export default function FollowUpOutcomeDialog({
                   value={draft.contactMethod}
                   disabled={busy}
                   placeholder="Phone or email used"
-                  onChange={(event) => onChange({ contactMethod: event.target.value })}
+                  onChange={(event) => updateDraft({ contactMethod: event.target.value })}
                 />
               </div>
             </section>
@@ -156,7 +230,7 @@ export default function FollowUpOutcomeDialog({
                     type="date"
                     value={draft.nextDueDate}
                     disabled={busy}
-                    onChange={(event) => onChange({ nextDueDate: event.target.value })}
+                    onChange={(event) => updateDraft({ nextDueDate: event.target.value })}
                   />
                   <div className="follow-up-quick-dates" role="group" aria-label="Quick next due date choices">
                     {QUICK_DUE_OPTIONS.map((option) => {
@@ -168,7 +242,7 @@ export default function FollowUpOutcomeDialog({
                           type="button"
                           disabled={busy}
                           aria-pressed={draft.nextDueDate === value}
-                          onClick={() => onChange({ nextDueDate: value })}
+                          onClick={() => updateDraft({ nextDueDate: value })}
                         >
                           {option.label}
                         </button>
@@ -179,7 +253,7 @@ export default function FollowUpOutcomeDialog({
                       type="button"
                       disabled={busy}
                       aria-pressed={!draft.nextDueDate}
-                      onClick={() => onChange({ nextDueDate: '' })}
+                      onClick={() => updateDraft({ nextDueDate: '' })}
                     >
                       No date
                     </button>
@@ -200,7 +274,7 @@ export default function FollowUpOutcomeDialog({
                       className="input select"
                       value={draft.nextOwnerUserId}
                       disabled={busy}
-                      onChange={(event) => onChange({ nextOwnerUserId: event.target.value })}
+                      onChange={(event) => updateDraft({ nextOwnerUserId: event.target.value })}
                     >
                       <option value="" disabled>Select owner</option>
                       {ownerOptions.map((owner) => (
@@ -229,7 +303,7 @@ export default function FollowUpOutcomeDialog({
               value={draft.note}
               disabled={busy}
               placeholder="Example: No answer. Left a voicemail and will call again Friday."
-              onChange={(event) => onChange({ note: event.target.value })}
+              onChange={(event) => updateDraft({ note: event.target.value })}
             />
           </section>
         </div>
@@ -266,7 +340,7 @@ export default function FollowUpOutcomeDialog({
         )}
 
         {error && <div className="form-error" role="alert">{error}</div>}
-      </div>
+      </form>
     </Modal>
   );
 }
