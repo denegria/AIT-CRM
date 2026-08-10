@@ -38,6 +38,8 @@ The read-only check verifies:
 - the production app responds
 - the Meta webhook rejects an invalid verify token
 - the Meta webhook accepts the configured verify token
+- the `DATABASE_URL` host and database are exact approved production manifest values with full TLS verification
+- the connected Neon project, production branch, and database identity match the audited manifest before catalog queries
 - the exact reconciled public catalog counts and digests
 - all 13 expected Drizzle journal IDs, hashes, and timestamps
 - the exact SQL-only index definitions preserved by the baseline
@@ -49,11 +51,13 @@ Vercel may omit sensitive env values from local pulls. If the app is already dep
 SKIP_SENSITIVE_ENV=1 SKIP_META_VALID_TOKEN=1 node --env-file=.env.production.local scripts/verify-production-readiness.mjs
 ```
 
-If production env is not available locally at all, the HTTP-only portion can still be run with:
+If production env is not available locally, run the separately named HTTP/repository diagnostic:
 
 ```bash
-SKIP_ENV=1 SKIP_DB=1 SKIP_META_VALID_TOKEN=1 npm run verify:production
+SKIP_META_VALID_TOKEN=1 npm run diagnose:production
 ```
+
+This command is explicitly non-authoritative and never reports production readiness. `npm run verify:production` requires live database identity and catalog proof; `SKIP_DB=1` is a hard error.
 
 ## Meta Page Additions
 
@@ -177,12 +181,7 @@ npx neonctl connection-string "$DRILL_BRANCH" \
   --ssl require
 ```
 
-Use the returned branch connection string only for verification commands, never in Vercel production env:
-
-```bash
-DATABASE_URL="<branch-connection-string>" npm run verify:production
-DATABASE_URL="<branch-connection-string>" npm run verify:rbac
-```
+Use the returned branch connection string only for the bounded restore inspection, never in Vercel production env. Do not run `verify:production` against it: the authoritative gate intentionally rejects every non-production host or branch before catalog acceptance. Record and validate the restore branch's own expected Neon project, branch, and database identity before read-only application/data checks.
 
 Record the branch name, restore timestamp, validation result, and deletion result in Linear. Then delete the drill branch:
 

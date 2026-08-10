@@ -8,7 +8,7 @@ export const SCHEMA_BASELINE_ID = 'ait-crm-reconciled-2026-08-10';
 export const SCHEMA_BASELINE_SOURCE_COMMIT = '33018dcfa55497a0c74f3217f9938c91db35c20a';
 export const SCHEMA_BASELINE_EVIDENCE_SHA256 = '8603737cade4aec086b06f137d77f69db6c04c873971e0efa1f79f4062ffa384';
 export const SCHEMA_EXPORT_RAW_STDOUT_SHA256 = '0336c9507c380e03d8ab53d4e00c17f528bb3f9068308193493caf5115eedf25';
-export const SCHEMA_MANIFEST_CANONICAL_SHA256 = 'ecd129516f4c87bb8815a76bfc6197b854848cd73cd49cd8b32067417a1bd1fe';
+export const SCHEMA_MANIFEST_CANONICAL_SHA256 = '92f0bb1dbc8b7afc1dc0af57fb11dda11d7cc05c83b4b16bd3301f7cf23cb675';
 export const SCHEMA_MANIFEST_RELATIVE_PATH = 'drizzle/reconciled-schema-manifest.json';
 
 export const CATALOG_FINGERPRINT_SQL = `
@@ -223,6 +223,20 @@ function validateManifestContract(manifest) {
   compareValue('repository.drizzleMutation.blockedOperations', JSON.stringify(['generate', 'migrate', 'push']), JSON.stringify(manifest.repository?.drizzleMutation?.blockedOperations), errors);
   compareValue('repository.reconstructedBaseline.historicalProvenance', false, manifest.repository?.reconstructedBaseline?.historicalProvenance, errors);
   compareValue('repository.reconstructedBaseline.transaction', 'single-transaction-always-rollback', manifest.repository?.reconstructedBaseline?.transaction, errors);
+  compareValue('database.databaseName', 'neondb', manifest.database?.databaseName, errors);
+  compareValue('database.neonProjectId', 'plain-band-07005942', manifest.database?.neonProjectId, errors);
+  const productionTargets = manifest.database?.protectedTargets?.filter((target) => target.label === 'production') || [];
+  compareValue('database production target count', 1, productionTargets.length, errors);
+  compareValue('database production branch', 'br-purple-bar-aphafrgp', productionTargets[0]?.branchId, errors);
+  compareValue(
+    'database production hosts',
+    JSON.stringify([
+      'ep-icy-credit-ap053eec-pooler.c-7.us-east-1.aws.neon.tech',
+      'ep-icy-credit-ap053eec.c-7.us-east-1.aws.neon.tech',
+    ]),
+    JSON.stringify(productionTargets[0]?.hosts),
+    errors,
+  );
   return errors;
 }
 

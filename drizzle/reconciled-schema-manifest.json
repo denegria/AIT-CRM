@@ -380,12 +380,16 @@
   "database": {
     "schema": "public",
     "journalSchema": "drizzle",
+    "databaseName": "neondb",
     "neonProjectId": "plain-band-07005942",
     "protectedTargets": [
       {
         "label": "production",
         "branchId": "br-purple-bar-aphafrgp",
-        "hosts": []
+        "hosts": [
+          "ep-icy-credit-ap053eec-pooler.c-7.us-east-1.aws.neon.tech",
+          "ep-icy-credit-ap053eec.c-7.us-east-1.aws.neon.tech"
+        ]
       },
       {
         "label": "staging",

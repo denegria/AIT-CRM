@@ -21,7 +21,7 @@ The catalog fields are:
 - indexes: `tablename`, `indexname`, and `indexdef` from `pg_indexes`, ordered by table and index name;
 - constraints: `conrelid::regclass::text`, `conname`, `contype`, and `pg_get_constraintdef(oid, true)`, ordered by relation and constraint name.
 
-The accepted canonical manifest SHA-256 is `ecd129516f4c87bb8815a76bfc6197b854848cd73cd49cd8b32067417a1bd1fe`; the verifier pins it outside the manifest so a manifest-only edit cannot silently redefine the baseline.
+The accepted canonical manifest SHA-256 is `92f0bb1dbc8b7afc1dc0af57fb11dda11d7cc05c83b4b16bd3301f7cf23cb675`; the verifier pins it outside the manifest so a manifest-only edit cannot silently redefine the baseline. This revision also pins the audited production database name, Neon project/branch identity, and approved direct/pooler endpoint hosts used by the authoritative production gate.
 
 The readiness implementation owns the exact read-only SQL corresponding to that contract. It compares all four counts and all four digests, all 13 journal rows (`id`, `hash`, and `created_at`), and the exact definitions of the two known SQL-only indexes:
 
@@ -65,4 +65,4 @@ npm run verify:schema
 npm run test:schema
 ```
 
-`verify:schema` is code-only. It reads repository files and runs the deterministic Drizzle export; it does not connect to a database or claim a migration result. `verify:production` runs the same repository gate before its existing HTTP/environment checks and, when database checks are enabled, compares the live read-only catalog and journal with the exact manifest.
+`verify:schema` is code-only. It reads repository files and runs the deterministic Drizzle export; it does not connect to a database or claim a migration result. The authoritative `verify:production` command runs the same repository gate, requires the manifest-approved production URL and live Neon project/branch/database identity, and only then compares the read-only catalog and journal with the exact manifest. `SKIP_DB=1` is forbidden. `diagnose:production` is the separately named repository/HTTP-only diagnostic and never claims production readiness.

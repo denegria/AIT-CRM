@@ -1,139 +1,184 @@
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { Client } from 'pg';
-import { databaseSslMode, databaseUrlUsesFullVerification } from '../src/db/database-url.js';
+
+import {
+  assertAuthoritativeProductionInvocation,
+  validateProductionDatabaseUrl,
+  verifyProductionDatabaseBaseline,
+} from './lib/production-readiness.mjs';
 import {
   loadSchemaManifest,
-  verifyDatabaseBaseline,
   verifyRepositoryBaseline,
 } from './lib/schema-readiness.mjs';
 
-const baseUrl = (process.env.AIT_CRM_BASE_URL || 'https://ait-crm-pi.vercel.app').replace(/\/$/, '');
-const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN || process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || '';
-const skipDb = process.env.SKIP_DB === '1';
-const skipEnv = process.env.SKIP_ENV === '1';
-const skipSensitiveEnv = process.env.SKIP_SENSITIVE_ENV === '1';
-const skipMetaValidToken = process.env.SKIP_META_VALID_TOKEN === '1';
-
-const checks = [];
-
-function addCheck(name, ok, detail = '') {
-  checks.push({ name, ok, detail });
-  const marker = ok ? 'ok' : 'fail';
-  console.log(marker + ' ' + name + (detail ? ' - ' + detail : ''));
+function defaultClientFactory(clientConfig) {
+  return new Client(clientConfig);
 }
 
-function requireEnv(name, options = {}) {
-  const value = process.env[name];
-  const ok = options.anyOf
-    ? options.anyOf.some((key) => Boolean(process.env[key]))
-    : Boolean(value);
-  addCheck(options.label || name + ' is set', ok, ok ? '' : 'missing');
-}
+export async function runProductionChecks({
+  authoritative,
+  env = process.env,
+  fetchImpl = fetch,
+  clientFactory = defaultClientFactory,
+  loadManifest = loadSchemaManifest,
+  verifyRepository = verifyRepositoryBaseline,
+  logger = console,
+} = {}) {
+  if (authoritative) assertAuthoritativeProductionInvocation(env);
 
-async function checkHttp() {
-  const root = await fetch(baseUrl, { redirect: 'manual' });
-  addCheck('production root responds', root.status >= 200 && root.status < 400, 'HTTP ' + root.status);
+  const baseUrl = (env.AIT_CRM_BASE_URL || 'https://ait-crm-pi.vercel.app').replace(/\/$/, '');
+  const verifyToken = env.META_WEBHOOK_VERIFY_TOKEN || env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || '';
+  const checks = [];
+  let verifiedManifest;
 
-  const session = await fetch(new URL('/api/auth/session', baseUrl));
-  const sessionBody = await readJson(session);
-  addCheck('auth session route responds', session.status === 200, 'HTTP ' + session.status);
-  addCheck(
-    'auth session route reports anonymous visitors unauthenticated',
-    sessionBody.authenticated === false && sessionBody.user === null,
-    JSON.stringify(sessionBody),
-  );
-
-  const wrongUrl = new URL('/api/webhooks/facebook-leads', baseUrl);
-  wrongUrl.searchParams.set('hub.mode', 'subscribe');
-  wrongUrl.searchParams.set('hub.verify_token', 'definitely-wrong-token');
-  wrongUrl.searchParams.set('hub.challenge', 'readiness-check');
-  const wrong = await fetch(wrongUrl);
-  addCheck('webhook rejects wrong verify token', wrong.status === 403, 'HTTP ' + wrong.status);
-
-  if (skipMetaValidToken) {
-    addCheck('configured verify token check skipped', true, 'SKIP_META_VALID_TOKEN=1');
-  } else if (verifyToken) {
-    const validUrl = new URL('/api/webhooks/facebook-leads', baseUrl);
-    validUrl.searchParams.set('hub.mode', 'subscribe');
-    validUrl.searchParams.set('hub.verify_token', verifyToken);
-    validUrl.searchParams.set('hub.challenge', 'readiness-check');
-    const valid = await fetch(validUrl);
-    const body = await valid.text();
-    addCheck('webhook accepts configured verify token', valid.status === 200 && body === 'readiness-check', 'HTTP ' + valid.status);
-  }
-}
-
-async function readJson(response) {
-  const text = await response.text();
-  if (!text) return {};
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { raw: text };
-  }
-}
-
-async function checkDatabase() {
-  if (skipDb) {
-    addCheck('database schema check skipped', true, 'SKIP_DB=1');
-    return;
-  }
-  if (!process.env.DATABASE_URL) {
-    addCheck('DATABASE_URL is set', false, 'missing');
-    return;
+  function addCheck(name, ok, detail = '') {
+    checks.push({ name, ok, detail });
+    logger.log(`${ok ? 'ok' : 'fail'} ${name}${detail ? ` - ${detail}` : ''}`);
   }
 
-  const client = new Client({ connectionString: process.env.DATABASE_URL });
-  await client.connect();
-  try {
-    const manifest = await loadSchemaManifest();
-    const report = await verifyDatabaseBaseline(client, manifest);
-    for (const check of report.checks) addCheck(check.name, check.ok, check.detail);
-  } finally {
-    await client.end();
+  function requireEnv(name, options = {}) {
+    const value = env[name];
+    const ok = options.anyOf
+      ? options.anyOf.some((key) => Boolean(env[key]))
+      : Boolean(value);
+    addCheck(options.label || `${name} is set`, ok, ok ? '' : 'missing');
   }
-}
 
-async function checkRepositorySchema() {
-  const report = await verifyRepositoryBaseline();
-  for (const check of report.checks) addCheck(check.name, check.ok, check.detail);
-  addCheck('schema manifest fingerprint is reproducible', true, report.manifestSha256);
-}
-
-async function main() {
-  await checkRepositorySchema();
-
-  if (skipEnv) {
-    addCheck('production env check skipped', true, 'SKIP_ENV=1');
-  } else {
-    requireEnv('AIT_CRM_SESSION_SECRET');
-    requireEnv('DATABASE_URL');
-    const sslMode = databaseSslMode(process.env.DATABASE_URL);
-    addCheck(
-      'DATABASE_URL enforces full TLS verification',
-      databaseUrlUsesFullVerification(process.env.DATABASE_URL),
-      sslMode ? `sslmode=${sslMode}` : 'sslmode missing or invalid',
-    );
-    if (skipSensitiveEnv) {
-      addCheck('sensitive Meta env check skipped', true, 'SKIP_SENSITIVE_ENV=1');
-    } else {
-      requireEnv('META_WEBHOOK_VERIFY_TOKEN', { anyOf: ['META_WEBHOOK_VERIFY_TOKEN', 'FACEBOOK_WEBHOOK_VERIFY_TOKEN'], label: 'Meta verify token is set' });
-      requireEnv('FACEBOOK_APP_SECRET');
-      requireEnv('META_PAGE_ACCESS_TOKEN', { anyOf: ['META_PAGE_ACCESS_TOKEN', 'META_PAGE_ACCESS_TOKEN_MAP'], label: 'Meta page token is set' });
+  async function readJson(response) {
+    const text = await response.text();
+    if (!text) return {};
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { raw: text };
     }
   }
 
+  async function checkHttp() {
+    const root = await fetchImpl(baseUrl, { redirect: 'manual' });
+    addCheck('production root responds', root.status >= 200 && root.status < 400, `HTTP ${root.status}`);
+
+    const session = await fetchImpl(new URL('/api/auth/session', baseUrl));
+    const sessionBody = await readJson(session);
+    addCheck('auth session route responds', session.status === 200, `HTTP ${session.status}`);
+    addCheck(
+      'auth session route reports anonymous visitors unauthenticated',
+      sessionBody.authenticated === false && sessionBody.user === null,
+      JSON.stringify(sessionBody),
+    );
+
+    const wrongUrl = new URL('/api/webhooks/facebook-leads', baseUrl);
+    wrongUrl.searchParams.set('hub.mode', 'subscribe');
+    wrongUrl.searchParams.set('hub.verify_token', 'definitely-wrong-token');
+    wrongUrl.searchParams.set('hub.challenge', 'readiness-check');
+    const wrong = await fetchImpl(wrongUrl);
+    addCheck('webhook rejects wrong verify token', wrong.status === 403, `HTTP ${wrong.status}`);
+
+    if (env.SKIP_META_VALID_TOKEN === '1') {
+      addCheck('configured verify token check skipped', true, 'SKIP_META_VALID_TOKEN=1');
+    } else if (verifyToken) {
+      const validUrl = new URL('/api/webhooks/facebook-leads', baseUrl);
+      validUrl.searchParams.set('hub.mode', 'subscribe');
+      validUrl.searchParams.set('hub.verify_token', verifyToken);
+      validUrl.searchParams.set('hub.challenge', 'readiness-check');
+      const valid = await fetchImpl(validUrl);
+      const body = await valid.text();
+      addCheck('webhook accepts configured verify token', valid.status === 200 && body === 'readiness-check', `HTTP ${valid.status}`);
+    }
+  }
+
+  async function checkRepositorySchema() {
+    const report = await verifyRepository();
+    verifiedManifest = report.manifest;
+    for (const check of report.checks) addCheck(check.name, check.ok, check.detail);
+    addCheck('schema manifest fingerprint is reproducible', true, report.manifestSha256);
+  }
+
+  async function checkDatabase() {
+    const manifest = verifiedManifest || await loadManifest();
+    let target;
+    try {
+      target = validateProductionDatabaseUrl(env.DATABASE_URL, manifest);
+      addCheck(
+        'DATABASE_URL authority, database, and TLS match the production manifest',
+        true,
+        `host=${target.safeTarget.host}, database=${target.safeTarget.database}`,
+      );
+    } catch (error) {
+      addCheck('DATABASE_URL authority, database, and TLS match the production manifest', false, error.message);
+      return;
+    }
+
+    const client = clientFactory(target.clientConfig);
+    let connected = false;
+    try {
+      await client.connect();
+      connected = true;
+      const report = await verifyProductionDatabaseBaseline(client, manifest);
+      for (const check of report.checks) addCheck(check.name, check.ok, check.detail);
+    } catch (error) {
+      addCheck('production database proof completed', false, error.message);
+    } finally {
+      if (connected) await client.end();
+    }
+  }
+
+  await checkRepositorySchema();
+
+  if (authoritative) {
+    if (env.SKIP_ENV === '1') {
+      addCheck('production env check skipped', true, 'SKIP_ENV=1; live database proof remains mandatory');
+    } else {
+      requireEnv('AIT_CRM_SESSION_SECRET');
+      requireEnv('DATABASE_URL');
+      if (env.SKIP_SENSITIVE_ENV === '1') {
+        addCheck('sensitive Meta env check skipped', true, 'SKIP_SENSITIVE_ENV=1');
+      } else {
+        requireEnv('META_WEBHOOK_VERIFY_TOKEN', { anyOf: ['META_WEBHOOK_VERIFY_TOKEN', 'FACEBOOK_WEBHOOK_VERIFY_TOKEN'], label: 'Meta verify token is set' });
+        requireEnv('FACEBOOK_APP_SECRET');
+        requireEnv('META_PAGE_ACCESS_TOKEN', { anyOf: ['META_PAGE_ACCESS_TOKEN', 'META_PAGE_ACCESS_TOKEN_MAP'], label: 'Meta page token is set' });
+      }
+    }
+  } else {
+    addCheck('live production database proof not attempted', true, 'non-authoritative diagnostics only');
+  }
+
   await checkHttp();
-  await checkDatabase();
+  if (authoritative) await checkDatabase();
 
   const failed = checks.filter((check) => !check.ok);
-  if (failed.length) {
-    console.error('\n' + failed.length + ' production readiness check(s) failed.');
-    process.exit(1);
-  }
-  console.log('\nProduction readiness checks passed.');
+  return {
+    authoritative,
+    ok: failed.length === 0,
+    productionReady: authoritative && failed.length === 0,
+    checks,
+  };
 }
 
-main().catch((error) => {
-  console.error(error.message || error);
-  process.exit(1);
-});
+export function runProductionReadiness(options = {}) {
+  return runProductionChecks({ ...options, authoritative: true });
+}
+
+export function runProductionDiagnostics(options = {}) {
+  return runProductionChecks({ ...options, authoritative: false });
+}
+
+async function main() {
+  try {
+    const report = await runProductionReadiness();
+    if (!report.ok) {
+      console.error(`\n${report.checks.filter((check) => !check.ok).length} production readiness check(s) failed.`);
+      process.exitCode = 1;
+      return;
+    }
+    console.log('\nProduction readiness checks passed.');
+  } catch (error) {
+    console.error(error.message || error);
+    process.exitCode = 1;
+  }
+}
+
+const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : '';
+if (invokedPath === fileURLToPath(import.meta.url)) await main();

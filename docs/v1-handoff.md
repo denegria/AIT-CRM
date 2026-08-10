@@ -62,11 +62,13 @@ Run before handoff or after a risky change:
 
     npm run lint
     npm run build
-    SKIP_ENV=1 SKIP_DB=1 SKIP_META_VALID_TOKEN=1 npm run verify:production
+    SKIP_META_VALID_TOKEN=1 npm run diagnose:production
 
-With production env available, prefer the full check:
+The diagnostic is repository/HTTP-only and cannot establish production readiness. With production env available, run the mandatory full check:
 
     node --env-file=.env.production.local scripts/verify-production-readiness.mjs
     npm run verify:rbac
+
+`SKIP_DB=1` is forbidden for the authoritative production check. It must prove the approved production URL authority and connected Neon project, branch, database, catalog, and journal.
 
 For bad data reports, capture the contact/lead name, email/phone, business unit, source, source row or external id, and what field looks wrong.
