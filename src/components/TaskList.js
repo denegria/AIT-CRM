@@ -1,6 +1,8 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
+import { createDashboardTaskCompletionController } from '@/lib/dashboard/task-completion.js';
+import { TaskCompletionControl } from './TaskCompletionControl.js';
 import s from './TaskList.module.css';
 
 export default function TaskList({
@@ -13,6 +15,7 @@ export default function TaskList({
   ownerRequired = false,
   fixedOwnerId = '',
   showOwnerSelect = true,
+  canToggle = true,
   emptyText = 'No tasks yet.',
 }) {
   const [newTask, setNewTask] = useState('');
@@ -20,6 +23,15 @@ export default function TaskList({
   const [ownerId, setOwnerId] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [taskMutations, setTaskMutations] = useState({});
+  const [taskCompletionController] = useState(() => (
+    createDashboardTaskCompletionController({
+      onStateChange: (taskId, state) => setTaskMutations((current) => ({
+        ...current,
+        [taskId]: state,
+      })),
+    })
+  ));
   const today = new Date().toISOString().slice(0, 10);
   const ownerOptions = owners || employees || [];
   const defaultOwnerId = ownerOptions[0]?.id || '';
@@ -53,6 +65,18 @@ export default function TaskList({
 
   const empName = (id) => employees?.find(e => e.id === id)?.name || '';
 
+  const handleToggle = async (task) => {
+    if (!onToggle || !canToggle) return;
+    try {
+      await taskCompletionController.submit({
+        taskId: task.id,
+        complete: () => onToggle(task.id, { completed: !task.completed }),
+      });
+    } catch {
+      // The row remains open and exposes the server-provided failure inline.
+    }
+  };
+
   return (
     <div>
       <div className={s.list}>
@@ -66,9 +90,13 @@ export default function TaskList({
                 Log
               </Link>
             ) : (
-              <button className={`${s.check} ${t.completed ? s.checked : ''}`} onClick={() => onToggle(t.id, { completed: !t.completed })}>
-                {t.completed ? '✓' : ''}
-              </button>
+              <TaskCompletionControl
+                task={t}
+                mutation={taskMutations[t.id]}
+                onComplete={() => handleToggle(t)}
+                canComplete={canToggle}
+                styles={s}
+              />
             )}
             <div className={s.content}>
               {t.id ? (

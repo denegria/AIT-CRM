@@ -5,6 +5,7 @@ import { AuthWelcomeLobby, LoginGate } from '@/components/AuthExperience';
 import * as defaults from './data';
 import { DEFERRED_BOOTSTRAP_LOADERS, hasDeferredBootstrapLoader } from './bootstrap-contract.js';
 import { loadDeferredTasks } from './tasks/bootstrap.js';
+import { createTaskLoadCoordinator } from './tasks/load-coordinator.js';
 import { fetchDashboardSummary } from './dashboard/loader.js';
 import { fetchPipelineSummary, pipelineSummaryQuery } from './pipeline/loader.js';
 import { LEAN_SHELL_PATHS, requiresTeamMonitorBootstrapReload } from './bootstrap-routing.js';
@@ -191,7 +192,7 @@ export function CRMProvider({ children, initialData }) {
   const tasksAreDeferred = isPostgres && Boolean(bootstrapData.access?.canReadCrm) && hasDeferredBootstrapLoader(bootstrapData, DEFERRED_BOOTSTRAP_LOADERS.TASKS);
   const [tasksLoadStatus, setTasksLoadStatus] = useState(tasksAreDeferred ? 'idle' : 'ready');
   const [tasksLoadError, setTasksLoadError] = useState('');
-  const tasksLoadPromiseRef = useRef(null);
+  const [tasksLoadCoordinator] = useState(() => createTaskLoadCoordinator());
   const [dashboardSummary, setDashboardSummary] = useState(null);
   const [dashboardSummaryStatus, setDashboardSummaryStatus] = useState(dashboardSummaryIsDeferred ? 'idle' : 'ready');
   const [dashboardSummaryError, setDashboardSummaryError] = useState('');
@@ -302,27 +303,23 @@ export function CRMProvider({ children, initialData }) {
   const loadTasks = useCallback(({ force = false } = {}) => {
     if (!isPostgres || !tasksAreDeferred) return Promise.resolve(tasks);
     if (!force && tasksLoadStatus === 'ready') return Promise.resolve(tasks);
-    if (tasksLoadPromiseRef.current) return tasksLoadPromiseRef.current;
 
-    setTasksLoadStatus('loading');
-    setTasksLoadError('');
-    const request = loadDeferredTasks({ contacts })
-      .then((nextTasks) => {
-        setTasks(nextTasks);
-        setTasksLoadStatus('ready');
-        return nextTasks;
-      })
-      .catch((error) => {
-        setTasksLoadStatus('error');
-        setTasksLoadError(error.message || 'Tasks could not load.');
-        throw error;
-      })
-      .finally(() => {
-        tasksLoadPromiseRef.current = null;
-      });
-    tasksLoadPromiseRef.current = request;
-    return request;
-  }, [contacts, isPostgres, tasks, tasksAreDeferred, tasksLoadStatus]);
+    return tasksLoadCoordinator.run(() => {
+      setTasksLoadStatus('loading');
+      setTasksLoadError('');
+      return loadDeferredTasks({ contacts })
+        .then((nextTasks) => {
+          setTasks(nextTasks);
+          setTasksLoadStatus('ready');
+          return nextTasks;
+        })
+        .catch((error) => {
+          setTasksLoadStatus('error');
+          setTasksLoadError(error.message || 'Tasks could not load.');
+          throw error;
+        });
+    }, { force });
+  }, [contacts, isPostgres, tasks, tasksAreDeferred, tasksLoadCoordinator, tasksLoadStatus]);
 
   const accessibleBusinessUnits = useMemo(() => {
     const activeUnits = (businessUnits || []).filter((unit) => unit.isActive !== false);

@@ -28,6 +28,7 @@ import {
   isTaskDueToday,
   isTaskOverdue,
 } from '@/lib/tasks/visibility.js';
+import { completeDashboardTaskAndReload } from '@/lib/dashboard/task-completion.js';
 
 function dateInputToIso(value) {
   if (!value) return null;
@@ -84,7 +85,6 @@ export default function Dashboard() {
     loadTasks,
     calendarEvents,
     employees,
-    updateTask,
     addTask,
     loaded,
     dataSource,
@@ -339,6 +339,19 @@ export default function Dashboard() {
     toast('Task created');
   }, [access.canWriteCrm, addTask, currentBusinessUnit?.id, currentUser?.id, dataSource, toast]);
 
+  const completeDashboardTask = useCallback(async (taskId, patch = {}) => {
+    if (!access.canWriteCrm) throw new Error('CRM write access is required.');
+    if (patch.completed !== true) throw new Error('Dashboard tasks can only be marked complete here.');
+
+    const task = await completeDashboardTaskAndReload({
+      taskId,
+      dataSource,
+      reloadTasks: loadTasks,
+    });
+    toast('Task completed');
+    return task;
+  }, [access.canWriteCrm, dataSource, loadTasks, toast]);
+
   if (
     !loaded ||
     (dataSource === 'postgres' && !tasksLoaded && !tasksError) ||
@@ -506,10 +519,11 @@ export default function Dashboard() {
             </div>
             <TaskList
               tasks={dashboardDueTodayTasks}
-              onToggle={(id, u) => updateTask(id, u)}
+              onToggle={completeDashboardTask}
               onAdd={createDashboardTask}
               employees={employees}
               canAdd={Boolean(access.canWriteCrm)}
+              canToggle={Boolean(access.canWriteCrm)}
               fixedOwnerId={currentUser?.id || ''}
               ownerRequired
               showOwnerSelect={false}

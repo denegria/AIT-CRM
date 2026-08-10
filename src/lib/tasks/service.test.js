@@ -32,6 +32,45 @@ test('task payload exposes the server cancellation decision when a session is pr
   assert.equal(payload.cancellationPolicy.requiresReason, true);
 });
 
+test('task transition payload stays scoped to the authorized task and excludes internal or adjacent records', () => {
+  const payload = toTaskPayload({
+    id: 'task-scoped',
+    organizationId: 'org-internal',
+    businessUnitId: 'bu-1',
+    contactId: 'contact-linked',
+    title: 'Call student',
+    taskType: 'manual_reminder',
+    status: 'completed',
+    priority: 'medium',
+    ownerUserId: 'user-1',
+    completedAt: new Date('2026-08-10T12:00:00.000Z'),
+    metadataJson: {},
+    auditEvents: [{ actorUserId: 'other-employee' }],
+    employeeTasks: [{ id: 'other-task' }],
+    secret: 'not-serialized',
+  }, {
+    session: {
+      user: {
+        id: 'user-1',
+        primaryRoleKey: 'account_coordinator',
+        roleKeys: ['account_coordinator'],
+      },
+    },
+  });
+
+  assert.deepEqual(Object.keys(payload), [
+    'id', 'title', 'description', 'businessUnitId', 'contactId', 'contactName',
+    'leadId', 'workOrderId', 'taskType', 'status', 'priority', 'dueAt',
+    'snoozedUntil', 'completedAt', 'canceledAt', 'ownerUserId',
+    'createdByUserId', 'sourceType', 'sourceId', 'sourceLabel', 'metadataJson',
+    'previousFollowUp', 'cancellationPolicy', 'createdAt', 'updatedAt',
+  ]);
+  assert.equal(payload.contactId, 'contact-linked');
+  for (const forbidden of ['organizationId', 'auditEvents', 'employeeTasks', 'secret']) {
+    assert.equal(Object.hasOwn(payload, forbidden), false);
+  }
+});
+
 function followUpTask(overrides = {}) {
   return {
     id: 'task-1',

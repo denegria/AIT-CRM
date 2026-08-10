@@ -15,7 +15,6 @@ import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import {
   assertCanAccessContactLead,
   assertCanAssignUser,
-  canAccessBusinessUnit,
   isRegularCoordinatorSession,
   resolveBusinessUnitId,
   resolveContactById,
@@ -71,6 +70,7 @@ import {
   TASK_CANCELLATION_DECISIONS,
   taskCancellationDecision,
 } from '@/lib/tasks/cancellation-policy.js';
+import { taskMutationAccessDecision } from '@/lib/tasks/access-policy.js';
 import { filterAssignableEmployees } from '@/lib/crm/assignable-employees.js';
 import { loadTaskContactOptions } from '@/lib/tasks/contact-options.js';
 
@@ -501,14 +501,12 @@ export async function PATCH(request) {
       .limit(1);
 
     if (!existingTask) return NextResponse.json({ error: 'Task not found.' }, { status: 404 });
-    if (!canAccessBusinessUnit(session, existingTask.businessUnitId)) {
-      return NextResponse.json({ error: 'Insufficient business-unit access.' }, { status: 403 });
-    }
     const action = String(body.action || '').trim();
-    const isCancellationAction = ['cancel', 'request_cancel', 'request_removal'].includes(action);
-    if (isRegularCoordinatorSession(session) && existingTask.ownerUserId !== session.user.id && !isCancellationAction) {
-      return NextResponse.json({ error: 'Regular coordinators can only access tasks assigned to them.' }, { status: 403 });
+    const mutationAccess = taskMutationAccessDecision({ session, task: existingTask, action });
+    if (!mutationAccess.allowed) {
+      return NextResponse.json({ error: mutationAccess.error }, { status: mutationAccess.status });
     }
+    const isCancellationAction = ['cancel', 'request_cancel', 'request_removal'].includes(action);
     if (stringParam(body.taskType) === TASK_TYPES.ARCHIVE_APPROVAL && existingTask.taskType !== TASK_TYPES.ARCHIVE_APPROVAL) {
       return NextResponse.json({ error: 'Archive approval tasks must be created from a contact archive request.' }, { status: 400 });
     }
