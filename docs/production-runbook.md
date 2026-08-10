@@ -5,18 +5,23 @@
 Run these before pushing to `master`:
 
 ```bash
+npm run verify:schema
+npm run test:schema
 npm run lint
-npm run build
+npm run build -- --webpack
 ```
 
-If a migration was added, apply it to production before code that depends on it:
+The reconciled baseline currently blocks all normal Drizzle mutation entrypoints:
 
 ```bash
-vercel env pull --environment=production .env.production.local
-node --env-file=.env.production.local node_modules/drizzle-kit/bin.cjs migrate --config drizzle.config.mjs
+npm run db:generate
+npm run db:migrate
+npm run db:push
 ```
 
-Use `node --env-file` instead of shell-sourcing Vercel env files so database URLs with special characters are parsed safely.
+Each command must exit in the repository preflight before Drizzle executes. Do not bypass the guard with `npx drizzle-kit`, `node_modules/.bin/drizzle-kit`, `node_modules/drizzle-kit/bin.cjs`, or a direct SQL/journal edit. No release may add a schema dependency until an approved lineage cutover establishes a unique `0027`-or-later baseline, passes the real disposable-Postgres reconstruction in `docs/schema-readiness.md`, and updates this runbook.
+
+No Drizzle mutation may precede `npm run verify:schema`. Production mutation remains a separate explicit approval even after the baseline is repaired.
 
 ## Production Verification
 
@@ -27,15 +32,15 @@ node --env-file=.env.production.local scripts/verify-production-readiness.mjs
 npm run verify:rbac
 ```
 
-The check verifies:
+The read-only check verifies:
 
 - required production env vars are present
 - the production app responds
 - the Meta webhook rejects an invalid verify token
 - the Meta webhook accepts the configured verify token
-- required CRM tables exist
-- the v1 `work_orders` columns exist
-- the Drizzle migration journal is readable
+- the exact reconciled public catalog counts and digests
+- all 13 expected Drizzle journal IDs, hashes, and timestamps
+- the exact SQL-only index definitions preserved by the baseline
 - role permissions and scoped test-account boundaries are enforced
 
 Vercel may omit sensitive env values from local pulls. If the app is already deployed and Meta has been verified externally, skip only the sensitive-value check:

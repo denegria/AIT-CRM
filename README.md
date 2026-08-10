@@ -86,15 +86,18 @@ Database commands:
 ```bash
 npm run db:generate
 npm run db:migrate
+npm run db:push
 ```
 
-Database-backed commands require `DATABASE_URL`. Authentication and integration credentials must also be supplied through environment variables. Ask a project administrator for the approved environment configuration; do not copy credentials into documentation, issue comments, or source files.
+These three mutation commands are currently fail-closed before Drizzle executes because the reconciled journal ends at `0012` while the SQL baseline extends through `0026`. Do not bypass them with a direct Drizzle command. The baseline must first receive an approved unique `0027`-or-later lineage cutover and pass the disposable-target procedure in `docs/schema-readiness.md`.
+
+Other database-backed commands require their explicitly documented environment variables. Authentication and integration credentials must also be supplied through environment variables. Ask a project administrator for the approved environment configuration; do not copy credentials into documentation, issue comments, or source files.
 
 ## Release model
 
 - `staging` is the QA lane and auto-deploys to the protected staging environment.
 - `master` is the production lane and is promoted only after staging acceptance and explicit approval.
-- Database migrations are verified against the intended Neon branch before application.
+- Database mutations remain blocked until the reconciled lineage is repaired; afterward they must be verified against the intended disposable and deployment targets before application.
 - Production data is never used as screenshot or fixture data.
 
 Operational release, rollback, and recovery procedures are documented in the [production runbook](./docs/production-runbook.md).

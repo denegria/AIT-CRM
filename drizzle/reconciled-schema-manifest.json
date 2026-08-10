@@ -1,0 +1,436 @@
+{
+  "formatVersion": 1,
+  "baselineId": "ait-crm-reconciled-2026-08-10",
+  "source": {
+    "repositoryCommit": "33018dcfa55497a0c74f3217f9938c91db35c20a",
+    "acceptedEvidence": "MIS-379 migration lineage and schema provenance audit",
+    "acceptedEvidenceSha256": "8603737cade4aec086b06f137d77f69db6c04c873971e0efa1f79f4062ffa384"
+  },
+  "serialization": {
+    "canonicalManifest": "recursive-key-sort-json-utf8-lf-v1",
+    "fileDigest": "sha256-raw-bytes-v1",
+    "drizzleExport": "sha256-raw-stdout-including-final-newline-v1"
+  },
+  "repository": {
+    "schema": {
+      "path": "src/db/schema.js",
+      "sha256": "956c032aea583b0ea68fa76333c5ec40aa44d220c3b8530fe7dd15098829fdd6"
+    },
+    "journal": {
+      "path": "drizzle/meta/_journal.json",
+      "sha256": "6e0759d6fd1d1add0e82c4c986b87e7b268dcc8e33cf26a2694203a41268ee3e"
+    },
+    "drizzleExport": {
+      "command": "drizzle-kit export --config drizzle.config.mjs",
+      "rawStdoutSha256": "0336c9507c380e03d8ab53d4e00c17f528bb3f9068308193493caf5115eedf25",
+      "structure": {
+        "tableCount": 50,
+        "explicitIndexCount": 93,
+        "foreignKeyCount": 183,
+        "checkConstraintCount": 4
+      }
+    },
+    "futureMigrationMinimum": 27,
+    "drizzleMutation": {
+      "allowed": false,
+      "blockedOperations": [
+        "generate",
+        "migrate",
+        "push"
+      ],
+      "reason": "Drizzle metadata ends at 0012 while the reconciled unjournaled SQL baseline extends through 0026; an approved lineage cutover must establish a unique 0027-or-later baseline before any Drizzle mutation."
+    },
+    "reconstructedBaseline": {
+      "purpose": "disposable-postgres-validation-only",
+      "historicalProvenance": false,
+      "transaction": "single-transaction-always-rollback",
+      "applyOrder": [
+        "drizzle/0000_ait_signs_init.sql",
+        "drizzle/0001_add_import_note_proposals.sql",
+        "drizzle/0002_auth_foundation.sql",
+        "drizzle/0003_work_order_details.sql",
+        "drizzle/0004_task_follow_up_schema.sql",
+        "drizzle/0005_lead_status_history.sql",
+        "drizzle/0006_conversation_schema.sql",
+        "drizzle/0007_message_template_registry.sql",
+        "drizzle/0008_follow_up_sequences.sql",
+        "drizzle/0009_follow_up_sequence_hardening.sql",
+        "drizzle/0010_import_batch_business_unit.sql",
+        "drizzle/0011_activity_event_metadata.sql",
+        "drizzle/0012_contact_people.sql",
+        "drizzle/0013_account_manager_payment_write.sql",
+        "drizzle/0014_notifications.sql",
+        "drizzle/0015_contact_archive_and_ait_usa_lifecycle.sql",
+        "drizzle/0016_contact_channel_consents.sql",
+        "drizzle/0016_ait_usa_course_metadata.sql",
+        "drizzle/0017_sms_campaign_control.sql",
+        "drizzle/0018_contact_course_records.sql",
+        "drizzle/0019_contact_course_location.sql",
+        "drizzle/0020_account_coordinator_role_key.sql",
+        "drizzle/0021_contact_course_teacher.sql",
+        "drizzle/0022_contact_phone_history.sql",
+        "drizzle/0023_course_class_sections.sql",
+        "drizzle/0024_roster_manifest_import_runs.sql",
+        "drizzle/0025_safe_contact_merge_runs.sql",
+        "drizzle/0026_attendance_sessions.sql"
+      ]
+    },
+    "legacyDuplicateMigrationIds": [
+      {
+        "identifier": "0016",
+        "paths": [
+          "drizzle/0016_ait_usa_course_metadata.sql",
+          "drizzle/0016_contact_channel_consents.sql"
+        ],
+        "classification": "reconciled-historical-collision-not-ordering-provenance"
+      }
+    ],
+    "trackedJournalPrefix": [
+      {
+        "journalIndex": 0,
+        "journalVersion": "7",
+        "databaseId": 1,
+        "createdAt": 1778593622244,
+        "tag": "0000_ait_signs_init",
+        "path": "drizzle/0000_ait_signs_init.sql",
+        "sha256": "ef5b47c14eb0a6c57d1658beba3fe6e4a374818a385f82cf4a1b977f7be0cd5f",
+        "provenance": "verified-production-journal",
+        "snapshot": {
+          "path": "drizzle/meta/0000_snapshot.json",
+          "sha256": "a2612bff5c1f57c4a3a4c39abdde055f47d86bfa932bd15dea337d17adacd975"
+        }
+      },
+      {
+        "journalIndex": 1,
+        "journalVersion": "7",
+        "databaseId": 2,
+        "createdAt": 1778620635410,
+        "tag": "0001_add_import_note_proposals",
+        "path": "drizzle/0001_add_import_note_proposals.sql",
+        "sha256": "918021d91471622cf11b712eb5962103a57b0ebb26869ff05e05bcc2254730f1",
+        "provenance": "verified-production-journal",
+        "snapshot": {
+          "path": "drizzle/meta/0001_snapshot.json",
+          "sha256": "5e3b6961b10cce9e58515649b976cbd44bfc9e2584afb91c875b434c938a8c94"
+        }
+      },
+      {
+        "journalIndex": 2,
+        "journalVersion": "7",
+        "databaseId": 3,
+        "createdAt": 1778682463614,
+        "tag": "0002_auth_foundation",
+        "path": "drizzle/0002_auth_foundation.sql",
+        "sha256": "e26b7b6e098a20a98480fce01f5bbb953f42870288e978a9e22c190d4f9a8c4c",
+        "provenance": "verified-production-journal",
+        "snapshot": {
+          "path": "drizzle/meta/0002_snapshot.json",
+          "sha256": "c12ba85082f9e139cbf72d51b24217b4f9b72a32cd465cbccbb583ce17f78b20"
+        }
+      },
+      {
+        "journalIndex": 3,
+        "journalVersion": "7",
+        "databaseId": 4,
+        "createdAt": 1778760579621,
+        "tag": "0003_work_order_details",
+        "path": "drizzle/0003_work_order_details.sql",
+        "sha256": "adc7b164a6d9bd76332f17d3ccb1db086029f48b0daba3a1bcdf548d0328797f",
+        "provenance": "verified-production-journal",
+        "snapshot": {
+          "path": "drizzle/meta/0003_snapshot.json",
+          "sha256": "226ad2542f5e8fdd5c0d52aeeeb6c7abb1dadbb726b958a4ec500227d4906cbb"
+        }
+      },
+      {
+        "journalIndex": 4,
+        "journalVersion": "7",
+        "databaseId": 5,
+        "createdAt": 1779554221042,
+        "tag": "0004_task_follow_up_schema",
+        "path": "drizzle/0004_task_follow_up_schema.sql",
+        "sha256": "31a7b1d10b1fa22d00c3c43e7fdbbcc545108e6d3a7c3f1b1c4b5e0dab5fcb3f",
+        "provenance": "verified-production-journal",
+        "snapshot": {
+          "path": "drizzle/meta/0004_snapshot.json",
+          "sha256": "5c1605d4d9ece450a2d159a3780288e1d9525bca3814641d7eef190a9ed35e80"
+        }
+      },
+      {
+        "journalIndex": 5,
+        "journalVersion": "7",
+        "databaseId": 6,
+        "createdAt": 1779641940090,
+        "tag": "0005_lead_status_history",
+        "path": "drizzle/0005_lead_status_history.sql",
+        "sha256": "dc93b102bff1e4b404af39319fdb989bd307538abbc7dd08585ce63d6d770504",
+        "provenance": "verified-production-journal",
+        "snapshot": {
+          "path": "drizzle/meta/0005_snapshot.json",
+          "sha256": "1141c0edf21781bdd2404a205ae857a34bde5db1a0dd1c4a1fd2a3e7bb09213a"
+        }
+      },
+      {
+        "journalIndex": 6,
+        "journalVersion": "7",
+        "databaseId": 7,
+        "createdAt": 1779762295122,
+        "tag": "0006_conversation_schema",
+        "path": "drizzle/0006_conversation_schema.sql",
+        "sha256": "f912db0206a0ebb97912d3aef692b4b0be6ca6c088925f82b06d00ae80854d90",
+        "provenance": "verified-production-journal",
+        "snapshot": {
+          "path": "drizzle/meta/0006_snapshot.json",
+          "sha256": "12c85cc9b5c4f6e95397d653f5996c5b3760c2cf8a52209bb8b27c63516de0d1"
+        }
+      },
+      {
+        "journalIndex": 7,
+        "journalVersion": "7",
+        "databaseId": 8,
+        "createdAt": 1779819900000,
+        "tag": "0007_message_template_registry",
+        "path": "drizzle/0007_message_template_registry.sql",
+        "sha256": "70a46e2c11d884f96d258551100259c180238d43e48ba9ae4a3c021aa49473b1",
+        "provenance": "verified-production-journal",
+        "snapshot": {
+          "path": "drizzle/meta/0007_snapshot.json",
+          "sha256": "f6b4cd0d9828bad5b930e87c42c39c3c52a912682e743792ad347e158887d4ea"
+        }
+      },
+      {
+        "journalIndex": 8,
+        "journalVersion": "7",
+        "databaseId": 9,
+        "createdAt": 1779836227835,
+        "tag": "0008_follow_up_sequences",
+        "path": "drizzle/0008_follow_up_sequences.sql",
+        "sha256": "7c225e51c0f8dd6c95c72a24d9b3ea1e1aa466b911e4cb0d8fd2ae46122ee812",
+        "provenance": "verified-production-journal",
+        "snapshot": {
+          "path": "drizzle/meta/0008_snapshot.json",
+          "sha256": "7476a0a3a9575ebf3d76d684e6a31d3c3f112557c0203409b0f141f338a52d61"
+        }
+      },
+      {
+        "journalIndex": 9,
+        "journalVersion": "7",
+        "databaseId": 10,
+        "createdAt": 1779837205645,
+        "tag": "0009_follow_up_sequence_hardening",
+        "path": "drizzle/0009_follow_up_sequence_hardening.sql",
+        "sha256": "8ac7ba2a249b7477da50c793f37e79338f01d3256ad13903672252d970dfd80c",
+        "provenance": "verified-production-journal",
+        "snapshot": {
+          "path": "drizzle/meta/0009_snapshot.json",
+          "sha256": "13fd7529a75271e5e3e7580f62a98850f6f7d5485bc8aa716d1a3fd6ae8a629f"
+        }
+      },
+      {
+        "journalIndex": 10,
+        "journalVersion": "7",
+        "databaseId": 11,
+        "createdAt": 1780114800000,
+        "tag": "0010_import_batch_business_unit",
+        "path": "drizzle/0010_import_batch_business_unit.sql",
+        "sha256": "9efb93339deded4d693d83fdf3d0ac44c6482e63029be16730473f0d18abcc47",
+        "provenance": "verified-production-journal",
+        "snapshot": {
+          "path": "drizzle/meta/0010_snapshot.json",
+          "sha256": "544ae23016eed2c2adec8261f53ff3cdd4a42ea72c58bca4d12a0458afaeb8cd"
+        }
+      },
+      {
+        "journalIndex": 11,
+        "journalVersion": "7",
+        "databaseId": 12,
+        "createdAt": 1780497450155,
+        "tag": "0011_activity_event_metadata",
+        "path": "drizzle/0011_activity_event_metadata.sql",
+        "sha256": "77d3e9247991ddaa62d54ad56da9bd1c198fc5d65a80a744d09c1f016e603425",
+        "provenance": "verified-production-journal",
+        "snapshot": {
+          "path": "drizzle/meta/0011_snapshot.json",
+          "sha256": "34eecb437513fdd820bcd1cf98ccd2fd3cf9cc393406e85f0489075a690b4bfc"
+        }
+      },
+      {
+        "journalIndex": 12,
+        "journalVersion": "7",
+        "databaseId": 13,
+        "createdAt": 1780905100000,
+        "tag": "0012_contact_people",
+        "path": "drizzle/0012_contact_people.sql",
+        "sha256": "08913a8354e8a016545f6dcd1e06f97ebf5b4f79a0ce2cb80fc74e89cbb94e67",
+        "provenance": "verified-production-journal",
+        "snapshot": {
+          "path": "drizzle/meta/0012_snapshot.json",
+          "sha256": "6f41046c525e4eb07789d98fe1e8882b329099de62c4619bec6803dba7d25455"
+        }
+      }
+    ],
+    "unjournaledBaselineSql": [
+      {
+        "identifier": "0013",
+        "path": "drizzle/0013_account_manager_payment_write.sql",
+        "sha256": "0ea107e62ae77a45de5a12c07ee2a88003dc5cd2af4a3a58261510fe85796032",
+        "journaled": false,
+        "provenance": "repository-sql-baseline-only"
+      },
+      {
+        "identifier": "0014",
+        "path": "drizzle/0014_notifications.sql",
+        "sha256": "4ee494166b0d4a88523ae08a84ad468196548dd2d5f8c58226ddc9a5f24a8c77",
+        "journaled": false,
+        "provenance": "repository-sql-baseline-only"
+      },
+      {
+        "identifier": "0015",
+        "path": "drizzle/0015_contact_archive_and_ait_usa_lifecycle.sql",
+        "sha256": "99f54ff8a32b0e30cf8b7e231cb11c8567ad1132cb0c4a899ee94aff73cff447",
+        "journaled": false,
+        "provenance": "repository-sql-baseline-only"
+      },
+      {
+        "identifier": "0016",
+        "path": "drizzle/0016_ait_usa_course_metadata.sql",
+        "sha256": "9f3e6510daf4a47f69c1c0c55de474ef6411564e39f86d1908973c8098b0448d",
+        "journaled": false,
+        "provenance": "repository-sql-baseline-only"
+      },
+      {
+        "identifier": "0016",
+        "path": "drizzle/0016_contact_channel_consents.sql",
+        "sha256": "3fe0a1012480b1f8271c4eac109fef05d6d4bc590a1a5c30890efef417d9f253",
+        "journaled": false,
+        "provenance": "repository-sql-baseline-only"
+      },
+      {
+        "identifier": "0017",
+        "path": "drizzle/0017_sms_campaign_control.sql",
+        "sha256": "51c4d7789003fff4b9424350c9fabb019b341bf33839de2f44c9bbc598f49cee",
+        "journaled": false,
+        "provenance": "repository-sql-baseline-only"
+      },
+      {
+        "identifier": "0018",
+        "path": "drizzle/0018_contact_course_records.sql",
+        "sha256": "c209c73c9aa617d963437375bc659a5252c3c1ba9a658176d8db74d8c7f0bb11",
+        "journaled": false,
+        "provenance": "repository-sql-baseline-only"
+      },
+      {
+        "identifier": "0019",
+        "path": "drizzle/0019_contact_course_location.sql",
+        "sha256": "e818d64f938f9aba2c2c3a2f3f0cf8a2177c4be87f340e79bde95d821ba6db23",
+        "journaled": false,
+        "provenance": "repository-sql-baseline-only"
+      },
+      {
+        "identifier": "0020",
+        "path": "drizzle/0020_account_coordinator_role_key.sql",
+        "sha256": "dddc30bffcef1323566dccd89e09be180c1617874d13179f118e11e67bf28bbf",
+        "journaled": false,
+        "provenance": "repository-sql-baseline-only"
+      },
+      {
+        "identifier": "0021",
+        "path": "drizzle/0021_contact_course_teacher.sql",
+        "sha256": "a3de407f5043c77f83b8b9467da0d559258e1c3967cdfaa1f45262c623bca8b2",
+        "journaled": false,
+        "provenance": "repository-sql-baseline-only"
+      },
+      {
+        "identifier": "0022",
+        "path": "drizzle/0022_contact_phone_history.sql",
+        "sha256": "ae486e6875486f0702d456036e4e2c4157de31acb9fb98a1f7080c87270f07bd",
+        "journaled": false,
+        "provenance": "repository-sql-baseline-only"
+      },
+      {
+        "identifier": "0023",
+        "path": "drizzle/0023_course_class_sections.sql",
+        "sha256": "e7bfd351e832852ccbccfd2a4e0502aa56d7bd6b82880c7d36012402702ce565",
+        "journaled": false,
+        "provenance": "repository-sql-baseline-only"
+      },
+      {
+        "identifier": "0024",
+        "path": "drizzle/0024_roster_manifest_import_runs.sql",
+        "sha256": "95b840e954f7060ddac0a2505d453d9d0531ad0596496d4b47ec7573844c8fae",
+        "journaled": false,
+        "provenance": "repository-sql-baseline-only"
+      },
+      {
+        "identifier": "0025",
+        "path": "drizzle/0025_safe_contact_merge_runs.sql",
+        "sha256": "813ee938d229250eaa5536d28a8598277204e2ea42b37ed4df3cc1bc9ca6bc77",
+        "journaled": false,
+        "provenance": "repository-sql-baseline-only"
+      },
+      {
+        "identifier": "0026",
+        "path": "drizzle/0026_attendance_sessions.sql",
+        "sha256": "9489f20c0fba64dda2d1396e47ded941336b713505514c38c80d70333ae5f50d",
+        "journaled": false,
+        "provenance": "repository-sql-baseline-only"
+      }
+    ]
+  },
+  "database": {
+    "schema": "public",
+    "journalSchema": "drizzle",
+    "neonProjectId": "plain-band-07005942",
+    "protectedTargets": [
+      {
+        "label": "production",
+        "branchId": "br-purple-bar-aphafrgp",
+        "hosts": []
+      },
+      {
+        "label": "staging",
+        "branchId": "br-broad-hill-aptjpyea",
+        "hosts": [
+          "ep-muddy-frost-apgwqat1-pooler.c-7.us-east-1.aws.neon.tech",
+          "ep-muddy-frost-apgwqat1.c-7.us-east-1.aws.neon.tech"
+        ]
+      }
+    ],
+    "catalog": {
+      "contract": "postgres-public-catalog-lf-pipe-v1",
+      "expected": {
+        "tableCount": 50,
+        "tableNameMd5": "391e82430292535419ae200d9b97eac1",
+        "columnCount": 697,
+        "columnCatalogMd5": "206962206ecc53b2082a6469e9425722",
+        "indexCount": 150,
+        "indexCatalogMd5": "21ae82c9ccf5ee3075f393a25d45745d",
+        "constraintCount": 242,
+        "constraintCatalogMd5": "48d7f37c67c09680ba9abba946cc0b26"
+      }
+    },
+    "sqlOnlyIndexes": [
+      {
+        "name": "contact_people_primary_contact_idx",
+        "table": "contact_people",
+        "sourcePath": "drizzle/0012_contact_people.sql",
+        "indexDefinition": "CREATE UNIQUE INDEX contact_people_primary_contact_idx ON public.contact_people USING btree (contact_id) WHERE (is_primary = true)"
+      },
+      {
+        "name": "contacts_org_archived_created_idx",
+        "table": "contacts",
+        "sourcePath": "drizzle/0015_contact_archive_and_ait_usa_lifecycle.sql",
+        "indexDefinition": "CREATE INDEX contacts_org_archived_created_idx ON public.contacts USING btree (organization_id, archived_at, created_at)"
+      }
+    ]
+  },
+  "limitations": {
+    "historicalApplyOrderForUnjournaledSql": "unknown",
+    "unjournaledSqlMayBeReplayedAgainstExistingState": false,
+    "unjournaledSqlMayBeAppliedToEmptyDisposableTarget": true,
+    "journalRowsMayBeSynthesized": false,
+    "reconciledCloneRequiredForFullReplayValidation": true,
+    "reconstructedBaselineOrderIsHistoricalProvenance": false,
+    "realPostgresFromZeroValidationStatus": "pending-approved-disposable-clone"
+  }
+}

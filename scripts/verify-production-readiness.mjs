@@ -1,5 +1,10 @@
 import { Client } from 'pg';
 import { databaseSslMode, databaseUrlUsesFullVerification } from '../src/db/database-url.js';
+import {
+  loadSchemaManifest,
+  verifyDatabaseBaseline,
+  verifyRepositoryBaseline,
+} from './lib/schema-readiness.mjs';
 
 const baseUrl = (process.env.AIT_CRM_BASE_URL || 'https://ait-crm-pi.vercel.app').replace(/\/$/, '');
 const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN || process.env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || '';
@@ -7,20 +12,6 @@ const skipDb = process.env.SKIP_DB === '1';
 const skipEnv = process.env.SKIP_ENV === '1';
 const skipSensitiveEnv = process.env.SKIP_SENSITIVE_ENV === '1';
 const skipMetaValidToken = process.env.SKIP_META_VALID_TOKEN === '1';
-const requiredTables = [
-  'organizations',
-  'business_units',
-  'users',
-  'contacts',
-  'leads',
-  'work_orders',
-  'estimates',
-  'import_batches',
-  'import_source_rows',
-  'import_normalized_records',
-  'import_review_items',
-];
-const requiredWorkOrderColumns = ['title', 'description', 'estimated_cost'];
 
 const checks = [];
 
@@ -94,37 +85,23 @@ async function checkDatabase() {
   const client = new Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
   try {
-    const tables = await client.query(
-      "select table_name from information_schema.tables where table_schema = 'public' and table_name = any($1::text[])",
-      [requiredTables],
-    );
-    const foundTables = new Set(tables.rows.map((row) => row.table_name));
-    const missingTables = requiredTables.filter((table) => !foundTables.has(table));
-    addCheck('required CRM tables exist', missingTables.length === 0, missingTables.length ? 'missing ' + missingTables.join(', ') : '');
-
-    const columns = await client.query(
-      "select column_name from information_schema.columns where table_schema = 'public' and table_name = 'work_orders' and column_name = any($1::text[])",
-      [requiredWorkOrderColumns],
-    );
-    const foundColumns = new Set(columns.rows.map((row) => row.column_name));
-    const missingColumns = requiredWorkOrderColumns.filter((column) => !foundColumns.has(column));
-    addCheck('work order v1 columns exist', missingColumns.length === 0, missingColumns.length ? 'missing ' + missingColumns.join(', ') : '');
-
-    const journal = await client.query(
-      'select id, hash, created_at from drizzle.__drizzle_migrations order by created_at desc limit 1',
-    ).catch(() => ({ rows: [] }));
-    const latestMigration = journal.rows[0];
-    addCheck(
-      'drizzle migration journal readable',
-      journal.rows.length > 0,
-      latestMigration ? 'latest id=' + latestMigration.id : 'no rows',
-    );
+    const manifest = await loadSchemaManifest();
+    const report = await verifyDatabaseBaseline(client, manifest);
+    for (const check of report.checks) addCheck(check.name, check.ok, check.detail);
   } finally {
     await client.end();
   }
 }
 
+async function checkRepositorySchema() {
+  const report = await verifyRepositoryBaseline();
+  for (const check of report.checks) addCheck(check.name, check.ok, check.detail);
+  addCheck('schema manifest fingerprint is reproducible', true, report.manifestSha256);
+}
+
 async function main() {
+  await checkRepositorySchema();
+
   if (skipEnv) {
     addCheck('production env check skipped', true, 'SKIP_ENV=1');
   } else {
