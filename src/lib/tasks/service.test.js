@@ -374,3 +374,105 @@ test('structured follow-up activity cancellation uses the same audited mechanics
   assert.equal(updatePatches.length, 1);
   assert.equal(updatePatches[0].status, 'canceled');
 });
+
+test('exact follow-up completion updates one selected task once and a stale retry makes no partial writes', async () => {
+  const selectedTask = followUpTask({ id: 'task-selected' });
+  const otherOpenTask = followUpTask({ id: 'task-other' });
+  const inserts = [];
+  const updateConditions = [];
+  let completionAttempts = 0;
+  const tx = {
+    update() {
+      return {
+        set() { return this; },
+        where(condition) {
+          updateConditions.push(condition);
+          return this;
+        },
+        returning() {
+          completionAttempts += 1;
+          return Promise.resolve(completionAttempts === 1
+            ? [{ ...selectedTask, status: 'completed', completedAt: new Date('2026-07-03T09:00:00.000Z') }]
+            : []);
+        },
+      };
+    },
+    insert() {
+      return {
+        values(value) {
+          inserts.push(value);
+          return Promise.resolve();
+        },
+      };
+    },
+  };
+  const db = { transaction: (callback) => callback(tx) };
+  const input = {
+    db,
+    organizationId: 'org-1',
+    actorUserId: 'actor-1',
+    existingTask: selectedTask,
+    taskPatch: { status: 'completed' },
+    followUpActivity: {
+      eventType: 'follow_up.reached_interested',
+      message: 'Reached and interested.',
+      noteBody: 'Reached and interested.',
+    },
+  };
+
+  const first = await completeFollowUpTaskWithActivity(input);
+  assert.equal(first.task.id, selectedTask.id);
+  assert.equal(otherOpenTask.status, 'open');
+  assert.equal(inserts.filter((value) => value.taskId === selectedTask.id && value.eventType === 'completed').length, 1);
+  const firstCondition = new PgDialect().sqlToQuery(updateConditions[0]);
+  assert.ok(firstCondition.params.includes(selectedTask.id));
+  assert.equal(firstCondition.params.includes(otherOpenTask.id), false);
+  for (const field of ['business_unit_id', 'contact_id', 'lead_id', 'owner_user_id', 'task_type', 'status']) {
+    assert.match(firstCondition.sql, new RegExp(`"tasks"\\."${field}"`));
+  }
+
+  const writesAfterFirstCompletion = inserts.length;
+  await assert.rejects(
+    completeFollowUpTaskWithActivity(input),
+    (error) => error.status === 409 && error.code === 'follow_up_task_stale',
+  );
+  assert.equal(inserts.length, writesAfterFirstCompletion);
+});
+
+test('generic outreach leaves existing and concurrently-created follow-up tasks untouched', async () => {
+  const existingTask = followUpTask({ id: 'task-existing' });
+  const concurrentTask = followUpTask({ id: 'task-concurrent' });
+  const inserts = [];
+  const tx = {
+    select() {
+      throw new Error('Generic outreach must not inspect tasks.');
+    },
+    update() {
+      throw new Error('Generic outreach must not update tasks.');
+    },
+    insert() {
+      return {
+        values(value) {
+          inserts.push(value);
+          return Promise.resolve();
+        },
+      };
+    },
+  };
+
+  await recordFollowUpActivity({
+    db: { transaction: (callback) => callback(tx) },
+    organizationId: 'org-1',
+    actorUserId: 'actor-1',
+    context: { businessUnitId: 'bu-1', contactId: 'contact-1', leadId: 'lead-1' },
+    followUpActivity: {
+      eventType: 'follow_up.attempted_no_answer',
+      message: 'Attempted outreach; no answer.',
+    },
+    cancelOpenFollowUps: false,
+  });
+
+  assert.equal(inserts.length, 2);
+  assert.equal(existingTask.status, 'open');
+  assert.equal(concurrentTask.status, 'open');
+});

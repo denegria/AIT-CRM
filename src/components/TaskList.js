@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { createDashboardTaskCompletionController } from '@/lib/dashboard/task-completion.js';
+import { followUpTaskEntryHref } from '@/lib/tasks/follow-up-selection.js';
 import { TaskCompletionControl } from './TaskCompletionControl.js';
 import s from './TaskList.module.css';
 
@@ -86,7 +87,7 @@ export default function TaskList({
           return (
           <div key={t.id} className={s.item}>
             {isFollowUpTask && !t.completed ? (
-              <Link className={s.logButton} href={`/tasks?contactId=${encodeURIComponent(t.contactId || '')}&taskType=follow_up`}>
+              <Link className={s.logButton} href={followUpTaskEntryHref(t)}>
                 Log
               </Link>
             ) : (
@@ -121,7 +122,7 @@ export default function TaskList({
                 </Link>
               )}
               {isFollowUpTask && (
-                <Link className={s.quickLink} href={`/tasks?contactId=${encodeURIComponent(t.contactId || '')}&taskType=follow_up`}>
+                <Link className={s.quickLink} href={followUpTaskEntryHref(t)}>
                   Follow-up
                 </Link>
               )}

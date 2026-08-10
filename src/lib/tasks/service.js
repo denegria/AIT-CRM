@@ -16,6 +16,10 @@ import {
   AUTOMATED_INBOUND_FOLLOW_UP_SOURCE_LABEL,
   planAutomatedInboundFollowUpReconciliation,
 } from './integrity-policy.js';
+import {
+  createFollowUpSelectionError,
+  FOLLOW_UP_SELECTION_ERROR_CODES,
+} from './follow-up-selection.js';
 import { supersedeOpenTaskRemovalApprovalInTransaction } from './removal-approvals.js';
 
 export { AUTOMATED_INBOUND_FOLLOW_UP_SOURCE_LABEL, isEligibleAutomatedInboundFollowUpTask } from './integrity-policy.js';
@@ -295,6 +299,7 @@ export async function listTasks({
     if (!businessUnitIds.length) return [];
     conditions.push(inArray(tasks.businessUnitId, businessUnitIds));
   }
+  if (filters.taskId) conditions.push(eq(tasks.id, filters.taskId));
   if (filters.businessUnitId) conditions.push(eq(tasks.businessUnitId, filters.businessUnitId));
   if (filters.contactId) conditions.push(eq(tasks.contactId, filters.contactId));
   if (filters.leadId) conditions.push(eq(tasks.leadId, filters.leadId));
@@ -560,22 +565,33 @@ export async function completeFollowUpTaskWithActivity({
   cancelOpenFollowUpsContext = {},
 }) {
   return db.transaction(async (tx) => {
+    if ([TASK_STATUSES.COMPLETED, TASK_STATUSES.CANCELED].includes(existingTask.status)) {
+      throw createFollowUpSelectionError(
+        'The selected follow-up task was already completed or canceled. Refresh the task queue before logging another outcome.',
+        FOLLOW_UP_SELECTION_ERROR_CODES.STALE,
+      );
+    }
+
     let [task] = await tx
       .update(tasks)
       .set(taskPatch)
       .where(and(
         eq(tasks.id, existingTask.id),
         eq(tasks.organizationId, organizationId),
+        eq(tasks.businessUnitId, existingTask.businessUnitId),
+        existingTask.contactId ? eq(tasks.contactId, existingTask.contactId) : isNull(tasks.contactId),
+        existingTask.leadId ? eq(tasks.leadId, existingTask.leadId) : isNull(tasks.leadId),
+        existingTask.ownerUserId ? eq(tasks.ownerUserId, existingTask.ownerUserId) : isNull(tasks.ownerUserId),
+        eq(tasks.taskType, TASK_TYPES.FOLLOW_UP),
         eq(tasks.status, existingTask.status),
       ))
       .returning();
 
     if (!task) {
-      throw createCrmError('Task was already updated. Refresh the queue and try again.', 409);
-    }
-
-    if ([TASK_STATUSES.COMPLETED, TASK_STATUSES.CANCELED].includes(existingTask.status)) {
-      throw createCrmError('Completed or canceled tasks must be reopened before further changes.');
+      throw createFollowUpSelectionError(
+        'The selected follow-up task changed before the outcome was saved. Refresh the task queue and select it again.',
+        FOLLOW_UP_SELECTION_ERROR_CODES.STALE,
+      );
     }
 
     await tx.insert(taskEvents).values(taskEventValues({

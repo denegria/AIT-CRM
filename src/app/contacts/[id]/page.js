@@ -31,6 +31,10 @@ import { appendContactNote, contactDetailPageState, loadContactTimeline } from '
 import { useRecordScopeRegistration } from '@/components/RecordScopeContext';
 import { InternalNoteComposer } from '@/components/ContactTimelineNoteFields';
 import FollowUpOutcomeDialog from '@/components/FollowUpOutcomeDialog';
+import {
+  buildContactFollowUpLookup,
+  followUpSubmissionTaskId,
+} from '@/lib/tasks/follow-up-selection.js';
 
 const SNAPSHOT_ICONS = {
   estimate: BriefcaseBusiness,
@@ -475,7 +479,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [followUpDraft, setFollowUpDraft] = useState(null);
   const [followUpTask, setFollowUpTask] = useState(null);
+  const [followUpRequestedTaskId, setFollowUpRequestedTaskId] = useState('');
+  const [followUpLeadId, setFollowUpLeadId] = useState(null);
   const [followUpBusy, setFollowUpBusy] = useState(false);
+  const [followUpResolving, setFollowUpResolving] = useState(false);
   const [followUpError, setFollowUpError] = useState('');
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -1193,39 +1200,70 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
   const openFollowUpModal = useCallback(() => {
     if (!contact?.id || !access.canWriteCrm) return;
+    const requestedTaskId = searchParams.get('taskId') || '';
+    const lookup = buildContactFollowUpLookup({
+      taskId: requestedTaskId,
+      leadId: searchParams.get('leadId') || '',
+      hasLeadId: searchParams.has('leadId'),
+    });
     setFollowUpDraft(defaultFollowUpDraft(contact, currentUser, ownerOptions));
     setFollowUpTask(null);
+    setFollowUpRequestedTaskId(requestedTaskId);
+    setFollowUpLeadId(null);
     setFollowUpError('');
     setFollowUpOpen(true);
     if (dataSource !== 'postgres') return;
+    setFollowUpResolving(true);
 
-    fetch(`/api/contacts/${contact.id}/follow-up`, { cache: 'no-store' })
+    fetch(`/api/contacts/${contact.id}/follow-up?${lookup.params.toString()}`, { cache: 'no-store' })
       .then(async (response) => {
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload.error || 'Follow-up task lookup failed.');
+        if (!Object.prototype.hasOwnProperty.call(payload, 'leadId')) {
+          throw new Error('Follow-up Lead context was not returned. Refresh and try again.');
+        }
+        if (requestedTaskId && payload.task?.id !== requestedTaskId) {
+          throw new Error('The selected follow-up task was not returned. Close this dialog and reopen it from the task queue.');
+        }
         setFollowUpTask(payload.task || null);
+        setFollowUpLeadId(payload.leadId || null);
       })
       .catch((error) => {
         setFollowUpError(error.message || 'Follow-up task lookup failed.');
+      })
+      .finally(() => {
+        setFollowUpResolving(false);
       });
-  }, [access.canWriteCrm, contact, currentUser, dataSource, ownerOptions]);
+  }, [access.canWriteCrm, contact, currentUser, dataSource, ownerOptions, searchParams]);
 
   const closeFollowUpModal = () => {
     if (followUpBusy) return;
     setFollowUpOpen(false);
     setFollowUpDraft(null);
     setFollowUpTask(null);
+    setFollowUpRequestedTaskId('');
+    setFollowUpLeadId(null);
+    setFollowUpResolving(false);
     setFollowUpError('');
     if (searchParams.get('action') === 'log-follow-up') {
       const next = new URLSearchParams(searchParams.toString());
       next.delete('action');
+      next.delete('taskId');
+      next.delete('contactId');
+      next.delete('leadId');
       router.replace(next.toString() ? `?${next.toString()}` : `/contacts/${contact.id}`, { scroll: false });
     }
   };
 
   useEffect(() => {
     if (searchParams.get('action') !== 'log-follow-up' || !contact?.id || !access.canWriteCrm) return;
-    const signature = `${contact.id}:log-follow-up`;
+    const requestedTaskId = searchParams.get('taskId') || '';
+    const lookup = buildContactFollowUpLookup({
+      taskId: requestedTaskId,
+      leadId: searchParams.get('leadId') || '',
+      hasLeadId: searchParams.has('leadId'),
+    });
+    const signature = `${contact.id}:log-follow-up:${requestedTaskId}:${lookup.selectionKey}`;
     if (followUpActionHandledRef.current === signature) return;
     followUpActionHandledRef.current = signature;
     openFollowUpModal();
@@ -1251,7 +1289,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   };
 
   const submitFollowUpLog = async () => {
-    if (!contact?.id || !access.canWriteCrm || !followUpDraft || followUpBusy) return;
+    if (!contact?.id || !access.canWriteCrm || !followUpDraft || followUpBusy || followUpResolving || followUpError) return;
     if (!followUpDraft.note.trim()) {
       setFollowUpError('Follow-up note is required.');
       return;
@@ -1263,6 +1301,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
+          taskId: followUpSubmissionTaskId({
+            requestedTaskId: followUpRequestedTaskId,
+            task: followUpTask,
+          }),
+          contactId: contact.id,
+          leadId: followUpLeadId,
           outcome: followUpDraft.outcome,
           channel: followUpDraft.channel,
           contactMethod: followUpDraft.contactMethod,
@@ -1277,6 +1321,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       setFollowUpOpen(false);
       setFollowUpDraft(null);
       setFollowUpTask(null);
+      setFollowUpRequestedTaskId('');
+      setFollowUpLeadId(null);
       if (searchParams.get('action') === 'log-follow-up') {
         router.replace(`/contacts/${contact.id}`, { scroll: false });
       }
@@ -2756,13 +2802,21 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         onChange={updateFollowUpDraft}
         onProfileChange={updateFollowUpLeadProfile}
         busy={followUpBusy}
+        submitDisabled={followUpResolving || Boolean(followUpError)}
         error={followUpError}
-        taskMatchText={followUpTask
-          ? `Completes oldest open follow-up task: ${followUpTask.title || 'Follow-up'} (${taskDateLabel(followUpTask.dueAt)}).`
-          : 'No open follow-up task was found. This will log follow-up history directly.'}
+        taskMatchText={followUpResolving
+          ? followUpRequestedTaskId
+            ? 'Resolving the exact selected follow-up task...'
+            : 'Resolving the selected Contact and Lead context...'
+          : followUpTask
+            ? `Completes this task: ${followUpTask.title || 'Follow-up'} (${taskDateLabel(followUpTask.dueAt)}).`
+            : followUpRequestedTaskId
+              ? 'The selected follow-up task could not be loaded. Close this dialog and reopen it from the task queue.'
+              : 'Records outreach for this Contact and does not complete or cancel any task.'}
         ownerOptions={ownerOptions}
         canManageAssignments={coordinatorUiPolicy.canManageCoordinatorAssignments}
         showProfile={isAitUsaContact}
+        title={followUpRequestedTaskId || followUpTask ? 'Complete follow-up' : 'Record outreach'}
       />
       {/* Edit Profile Dialog */}
       {isEditModalOpen && editForm && (

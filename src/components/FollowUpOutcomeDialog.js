@@ -35,6 +35,7 @@ export default function FollowUpOutcomeDialog({
   onChange,
   onProfileChange,
   busy = false,
+  submitDisabled = false,
   error = '',
   taskMatchText = '',
   ownerOptions = [],
@@ -64,7 +65,7 @@ export default function FollowUpOutcomeDialog({
             className="btn btn-primary"
             type="button"
             onClick={onSubmit}
-            disabled={busy || !draft.note.trim()}
+            disabled={busy || submitDisabled || !draft.note.trim()}
           >
             <CheckCircle2 size={16} /> {busy ? 'Saving...' : 'Save Outcome'}
           </button>

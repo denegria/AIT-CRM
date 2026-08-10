@@ -8,5 +8,8 @@ export function createCrmError(message, status = 400) {
 
 export function crmErrorResponse(error) {
   if (!error?.status) throw error;
-  return NextResponse.json({ error: error.message }, { status: error.status });
+  return NextResponse.json({
+    error: error.message,
+    ...(error.code ? { code: error.code } : {}),
+  }, { status: error.status });
 }

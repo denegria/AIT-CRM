@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { and, asc, desc, eq, inArray } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
 import {
   businessUnits,
@@ -10,7 +10,6 @@ import {
 } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import {
-  assertCanAccessContactLead,
   assertCanAssignUser,
   canAccessBusinessUnit,
   isRegularCoordinatorSession,
@@ -35,6 +34,13 @@ import {
   leadStatusForFollowUpOutcome,
   normalizeFollowUpCompletionPayload,
 } from '@/lib/tasks/follow-up.js';
+import {
+  assertExactFollowUpTaskSelection,
+  createFollowUpSelectionError,
+  FOLLOW_UP_SELECTION_ERROR_CODES,
+  resolveExactFollowUpTaskRequest,
+} from '@/lib/tasks/follow-up-selection.js';
+import { resolveFollowUpLeadContext } from '@/lib/tasks/follow-up-context.js';
 import {
   completeFollowUpTaskWithActivity,
   recordFollowUpActivity,
@@ -73,14 +79,21 @@ async function resolveOrganizationUserId(db, session, value, fieldName = 'ownerU
   return user.id;
 }
 
-async function resolveLatestLeadForContact(db, organizationId, contactId) {
+async function resolveLeadById(db, organizationId, leadId) {
+  if (!leadId) return null;
   const [lead] = await db
     .select()
     .from(leads)
-    .where(and(eq(leads.contactId, contactId), eq(leads.organizationId, organizationId)))
-    .orderBy(desc(leads.createdAt))
+    .where(and(eq(leads.id, leadId), eq(leads.organizationId, organizationId)))
     .limit(1);
   return lead || null;
+}
+
+async function listLeadsForContact(db, organizationId, contactId) {
+  return db
+    .select()
+    .from(leads)
+    .where(and(eq(leads.contactId, contactId), eq(leads.organizationId, organizationId)));
 }
 
 async function resolveBusinessUnitById(db, session, businessUnitId) {
@@ -91,34 +104,6 @@ async function resolveBusinessUnitById(db, session, businessUnitId) {
     .where(and(eq(businessUnits.id, businessUnitId), eq(businessUnits.organizationId, session.user.organizationId)))
     .limit(1);
   return businessUnit || null;
-}
-
-async function findOldestOpenFollowUpTask(db, session, contactId) {
-  if (!session.user.canAccessAllBusinessUnits && !session.user.businessUnitIds?.length) {
-    return null;
-  }
-
-  const conditions = [
-    eq(tasks.organizationId, session.user.organizationId),
-    eq(tasks.contactId, contactId),
-    eq(tasks.taskType, TASK_TYPES.FOLLOW_UP),
-    inArray(tasks.status, [TASK_STATUSES.OPEN, TASK_STATUSES.IN_PROGRESS, TASK_STATUSES.SNOOZED]),
-  ];
-  if (!session.user.canAccessAllBusinessUnits) {
-    conditions.push(inArray(tasks.businessUnitId, session.user.businessUnitIds));
-  }
-  if (isRegularCoordinatorSession(session)) {
-    conditions.push(eq(tasks.ownerUserId, session.user.id));
-  }
-
-  const [task] = await db
-    .select()
-    .from(tasks)
-    .where(and(...conditions))
-    .orderBy(asc(tasks.dueAt), asc(tasks.createdAt))
-    .limit(1);
-
-  return task || null;
 }
 
 function buildFollowUpTransition({
@@ -211,6 +196,8 @@ function safeTaskSummary(task) {
   if (!task) return null;
   return {
     id: task.id,
+    contactId: task.contactId || null,
+    leadId: task.leadId || null,
     title: task.title,
     dueAt: task.dueAt?.toISOString?.() || task.dueAt || null,
     status: task.status,
@@ -225,16 +212,59 @@ export async function GET(request, { params }) {
   const db = getDb();
 
   try {
+    const { searchParams } = new URL(request.url);
+    const requestedTaskId = optionalUuid(searchParams.get('taskId'), 'taskId');
+    const requestedLeadId = optionalUuid(searchParams.get('leadId'), 'leadId');
     const contact = await resolveContactById({
       db,
       session,
       contactsTable: contacts,
       contactId: id,
     });
-    const lead = await resolveLatestLeadForContact(db, session.user.organizationId, contact.id);
-    assertCanAccessContactLead(session, lead, contact);
-    const task = await findOldestOpenFollowUpTask(db, session, contact.id);
-    return NextResponse.json({ task: safeTaskSummary(task) });
+    const task = await resolveExactFollowUpTaskRequest({
+      requestedTaskId,
+      requestedContactId: contact.id,
+      requestedLeadId,
+      hasContactId: true,
+      hasLeadId: searchParams.has('leadId'),
+      loadTaskById: async (taskId) => (await db
+        .select()
+        .from(tasks)
+        .where(and(
+          eq(tasks.id, taskId),
+          eq(tasks.organizationId, session.user.organizationId),
+        ))
+        .limit(1))[0] || null,
+      authorizeTask: (selectedTask) => {
+        if (!canAccessBusinessUnit(session, selectedTask.businessUnitId)) {
+          throw createFollowUpSelectionError(
+            'Insufficient business-unit access.',
+            FOLLOW_UP_SELECTION_ERROR_CODES.UNAUTHORIZED,
+            403,
+          );
+        }
+        if (isRegularCoordinatorSession(session) && selectedTask.ownerUserId !== session.user.id) {
+          throw createFollowUpSelectionError(
+            'Regular coordinators can only access tasks assigned to them.',
+            FOLLOW_UP_SELECTION_ERROR_CODES.UNAUTHORIZED,
+            403,
+          );
+        }
+      },
+    });
+    const leadContext = await resolveFollowUpLeadContext({
+      session,
+      contact,
+      task,
+      requestedLeadId,
+      hasRequestedLeadId: searchParams.has('leadId'),
+      loadLeadById: (leadId) => resolveLeadById(db, session.user.organizationId, leadId),
+      loadLeadsForContact: (contactId) => listLeadsForContact(db, session.user.organizationId, contactId),
+    });
+    return NextResponse.json({
+      task: safeTaskSummary(task),
+      leadId: leadContext.leadId,
+    });
   } catch (err) {
     return crmErrorResponse(err);
   }
@@ -257,35 +287,60 @@ export async function POST(request, { params }) {
       contactId: id,
     });
     const explicitTaskId = optionalUuid(body.taskId, 'taskId');
+    const requestedContactId = optionalUuid(body.contactId, 'contactId');
+    const requestedLeadId = optionalUuid(body.leadId, 'leadId');
+    if (!Object.prototype.hasOwnProperty.call(body, 'contactId') ||
+        !Object.prototype.hasOwnProperty.call(body, 'leadId')) {
+      throw createFollowUpSelectionError(
+        'Follow-up logging requires the selected contact and lead identifiers. Reopen the follow-up and try again.',
+        FOLLOW_UP_SELECTION_ERROR_CODES.MISSING_IDENTIFIERS,
+        400,
+      );
+    }
+    if (requestedContactId !== contact.id) {
+      throw createFollowUpSelectionError(
+        'The follow-up request no longer matches this contact. Refresh and try again.',
+        FOLLOW_UP_SELECTION_ERROR_CODES.MISMATCH,
+      );
+    }
     const existingTask = explicitTaskId
-      ? (await db
+      ? ((await db
           .select()
           .from(tasks)
           .where(and(
             eq(tasks.id, explicitTaskId),
             eq(tasks.organizationId, session.user.organizationId),
-            eq(tasks.contactId, contact.id),
-            eq(tasks.taskType, TASK_TYPES.FOLLOW_UP),
           ))
-          .limit(1))[0]
-      : await findOldestOpenFollowUpTask(db, session, contact.id);
+          .limit(1))[0] || null)
+      : null;
 
-    if (explicitTaskId && !existingTask) throw createCrmError('Follow-up task not found.', 404);
     if (existingTask && !canAccessBusinessUnit(session, existingTask.businessUnitId)) {
       throw createCrmError('Insufficient business-unit access.', 403);
     }
     if (existingTask && isRegularCoordinatorSession(session) && existingTask.ownerUserId !== session.user.id) {
       throw createCrmError('Regular coordinators can only access tasks assigned to them.', 403);
     }
+    if (explicitTaskId) {
+      assertExactFollowUpTaskSelection({
+        task: existingTask,
+        requestedTaskId: explicitTaskId,
+        requestedContactId,
+        requestedLeadId,
+        hasContactId: true,
+        hasLeadId: true,
+      });
+    }
 
-    const lead = existingTask?.leadId
-      ? (await db
-          .select()
-          .from(leads)
-          .where(and(eq(leads.id, existingTask.leadId), eq(leads.organizationId, session.user.organizationId)))
-          .limit(1))[0] || null
-      : await resolveLatestLeadForContact(db, session.user.organizationId, contact.id);
-    assertCanAccessContactLead(session, lead, contact);
+    const leadContext = await resolveFollowUpLeadContext({
+      session,
+      contact,
+      task: existingTask,
+      requestedLeadId,
+      hasRequestedLeadId: true,
+      loadLeadById: (leadId) => resolveLeadById(db, session.user.organizationId, leadId),
+      loadLeadsForContact: (contactId) => listLeadsForContact(db, session.user.organizationId, contactId),
+    });
+    const lead = leadContext.lead;
 
     const businessUnitId = existingTask?.businessUnitId || lead?.businessUnitId || contact.primaryBusinessUnitId;
     if (!businessUnitId) throw createCrmError('A business unit is required to log follow-up.');
@@ -417,11 +472,7 @@ export async function POST(request, { params }) {
       contactPatch: contactPatchForFollowUpOutcome(completion.outcome, now),
       leadPatch: transition.leadPatch,
       leadStatusChange: transition.leadStatusChange,
-      cancelOpenFollowUps: isNoFurtherProspectingLifecycleStatus(transition.leadStatusChange?.toStatus),
-      cancelOpenFollowUpsContext: {
-        source: 'follow_up_activity',
-        lifecycleStatus: transition.leadStatusChange?.toStatus || null,
-      },
+      cancelOpenFollowUps: false,
       profileActivity: transition.profileActivity,
       nextTaskValues,
       nextTaskEventMetadata: compactObject({

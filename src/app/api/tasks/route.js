@@ -34,6 +34,8 @@ import {
   leadStatusForFollowUpOutcome,
   normalizeFollowUpCompletionPayload,
 } from '@/lib/tasks/follow-up.js';
+import { assertExactFollowUpTaskSelection } from '@/lib/tasks/follow-up-selection.js';
+import { resolveExactFollowUpTaskContext } from '@/lib/tasks/follow-up-context.js';
 import {
   buildTaskTransition,
   nextRecurringDueAt,
@@ -199,6 +201,16 @@ async function resolveLeadById(db, session, leadId) {
   return lead;
 }
 
+async function loadOrganizationLeadById(db, organizationId, leadId) {
+  if (!leadId) return null;
+  const [lead] = await db
+    .select()
+    .from(leads)
+    .where(and(eq(leads.id, leadId), eq(leads.organizationId, organizationId)))
+    .limit(1);
+  return lead || null;
+}
+
 async function resolveWorkOrderById(db, session, workOrderId) {
   if (!workOrderId) return null;
   const [workOrder] = await db
@@ -358,6 +370,7 @@ export async function GET(request) {
       : session.user.businessUnitIds;
 
     const filters = {
+      taskId: optionalUuid(searchParams.get('taskId'), 'taskId'),
       contactId: optionalUuid(searchParams.get('contactId'), 'contactId'),
       leadId: optionalUuid(searchParams.get('leadId'), 'leadId'),
       workOrderId: optionalUuid(searchParams.get('workOrderId'), 'workOrderId'),
@@ -601,6 +614,31 @@ export async function PATCH(request) {
     }
 
     if (String(body.action || '').trim() === 'complete' && existingTask.taskType === TASK_TYPES.FOLLOW_UP) {
+      const requestedContactId = optionalUuid(body.contactId, 'contactId');
+      const requestedLeadId = optionalUuid(body.leadId, 'leadId');
+      assertExactFollowUpTaskSelection({
+        task: existingTask,
+        requestedTaskId: id,
+        requestedContactId,
+        requestedLeadId,
+        hasContactId: Object.prototype.hasOwnProperty.call(body, 'contactId'),
+        hasLeadId: Object.prototype.hasOwnProperty.call(body, 'leadId'),
+      });
+      const exactContext = await resolveExactFollowUpTaskContext({
+        session,
+        task: existingTask,
+        loadContactById: (contactId) => resolveContactById({
+          db,
+          session,
+          contactsTable: contacts,
+          contactId,
+        }),
+        loadLeadById: (leadId) => loadOrganizationLeadById(
+          db,
+          session.user.organizationId,
+          leadId,
+        ),
+      });
       const now = new Date();
       const effectiveOwnerUserId = existingTask.ownerUserId || session.user.id;
       const completion = normalizeFollowUpCompletionPayload({
@@ -609,13 +647,7 @@ export async function PATCH(request) {
         now,
       });
       const businessUnit = await resolveBusinessUnitById(db, session, existingTask.businessUnitId);
-      const [lead] = existingTask.leadId
-        ? await db
-            .select()
-            .from(leads)
-            .where(and(eq(leads.id, existingTask.leadId), eq(leads.organizationId, session.user.organizationId)))
-            .limit(1)
-        : [];
+      const lead = exactContext.lead;
       const suggestedLeadStatus = leadStatusForFollowUpOutcome(completion.outcome, businessUnit);
       const leadProfilePatch = leadProfilePatchFromPayload(body, { allowClear: false });
       const leadProfileDbPatch = leadProfilePatchToDrizzleValues(leadProfilePatch);

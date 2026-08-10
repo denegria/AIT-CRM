@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   CheckCircle2,
   Pencil,
@@ -52,6 +52,10 @@ import {
   TASK_CANCELLATION_DECISIONS,
   taskCancellationDecision,
 } from '@/lib/tasks/cancellation-policy.js';
+import {
+  assertExactFollowUpTaskSelection,
+  clearedFollowUpTaskEntryHref,
+} from '@/lib/tasks/follow-up-selection.js';
 import s from './FollowUpQueue.module.css';
 
 const TASK_TYPE_OPTIONS = [
@@ -309,6 +313,7 @@ export default function FollowUpQueuePage() {
     leanShellIsDeferred,
   } = useCRM();
   const { toast } = useToast();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
   const canReviewArchiveApprovalTasks = useMemo(() => canReviewArchiveApprovals(currentUser), [currentUser]);
@@ -318,6 +323,7 @@ export default function FollowUpQueuePage() {
   );
   const lockedTaskOwnerFilter = coordinatorUiPolicy.ownerScoped && currentUser?.id ? '__me' : '';
   const prefillSignatureRef = useRef('');
+  const followUpEntrySignatureRef = useRef('');
   const newTaskTriggerRef = useRef(null);
   const followUpOutcomeTriggerRef = useRef(null);
   const createFormRef = useRef(null);
@@ -503,7 +509,7 @@ export default function FollowUpQueuePage() {
     };
   }, [currentBusinessUnitId]);
 
-  const readTasks = useCallback(async () => {
+  const readTasks = useCallback(async ({ ignoreExactEntry = false } = {}) => {
     if (dataSource !== 'postgres') {
       setQueueTasks((tasks || []).map((task) => normalizeTask(task, contacts)));
       setAssignees(fallbackAssignees);
@@ -514,13 +520,20 @@ export default function FollowUpQueuePage() {
     setLoading(true);
     setError('');
     const params = new URLSearchParams();
-    if (filters.businessUnitId !== 'all') params.set('businessUnitId', filters.businessUnitId);
-    if (filters.ownerUserId !== 'all' && filters.ownerUserId !== 'unassigned') {
-      params.set('ownerUserId', filters.ownerUserId === '__me' ? currentUser?.id || '' : filters.ownerUserId);
+    const selectedFollowUpTaskId = !ignoreExactEntry && searchParams.get('action') === 'log-follow-up'
+      ? searchParams.get('taskId') || ''
+      : '';
+    if (selectedFollowUpTaskId) {
+      params.set('taskId', selectedFollowUpTaskId);
+    } else {
+      if (filters.businessUnitId !== 'all') params.set('businessUnitId', filters.businessUnitId);
+      if (filters.ownerUserId !== 'all' && filters.ownerUserId !== 'unassigned') {
+        params.set('ownerUserId', filters.ownerUserId === '__me' ? currentUser?.id || '' : filters.ownerUserId);
+      }
+      if (filters.ownerUserId === 'unassigned') params.set('unassigned', 'true');
+      if (filters.taskType !== 'all') params.set('taskType', filters.taskType);
+      if (filters.status !== 'all') params.set('status', filters.status);
     }
-    if (filters.ownerUserId === 'unassigned') params.set('unassigned', 'true');
-    if (filters.taskType !== 'all') params.set('taskType', filters.taskType);
-    if (filters.status !== 'all') params.set('status', filters.status);
 
     try {
       const response = await fetch(`/api/tasks?${params.toString()}`, { cache: 'no-store' });
@@ -536,7 +549,13 @@ export default function FollowUpQueuePage() {
     } finally {
       setLoading(false);
     }
-  }, [contacts, currentUser?.id, dataSource, fallbackAssignees, filters.businessUnitId, filters.ownerUserId, filters.status, filters.taskType, leanShellIsDeferred, tasks]);
+  }, [contacts, currentUser?.id, dataSource, fallbackAssignees, filters.businessUnitId, filters.ownerUserId, filters.status, filters.taskType, leanShellIsDeferred, searchParams, tasks]);
+
+  const consumeExactFollowUpEntry = useCallback(async () => {
+    if (searchParams.get('action') !== 'log-follow-up') return;
+    router.replace(clearedFollowUpTaskEntryHref(searchParams), { scroll: false });
+    await readTasks({ ignoreExactEntry: true });
+  }, [readTasks, router, searchParams]);
 
   useEffect(() => {
     let cancelled = false;
@@ -689,6 +708,10 @@ export default function FollowUpQueuePage() {
 
   async function applyTaskAction(task, action, payload = {}) {
     if (!access.canWriteCrm) return;
+    const completesExactFollowUpEntry = action === 'complete' &&
+      task.taskType === 'follow_up' &&
+      searchParams.get('action') === 'log-follow-up' &&
+      searchParams.get('taskId') === task.id;
     setBusyTaskId(task.id);
     setError('');
     let createdNextTask = false;
@@ -698,7 +721,15 @@ export default function FollowUpQueuePage() {
         const response = await fetch('/api/tasks', {
           method: 'PATCH',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ id: task.id, action, ...payload }),
+          body: JSON.stringify({
+            id: task.id,
+            action,
+            ...(action === 'complete' && task.taskType === 'follow_up' ? {
+              contactId: task.contactId || null,
+              leadId: task.leadId || null,
+            } : {}),
+            ...payload,
+          }),
         });
         const result = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(result.error || 'Task update failed.');
@@ -771,6 +802,7 @@ export default function FollowUpQueuePage() {
           delete next[task.id];
           return next;
         });
+        if (completesExactFollowUpEntry) await consumeExactFollowUpEntry();
       }
       if (action === 'approve_archive' || action === 'deny_archive') {
         setArchiveDecisionDrafts((prev) => {
@@ -957,7 +989,7 @@ export default function FollowUpQueuePage() {
   useEffect(() => {
     let cancelled = false;
     const contactId = searchParams.get('contactId') || '';
-    if (!contactId) return undefined;
+    if (!contactId || searchParams.get('action') === 'log-follow-up') return undefined;
     const taskTypeParam = searchParams.get('taskType') || '';
     const signature = `${contactId}:${taskTypeParam}`;
     if (prefillSignatureRef.current === signature) return undefined;
@@ -995,6 +1027,43 @@ export default function FollowUpQueuePage() {
       cancelled = true;
     };
   }, [accessibleBusinessUnits, accessibleContacts, coordinatorUiPolicy.lockedOwnerUserId, currentBusinessUnitId, currentUser, searchParams, visibleAssignees]);
+
+  useEffect(() => {
+    if (searchParams.get('action') !== 'log-follow-up') {
+      followUpEntrySignatureRef.current = '';
+      return;
+    }
+    if (loading) return;
+    if (dataSource !== 'postgres' && !queueTasks.length && tasks.length) return;
+    const taskId = searchParams.get('taskId') || '';
+    const contactId = searchParams.get('contactId') || '';
+    const leadId = searchParams.get('leadId') || '';
+    const signature = `${taskId}:${contactId}:${leadId}`;
+    if (followUpEntrySignatureRef.current === signature) return;
+    followUpEntrySignatureRef.current = signature;
+
+    let selectedTaskId = '';
+    let selectionMessage = '';
+    try {
+      const task = queueTasks.find((row) => row.id === taskId) || null;
+      assertExactFollowUpTaskSelection({
+        task,
+        requestedTaskId: taskId,
+        requestedContactId: contactId || null,
+        requestedLeadId: leadId || null,
+        hasContactId: searchParams.has('contactId'),
+        hasLeadId: searchParams.has('leadId'),
+      });
+      selectedTaskId = task.id;
+    } catch (selectionError) {
+      selectionMessage = selectionError.message || 'The selected follow-up task could not be opened.';
+    }
+
+    queueMicrotask(() => {
+      setCompletionTaskId(selectedTaskId);
+      setError(selectionMessage);
+    });
+  }, [dataSource, loading, queueTasks, searchParams, tasks.length]);
 
   async function submitCreatedTask(event) {
     event.preventDefault();
@@ -1153,6 +1222,12 @@ export default function FollowUpQueuePage() {
       nextOwnerUserId: draft.nextOwnerUserId || task.ownerUserId || null,
       ...(coordinatorUiPolicy.lockedOwnerUserId ? { nextOwnerUserId: coordinatorUiPolicy.lockedOwnerUserId } : {}),
     });
+  }
+
+  async function closeFollowUpOutcome() {
+    if (busyTaskId) return;
+    setCompletionTaskId('');
+    await consumeExactFollowUpEntry();
   }
 
   function openTaskActionPanel(taskId) {
@@ -1386,7 +1461,7 @@ export default function FollowUpQueuePage() {
             <Plus size={14} />
             New Task
           </button>
-          <button className="btn btn-sm" onClick={readTasks} disabled={loading}>
+          <button className="btn btn-sm" onClick={() => readTasks()} disabled={loading}>
             <RefreshCcw size={14} />
             Refresh
           </button>
@@ -1718,7 +1793,7 @@ export default function FollowUpQueuePage() {
             size="compact"
             title="Task queue could not load"
             copy={error}
-            actions={<PageStateAction onClick={readTasks}>Try Again</PageStateAction>}
+            actions={<PageStateAction onClick={() => readTasks()}>Try Again</PageStateAction>}
           />
         )}
 
@@ -2133,7 +2208,7 @@ export default function FollowUpQueuePage() {
       </section>
       <FollowUpOutcomeDialog
         open={Boolean(activeFollowUpTask && activeFollowUpDraft)}
-        onClose={() => busyTaskId !== activeFollowUpTask?.id && setCompletionTaskId('')}
+        onClose={closeFollowUpOutcome}
         onSubmit={() => activeFollowUpTask && submitFollowUpCompletion(activeFollowUpTask)}
         draft={activeFollowUpDraft}
         onChange={(patch) => activeFollowUpTask && updateFollowUpDraft(activeFollowUpTask.id, patch)}
