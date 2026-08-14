@@ -52,7 +52,10 @@
     "test:attendance": "node --test src/lib/attendance/*.test.js src/lib/crm/class-sections.test.js src/lib/crm/access.test.js",
     "verify:attendance-schema": "node scripts/verify-attendance-schema.mjs",
     "qa:db-branch": "node scripts/qa-db-branch.mjs",
-    "test:qa-db-branch": "node --test scripts/qa-db-branch.test.mjs src/lib/runtime-safety.test.js"
+    "test:qa-db-branch": "node --test scripts/qa-db-branch.test.mjs src/lib/runtime-safety.test.js",
+    "test": "node ./scripts/run-tests.mjs",
+    "check:repository": "node ./scripts/check-repository.mjs",
+    "validate": "npm run check:repository && npm test && npm run test:follow-up-outcome && npm run lint && npm run build"
   },
   "dependencies": {
     "drizzle-kit": "^0.31.10",
