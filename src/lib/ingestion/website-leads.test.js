@@ -517,6 +517,26 @@ test('creates a notification after a new website lead is promoted', async () => 
   assert.equal(taskInsert.params[12], 'New lead follow-up');
 });
 
+test('AIT Signs website ingestion preserves the legacy one-submission contact and lead creation path', async () => {
+  const { client, calls } = createWebsitePromotionClient();
+  const result = await ingestWebsiteLeadSubmission(client, {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-1',
+    businessUnit: { id: 'bu-1', name: 'AIT Signs' },
+    body: {
+      externalId: 'ait-signs-regression-001',
+      fullName: 'Signs Customer',
+      email: 'signs-customer@example.com',
+      message: 'Need storefront signs',
+    },
+  });
+  assert.equal(result.contactId, 'contact-1');
+  assert.equal(result.leadId, 'lead-1');
+  assert.equal(calls.filter((call) => call.sql.startsWith('insert into contacts')).length, 1);
+  assert.equal(calls.filter((call) => call.sql.startsWith('insert into leads')).length, 1);
+  assert.equal(calls.some((call) => call.sql.startsWith('select id, organization_id, business_unit_id, contact_id, status')), false);
+});
+
 test('AIT USA website inquiries reuse the sole active Opportunity and preserve its source and owner', async () => {
   const { client, calls } = createWebsitePromotionClient({
     existingContactId: 'contact-1',

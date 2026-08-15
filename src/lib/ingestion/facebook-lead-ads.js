@@ -473,7 +473,7 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
     });
   }
 
-  await client.query(
+  const captureActivity = await client.query(
     `
       insert into activity_events
       (organization_id, business_unit_id, contact_id, lead_id, event_type, message, source_sheet, source_row, occurred_at)
@@ -487,6 +487,7 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
           and source_sheet = $6
           and source_row = $7
       )
+      returning id
     `,
     [
       organizationId,
@@ -498,7 +499,7 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
       rowNumber,
     ],
   );
-  if (!createdOpportunity && extraFieldNotes.length) {
+  if (!createdOpportunity && extraFieldNotes.length && captureActivity.rows.length > 0) {
     await client.query(
       `insert into notes (organization_id, business_unit_id, contact_id, lead_id, body)
        values ($1, $2, $3, $4, $5)`,

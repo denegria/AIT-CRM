@@ -6,7 +6,7 @@ import PageState from '@/components/PageState';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
 import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import { validateManualContactIdentity } from '@/lib/crm/contact-input';
-import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
+import { isClosedLifecycleStatus, WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
 import {
   buildContactDirectoryFacetGroups,
   CONTACT_DIRECTORY_FACET_GROUPS,
@@ -64,6 +64,7 @@ import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import TimeframeFilterPanel from '@/components/TimeframeFilterPanel';
 import { ContactDialogInitialTimelineNote } from '@/components/ContactTimelineNoteFields';
+import ContactTerminalStatusReasonField from '@/components/ContactTerminalStatusReasonField';
 import { Activity, AlertCircle, BadgeDollarSign, Check, Clock3, ListFilter, PhoneOff, RotateCcw, UserRoundCheck, UsersRound, X } from 'lucide-react';
 
 const empty = {
@@ -79,6 +80,7 @@ const empty = {
   tags: [],
   nextAction: '',
   appendNote: '',
+  terminalStatusReason: '',
 };
 
 const CONTACT_FILTER_CHIP_LABELS = {
@@ -610,6 +612,15 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       : (!String(form.name || '').trim() ? 'Contact name is required.' : '');
     if (validationError) {
       setFormError(validationError);
+      return;
+    }
+    if (
+      drawer === 'new' &&
+      isAitUsaForm &&
+      isClosedLifecycleStatus(form.status, { businessUnit: formBusinessUnit }) &&
+      !String(form.terminalStatusReason || '').trim()
+    ) {
+      setFormError('Outcome reason is required when an AIT USA Opportunity starts in a closed status.');
       return;
     }
     setFormError('');
@@ -1474,6 +1485,15 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                   ].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>
+              <ContactTerminalStatusReasonField
+                visible={Boolean(
+                  drawer === 'new' &&
+                  isAitUsaForm &&
+                  isClosedLifecycleStatus(form.status, { businessUnit: formBusinessUnit })
+                )}
+                value={form.terminalStatusReason || ''}
+                onChange={e => setForm(f => ({ ...f, terminalStatusReason: e.target.value }))}
+              />
               <div className="form-group">
                 <label className="form-label">Source</label>
                 <select className="input select" value={form.source} onChange={e => setForm(f => ({...f, source: e.target.value}))}>

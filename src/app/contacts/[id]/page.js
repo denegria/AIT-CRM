@@ -32,6 +32,7 @@ import { useRecordScopeRegistration } from '@/components/RecordScopeContext';
 import { InternalNoteComposer } from '@/components/ContactTimelineNoteFields';
 import FollowUpOutcomeDialog from '@/components/FollowUpOutcomeDialog';
 import OpportunityLifecycleField from '@/components/OpportunityLifecycleField';
+import { buildContactProfilePatch } from '@/lib/crm/contact-profile-patch.js';
 import {
   buildContactFollowUpLookup,
   followUpSubmissionTaskId,
@@ -1201,24 +1202,15 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       editForm.status !== contact.status &&
       isEnrolledWorkflowStatus(editForm.status) &&
       !activeCourseRecord;
-    const profilePatch = { ...editForm };
-    delete profilePatch.notes;
-    delete profilePatch.timeline;
-    if (isAitUsaContact && !contact.hasLeadStatus) {
-      delete profilePatch.status;
-      delete profilePatch.currentStage;
-      delete profilePatch.opportunityId;
-      delete profilePatch.assignedTo;
-      delete profilePatch.leadProfile;
-      delete profilePatch.courseMetadata;
-    }
-    updateContact(contact.id, {
-      ...profilePatch,
-      ...(coordinatorUiPolicy.lockedOwnerUserId ? { assignedTo: coordinatorUiPolicy.lockedOwnerUserId } : {}),
-      statusChangeReason: isClosedStatusReopen ? editForm.statusChangeReason : '',
-      terminalStatusReason: isEnteringClosedStatus ? editForm.terminalStatusReason : '',
-      ...(editForm.leadProfile ? { leadProfile: editForm.leadProfile } : {}),
-    })
+    const profilePatch = buildContactProfilePatch({
+      editForm,
+      contact,
+      isAitUsa: isAitUsaContact,
+      lockedOwnerUserId: coordinatorUiPolicy.lockedOwnerUserId,
+      isClosedStatusReopen,
+      isEnteringClosedStatus,
+    });
+    updateContact(contact.id, profilePatch)
       .then(() => {
         toast('Profile updated');
         setTimelineReloadKey((key) => key + 1);
@@ -2949,6 +2941,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <OpportunityLifecycleField
                       isAitUsa={isAitUsaContact}
                       hasLeadStatus={contact.hasLeadStatus}
+                      opportunityConflict={contact.opportunityConflict}
                       status={editForm.status}
                       statuses={contactStatusOptions || PIPELINE_STATUSES}
                       onStatusChange={e => setEditForm({...editForm, status: e.target.value, terminalStatusReason: ''})}
@@ -3038,7 +3031,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
                   <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-owner">Assigned To</label>
-                    <select id="profile-edit-owner" className="input select" value={editForm.assignedTo || ''} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
+                    <select id="profile-edit-owner" className="input select" value={editForm.assignedTo || ''} disabled={Boolean(isAitUsaContact && contact.opportunityConflict)} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
                       <option value="">Unassigned</option>
                       {ownerOptions.map((owner) => (
                         <option key={owner.id} value={owner.id}>{owner.label}</option>

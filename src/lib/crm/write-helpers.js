@@ -117,8 +117,8 @@ export async function createContactWithLead({
   });
 }
 
-export async function updateContactWithLeadAndNotes({
-  db,
+export async function updateContactWithLeadAndNotesInTransaction({
+  tx,
   organizationId,
   actorUserId,
   contactId,
@@ -129,7 +129,6 @@ export async function updateContactWithLeadAndNotes({
   appendNote = null,
   addFollowUpNote = null,
 }) {
-  return db.transaction(async (tx) => {
     const [contact] = await tx
       .update(contacts)
       .set(contactPatch)
@@ -236,7 +235,13 @@ export async function updateContactWithLeadAndNotes({
       noteRows,
       activityEventRows: await activityEventsForContact(tx, organizationId, contactId),
     };
-  });
+}
+
+export async function updateContactWithLeadAndNotes({ db, ...values }) {
+  return db.transaction((tx) => updateContactWithLeadAndNotesInTransaction({
+    tx,
+    ...values,
+  }));
 }
 
 export async function createWorkOrderWithActivity({

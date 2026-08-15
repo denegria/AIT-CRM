@@ -1,14 +1,23 @@
 import { NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
-import { businessUnits, contacts, users } from '@/db/schema.js';
+import {
+  businessUnitMemberships,
+  businessUnits,
+  contacts,
+  roles,
+  userRoles,
+  users,
+} from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import {
   assertCanAssignUser,
+  assertCanAccessContactLead,
   canAccessBusinessUnit,
   canAccessContact,
   isRegularCoordinatorSession,
 } from '@/lib/crm/access.js';
+import { isAssignableEmployee } from '@/lib/crm/assignable-employees.js';
 import {
   isClosedLifecycleStatus,
   requireLifecycleStatus,
@@ -23,6 +32,50 @@ import { isUuid } from '@/lib/crm/validation.js';
 
 function jsonError(error, status = 400) {
   return NextResponse.json({ error }, { status });
+}
+
+async function resolveStartOpportunityOwner(db, session, requestedOwnerId, businessUnitId) {
+  const assignedUserId = isRegularCoordinatorSession(session)
+    ? session.user.id
+    : String(requestedOwnerId || '').trim() || null;
+  if (!assignedUserId) return null;
+  if (!isUuid(assignedUserId)) throw Object.assign(new Error('Assigned user must be a valid user id.'), { status: 400 });
+  assertCanAssignUser(session, assignedUserId);
+
+  const [assignedUser] = await db
+    .select({ id: users.id, name: users.name, email: users.email, isActive: users.isActive })
+    .from(users)
+    .where(and(
+      eq(users.id, assignedUserId),
+      eq(users.organizationId, session.user.organizationId),
+    ))
+    .limit(1);
+  if (!assignedUser || assignedUser.isActive === false) {
+    throw Object.assign(new Error('Selected assignee is not active in this organization.'), { status: 400 });
+  }
+
+  const [roleRows, membershipRows] = await Promise.all([
+    db
+      .select({ key: roles.key })
+      .from(userRoles)
+      .innerJoin(roles, eq(userRoles.roleId, roles.id))
+      .where(and(
+        eq(userRoles.userId, assignedUserId),
+        eq(roles.organizationId, session.user.organizationId),
+      )),
+    db
+      .select({ businessUnitId: businessUnitMemberships.businessUnitId })
+      .from(businessUnitMemberships)
+      .where(eq(businessUnitMemberships.userId, assignedUserId)),
+  ]);
+  const roleKeys = roleRows.map((row) => row.key).filter(Boolean);
+  if (!isAssignableEmployee({ ...assignedUser, roleKeys })) {
+    throw Object.assign(new Error('Selected assignee is not assignable to CRM Opportunities.'), { status: 400 });
+  }
+  if (roleKeys.includes('admin') || membershipRows.some((row) => row.businessUnitId === businessUnitId)) {
+    return assignedUserId;
+  }
+  throw Object.assign(new Error('Selected assignee does not belong to this Opportunity business unit.'), { status: 400 });
 }
 
 export async function POST(
@@ -55,6 +108,11 @@ export async function POST(
     .limit(1);
   if (!contact) return jsonError('Contact not found.', 404);
   if (!canAccessContact(session, contact)) return jsonError('Insufficient business-unit access.', 403);
+  try {
+    assertCanAccessContactLead(session, null, contact);
+  } catch (accessError) {
+    return jsonError(accessError.message, accessError.status || 403);
+  }
   if (contact.primaryBusinessUnitId !== businessUnitId) {
     return jsonError('Opportunity business unit must match the Contact business unit.', 409);
   }
@@ -87,25 +145,11 @@ export async function POST(
     return jsonError('A reason is required to start an Opportunity in a closed status.');
   }
 
-  let assignedUserId = String(body.assignedTo || '').trim() || null;
-  if (isRegularCoordinatorSession(session)) assignedUserId = session.user.id;
-  if (assignedUserId) {
-    if (!isUuid(assignedUserId)) return jsonError('Assigned user must be a valid user id.');
-    try {
-      assertCanAssignUser(session, assignedUserId);
-    } catch (assignmentError) {
-      return jsonError(assignmentError.message, assignmentError.status || 403);
-    }
-    const [assignedUser] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(and(
-        eq(users.id, assignedUserId),
-        eq(users.organizationId, session.user.organizationId),
-        eq(users.isActive, true),
-      ))
-      .limit(1);
-    if (!assignedUser) return jsonError('Assigned user not found.', 404);
+  let assignedUserId;
+  try {
+    assignedUserId = await resolveStartOpportunityOwner(db, session, body.assignedTo, businessUnitId);
+  } catch (assignmentError) {
+    return jsonError(assignmentError.message, assignmentError.status || 400);
   }
 
   const result = await startOpportunityForRequest({

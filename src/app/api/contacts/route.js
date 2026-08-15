@@ -37,10 +37,12 @@ import {
   createContactWithLead,
   latestLeadForContact,
   updateContactWithLeadAndNotes,
+  updateContactWithLeadAndNotesInTransaction,
 } from '@/lib/crm/write-helpers.js';
 import {
   loadScopedOpportunityById,
   resolveAitUsaActiveOpportunity,
+  withLockedAitUsaClosedOpportunityReopen,
 } from '@/lib/crm/ait-usa-opportunities.js';
 import { createOrReuseArchiveApprovalTask } from '@/lib/tasks/archive-approvals.js';
 import { toTaskPayload } from '@/lib/tasks/service.js';
@@ -49,6 +51,7 @@ import { summarizeContactTouch } from '@/lib/contact-touch.js';
 import { buildAitUsaEnrollmentSignals } from '@/lib/ait-usa-enrollment-signals.js';
 import { loadContactDirectoryPage } from '@/lib/contact-directory/service.js';
 import { canonicalAitUsaSchoolLocation } from '@/lib/school-locations.js';
+import { hasOpportunityMutationRequest } from '@/lib/crm/contact-profile-patch.js';
 
 export async function GET(request) {
   const { error, session } = await requirePermission(request, PERMISSIONS.CRM_READ);
@@ -109,6 +112,8 @@ export function toContactPayload(row, lead = null, noteRows = [], businessUnit =
     businessUnitName: businessUnit?.name || '',
     hasLeadStatus: Boolean(lead),
     opportunityId: lead?.id || '',
+    opportunityConflict: Boolean(row.opportunityConflict),
+    activeOpportunityCount: Number(row.activeOpportunityCount || 0),
     workflowKey: workflow.workflowKey,
     workflowLabel: workflow.workflowLabel,
     status: workflow.status,
@@ -303,8 +308,17 @@ export async function POST(request) {
   return NextResponse.json({ contact: toContactPayload(contact, lead, noteRows, businessUnit) }, { status: 201 });
 }
 
-export async function PATCH(request) {
-  const { error, session } = await requirePermission(request, PERMISSIONS.CRM_WRITE);
+export async function PATCH(request, _context = {}, overrides = {}) {
+  const requirePermissionForRequest = overrides.requirePermissionForRequest || requirePermission;
+  const getDbForRequest = overrides.getDbForRequest || getDb;
+  const latestLeadForContactForRequest = overrides.latestLeadForContactForRequest || latestLeadForContact;
+  const loadBusinessUnitForRequest = overrides.loadBusinessUnitForRequest || loadBusinessUnitForWorkflow;
+  const resolveActiveOpportunityForRequest = overrides.resolveActiveOpportunityForRequest || resolveAitUsaActiveOpportunity;
+  const loadScopedOpportunityForRequest = overrides.loadScopedOpportunityForRequest || loadScopedOpportunityById;
+  const updateContactForRequest = overrides.updateContactForRequest || updateContactWithLeadAndNotes;
+  const updateContactInTransactionForRequest = overrides.updateContactInTransactionForRequest || updateContactWithLeadAndNotesInTransaction;
+  const withLockedReopenForRequest = overrides.withLockedReopenForRequest || withLockedAitUsaClosedOpportunityReopen;
+  const { error, session } = await requirePermissionForRequest(request, PERMISSIONS.CRM_WRITE);
   if (error) return error;
 
   const body = await request.json().catch(() => ({}));
@@ -316,7 +330,7 @@ export async function PATCH(request) {
     return NextResponse.json({ error: 'A valid contact id is required.' }, { status: 400 });
   }
 
-  const db = getDb();
+  const db = getDbForRequest();
   const [existing] = await db
     .select()
     .from(contacts)
@@ -352,14 +366,15 @@ export async function PATCH(request) {
     }
   }
 
-  let lead = await latestLeadForContact(db, session.user.organizationId, id);
+  let lead = await latestLeadForContactForRequest(db, session.user.organizationId, id);
   const statusBusinessUnitId = hasBusinessUnitPatch && patch.primaryBusinessUnitId
     ? patch.primaryBusinessUnitId
     : existing.primaryBusinessUnitId || lead?.businessUnitId;
-  const statusBusinessUnit = await loadBusinessUnitForWorkflow(db, session, statusBusinessUnitId);
+  const statusBusinessUnit = await loadBusinessUnitForRequest(db, session, statusBusinessUnitId);
   const isAitUsaWorkflow = workflowKeyForBusinessUnit(statusBusinessUnit) === WORKFLOW_KEYS.AIT_USA;
+  let hasAitUsaOpportunityConflict = false;
   if (isAitUsaWorkflow) {
-    const activeOpportunity = await resolveAitUsaActiveOpportunity({
+    const activeOpportunity = await resolveActiveOpportunityForRequest({
       client: db,
       organization: session.user.organizationId,
       businessUnit: statusBusinessUnit,
@@ -367,13 +382,16 @@ export async function PATCH(request) {
       lock: false,
     });
     if (activeOpportunity.status === 'ambiguous') {
-      return NextResponse.json(
-        { error: 'This Contact has multiple active Opportunities. Review and resolve the conflict before editing status.' },
-        { status: 409 },
-      );
+      hasAitUsaOpportunityConflict = true;
+      if (hasOpportunityMutationRequest(body)) {
+        return NextResponse.json(
+          { error: 'This Contact has multiple active Opportunities. Review and resolve the conflict before editing Opportunity fields.' },
+          { status: 409 },
+        );
+      }
     }
     if (activeOpportunity.status === 'exact') {
-      lead = await loadScopedOpportunityById(db, {
+      lead = await loadScopedOpportunityForRequest(db, {
         organizationId: session.user.organizationId,
         businessUnitId: statusBusinessUnit.id,
         contactId: id,
@@ -383,7 +401,7 @@ export async function PATCH(request) {
       if (!isUuid(body.opportunityId)) {
         return NextResponse.json({ error: 'Selected Opportunity id is invalid.' }, { status: 400 });
       }
-      lead = await loadScopedOpportunityById(db, {
+      lead = await loadScopedOpportunityForRequest(db, {
         organizationId: session.user.organizationId,
         businessUnitId: statusBusinessUnit.id,
         contactId: id,
@@ -433,6 +451,7 @@ export async function PATCH(request) {
     hasBusinessUnitPatch || hasLeadProfilePatch || hasCourseMetadataPatch;
   let leadPatch = null;
   let leadStatusChange = null;
+  let isAitUsaClosedOpportunityReopen = false;
   if (lead && hasLeadPatch) {
     leadPatch = { updatedAt: new Date() };
     if ('status' in body) {
@@ -468,6 +487,7 @@ export async function PATCH(request) {
       leadPatch.status = transition.toStatus;
       leadPatch.currentStage = transition.toStatus;
       leadStatusChange = transition;
+      isAitUsaClosedOpportunityReopen = Boolean(isAitUsaWorkflow && transition.reopenReason);
     }
     if ('source' in body) leadPatch.sourceName = body.source || null;
     if ('assignedTo' in body) {
@@ -513,7 +533,7 @@ export async function PATCH(request) {
 
   let result;
   try {
-    result = await updateContactWithLeadAndNotes({
+    const writeValues = {
       db,
       organizationId: session.user.organizationId,
       actorUserId: session.user.id,
@@ -524,19 +544,49 @@ export async function PATCH(request) {
       leadStatusChange,
       appendNote: normalizeAppendNoteInput(body.appendNote),
       addFollowUpNote: normalizeFollowUpNoteInput(body.followUpNote),
-    });
+    };
+    if (isAitUsaClosedOpportunityReopen) {
+      result = await withLockedReopenForRequest({
+        db,
+        organizationId: session.user.organizationId,
+        businessUnit: statusBusinessUnit,
+        contact: existing,
+        opportunityId: lead.id,
+        toStatus: body.status,
+        reopenReason: body.statusChangeReason || body.reopenClosedStatusReason || '',
+        write: ({ tx, opportunity, transition }) => updateContactInTransactionForRequest({
+          ...writeValues,
+          tx,
+          existingLead: opportunity,
+          leadPatch: {
+            ...leadPatch,
+            status: transition.toStatus,
+            currentStage: transition.toStatus,
+          },
+          leadStatusChange: transition,
+        }),
+      });
+    } else {
+      result = await updateContactForRequest(writeValues);
+    }
   } catch (error) {
-    return NextResponse.json({ error: error.message || 'Contact update failed.' }, { status: 500 });
+    return error?.status
+      ? crmErrorResponse(error)
+      : NextResponse.json({ error: error.message || 'Contact update failed.' }, { status: 500 });
   }
 
-  const resultBusinessUnit = await loadBusinessUnitForWorkflow(
+  const resultBusinessUnit = await loadBusinessUnitForRequest(
     db,
     session,
     result.contact.primaryBusinessUnitId || result.lead?.businessUnitId,
   );
   return NextResponse.json({
     contact: toContactPayload(
-      result.contact,
+      {
+        ...result.contact,
+        opportunityConflict: hasAitUsaOpportunityConflict,
+        activeOpportunityCount: hasAitUsaOpportunityConflict ? 2 : undefined,
+      },
       result.lead,
       result.noteRows,
       resultBusinessUnit,

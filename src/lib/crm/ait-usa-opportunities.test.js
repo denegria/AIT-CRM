@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  selectAitUsaOpportunityForBootstrap,
   resolveAitUsaActiveOpportunity,
   startAitUsaOpportunity,
+  withLockedAitUsaClosedOpportunityReopen,
 } from './ait-usa-opportunities.js';
 
 const scope = Object.freeze({
@@ -126,4 +128,97 @@ test('Start Opportunity locks, creates, and audits the initial status in one tra
   assert.equal(calls.inserts.length, 2);
   assert.equal(calls.inserts[1].values.leadId, 'opportunity-1');
   assert.equal(calls.inserts[1].values.reason, 'Student chose another program.');
+});
+
+test('bootstrap selects an older sole active AIT USA Opportunity over newer closed history', () => {
+  const result = selectAitUsaOpportunityForBootstrap([
+    { id: 'closed-newer', status: 'Not Interested', createdAt: '2026-08-15T12:00:00Z' },
+    { id: 'active-older', status: 'Follow Up', createdAt: '2026-08-14T12:00:00Z' },
+  ], scope.businessUnit);
+  assert.equal(result.opportunity.id, 'active-older');
+  assert.equal(result.conflict, false);
+  assert.equal(result.activeCount, 1);
+});
+
+test('bootstrap selects newest closed AIT USA history when no active Opportunity exists', () => {
+  const result = selectAitUsaOpportunityForBootstrap([
+    { id: 'closed-older', status: 'Course Completed', createdAt: '2026-08-14T12:00:00Z' },
+    { id: 'closed-newer', status: 'Not Interested', createdAt: '2026-08-15T12:00:00Z' },
+  ], scope.businessUnit);
+  assert.equal(result.opportunity.id, 'closed-newer');
+  assert.equal(result.conflict, false);
+  assert.equal(result.activeCount, 0);
+});
+
+test('bootstrap exposes an explicit conflict when multiple AIT USA Opportunities are active', () => {
+  const result = selectAitUsaOpportunityForBootstrap([
+    { id: 'active-1', status: 'New Lead', createdAt: '2026-08-14T12:00:00Z' },
+    { id: 'active-2', status: 'Follow Up', createdAt: '2026-08-15T12:00:00Z' },
+  ], scope.businessUnit);
+  assert.equal(result.opportunity.id, 'active-2');
+  assert.equal(result.conflict, true);
+  assert.equal(result.activeCount, 2);
+});
+
+test('closed-to-active update locks and re-resolves before invoking the transactional writer', async () => {
+  const calls = [];
+  const tx = {
+    async query(text) {
+      const normalized = String(text).replace(/\s+/g, ' ').trim();
+      calls.push(normalized);
+      if (normalized.includes('where organization_id = $1 and business_unit_id = $2 and contact_id = $3')) {
+        return { rows: [{ id: 'closed-1', status: 'Not Interested' }] };
+      }
+      if (normalized.includes('where id = $1 and organization_id = $2')) {
+        return { rows: [{ id: 'closed-1', status: 'Not Interested' }] };
+      }
+      return { rows: [] };
+    },
+  };
+  const db = { transaction: (handler) => handler(tx) };
+  let writeTx = null;
+  const result = await withLockedAitUsaClosedOpportunityReopen({
+    db,
+    organizationId: 'org-1',
+    businessUnit: scope.businessUnit,
+    contact: scope.contact,
+    opportunityId: 'closed-1',
+    toStatus: 'Follow Up',
+    reopenReason: 'correction',
+    write: ({ tx: transactionClient, opportunity, transition }) => {
+      writeTx = transactionClient;
+      return { opportunity, transition };
+    },
+  });
+  assert.equal(writeTx, tx);
+  assert.equal(result.opportunity.id, 'closed-1');
+  assert.equal(result.transition.toStatus, 'Follow Up');
+  assert.match(calls[0], /pg_advisory_xact_lock/);
+});
+
+test('closed-to-active update returns 409 and performs no writer side effects when an active Opportunity won the race', async () => {
+  const tx = {
+    async query(text) {
+      const normalized = String(text).replace(/\s+/g, ' ').trim();
+      if (normalized.includes('from leads') && normalized.includes('order by created_at')) {
+        return { rows: [{ id: 'active-winner', status: 'Follow Up' }] };
+      }
+      return { rows: [] };
+    },
+  };
+  let wrote = false;
+  await assert.rejects(
+    withLockedAitUsaClosedOpportunityReopen({
+      db: { transaction: (handler) => handler(tx) },
+      organizationId: 'org-1',
+      businessUnit: scope.businessUnit,
+      contact: scope.contact,
+      opportunityId: 'closed-1',
+      toStatus: 'Follow Up',
+      reopenReason: 'correction',
+      write: () => { wrote = true; },
+    }),
+    (error) => error.status === 409 && /already has an active Opportunity/.test(error.message),
+  );
+  assert.equal(wrote, false);
 });

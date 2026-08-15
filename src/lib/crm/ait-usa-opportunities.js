@@ -1,10 +1,12 @@
 import { and, eq, sql } from 'drizzle-orm';
 import { leadStatusHistory, leads } from '../../db/schema.js';
 import {
+  evaluateLifecycleTransition,
   isClosedLifecycleStatus,
   WORKFLOW_KEYS,
   workflowKeyForBusinessUnit,
 } from './lifecycle.js';
+import { createCrmError } from './errors.js';
 
 function requiredId(value, label) {
   const id = typeof value === 'string' ? value : value?.id;
@@ -109,6 +111,17 @@ export async function loadScopedOpportunityById(client, {
   contactId,
   opportunityId,
 }) {
+  if (typeof client.query === 'function') {
+    const result = await client.query(
+      `select id, organization_id, business_unit_id, contact_id, status, current_stage,
+              assigned_user_id, source_type, source_name, created_at
+       from leads
+       where id = $1 and organization_id = $2 and business_unit_id = $3 and contact_id = $4
+       limit 1`,
+      [opportunityId, organizationId, businessUnitId, contactId],
+    );
+    return result.rows[0] ? opportunityRow(result.rows[0]) : null;
+  }
   const [opportunity] = await client
     .select()
     .from(leads)
@@ -120,6 +133,92 @@ export async function loadScopedOpportunityById(client, {
     ))
     .limit(1);
   return opportunity || null;
+}
+
+function opportunityTime(row = {}) {
+  const value = row.createdAt || row.created_at;
+  const time = value instanceof Date ? value.getTime() : new Date(value || '').getTime();
+  return Number.isNaN(time) ? 0 : time;
+}
+
+export function selectAitUsaOpportunityForBootstrap(opportunities = [], businessUnit = null) {
+  if (workflowKeyForBusinessUnit(businessUnit) !== WORKFLOW_KEYS.AIT_USA) {
+    throw new Error('AIT USA bootstrap selection requires an AIT USA business unit.');
+  }
+  const ordered = [...opportunities]
+    .sort((left, right) => opportunityTime(right) - opportunityTime(left) || String(right.id).localeCompare(String(left.id)));
+  const active = ordered.filter(isActiveAitUsaOpportunity);
+  return {
+    opportunity: active.length ? active[0] : ordered[0] || null,
+    conflict: active.length > 1,
+    activeCount: active.length,
+  };
+}
+
+export async function guardAitUsaClosedOpportunityReopen({
+  client,
+  organizationId,
+  businessUnit,
+  contact,
+  opportunityId,
+}) {
+  const resolution = await resolveAitUsaActiveOpportunity({
+    client,
+    organization: organizationId,
+    businessUnit,
+    contact,
+  });
+  if (resolution.status !== 'none') {
+    throw createCrmError(
+      resolution.status === 'ambiguous'
+        ? 'This Contact has multiple active Opportunities. Review and resolve the conflict before reopening.'
+        : 'This Contact already has an active Opportunity. Refresh before reopening closed history.',
+      409,
+    );
+  }
+
+  const opportunity = await loadScopedOpportunityById(client, {
+    organizationId,
+    businessUnitId: businessUnit.id,
+    contactId: contact.id,
+    opportunityId,
+  });
+  if (!opportunity || !isClosedLifecycleStatus(opportunity.status || opportunity.currentStage, { businessUnit })) {
+    throw createCrmError('The selected closed Opportunity is no longer available to reopen.', 409);
+  }
+  return opportunity;
+}
+
+export async function withLockedAitUsaClosedOpportunityReopen({
+  db,
+  organizationId,
+  businessUnit,
+  contact,
+  opportunityId,
+  toStatus,
+  reopenReason,
+  write,
+}) {
+  return db.transaction(async (tx) => {
+    const opportunity = await guardAitUsaClosedOpportunityReopen({
+      client: tx,
+      organizationId,
+      businessUnit,
+      contact,
+      opportunityId,
+    });
+    const transition = evaluateLifecycleTransition({
+      fromStatus: opportunity.status,
+      toStatus,
+      businessUnit,
+      canReopenClosedStatus: false,
+      reopenClosedStatusReason: reopenReason,
+    });
+    if (!transition.allowed || !transition.reopenReason) {
+      throw createCrmError(transition.reason || 'The selected Opportunity cannot be reopened.', 409);
+    }
+    return write({ tx, opportunity, transition });
+  });
 }
 
 export async function startAitUsaOpportunity({

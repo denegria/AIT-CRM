@@ -3,11 +3,21 @@ import React from 'react';
 export default function OpportunityLifecycleField({
   isAitUsa,
   hasLeadStatus,
+  opportunityConflict = false,
   status,
   statuses = [],
   onStatusChange,
   onStart,
 }) {
+  if (isAitUsa && opportunityConflict) {
+    return (
+      <div className="profile-editor-opportunity-empty" data-testid="opportunity-conflict-state">
+        <div className="profile-editor-helper" role="alert">
+          Multiple active Opportunities were found. Status and owner changes are blocked until the conflict is resolved.
+        </div>
+      </div>
+    );
+  }
   if (isAitUsa && !hasLeadStatus) {
     return (
       <div className="profile-editor-opportunity-empty" data-testid="opportunity-empty-state">

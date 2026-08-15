@@ -2,7 +2,7 @@ import { cache } from 'react';
 import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import * as seedData from './data';
 import { getDb } from '../db/index.js';
-import { hasPermission, isAuthEnabled, PERMISSIONS, SESSION_SECRET_ENV } from './auth';
+import { hasPermission, isAuthEnabled, PERMISSIONS, SESSION_SECRET_ENV } from './auth.js';
 import { sessionHasAdminRole } from './auth/admin-policy.js';
 import {
   businessUnits as businessUnitsTable,
@@ -43,6 +43,7 @@ import { latestExcelDateFromText, summarizeContactTouch } from './contact-touch.
 import { buildAitUsaEnrollmentSignals } from './ait-usa-enrollment-signals.js';
 import { attachPaymentSnapshotContactLinks } from './financial-linkage.js';
 import { filterAssignableEmployees } from './crm/assignable-employees.js';
+import { selectAitUsaOpportunityForBootstrap } from './crm/ait-usa-opportunities.js';
 import { courseRecordSummaryPayloadFromRow, deriveCourseSummary } from './crm/course-records.js';
 import { getServerAppVersion } from './app-version.js';
 import { canonicalRoleKeys } from './roles.js';
@@ -218,11 +219,7 @@ export function mapContacts(
   businessUnitIds = null,
   relatedRows = {},
 ) {
-  const leadByContactId = new Map();
-  for (const lead of leadRows) {
-    if (!lead.contactId || leadByContactId.has(lead.contactId)) continue;
-    leadByContactId.set(lead.contactId, lead);
-  }
+  const leadsByContactId = rowsByContactId(leadRows);
 
   const notesByContactId = new Map();
   for (const note of noteRows) {
@@ -251,8 +248,12 @@ export function mapContacts(
   const followUpCommitmentsByContactId = rowsByContactId(relatedRows.followUpCommitments || []);
 
   return contactRows.map((contact, index) => {
-    const lead = leadByContactId.get(contact.id);
     const businessUnit = businessUnitById.get(contact.primaryBusinessUnitId) || null;
+    const contactLeads = leadsByContactId.get(contact.id) || [];
+    const aitUsaSelection = workflowKeyForBusinessUnit(businessUnit) === WORKFLOW_KEYS.AIT_USA
+      ? selectAitUsaOpportunityForBootstrap(contactLeads, businessUnit)
+      : null;
+    const lead = aitUsaSelection?.opportunity || contactLeads[0] || null;
     const contactWorkOrders = workOrdersByContactId.get(contact.id) || [];
     const contactEstimates = estimatesByContactId.get(contact.id) || [];
     const contactPaymentSnapshots = paymentSnapshotsByContactId.get(contact.id) || [];
@@ -315,6 +316,8 @@ export function mapContacts(
       sourceActivityDate,
       hasLeadStatus: Boolean(lead),
       opportunityId: lead?.id || '',
+      opportunityConflict: Boolean(aitUsaSelection?.conflict),
+      activeOpportunityCount: aitUsaSelection?.activeCount || 0,
       leadId: lead?.id || '',
     }, {
       businessUnit,
@@ -363,6 +366,8 @@ export function mapContacts(
       businessUnitName: businessUnit?.name || '',
       hasLeadStatus: Boolean(lead),
       opportunityId: lead?.id || '',
+      opportunityConflict: Boolean(aitUsaSelection?.conflict),
+      activeOpportunityCount: aitUsaSelection?.activeCount || 0,
       isPipelineEligible,
       workflowKey: workflow.workflowKey,
       workflowLabel: workflow.workflowLabel,

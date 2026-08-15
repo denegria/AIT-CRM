@@ -58,6 +58,7 @@ function createServiceClient({
   activeOpportunities = [],
 } = {}) {
   const calls = [];
+  let capturedActivityInserted = false;
   return {
     calls,
     client: {
@@ -143,6 +144,11 @@ function createServiceClient({
         }
         if (normalized.startsWith('insert into leads')) {
           return { rows: [{ id: leadId }] };
+        }
+        if (normalized.startsWith('insert into activity_events') && normalized.includes("'facebook_lead_captured'")) {
+          if (capturedActivityInserted) return { rows: [], rowCount: 0 };
+          capturedActivityInserted = true;
+          return { rows: [{ id: 'facebook-capture-activity-1' }], rowCount: 1 };
         }
         if (normalized.startsWith('insert into activity_events')) {
           return { rows: [] };
@@ -493,8 +499,9 @@ test('auto-promotion fails closed when page and form business-unit mapping is mi
   });
 });
 
-test('auto-promotion links existing contacts without overwriting populated PII', async () => {
+test('AIT Signs Facebook auto-promotion keeps legacy contact linking without overwriting populated PII', async () => {
   const { client, calls } = createServiceClient({
+    businessUnitName: 'AIT Signs',
     existingContact: { id: 'existing-contact-1', primary_business_unit_id: 'bu-old' },
   });
 
@@ -684,6 +691,42 @@ test('replaying an existing imported lead repairs side effects without inserting
   assert.equal(calls.some((call) => call.sql.includes("'facebook_lead_captured'")), true);
   assert.equal(calls.some((call) => call.sql.startsWith('insert into notifications')), true);
   assert.equal(calls.some((call) => call.sql.startsWith('with intake_lock as')), true);
+});
+
+test('replaying a reused AIT USA Opportunity creates the free-form answer note exactly once per source row', async () => {
+  const { client, calls } = createServiceClient({
+    businessUnitName: 'AIT USA Institute',
+    existingContact: { id: 'contact-existing', primary_business_unit_id: 'bu-1' },
+    activeOpportunities: [{
+      id: 'opportunity-existing',
+      organization_id: 'org-1',
+      business_unit_id: 'bu-1',
+      contact_id: 'contact-existing',
+      status: 'Follow Up',
+      assigned_user_id: 'user-owner-1',
+      source_name: 'Original source',
+    }],
+  });
+  const proposal = {
+    proposedContact: { name: 'Ada Lovelace', email: 'ada@example.com', business_unit_id: 'bu-1' },
+    proposedLead: {
+      source_type: 'facebook_webhook',
+      leadgen_id: 'leadgen-1',
+      form_id: 'form-1',
+      business_unit_id: 'bu-1',
+      field_data: [{ name: 'education_level', values: ['Master degree'] }],
+    },
+    sourceRowId: 'source-row-5',
+    rowNumber: 12,
+  };
+
+  await promoteFacebookLeadProposalToCrm(client, 'org-1', proposal);
+  await promoteFacebookLeadProposalToCrm(client, 'org-1', proposal);
+
+  const noteInserts = calls.filter((call) => call.sql.startsWith('insert into notes'));
+  assert.equal(noteInserts.length, 1);
+  assert.match(noteInserts[0].params[4], /Education Level: Master degree/);
+  assert.equal(calls.filter((call) => call.sql.includes("'facebook_lead_captured'")).length, 2);
 });
 
 test('dirty cross-tenant lead links never update or return the foreign contact', async () => {
