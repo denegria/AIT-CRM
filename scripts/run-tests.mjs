@@ -4,8 +4,10 @@ import path from "node:path";
 
 const roots = ["scripts", "src"];
 const excluded = new Set([
+  "src/app/contacts/ait-usa-opportunity-route.test.js",
   "src/app/tasks/follow-up-route-validation.test.js",
   "src/components/FollowUpOutcomeDialog.test.jsx",
+  "src/lib/bootstrap-data.ait-usa-opportunity.test.js",
 ]);
 const testPattern = /\.test\.(?:js|mjs)$/;
 

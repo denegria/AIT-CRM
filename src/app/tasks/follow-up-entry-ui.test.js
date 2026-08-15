@@ -40,9 +40,16 @@ test('Contact completion route has no oldest-open completion fallback', () => {
 
 test('Tasks completion validates the exact Contact and Lead chain before calling the write service', () => {
   const contextIndex = tasksRouteSource.indexOf('const exactContext = await resolveExactFollowUpTaskContext({');
-  const completionIndex = tasksRouteSource.indexOf('const { task, nextTask } = await completeFollowUpTaskWithActivity({');
+  const completionIndex = tasksRouteSource.indexOf('const { task, nextTask } = await completeFollowUpForRequest({');
 
   assert.notEqual(contextIndex, -1);
   assert.notEqual(completionIndex, -1);
   assert.ok(contextIndex < completionIndex);
+});
+
+test('Tasks completion injectable boundary defaults to the canonical follow-up service', () => {
+  assert.match(
+    tasksRouteSource,
+    /const completeFollowUpForRequest = runtime\.completeFollowUpForRequest \|\| completeFollowUpTaskWithActivity;/,
+  );
 });

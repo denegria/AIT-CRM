@@ -101,6 +101,10 @@ function createClient({
           return { rows: params[2] === 'bu-2' ? [] : [{ id: 'bu-1' }] };
         }
 
+        if (normalized.startsWith('select id, name from business_units')) {
+          return { rows: params[1] === 'bu-2' ? [] : [{ id: 'bu-1', name: 'AIT Signs' }] };
+        }
+
         if (normalized.startsWith('update import_normalized_records set status = $1')) {
           return { rows: [{ id: 'record-1', record_type: 'lead', status: params[0] }] };
         }
@@ -680,6 +684,9 @@ function createTwoClientPromotionHarness({ initialStatus = 'pending' } = {}) {
           }
           if (normalized.startsWith('select nr.id, nr.source_row_id')) return { rows: [record()] };
           if (normalized.startsWith('select bu.id from business_units bu')) return { rows: [{ id: 'bu-1' }] };
+          if (normalized.startsWith('select id, name from business_units')) {
+            return { rows: [{ id: 'bu-1', name: 'AIT Signs' }] };
+          }
           if (normalized.startsWith("update import_normalized_records nr set status = 'promoting'")) {
             if (!['pending', 'needs_review', 'promoting'].includes(state.status)) return { rows: [], rowCount: 0 };
             state.status = 'promoting';
