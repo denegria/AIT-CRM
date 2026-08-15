@@ -719,3 +719,88 @@ test('locked AIT USA follow-up uses the committed transition reason and cancella
   assert.equal(activity.metadataJson.statusTransition.toStatus, 'Enrolled');
   assert.equal(activity.metadataJson.statusTransition.reason, 'Follow-up outcome: enrolled_or_won');
 });
+
+test('stale active-to-active follow-up reason cannot overwrite a locked closed-to-active reopen reason', async () => {
+  const inserts = [];
+  const patches = [];
+  const lockedClosedLead = {
+    id: 'historical-a',
+    organization_id: 'org-1',
+    business_unit_id: 'bu-1',
+    contact_id: 'contact-1',
+    status: 'Not Interested',
+    current_stage: 'Not Interested',
+  };
+  const tx = {
+    async query(text) {
+      const normalized = String(text).replace(/\s+/g, ' ').trim();
+      if (normalized.includes('order by created_at')) return { rows: [lockedClosedLead] };
+      if (normalized.includes('where id = $1 and organization_id = $2')) return { rows: [lockedClosedLead] };
+      return { rows: [] };
+    },
+    insert() {
+      return {
+        values(value) {
+          inserts.push(value);
+          return Promise.resolve();
+        },
+      };
+    },
+    update() {
+      return {
+        set(patch) {
+          patches.push(patch);
+          return this;
+        },
+        where() { return this; },
+        returning() {
+          return Promise.resolve([{
+            id: 'historical-a',
+            organizationId: 'org-1',
+            businessUnitId: 'bu-1',
+            contactId: 'contact-1',
+            status: patches.at(-1).status,
+            currentStage: patches.at(-1).currentStage,
+          }]);
+        },
+      };
+    },
+  };
+
+  await recordFollowUpActivity({
+    db: { transaction: (callback) => callback(tx) },
+    organizationId: 'org-1',
+    actorUserId: 'actor-1',
+    context: { businessUnitId: 'bu-1', contactId: 'contact-1', leadId: 'historical-a' },
+    followUpActivity: {
+      eventType: 'follow_up.reached_interested',
+      message: 'Interested again.',
+      metadataJson: {},
+    },
+    leadPatch: { status: 'Follow Up', currentStage: 'Follow Up' },
+    leadStatusChange: {
+      changed: true,
+      fromStatus: 'New Lead',
+      toStatus: 'Follow Up',
+      reason: 'Follow-up outcome: reached_interested',
+    },
+    followUpOutcome: 'reached_interested',
+    followUpChannel: 'phone',
+    aitUsaOpportunityMutation: {
+      organizationId: 'org-1',
+      businessUnit: { id: 'bu-1', name: 'AIT USA Institute' },
+      contact: { id: 'contact-1' },
+      expectedOpportunityId: 'historical-a',
+      toStatus: 'Follow Up',
+      reopenReason: 'new_course_follow_up',
+      terminalReason: 'Follow-up outcome: reached_interested',
+    },
+  });
+
+  const history = inserts.find((value) => value.leadId === 'historical-a' && value.fromStatus === 'Not Interested');
+  assert.equal(history.toStatus, 'Follow Up');
+  assert.equal(history.reason, 'Reopened for new course follow-up.');
+  const activity = inserts.find((value) => value.eventType === 'follow_up.reached_interested');
+  assert.equal(activity.metadataJson.statusTransition.fromStatus, 'Not Interested');
+  assert.equal(activity.metadataJson.statusTransition.reason, 'Reopened for new course follow-up.');
+});

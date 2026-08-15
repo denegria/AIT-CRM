@@ -11,9 +11,11 @@ const databaseUrl = String(process.env.AIT_USA_OPPORTUNITY_RACE_DATABASE_URL || 
 const confirmation = String(process.env.AIT_USA_OPPORTUNITY_RACE_DATABASE_CONFIRM || '').trim();
 const expectedNeonBranchId = String(process.env.AIT_USA_OPPORTUNITY_RACE_EXPECTED_NEON_BRANCH_ID || '').trim();
 const expectedNeonProjectId = String(process.env.AIT_USA_OPPORTUNITY_RACE_EXPECTED_NEON_PROJECT_ID || '').trim();
+const targetBaseUrl = String(process.env.AIT_USA_OPPORTUNITY_RACE_TARGET_BASE_URL || '').trim();
 const ALLOWED_NON_PRODUCTION_NEON_BRANCH_IDS = new Set(['br-broad-hill-aptjpyea']);
 const ALLOWED_NEON_PROJECT_IDS = new Set(['plain-band-07005942']);
 const REFUSED_PRODUCTION_NEON_BRANCH_IDS = new Set(['br-purple-bar-aphafrgp']);
+const NEON_BRANCH_NAMES = new Map([['br-broad-hill-aptjpyea', 'staging']]);
 const BARRIER_DEADLINE_MS = 5_000;
 const CLEANUP_DEADLINE_MS = 3_000;
 
@@ -65,6 +67,19 @@ function assertExplicitSafeDatabase(url) {
   if (!expectedNeonBranchId || !expectedNeonProjectId) {
     throw new Error('Set exact EXPECTED Neon branch and project ids for the approved safe database.');
   }
+  if (!targetBaseUrl) {
+    throw new Error('Set nonsecret AIT_USA_OPPORTUNITY_RACE_TARGET_BASE_URL before running the race harness.');
+  }
+  const parsedTargetBaseUrl = new URL(targetBaseUrl);
+  if (
+    !['http:', 'https:'].includes(parsedTargetBaseUrl.protocol) ||
+    parsedTargetBaseUrl.username ||
+    parsedTargetBaseUrl.password ||
+    parsedTargetBaseUrl.search ||
+    parsedTargetBaseUrl.hash
+  ) {
+    throw new Error('AIT_USA_OPPORTUNITY_RACE_TARGET_BASE_URL must be a nonsecret HTTP(S) URL without credentials, query, or fragment.');
+  }
   if (
     !ALLOWED_NON_PRODUCTION_NEON_BRANCH_IDS.has(expectedNeonBranchId) ||
     !ALLOWED_NEON_PROJECT_IDS.has(expectedNeonProjectId) ||
@@ -73,6 +88,23 @@ function assertExplicitSafeDatabase(url) {
   ) {
     throw new Error('Race harness refuses a database identified as production.');
   }
+  return parsedTargetBaseUrl.toString().replace(/\/$/, '');
+}
+
+function safeDatabaseFingerprint(url, schema, safeTargetBaseUrl, runtimeIdentity) {
+  const parsed = new URL(url);
+  const hostParts = parsed.hostname.split('.').filter(Boolean);
+  const database = decodeURIComponent(parsed.pathname.replace(/^\/+/, '').split('/')[0] || '');
+  if (!database) throw new Error('Race harness database URL must identify a database before any schema write.');
+  return {
+    targetBaseUrl: safeTargetBaseUrl,
+    neonProjectId: runtimeIdentity.projectId,
+    neonBranchId: runtimeIdentity.branchId,
+    branchName: NEON_BRANCH_NAMES.get(runtimeIdentity.branchId) || 'unknown',
+    hostSuffix: hostParts.slice(-3).join('.'),
+    database,
+    schema,
+  };
 }
 
 async function assertRuntimeDatabaseIdentity(client) {
@@ -89,6 +121,7 @@ async function assertRuntimeDatabaseIdentity(client) {
   if (actualBranchId !== expectedNeonBranchId || actualProjectId !== expectedNeonProjectId) {
     throw new Error('Runtime Neon branch/project identity does not match the exact approved EXPECTED values.');
   }
+  return { branchId: actualBranchId, projectId: actualProjectId };
 }
 
 async function observeAdvisoryLockWait(observer, processId) {
@@ -199,10 +232,12 @@ async function endClient(client, label) {
 }
 
 test('two PostgreSQL clients serialize reopen versus Start/ingestion creation under the shared advisory lock', {
-  skip: !databaseUrl ? 'Set the explicit safe race database URL and confirmation to run this harness.' : false,
+  skip: !databaseUrl
+    ? 'Set the explicit safe race database URL, confirmation, identity, and nonsecret target base URL to run this harness.'
+    : false,
   timeout: 30_000,
 }, async () => {
-  assertExplicitSafeDatabase(databaseUrl);
+  const safeTargetBaseUrl = assertExplicitSafeDatabase(databaseUrl);
   const { Client } = await import('pg');
   const setup = new Client({ connectionString: databaseUrl });
   const observer = new Client({ connectionString: databaseUrl });
@@ -227,7 +262,11 @@ test('two PostgreSQL clients serialize reopen versus Start/ingestion creation un
       'connect race harness clients',
       10_000,
     );
-    await assertRuntimeDatabaseIdentity(setup);
+    const runtimeIdentity = await assertRuntimeDatabaseIdentity(setup);
+    console.info(
+      'AIT USA race harness SAFE database fingerprint:',
+      JSON.stringify(safeDatabaseFingerprint(databaseUrl, schema, safeTargetBaseUrl, runtimeIdentity)),
+    );
     await setup.query(`create schema ${quotedSchema}`);
     schemaCreated = true;
     await setup.query(`
@@ -301,6 +340,11 @@ test('two PostgreSQL clients serialize reopen versus Start/ingestion creation un
       'observe second advisory-lock wait',
     );
     assert.equal(
+      secondObservation.observed,
+      true,
+      `observer did not see the second transaction waiting on a server advisory lock; observer=${JSON.stringify(secondObservation)}`,
+    );
+    assert.equal(
       secondSettled,
       false,
       `second transaction settled after issuing the advisory lock; observer=${JSON.stringify(secondObservation)}`,
@@ -368,6 +412,11 @@ test('two PostgreSQL clients serialize reopen versus Start/ingestion creation un
     const staleObservation = await withDeadline(
       observeAdvisoryLockWait(observer, staleBackend.pid),
       'observe stale PATCH advisory-lock wait',
+    );
+    assert.equal(
+      staleObservation.observed,
+      true,
+      `observer did not see the stale PATCH waiting on a server advisory lock; observer=${JSON.stringify(staleObservation)}`,
     );
     assert.equal(
       staleSettled,

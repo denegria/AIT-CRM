@@ -47,10 +47,16 @@ function runFollowUpWrite({
     db,
     ...aitUsaOpportunityMutation,
     write: ({ tx, opportunity, transition }) => {
+      const preLockTransitionStillMatches = Boolean(
+        transition &&
+        leadStatusChange &&
+        leadStatusChange.fromStatus === transition.fromStatus &&
+        leadStatusChange.toStatus === transition.toStatus,
+      );
       const effectiveLeadStatusChange = transition ? {
         ...transition,
-        ...(transition.changed && (leadStatusChange?.reason || aitUsaOpportunityMutation.terminalReason)
-          ? { reason: leadStatusChange?.reason || aitUsaOpportunityMutation.terminalReason }
+        ...(transition.changed && preLockTransitionStillMatches && leadStatusChange.reason
+          ? { reason: leadStatusChange.reason }
           : {}),
       } : leadStatusChange;
       return write(tx, {
