@@ -251,7 +251,10 @@ export function mapContacts(
     const businessUnit = businessUnitById.get(contact.primaryBusinessUnitId) || null;
     const contactLeads = leadsByContactId.get(contact.id) || [];
     const aitUsaSelection = workflowKeyForBusinessUnit(businessUnit) === WORKFLOW_KEYS.AIT_USA
-      ? selectAitUsaOpportunityForBootstrap(contactLeads, businessUnit)
+      ? selectAitUsaOpportunityForBootstrap(
+          contactLeads.filter((opportunity) => opportunity.businessUnitId === businessUnit.id),
+          businessUnit,
+        )
       : null;
     const lead = aitUsaSelection?.opportunity || contactLeads[0] || null;
     const contactWorkOrders = workOrdersByContactId.get(contact.id) || [];

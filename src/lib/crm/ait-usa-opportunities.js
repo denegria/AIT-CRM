@@ -97,12 +97,12 @@ export async function resolveAitUsaActiveOpportunity({
   const active = opportunities.filter(isActiveAitUsaOpportunity);
 
   if (active.length === 0) {
-    return { status: 'none', leadId: null, opportunity: null };
+    return { status: 'none', leadId: null, opportunity: null, activeCount: 0 };
   }
   if (active.length === 1) {
-    return { status: 'exact', leadId: active[0].id, opportunity: active[0] };
+    return { status: 'exact', leadId: active[0].id, opportunity: active[0], activeCount: 1 };
   }
-  return { status: 'ambiguous', leadId: null, opportunity: null };
+  return { status: 'ambiguous', leadId: null, opportunity: null, activeCount: active.length };
 }
 
 export async function loadScopedOpportunityById(client, {
@@ -199,23 +199,96 @@ export async function withLockedAitUsaClosedOpportunityReopen({
   reopenReason,
   write,
 }) {
+  return withLockedAitUsaOpportunityMutation({
+    db,
+    organizationId,
+    businessUnit,
+    contact,
+    expectedOpportunityId: opportunityId,
+    toStatus,
+    reopenReason,
+    write: ({ tx, opportunity, transition }) => {
+      if (!transition?.reopenReason) {
+        throw createCrmError('The selected Opportunity cannot be reopened.', 409);
+      }
+      return write({ tx, opportunity, transition });
+    },
+  });
+}
+
+export async function withLockedAitUsaOpportunityMutation({
+  db,
+  organizationId,
+  businessUnit,
+  contact,
+  expectedOpportunityId,
+  toStatus,
+  reopenReason = '',
+  terminalReason = '',
+  write,
+}) {
   return db.transaction(async (tx) => {
-    const opportunity = await guardAitUsaClosedOpportunityReopen({
+    const resolution = await resolveAitUsaActiveOpportunity({
       client: tx,
-      organizationId,
+      organization: organizationId,
       businessUnit,
       contact,
-      opportunityId,
     });
-    const transition = evaluateLifecycleTransition({
-      fromStatus: opportunity.status,
-      toStatus,
-      businessUnit,
-      canReopenClosedStatus: false,
-      reopenClosedStatusReason: reopenReason,
+    if (resolution.status === 'ambiguous') {
+      throw createCrmError(
+        'This Contact has multiple active Opportunities. Review and resolve the conflict before editing Opportunity fields.',
+        409,
+      );
+    }
+    if (resolution.status === 'exact' && resolution.leadId !== expectedOpportunityId) {
+      throw createCrmError(
+        'The active Opportunity changed while this Contact was open. Refresh before saving Opportunity fields.',
+        409,
+      );
+    }
+
+    const opportunity = await loadScopedOpportunityById(tx, {
+      organizationId,
+      businessUnitId: businessUnit.id,
+      contactId: contact.id,
+      opportunityId: expectedOpportunityId,
     });
-    if (!transition.allowed || !transition.reopenReason) {
-      throw createCrmError(transition.reason || 'The selected Opportunity cannot be reopened.', 409);
+    if (!opportunity) {
+      throw createCrmError('The selected Opportunity is no longer available. Refresh before saving.', 409);
+    }
+
+    const opportunityIsActive = isActiveAitUsaOpportunity(opportunity);
+    if (
+      (resolution.status === 'none' && opportunityIsActive) ||
+      (resolution.status === 'exact' && !opportunityIsActive)
+    ) {
+      throw createCrmError('The Opportunity changed while this Contact was open. Refresh before saving.', 409);
+    }
+
+    let transition = null;
+    if (toStatus !== undefined && toStatus !== null) {
+      try {
+        transition = evaluateLifecycleTransition({
+          fromStatus: opportunity.status,
+          toStatus,
+          businessUnit,
+          canReopenClosedStatus: false,
+          reopenClosedStatusReason: reopenReason,
+        });
+      } catch (error) {
+        throw createCrmError(error.message, 400);
+      }
+      if (!transition.allowed) throw createCrmError(transition.reason, 403);
+      if (
+        transition.changed &&
+        isClosedLifecycleStatus(transition.toStatus, { businessUnit })
+      ) {
+        const reason = String(terminalReason || '').trim();
+        if (!reason) {
+          throw createCrmError('A reason is required when moving an AIT USA Opportunity into a closed status.', 400);
+        }
+        transition.reason = reason;
+      }
     }
     return write({ tx, opportunity, transition });
   });

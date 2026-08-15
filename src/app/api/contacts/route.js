@@ -42,7 +42,7 @@ import {
 import {
   loadScopedOpportunityById,
   resolveAitUsaActiveOpportunity,
-  withLockedAitUsaClosedOpportunityReopen,
+  withLockedAitUsaOpportunityMutation,
 } from '@/lib/crm/ait-usa-opportunities.js';
 import { createOrReuseArchiveApprovalTask } from '@/lib/tasks/archive-approvals.js';
 import { toTaskPayload } from '@/lib/tasks/service.js';
@@ -317,7 +317,7 @@ export async function PATCH(request, _context = {}, overrides = {}) {
   const loadScopedOpportunityForRequest = overrides.loadScopedOpportunityForRequest || loadScopedOpportunityById;
   const updateContactForRequest = overrides.updateContactForRequest || updateContactWithLeadAndNotes;
   const updateContactInTransactionForRequest = overrides.updateContactInTransactionForRequest || updateContactWithLeadAndNotesInTransaction;
-  const withLockedReopenForRequest = overrides.withLockedReopenForRequest || withLockedAitUsaClosedOpportunityReopen;
+  const withLockedMutationForRequest = overrides.withLockedMutationForRequest || withLockedAitUsaOpportunityMutation;
   const { error, session } = await requirePermissionForRequest(request, PERMISSIONS.CRM_WRITE);
   if (error) return error;
 
@@ -371,9 +371,43 @@ export async function PATCH(request, _context = {}, overrides = {}) {
     ? patch.primaryBusinessUnitId
     : existing.primaryBusinessUnitId || lead?.businessUnitId;
   const statusBusinessUnit = await loadBusinessUnitForRequest(db, session, statusBusinessUnitId);
+  if (
+    hasBusinessUnitPatch &&
+    existing.primaryBusinessUnitId &&
+    patch.primaryBusinessUnitId &&
+    patch.primaryBusinessUnitId !== existing.primaryBusinessUnitId
+  ) {
+    const currentBusinessUnit = await loadBusinessUnitForRequest(
+      db,
+      session,
+      existing.primaryBusinessUnitId,
+    );
+    if (workflowKeyForBusinessUnit(currentBusinessUnit) === WORKFLOW_KEYS.AIT_USA) {
+      return NextResponse.json(
+        { error: 'Move the Contact only after resolving or closing its AIT USA Opportunity.' },
+        { status: 409 },
+      );
+    }
+  }
   const isAitUsaWorkflow = workflowKeyForBusinessUnit(statusBusinessUnit) === WORKFLOW_KEYS.AIT_USA;
   let hasAitUsaOpportunityConflict = false;
+  let activeOpportunityCount = 0;
   if (isAitUsaWorkflow) {
+    let requestedOpportunity = null;
+    if (body.opportunityId) {
+      if (!isUuid(body.opportunityId)) {
+        return NextResponse.json({ error: 'Selected Opportunity id is invalid.' }, { status: 400 });
+      }
+      requestedOpportunity = await loadScopedOpportunityForRequest(db, {
+        organizationId: session.user.organizationId,
+        businessUnitId: statusBusinessUnit.id,
+        contactId: id,
+        opportunityId: body.opportunityId,
+      });
+      if (!requestedOpportunity) {
+        return NextResponse.json({ error: 'Selected Opportunity was not found for this Contact.' }, { status: 409 });
+      }
+    }
     const activeOpportunity = await resolveActiveOpportunityForRequest({
       client: db,
       organization: session.user.organizationId,
@@ -383,35 +417,28 @@ export async function PATCH(request, _context = {}, overrides = {}) {
     });
     if (activeOpportunity.status === 'ambiguous') {
       hasAitUsaOpportunityConflict = true;
+      activeOpportunityCount = activeOpportunity.activeCount || 2;
       if (hasOpportunityMutationRequest(body)) {
         return NextResponse.json(
           { error: 'This Contact has multiple active Opportunities. Review and resolve the conflict before editing Opportunity fields.' },
           { status: 409 },
         );
       }
-    }
-    if (activeOpportunity.status === 'exact') {
-      lead = await loadScopedOpportunityForRequest(db, {
-        organizationId: session.user.organizationId,
-        businessUnitId: statusBusinessUnit.id,
-        contactId: id,
-        opportunityId: activeOpportunity.leadId,
-      });
-    } else if (body.opportunityId) {
-      if (!isUuid(body.opportunityId)) {
-        return NextResponse.json({ error: 'Selected Opportunity id is invalid.' }, { status: 400 });
-      }
-      lead = await loadScopedOpportunityForRequest(db, {
-        organizationId: session.user.organizationId,
-        businessUnitId: statusBusinessUnit.id,
-        contactId: id,
-        opportunityId: body.opportunityId,
-      });
-      if (!lead) {
-        return NextResponse.json({ error: 'Selected Opportunity was not found for this Contact.' }, { status: 409 });
+      lead = requestedOpportunity;
+    } else if (activeOpportunity.status === 'exact') {
+      activeOpportunityCount = 1;
+      if (requestedOpportunity) {
+        lead = requestedOpportunity;
+      } else {
+        lead = await loadScopedOpportunityForRequest(db, {
+          organizationId: session.user.organizationId,
+          businessUnitId: statusBusinessUnit.id,
+          contactId: id,
+          opportunityId: activeOpportunity.leadId,
+        });
       }
     } else {
-      lead = null;
+      lead = requestedOpportunity;
     }
   }
   try {
@@ -451,43 +478,37 @@ export async function PATCH(request, _context = {}, overrides = {}) {
     hasBusinessUnitPatch || hasLeadProfilePatch || hasCourseMetadataPatch;
   let leadPatch = null;
   let leadStatusChange = null;
-  let isAitUsaClosedOpportunityReopen = false;
   if (lead && hasLeadPatch) {
     leadPatch = { updatedAt: new Date() };
     if ('status' in body) {
-      let transition;
-      try {
-        transition = evaluateLifecycleTransition({
-          fromStatus: lead.status,
-          toStatus: body.status,
-          businessUnit: statusBusinessUnit,
-          canReopenClosedStatus: isAitUsaWorkflow ? false : session.user.canAccessAllBusinessUnits,
-          reopenClosedStatusReason: body.statusChangeReason || body.reopenClosedStatusReason || '',
-        });
-      } catch (error) {
-        return NextResponse.json({ error: error.message }, { status: 400 });
-      }
-      if (!transition.allowed) {
-        return NextResponse.json({ error: transition.reason }, { status: 403 });
-      }
-      if (
-        isAitUsaWorkflow &&
-        transition.changed &&
-        isClosedLifecycleStatus(transition.toStatus, { businessUnit: statusBusinessUnit })
-      ) {
-        const terminalReason = String(body.terminalStatusReason || '').trim();
-        if (!terminalReason) {
-          return NextResponse.json(
-            { error: 'A reason is required when moving an AIT USA Opportunity into a closed status.' },
-            { status: 400 },
-          );
+      if (isAitUsaWorkflow) {
+        try {
+          const requestedStatus = requireLifecycleStatus(body.status, { businessUnit: statusBusinessUnit });
+          leadPatch.status = requestedStatus;
+          leadPatch.currentStage = requestedStatus;
+        } catch (error) {
+          return NextResponse.json({ error: error.message }, { status: 400 });
         }
-        transition.reason = terminalReason;
+      } else {
+        let transition;
+        try {
+          transition = evaluateLifecycleTransition({
+            fromStatus: lead.status,
+            toStatus: body.status,
+            businessUnit: statusBusinessUnit,
+            canReopenClosedStatus: session.user.canAccessAllBusinessUnits,
+            reopenClosedStatusReason: body.statusChangeReason || body.reopenClosedStatusReason || '',
+          });
+        } catch (error) {
+          return NextResponse.json({ error: error.message }, { status: 400 });
+        }
+        if (!transition.allowed) {
+          return NextResponse.json({ error: transition.reason }, { status: 403 });
+        }
+        leadPatch.status = transition.toStatus;
+        leadPatch.currentStage = transition.toStatus;
+        leadStatusChange = transition;
       }
-      leadPatch.status = transition.toStatus;
-      leadPatch.currentStage = transition.toStatus;
-      leadStatusChange = transition;
-      isAitUsaClosedOpportunityReopen = Boolean(isAitUsaWorkflow && transition.reopenReason);
     }
     if ('source' in body) leadPatch.sourceName = body.source || null;
     if ('assignedTo' in body) {
@@ -545,23 +566,26 @@ export async function PATCH(request, _context = {}, overrides = {}) {
       appendNote: normalizeAppendNoteInput(body.appendNote),
       addFollowUpNote: normalizeFollowUpNoteInput(body.followUpNote),
     };
-    if (isAitUsaClosedOpportunityReopen) {
-      result = await withLockedReopenForRequest({
+    if (isAitUsaWorkflow && lead && hasLeadPatch) {
+      result = await withLockedMutationForRequest({
         db,
         organizationId: session.user.organizationId,
         businessUnit: statusBusinessUnit,
         contact: existing,
-        opportunityId: lead.id,
-        toStatus: body.status,
+        expectedOpportunityId: lead.id,
+        toStatus: 'status' in body ? body.status : undefined,
         reopenReason: body.statusChangeReason || body.reopenClosedStatusReason || '',
+        terminalReason: body.terminalStatusReason || '',
         write: ({ tx, opportunity, transition }) => updateContactInTransactionForRequest({
           ...writeValues,
           tx,
           existingLead: opportunity,
           leadPatch: {
             ...leadPatch,
-            status: transition.toStatus,
-            currentStage: transition.toStatus,
+            ...(transition ? {
+              status: transition.toStatus,
+              currentStage: transition.toStatus,
+            } : {}),
           },
           leadStatusChange: transition,
         }),
@@ -585,7 +609,7 @@ export async function PATCH(request, _context = {}, overrides = {}) {
       {
         ...result.contact,
         opportunityConflict: hasAitUsaOpportunityConflict,
-        activeOpportunityCount: hasAitUsaOpportunityConflict ? 2 : undefined,
+        activeOpportunityCount,
       },
       result.lead,
       result.noteRows,

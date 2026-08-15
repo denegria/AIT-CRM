@@ -4,11 +4,16 @@ import { randomUUID } from 'node:crypto';
 import {
   resolveAitUsaActiveOpportunity,
   withLockedAitUsaClosedOpportunityReopen,
+  withLockedAitUsaOpportunityMutation,
 } from './ait-usa-opportunities.js';
 
 const databaseUrl = String(process.env.AIT_USA_OPPORTUNITY_RACE_DATABASE_URL || '').trim();
 const confirmation = String(process.env.AIT_USA_OPPORTUNITY_RACE_DATABASE_CONFIRM || '').trim();
-const databaseIdentity = String(process.env.AIT_USA_OPPORTUNITY_RACE_DATABASE_IDENTITY || '').trim();
+const expectedNeonBranchId = String(process.env.AIT_USA_OPPORTUNITY_RACE_EXPECTED_NEON_BRANCH_ID || '').trim();
+const expectedNeonProjectId = String(process.env.AIT_USA_OPPORTUNITY_RACE_EXPECTED_NEON_PROJECT_ID || '').trim();
+const ALLOWED_NON_PRODUCTION_NEON_BRANCH_IDS = new Set(['br-broad-hill-aptjpyea']);
+const ALLOWED_NEON_PROJECT_IDS = new Set(['plain-band-07005942']);
+const REFUSED_PRODUCTION_NEON_BRANCH_IDS = new Set(['br-purple-bar-aphafrgp']);
 
 function assertExplicitSafeDatabase(url) {
   if (confirmation !== 'allow-safe-race-writes') {
@@ -16,13 +21,50 @@ function assertExplicitSafeDatabase(url) {
   }
   const parsed = new URL(url);
   const urlIdentity = `${parsed.hostname}/${parsed.pathname}`.toLowerCase();
-  const assertedIdentity = databaseIdentity.toLowerCase();
-  if (!assertedIdentity || !/(test|testing|staging|br-broad-hill-aptjpyea)/.test(assertedIdentity)) {
-    throw new Error('Set AIT_USA_OPPORTUNITY_RACE_DATABASE_IDENTITY to the verified safe test/staging branch label or id.');
+  if (!expectedNeonBranchId || !expectedNeonProjectId) {
+    throw new Error('Set exact EXPECTED Neon branch and project ids for the approved safe database.');
   }
-  if (/prod|production|br-purple-bar-aphafrgp/.test(`${urlIdentity}/${assertedIdentity}`)) {
+  if (
+    !ALLOWED_NON_PRODUCTION_NEON_BRANCH_IDS.has(expectedNeonBranchId) ||
+    !ALLOWED_NEON_PROJECT_IDS.has(expectedNeonProjectId) ||
+    REFUSED_PRODUCTION_NEON_BRANCH_IDS.has(expectedNeonBranchId) ||
+    /prod|production/.test(`${urlIdentity}/${expectedNeonBranchId}/${expectedNeonProjectId}`)
+  ) {
     throw new Error('Race harness refuses a database identified as production.');
   }
+}
+
+async function assertRuntimeDatabaseIdentity(client) {
+  const result = await client.query(`
+    select
+      current_setting('neon.branch_id', true) as branch_id,
+      current_setting('neon.project_id', true) as project_id
+  `);
+  const actualBranchId = String(result.rows[0]?.branch_id || '').trim();
+  const actualProjectId = String(result.rows[0]?.project_id || '').trim();
+  if (REFUSED_PRODUCTION_NEON_BRANCH_IDS.has(actualBranchId)) {
+    throw new Error('Race harness refuses the production Neon branch.');
+  }
+  if (actualBranchId !== expectedNeonBranchId || actualProjectId !== expectedNeonProjectId) {
+    throw new Error('Runtime Neon branch/project identity does not match the exact approved EXPECTED values.');
+  }
+}
+
+async function waitForAdvisoryLockWait(observer, processId) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const result = await observer.query(
+      `select
+         exists (
+           select 1 from pg_locks
+           where pid = $1 and locktype = 'advisory' and granted = false
+         ) as waiting,
+         coalesce((select query from pg_stat_activity where pid = $1), '') as query`,
+      [processId],
+    );
+    if (result.rows[0]?.waiting && /pg_advisory_xact_lock/i.test(result.rows[0]?.query || '')) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  throw new Error('Contender never reached a proven pg_advisory_xact_lock wait barrier.');
 }
 
 function transactionDb(client, searchPath) {
@@ -56,12 +98,15 @@ test('two PostgreSQL clients serialize reopen versus Start/ingestion creation un
   const contact = { id: 'contact-1' };
   let releaseFirst;
   let firstEntered;
+  let schemaCreated = false;
   const firstEnteredPromise = new Promise((resolve) => { firstEntered = resolve; });
   const releaseFirstPromise = new Promise((resolve) => { releaseFirst = resolve; });
 
   await Promise.all([setup.connect(), firstClient.connect(), secondClient.connect()]);
   try {
+    await assertRuntimeDatabaseIdentity(setup);
     await setup.query(`create schema ${quotedSchema}`);
+    schemaCreated = true;
     await setup.query(`
       create table ${quotedSchema}.leads (
         id text primary key,
@@ -116,8 +161,8 @@ test('two PostgreSQL clients serialize reopen versus Start/ingestion creation un
       return resolution;
     }).finally(() => { secondSettled = true; });
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    assert.equal(secondSettled, false, 'second client must wait on the shared scope lock');
+    await waitForAdvisoryLockWait(setup, secondClient.processID);
+    assert.equal(secondSettled, false, 'second client must remain blocked at the proven advisory-lock barrier');
     releaseFirst();
     assert.equal(await first, 'first-won');
     const secondResolution = await second;
@@ -128,8 +173,59 @@ test('two PostgreSQL clients serialize reopen versus Start/ingestion creation un
       `select count(*)::int as count from ${quotedSchema}.leads where status = 'Follow Up'`,
     );
     assert.equal(active.rows[0].count, 1);
+
+    await setup.query(`truncate ${quotedSchema}.leads`);
+    await setup.query(
+      `insert into ${quotedSchema}.leads (id, organization_id, business_unit_id, contact_id, status, current_stage)
+       values ('active-a', 'org-1', 'bu-usa', 'contact-1', 'Follow Up', 'Follow Up')`,
+    );
+    const staleRead = await setup.query(`select id, status from ${quotedSchema}.leads where id = 'active-a'`);
+    assert.equal(staleRead.rows[0].status, 'Follow Up');
+
+    let releaseReplacement;
+    let replacementReady;
+    const releaseReplacementPromise = new Promise((resolve) => { releaseReplacement = resolve; });
+    const replacementReadyPromise = new Promise((resolve) => { replacementReady = resolve; });
+    const replacement = transactionDb(secondClient, quotedSchema).transaction(async (tx) => {
+      const before = await resolveAitUsaActiveOpportunity({
+        client: tx,
+        organization: 'org-1',
+        businessUnit,
+        contact,
+      });
+      assert.equal(before.leadId, 'active-a');
+      await tx.query("update leads set status = 'Not Interested', current_stage = 'Not Interested' where id = 'active-a'");
+      await tx.query(
+        "insert into leads (id, organization_id, business_unit_id, contact_id, status, current_stage) values ('active-b', 'org-1', 'bu-usa', 'contact-1', 'New Lead', 'New Lead')",
+      );
+      replacementReady();
+      await releaseReplacementPromise;
+    });
+    await replacementReadyPromise;
+
+    let staleWriterCalled = false;
+    let staleSettled = false;
+    const stalePatch = withLockedAitUsaOpportunityMutation({
+      db: transactionDb(firstClient, quotedSchema),
+      organizationId: 'org-1',
+      businessUnit,
+      contact,
+      expectedOpportunityId: staleRead.rows[0].id,
+      toStatus: staleRead.rows[0].status,
+      write: async () => { staleWriterCalled = true; },
+    }).finally(() => { staleSettled = true; });
+    await waitForAdvisoryLockWait(setup, firstClient.processID);
+    assert.equal(staleSettled, false, 'stale PATCH must wait at the proven advisory-lock barrier');
+    releaseReplacement();
+    await replacement;
+    await assert.rejects(stalePatch, (error) => error.status === 409);
+    assert.equal(staleWriterCalled, false);
+    const finalActive = await setup.query(
+      `select id from ${quotedSchema}.leads where status in ('New Lead', 'Follow Up') order by id`,
+    );
+    assert.deepEqual(finalActive.rows.map((row) => row.id), ['active-b']);
   } finally {
-    await setup.query(`drop schema if exists ${quotedSchema} cascade`).catch(() => {});
+    if (schemaCreated) await setup.query(`drop schema if exists ${quotedSchema} cascade`).catch(() => {});
     await Promise.all([setup.end(), firstClient.end(), secondClient.end()]);
   }
 });

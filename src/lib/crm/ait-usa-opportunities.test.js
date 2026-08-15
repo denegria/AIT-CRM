@@ -5,6 +5,7 @@ import {
   resolveAitUsaActiveOpportunity,
   startAitUsaOpportunity,
   withLockedAitUsaClosedOpportunityReopen,
+  withLockedAitUsaOpportunityMutation,
 } from './ait-usa-opportunities.js';
 
 const scope = Object.freeze({
@@ -32,7 +33,7 @@ test('AIT USA Opportunity resolution ignores closed history and returns none', a
   ]);
   const result = await resolveAitUsaActiveOpportunity({ client, ...scope });
 
-  assert.deepEqual(result, { status: 'none', leadId: null, opportunity: null });
+  assert.deepEqual(result, { status: 'none', leadId: null, opportunity: null, activeCount: 0 });
   assert.match(client.calls[0].text, /pg_advisory_xact_lock/);
   assert.deepEqual(client.calls[1].values, ['org-1', 'bu-usa', 'contact-1']);
 });
@@ -58,7 +59,7 @@ test('AIT USA Opportunity resolution fails closed when aliases classify multiple
   ]);
   const result = await resolveAitUsaActiveOpportunity({ client, ...scope });
 
-  assert.deepEqual(result, { status: 'ambiguous', leadId: null, opportunity: null });
+  assert.deepEqual(result, { status: 'ambiguous', leadId: null, opportunity: null, activeCount: 2 });
 });
 
 test('AIT Signs cannot enter the AIT USA Opportunity resolver', async () => {
@@ -218,7 +219,93 @@ test('closed-to-active update returns 409 and performs no writer side effects wh
       reopenReason: 'correction',
       write: () => { wrote = true; },
     }),
-    (error) => error.status === 409 && /already has an active Opportunity/.test(error.message),
+    (error) => error.status === 409 && /active Opportunity changed/.test(error.message),
   );
   assert.equal(wrote, false);
+});
+
+test('unchanged-status stale PATCH cannot reactivate expected A after replacement B became active', async () => {
+  const tx = {
+    async query(text) {
+      const normalized = String(text).replace(/\s+/g, ' ').trim();
+      if (normalized.includes('from leads') && normalized.includes('order by created_at')) {
+        return { rows: [{ id: 'active-b', status: 'New Lead' }] };
+      }
+      return { rows: [] };
+    },
+  };
+  let wrote = false;
+  await assert.rejects(
+    withLockedAitUsaOpportunityMutation({
+      db: { transaction: (handler) => handler(tx) },
+      organizationId: 'org-1',
+      businessUnit: scope.businessUnit,
+      contact: scope.contact,
+      expectedOpportunityId: 'active-a',
+      toStatus: 'Follow Up',
+      write: () => { wrote = true; },
+    }),
+    (error) => error.status === 409 && /active Opportunity changed/.test(error.message),
+  );
+  assert.equal(wrote, false);
+});
+
+test('locked mutation reevaluates an expected row that became closed and requires a reopen reason', async () => {
+  const tx = {
+    async query(text) {
+      const normalized = String(text).replace(/\s+/g, ' ').trim();
+      if (normalized.includes('order by created_at')) {
+        return { rows: [{ id: 'active-a', status: 'Not Interested' }] };
+      }
+      if (normalized.includes('where id = $1 and organization_id = $2')) {
+        return { rows: [{ id: 'active-a', status: 'Not Interested' }] };
+      }
+      return { rows: [] };
+    },
+  };
+  let wrote = false;
+  await assert.rejects(
+    withLockedAitUsaOpportunityMutation({
+      db: { transaction: (handler) => handler(tx) },
+      organizationId: 'org-1',
+      businessUnit: scope.businessUnit,
+      contact: scope.contact,
+      expectedOpportunityId: 'active-a',
+      toStatus: 'Follow Up',
+      write: () => { wrote = true; },
+    }),
+    (error) => error.status === 403 && /requires a correction or new-course/.test(error.message),
+  );
+  assert.equal(wrote, false);
+});
+
+test('non-status AIT USA Opportunity mutation also uses the shared lock and expected-row binding', async () => {
+  const calls = [];
+  const tx = {
+    async query(text) {
+      const normalized = String(text).replace(/\s+/g, ' ').trim();
+      calls.push(normalized);
+      if (normalized.includes('order by created_at')) {
+        return { rows: [{ id: 'active-a', status: 'Follow Up' }] };
+      }
+      if (normalized.includes('where id = $1 and organization_id = $2')) {
+        return { rows: [{ id: 'active-a', status: 'Follow Up' }] };
+      }
+      return { rows: [] };
+    },
+  };
+  let writeTx;
+  await withLockedAitUsaOpportunityMutation({
+    db: { transaction: (handler) => handler(tx) },
+    organizationId: 'org-1',
+    businessUnit: scope.businessUnit,
+    contact: scope.contact,
+    expectedOpportunityId: 'active-a',
+    write: ({ tx: currentTx, transition }) => {
+      writeTx = currentTx;
+      assert.equal(transition, null);
+    },
+  });
+  assert.equal(writeTx, tx);
+  assert.match(calls[0], /pg_advisory_xact_lock/);
 });

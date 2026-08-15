@@ -61,3 +61,22 @@ test('AIT Signs bootstrap preserves newest-Lead selection regardless of AIT USA 
   assert.equal(payload.opportunityConflict, false);
   assert.equal(payload.activeOpportunityCount, 0);
 });
+
+test('AIT USA bootstrap ignores newer and active Leads from another business unit on a shared Contact', () => {
+  const [payload] = mapContacts(
+    [contact],
+    [
+      { id: 'signs-active-newer', contactId: contact.id, businessUnitId: 'bu-signs', status: 'New Lead', assignedUserId: 'signs-owner', createdAt: new Date('2026-08-16T12:00:00Z') },
+      { id: 'usa-active', contactId: contact.id, businessUnitId: aitUsa.id, status: 'Follow Up', assignedUserId: 'usa-owner', createdAt: new Date('2026-08-14T12:00:00Z') },
+      { id: 'signs-active-older', contactId: contact.id, businessUnitId: 'bu-signs', status: 'In Progress', createdAt: new Date('2026-08-13T12:00:00Z') },
+    ],
+    [],
+    [],
+    [aitUsa, { id: 'bu-signs', name: 'AIT Signs' }],
+  );
+  assert.equal(payload.opportunityId, 'usa-active');
+  assert.equal(payload.assignedTo, 'usa-owner');
+  assert.equal(payload.status, 'Follow Up');
+  assert.equal(payload.opportunityConflict, false);
+  assert.equal(payload.activeOpportunityCount, 1);
+});

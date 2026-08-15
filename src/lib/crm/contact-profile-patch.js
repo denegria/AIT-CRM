@@ -35,6 +35,14 @@ export function buildContactProfilePatch({
   delete patch.notes;
   delete patch.timeline;
 
+  if (isAitUsa && contact.opportunityConflict) {
+    return Object.fromEntries(
+      ['id', 'name', 'email', 'phone', 'address', 'opportunityId']
+        .filter((field) => Object.prototype.hasOwnProperty.call(editForm, field))
+        .map((field) => [field, editForm[field]]),
+    );
+  }
+
   if (isAitUsa && !contact.hasLeadStatus) {
     delete patch.status;
     delete patch.currentStage;
@@ -43,17 +51,6 @@ export function buildContactProfilePatch({
     delete patch.leadProfile;
     delete patch.courseMetadata;
   }
-  if (isAitUsa && contact.opportunityConflict) {
-    delete patch.status;
-    delete patch.currentStage;
-    delete patch.assignedTo;
-    delete patch.leadProfile;
-    delete patch.courseMetadata;
-    delete patch.source;
-    delete patch.businessUnitId;
-    delete patch.primaryBusinessUnitId;
-  }
-
   const canMutateOpportunity = !(isAitUsa && (!contact.hasLeadStatus || contact.opportunityConflict));
   return {
     ...patch,

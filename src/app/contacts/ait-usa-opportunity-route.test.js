@@ -78,19 +78,42 @@ const contact = Object.freeze({
 });
 const businessUnit = Object.freeze({ id: ids.businessUnit, name: 'AIT USA Institute', label: 'Division' });
 
+function fullBootstrapContactPayload(overrides = {}) {
+  return {
+    id: ids.contact,
+    name: 'Ana Updated',
+    email: 'ana@example.com',
+    phone: '555-0100',
+    address: 'Plainfield',
+    status: 'Follow Up',
+    currentStage: 'Follow Up',
+    opportunityId: ids.opportunity,
+    assignedTo: ids.otherUser,
+    source: 'Website',
+    businessUnitId: ids.businessUnit,
+    primaryBusinessUnitId: ids.businessUnit,
+    programInterest: 'HVAC',
+    preferredDay: 'Monday',
+    preferredSchedule: 'Evening',
+    testInterest: 'EPA',
+    educationLevel: 'High school',
+    schoolName: 'AIT USA',
+    locationPreference: 'Plainfield',
+    profileDetails: 'Full bootstrap payload field',
+    sourceDetail: 'Website form',
+    currentCourse: 'HVAC',
+    completedCourse: 'Electrical',
+    endedCourse: 'Plumbing',
+    courseOutcome: 'Completed',
+    leadProfile: { programInterest: 'HVAC' },
+    courseMetadata: { currentCourse: 'HVAC' },
+    ...overrides,
+  };
+}
+
 test('conflicted AIT USA unrelated-name PATCH body is not classified as an Opportunity mutation', () => {
   const body = buildContactProfilePatch({
-    editForm: {
-      id: ids.contact,
-      name: 'Ana Updated',
-      status: 'Follow Up',
-      opportunityId: ids.opportunity,
-      assignedTo: ids.otherUser,
-      source: 'Website',
-      businessUnitId: ids.businessUnit,
-      primaryBusinessUnitId: ids.businessUnit,
-      leadProfile: { programInterest: 'HVAC' },
-    },
+    editForm: fullBootstrapContactPayload(),
     contact: { hasLeadStatus: true, opportunityConflict: true },
     isAitUsa: true,
     lockedOwnerUserId: ids.user,
@@ -111,15 +134,22 @@ test('direct PATCH allows conflict-safe Contact-only edits with no Lead update',
     assignedUserId: ids.otherUser,
   };
   let writeInput = null;
+  const contactOnlyBody = buildContactProfilePatch({
+    editForm: fullBootstrapContactPayload(),
+    contact: { hasLeadStatus: true, opportunityConflict: true },
+    isAitUsa: true,
+    lockedOwnerUserId: ids.user,
+  });
+  assert.equal(hasOpportunityMutationRequest(contactOnlyBody), false);
   const response = await PATCH(
-    patchRequest({ id: ids.contact, name: 'Ana Updated', opportunityId: ids.opportunity }),
+    patchRequest(contactOnlyBody),
     {},
     {
       requirePermissionForRequest: async () => ({ error: null, session: elevatedSession }),
       getDbForRequest: () => dbRows([contact]),
       latestLeadForContactForRequest: async () => ({ ...selectedActive, id: '10000000-0000-4000-8000-000000000099' }),
       loadBusinessUnitForRequest: async () => businessUnit,
-      resolveActiveOpportunityForRequest: async () => ({ status: 'ambiguous', leadId: null, opportunity: null }),
+      resolveActiveOpportunityForRequest: async () => ({ status: 'ambiguous', leadId: null, opportunity: null, activeCount: 3 }),
       loadScopedOpportunityForRequest: async () => selectedActive,
       updateContactForRequest: async (input) => {
         writeInput = input;
@@ -136,6 +166,7 @@ test('direct PATCH allows conflict-safe Contact-only edits with no Lead update',
   assert.equal(response.status, 200);
   assert.equal(payload.contact.name, 'Ana Updated');
   assert.equal(payload.contact.opportunityConflict, true);
+  assert.equal(payload.contact.activeOpportunityCount, 3);
   assert.equal(writeInput.leadPatch, null);
   assert.equal(writeInput.leadStatusChange, null);
 });
@@ -169,13 +200,51 @@ test('direct closed-to-active PATCH maps a concurrent active-Opportunity conflic
       loadScopedOpportunityForRequest: async () => closedOpportunity,
       updateContactForRequest: async () => { normalWrites += 1; },
       updateContactInTransactionForRequest: async () => { transactionWrites += 1; },
-      withLockedReopenForRequest: async () => {
+      withLockedMutationForRequest: async () => {
         throw Object.assign(new Error('This Contact already has an active Opportunity.'), { status: 409 });
       },
     },
   );
   assert.equal(response.status, 409);
   assert.match((await response.json()).error, /already has an active Opportunity/);
+  assert.equal(normalWrites, 0);
+  assert.equal(transactionWrites, 0);
+});
+
+test('direct unchanged-status full UI PATCH enters the locked expected-opportunity path and rejects stale A', async () => {
+  const activeA = {
+    id: ids.opportunity,
+    organizationId: ids.organization,
+    businessUnitId: ids.businessUnit,
+    contactId: ids.contact,
+    status: 'Follow Up',
+    currentStage: 'Follow Up',
+    assignedUserId: ids.otherUser,
+  };
+  let normalWrites = 0;
+  let transactionWrites = 0;
+  let lockInput = null;
+  const response = await PATCH(
+    patchRequest(fullBootstrapContactPayload()),
+    {},
+    {
+      requirePermissionForRequest: async () => ({ error: null, session: elevatedSession }),
+      getDbForRequest: () => dbRows([contact], [{ id: ids.businessUnit }], [{ id: ids.otherUser }]),
+      latestLeadForContactForRequest: async () => activeA,
+      loadBusinessUnitForRequest: async () => businessUnit,
+      resolveActiveOpportunityForRequest: async () => ({ status: 'exact', leadId: ids.opportunity, opportunity: activeA, activeCount: 1 }),
+      loadScopedOpportunityForRequest: async () => activeA,
+      updateContactForRequest: async () => { normalWrites += 1; },
+      updateContactInTransactionForRequest: async () => { transactionWrites += 1; },
+      withLockedMutationForRequest: async (input) => {
+        lockInput = input;
+        throw Object.assign(new Error('The active Opportunity changed while this Contact was open.'), { status: 409 });
+      },
+    },
+  );
+  assert.equal(response.status, 409);
+  assert.equal(lockInput.expectedOpportunityId, ids.opportunity);
+  assert.equal(lockInput.toStatus, 'Follow Up');
   assert.equal(normalWrites, 0);
   assert.equal(transactionWrites, 0);
 });

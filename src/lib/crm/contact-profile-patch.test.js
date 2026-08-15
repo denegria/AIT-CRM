@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { buildContactProfilePatch } from './contact-profile-patch.js';
+import {
+  buildContactProfilePatch,
+  hasOpportunityMutationRequest,
+} from './contact-profile-patch.js';
 
 const fullEditForm = Object.freeze({
   id: 'contact-1',
@@ -15,6 +18,19 @@ const fullEditForm = Object.freeze({
   primaryBusinessUnitId: 'bu-usa',
   leadProfile: { programInterest: 'HVAC' },
   courseMetadata: { currentCourse: 'HVAC' },
+  programInterest: 'HVAC',
+  preferredDay: 'Monday',
+  preferredSchedule: 'Evening',
+  testInterest: 'EPA',
+  educationLevel: 'High school',
+  schoolName: 'AIT USA',
+  locationPreference: 'Plainfield',
+  profileDetails: 'Full bootstrap payload field',
+  sourceDetail: 'Facebook form',
+  currentCourse: 'HVAC',
+  completedCourse: 'Electrical',
+  endedCourse: 'Plumbing',
+  courseOutcome: 'Completed',
 });
 
 test('AIT USA conflict serializes an unrelated Contact edit without Opportunity mutation fields', () => {
@@ -27,9 +43,15 @@ test('AIT USA conflict serializes an unrelated Contact edit without Opportunity 
   assert.equal(patch.name, 'Updated name');
   assert.equal(patch.phone, '555-0100');
   assert.equal(patch.opportunityId, 'active-older');
-  for (const field of ['status', 'currentStage', 'assignedTo', 'source', 'businessUnitId', 'primaryBusinessUnitId', 'leadProfile', 'courseMetadata']) {
+  for (const field of [
+    'status', 'currentStage', 'assignedTo', 'source', 'businessUnitId', 'primaryBusinessUnitId',
+    'leadProfile', 'courseMetadata', 'programInterest', 'preferredDay', 'preferredSchedule',
+    'testInterest', 'educationLevel', 'schoolName', 'locationPreference', 'profileDetails',
+    'sourceDetail', 'currentCourse', 'completedCourse', 'endedCourse', 'courseOutcome',
+  ]) {
     assert.equal(Object.hasOwn(patch, field), false, `${field} must not be serialized`);
   }
+  assert.equal(hasOpportunityMutationRequest(patch), false);
 });
 
 test('AIT Signs preserves its legacy lifecycle, owner, source, and business-unit patch fields', () => {
