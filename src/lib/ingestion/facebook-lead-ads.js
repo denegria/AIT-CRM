@@ -15,6 +15,9 @@ import {
   recordInboundLeadAssignmentActivity,
   resolveDefaultInboundLeadOwnerUserId,
 } from '../crm/assignment.js';
+import { classifyContactIdentity } from '../crm/contact-identity.js';
+import { resolveAitUsaActiveOpportunity } from '../crm/ait-usa-opportunities.js';
+import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from '../crm/lifecycle.js';
 import { createInboundLeadIntakeTask } from '../tasks/intake.js';
 export const FACEBOOK_LEAD_ADS_BATCH_SOURCE_NAME = 'Facebook Lead Ads';
 export const FACEBOOK_LEAD_ADS_BATCH_SOURCE_TYPE = 'facebook_leads';
@@ -182,7 +185,7 @@ async function resolveBusinessUnitId(
   if (mapped) {
     const mappedResult = await client.query(
       `
-        select id
+        select id, name
         from business_units
         where organization_id = $1
           and is_active = true
@@ -194,6 +197,7 @@ async function resolveBusinessUnitId(
     if (mappedResult.rows[0]?.id) {
       return {
         businessUnitId: mappedResult.rows[0].id,
+        businessUnit: mappedResult.rows[0],
         mappingSource: mapping.source,
         explicitMapping: true,
       };
@@ -217,7 +221,7 @@ async function resolveBusinessUnitId(
 
   const result = await client.query(
     `
-      select id
+      select id, name
       from business_units
       where organization_id = $1 and is_active = true
       order by name asc
@@ -227,6 +231,7 @@ async function resolveBusinessUnitId(
   );
   return {
     businessUnitId: result.rows[0]?.id || null,
+    businessUnit: result.rows[0] || null,
     mappingSource: result.rows[0]?.id ? 'fallback' : null,
     explicitMapping: false,
     reason: result.rows[0]?.id ? null : 'No business unit found',
@@ -251,44 +256,43 @@ async function hasLeadgenId(client, leadgenId) {
 async function findExistingContact(client, organizationId, details) {
   if (details.email) {
     const byEmail = await client.query(
-      `
-        select id, primary_business_unit_id
-        from contacts
-        where organization_id = $1 and lower(email) = lower($2)
-        order by updated_at desc
-        limit 1
-      `,
+      `select id, primary_business_unit_id
+       from contacts
+       where organization_id = $1 and lower(email) = lower($2)
+       order by updated_at desc
+       limit 1`,
       [organizationId, details.email],
     );
     if (byEmail.rows[0]) return byEmail.rows[0];
   }
-
   if (details.phone) {
     const byPhone = await client.query(
-      `
-        select id, primary_business_unit_id
-        from contacts
-        where organization_id = $1 and phone = $2
-        order by updated_at desc
-        limit 1
-      `,
+      `select id, primary_business_unit_id
+       from contacts
+       where organization_id = $1 and phone = $2
+       order by updated_at desc
+       limit 1`,
       [organizationId, details.phone],
     );
     if (byPhone.rows[0]) return byPhone.rows[0];
   }
-
   return null;
 }
 
-async function upsertContactAndLead(client, organizationId, businessUnitId, event, details, sourceRowId, rowNumber) {
-  if (!businessUnitId) return { contactId: null, leadId: null, reason: 'No business unit found' };
-  const assignedUserId = await resolveDefaultInboundLeadOwnerUserId(client, {
-    organizationId,
-    businessUnitId,
-    sourceType: 'facebook_lead_ads',
-    sourceKey: event.leadgenId || event.id || sourceRowId || String(rowNumber || ''),
-  });
+async function loadFacebookBusinessUnit(client, organizationId, businessUnitId) {
+  const result = await client.query(
+    `select id, name from business_units
+     where organization_id = $1 and id = $2 and is_active = true
+     limit 1`,
+    [organizationId, businessUnitId],
+  );
+  return result.rows[0] || null;
+}
 
+async function upsertContactAndLead(client, organizationId, businessUnitId, event, details, sourceRowId, rowNumber, preparedBusinessUnit = null) {
+  if (!businessUnitId) return { contactId: null, leadId: null, reason: 'No business unit found' };
+  const businessUnit = preparedBusinessUnit || await loadFacebookBusinessUnit(client, organizationId, businessUnitId);
+  if (!businessUnit) return { contactId: null, leadId: null, reason: 'Business unit not found' };
   let existingLead = null;
   if (sourceRowId) {
     const existingLeadResult = await client.query(
@@ -313,8 +317,50 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
     existingLead = existingLeadResult.rows[0] || null;
   }
 
-  const existing = await findExistingContact(client, organizationId, details);
-  let contactId = existingLead?.contact_id || existing?.id || null;
+  const isAitUsa = workflowKeyForBusinessUnit(businessUnit) === WORKFLOW_KEYS.AIT_USA;
+  const legacyExistingContact = !existingLead && !isAitUsa
+    ? await findExistingContact(client, organizationId, details)
+    : null;
+  const identity = existingLead
+    ? { status: 'exact', contactId: existingLead.contact_id }
+    : isAitUsa
+      ? await classifyContactIdentity(client, {
+          organizationId,
+          email: details.email,
+          phone: details.phone,
+        })
+      : legacyExistingContact
+        ? { status: 'exact', contactId: legacyExistingContact.id }
+        : { status: 'new', contactId: null };
+  if (!existingLead && identity.status === 'ambiguous') {
+    return {
+      contactId: null,
+      leadId: null,
+      assignedUserId: null,
+      reason: `Facebook lead identity needs review: ${identity.reason}.`,
+      blockedReason: 'contact_identity_review',
+    };
+  }
+
+  const opportunityResolution = !existingLead && identity.status === 'exact' && isAitUsa
+    ? await resolveAitUsaActiveOpportunity({
+        client,
+        organization: organizationId,
+        businessUnit,
+        contact: identity.contactId,
+      })
+    : { status: 'none', leadId: null, opportunity: null };
+  if (opportunityResolution.status === 'ambiguous') {
+    return {
+      contactId: null,
+      leadId: null,
+      assignedUserId: null,
+      reason: 'Facebook lead Opportunity needs review: multiple active Opportunities.',
+      blockedReason: 'multiple_active_opportunities',
+    };
+  }
+
+  let contactId = existingLead?.contact_id || identity.contactId || null;
   if (contactId) {
     const contactUpdate = await client.query(
       `
@@ -358,9 +404,16 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
     extraFieldNotes.length ? `Facebook form answers:\n${extraFieldNotes.map((line) => `- ${line}`).join('\n')}` : '',
   ].filter(Boolean).join('\n\n');
 
-  let leadId = existingLead?.id || null;
-  let leadAssignedUserId = existingLead?.assigned_user_id || assignedUserId;
+  let leadId = existingLead?.id || opportunityResolution.leadId || null;
+  let leadAssignedUserId = existingLead?.assigned_user_id || opportunityResolution.opportunity?.assignedUserId || null;
+  const createdOpportunity = !leadId;
   if (!leadId) {
+    const assignedUserId = await resolveDefaultInboundLeadOwnerUserId(client, {
+      organizationId,
+      businessUnitId,
+      sourceType: 'facebook_lead_ads',
+      sourceKey: event.leadgenId || event.id || sourceRowId || String(rowNumber || ''),
+    });
     const lead = await client.query(
       `
         insert into leads
@@ -410,13 +463,15 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
     }
   }
 
-  await recordInboundLeadAssignmentActivity(client, {
-    organizationId,
-    businessUnitId,
-    contactId,
-    leadId,
-    ownerUserId: leadAssignedUserId,
-  });
+  if (createdOpportunity) {
+    await recordInboundLeadAssignmentActivity(client, {
+      organizationId,
+      businessUnitId,
+      contactId,
+      leadId,
+      ownerUserId: leadAssignedUserId,
+    });
+  }
 
   await client.query(
     `
@@ -443,6 +498,19 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
       rowNumber,
     ],
   );
+  if (!createdOpportunity && extraFieldNotes.length) {
+    await client.query(
+      `insert into notes (organization_id, business_unit_id, contact_id, lead_id, body)
+       values ($1, $2, $3, $4, $5)`,
+      [
+        organizationId,
+        businessUnitId,
+        contactId,
+        leadId,
+        `Facebook form answers:\n${extraFieldNotes.map((line) => `- ${line}`).join('\n')}`,
+      ],
+    );
+  }
   const inboundLeadIdempotencyKey = `facebook_lead_ads:${event.leadgenId || sourceRowId || leadId}`;
   const inboundLeadMetadata = {
     leadgenId: event.leadgenId || null,
@@ -476,7 +544,7 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
     ownerUserId: leadAssignedUserId,
     metadata: inboundLeadMetadata,
   });
-  return { contactId, leadId, assignedUserId: leadAssignedUserId, reason: null, alreadyExists: Boolean(existingLead) };
+  return { contactId, leadId, assignedUserId: leadAssignedUserId, reason: null, alreadyExists: !createdOpportunity };
 }
 
 export async function promoteFacebookLeadProposalToCrm(
@@ -563,11 +631,12 @@ async function maybeAutoPromoteFacebookLead(client, {
     details,
     sourceRowId,
     rowNumber,
+    businessUnit.businessUnit,
   );
 
   return {
     ...crmWrite,
-    blockedReason: crmWrite.leadId ? null : 'crm_write_failed',
+    blockedReason: crmWrite.leadId ? null : crmWrite.blockedReason || 'crm_write_failed',
   };
 }
 

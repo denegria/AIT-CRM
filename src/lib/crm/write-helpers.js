@@ -61,6 +61,7 @@ export async function createContactWithLead({
   actorUserId,
   contactValues,
   leadValues = null,
+  initialLeadStatusReason = null,
   initialNote = null,
 }) {
   return db.transaction(async (tx) => {
@@ -82,6 +83,19 @@ export async function createContactWithLead({
           ...leadValues,
         })
         .returning();
+      if (initialLeadStatusReason) {
+        await tx.insert(leadStatusHistory).values({
+          organizationId,
+          businessUnitId: lead.businessUnitId,
+          contactId: contact.id,
+          leadId: lead.id,
+          fromStatus: null,
+          toStatus: lead.status,
+          actorUserId,
+          reason: initialLeadStatusReason,
+          occurredAt: new Date(),
+        });
+      }
     }
 
     let noteRows = [];

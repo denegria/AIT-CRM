@@ -517,6 +517,80 @@ test('creates a notification after a new website lead is promoted', async () => 
   assert.equal(taskInsert.params[12], 'New lead follow-up');
 });
 
+test('AIT USA website inquiries reuse the sole active Opportunity and preserve its source and owner', async () => {
+  const { client, calls } = createWebsitePromotionClient({
+    existingContactId: 'contact-1',
+    opportunityRows: [{
+      id: 'opportunity-existing',
+      organization_id: 'org-1',
+      business_unit_id: 'bu-usa',
+      contact_id: 'contact-1',
+      status: 'Follow Up',
+      assigned_user_id: 'owner-existing',
+      source_name: 'Original inquiry',
+    }],
+  });
+  const result = await ingestWebsiteLeadSubmission(client, {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-usa',
+    businessUnit: { id: 'bu-usa', name: 'AIT USA Institute' },
+    body: { externalId: 'aitusa-reuse-001', email: 'student@example.com', message: 'A second inquiry' },
+  });
+
+  assert.equal(result.leadId, 'opportunity-existing');
+  assert.equal(result.assignedUserId, 'owner-existing');
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('update leads set original_notes')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into activity_events')), true);
+  const task = calls.find((call) => call.sql.startsWith('with intake_lock as'));
+  assert.equal(task.params.includes('owner-existing'), true);
+});
+
+test('AIT USA website inquiries with multiple active Opportunities go to Import Review without Contact or CRM side effects', async () => {
+  const { client, calls } = createWebsitePromotionClient({
+    existingContactId: 'contact-1',
+    opportunityRows: [
+      { id: 'active-1', status: 'New Lead' },
+      { id: 'active-2', status: 'Enrolled' },
+    ],
+  });
+  const result = await ingestWebsiteLeadSubmission(client, {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-usa',
+    businessUnit: { id: 'bu-usa', name: 'AIT USA Institute' },
+    body: { externalId: 'aitusa-review-001', email: 'student@example.com' },
+  });
+
+  assert.equal(result.review, true);
+  assert.equal(result.contactId, null);
+  assert.equal(result.leadId, null);
+  assert.equal(calls.some((call) => call.sql.startsWith('update contacts')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into notifications')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('with intake_lock as')), false);
+  const review = calls.find((call) => call.sql.startsWith('insert into import_review_items'));
+  assert.match(review.params[3], /multiple_active_opportunities/);
+});
+
+test('closed AIT USA Opportunity history does not block one new Opportunity', async () => {
+  const { client, calls } = createWebsitePromotionClient({
+    existingContactId: 'contact-1',
+    opportunityRows: [
+      { id: 'closed-1', status: 'Dropped / Quit' },
+      { id: 'closed-2', status: 'retargeting only' },
+    ],
+  });
+  const result = await ingestWebsiteLeadSubmission(client, {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-usa',
+    businessUnit: { id: 'bu-usa', name: 'AIT USA Institute' },
+    body: { externalId: 'aitusa-new-after-closed-001', email: 'student@example.com' },
+  });
+
+  assert.equal(result.leadId, 'lead-1');
+  assert.equal(calls.filter((call) => call.sql.startsWith('insert into leads')).length, 1);
+});
+
 test('routes Wix student geography to the lead and explicit campus to intended learning location', async () => {
   const { client, calls } = createWebsitePromotionClient();
 
@@ -738,7 +812,11 @@ function createDuplicateClient() {
   };
 }
 
-function createWebsitePromotionClient({ duplicateAfterFirstPromotion = false } = {}) {
+function createWebsitePromotionClient({
+  duplicateAfterFirstPromotion = false,
+  existingContactId = null,
+  opportunityRows = [],
+} = {}) {
   const calls = [];
   let promoted = false;
   return {
@@ -774,7 +852,13 @@ function createWebsitePromotionClient({ duplicateAfterFirstPromotion = false } =
           return { rows: [] };
         }
         if (normalizedSql.startsWith('select id from contacts where organization_id')) {
-          return { rows: [] };
+          return { rows: existingContactId ? [{ id: existingContactId }] : [] };
+        }
+        if (normalizedSql.startsWith('select id, organization_id, business_unit_id, contact_id, status')) {
+          return { rows: opportunityRows };
+        }
+        if (normalizedSql.startsWith('update contacts')) {
+          return { rows: existingContactId ? [{ id: existingContactId }] : [] };
         }
         if (normalizedSql.startsWith('insert into contacts')) {
           return { rows: [{ id: 'contact-1' }] };

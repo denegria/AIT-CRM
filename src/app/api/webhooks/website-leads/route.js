@@ -7,7 +7,7 @@ import {
   ingestWebsiteLeadSubmission,
   normalizeWebsiteLeadSubmission,
   resolveSingleOrganizationId,
-  resolveWebsiteLeadBusinessUnitId,
+  resolveWebsiteLeadBusinessUnit,
   verifyWebsiteLeadSecret,
   websiteLeadAuthFailureDiagnostics,
 } from '@/lib/ingestion/website-leads.js';
@@ -158,11 +158,12 @@ export async function POST(request) {
           ? aitUsaEventToWebsiteLeadBody(aitUsaEvent.event)
           : null;
         const normalizedLead = leadBody ? normalizeWebsiteLeadSubmission(leadBody) : null;
-        const businessUnitId = await resolveWebsiteLeadBusinessUnitId(client, {
+        const businessUnit = await resolveWebsiteLeadBusinessUnit(client, {
           organizationId,
           lead: normalizedLead?.lead || { sourceKey: 'aitusa_refresh', sourceName: 'AIT USA Refresh' },
           businessUnitMap: parseJsonEnv(BUSINESS_UNIT_MAP_ENV),
         });
+        const businessUnitId = businessUnit?.id || null;
         if (!businessUnitId) return jsonError('No active business unit exists for website lead ingestion.', 503);
         if (normalizedLead) {
           if (!hasWebsiteLeadContactSignal(normalizedLead.lead)) {
@@ -171,6 +172,7 @@ export async function POST(request) {
           const result = await ingestWebsiteLeadSubmission(client, {
             organizationId,
             businessUnitId,
+            businessUnit,
             body: normalizedLead.payload,
             lead: normalizedLead.lead,
           });
@@ -183,7 +185,7 @@ export async function POST(request) {
             leadId: result.leadId,
           }, { status: result.duplicate || result.review ? 202 : 201 });
         }
-        const result = await ingestAitUsaCrmEvent(client, { organizationId, businessUnitId, event: aitUsaEvent.event });
+        const result = await ingestAitUsaCrmEvent(client, { organizationId, businessUnitId, businessUnit, event: aitUsaEvent.event });
         return NextResponse.json({ ok: true, acknowledged: result.acknowledged === true, duplicate: result.duplicate, review: result.review === true, contactId: result.contactId, leadId: result.leadId }, { status: result.duplicate || result.review ? 202 : 201 });
       });
     } catch (error) {
@@ -204,16 +206,18 @@ export async function POST(request) {
       const organizationId = await getOrganizationId(client);
       if (!organizationId) return jsonError('No CRM organization exists.', 503);
 
-      const businessUnitId = await resolveWebsiteLeadBusinessUnitId(client, {
+      const businessUnit = await resolveWebsiteLeadBusinessUnit(client, {
         organizationId,
         lead,
         businessUnitMap: parseJsonEnv(BUSINESS_UNIT_MAP_ENV),
       });
+      const businessUnitId = businessUnit?.id || null;
       if (!businessUnitId) return jsonError('No active business unit exists for website lead ingestion.', 503);
 
       const result = await ingestWebsiteLeadSubmission(client, {
         organizationId,
         businessUnitId,
+        businessUnit,
         body: payload,
         lead,
       });

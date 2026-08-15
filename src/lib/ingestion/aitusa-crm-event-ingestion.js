@@ -1,6 +1,7 @@
 import { createInboundLeadNotification } from '../notifications/service.js';
 import { createInboundLeadIntakeTask } from '../tasks/intake.js';
 import { classifyContactIdentity } from '../crm/contact-identity.js';
+import { resolveAitUsaActiveOpportunity } from '../crm/ait-usa-opportunities.js';
 
 const FOLLOW_UP_EVENTS = new Set(['placement_completed', 'advisor_handoff_requested']);
 const AITUSA_CRM_REVIEW_BATCH_SOURCE_NAME = 'AIT USA Refresh Events';
@@ -13,7 +14,7 @@ const AITUSA_CRM_REVIEW_TYPE = 'aitusa_crm_identity_review';
 // event is a timeline fact, not a new form submission. The transaction lock
 // makes acknowledgement/replay safe even though the legacy import tables do not
 // have a suitable event-id uniqueness constraint.
-export async function ingestAitUsaCrmEvent(client, { organizationId, businessUnitId, event }) {
+export async function ingestAitUsaCrmEvent(client, { organizationId, businessUnitId, businessUnit: preparedBusinessUnit = null, event }) {
   const eventKey = event.idempotencyKey;
   await client.query('begin');
   try {
@@ -67,8 +68,14 @@ export async function ingestAitUsaCrmEvent(client, { organizationId, businessUni
         reviewRecord,
       };
     }
+    const businessUnit = preparedBusinessUnit || { id: businessUnitId, name: 'AIT USA Institute' };
     const existingLead = identity.status === 'exact'
-      ? await findExistingEventLead(client, { organizationId, businessUnitId, contactId: identity.contactId })
+      ? await resolveAitUsaActiveOpportunity({
+          client,
+          organization: organizationId,
+          businessUnit,
+          contact: identity.contactId,
+        })
       : { status: 'none', leadId: null };
     if (existingLead.status === 'ambiguous') {
       const reviewRecord = await recordContactIdentityReview(client, {
@@ -76,7 +83,7 @@ export async function ingestAitUsaCrmEvent(client, { organizationId, businessUni
         businessUnitId,
         event,
         identity,
-        reason: 'multiple_same_business_unit_leads',
+        reason: 'multiple_active_opportunities',
       });
       await client.query('commit');
       return {
@@ -339,17 +346,6 @@ async function upsertEventContact(client, { organizationId, businessUnitId, cont
     [organizationId, businessUnitId, contact.firstName || 'AIT USA learner', contact.email || '', contact.phone || ''],
   );
   return inserted.rows[0]?.id || null;
-}
-
-async function findExistingEventLead(client, { organizationId, businessUnitId, contactId }) {
-  const existing = await client.query(
-    `select id from leads where organization_id = $1 and business_unit_id = $2 and contact_id = $3`,
-    [organizationId, businessUnitId, contactId],
-  );
-  const ids = [...new Set(existing.rows.map((row) => row.id).filter(Boolean))].sort();
-  if (ids.length > 1) return { status: 'ambiguous', leadId: null };
-  if (ids.length === 1) return { status: 'exact', leadId: ids[0] };
-  return { status: 'none', leadId: null };
 }
 
 async function createEventLead(client, { organizationId, businessUnitId, contactId, event }) {

@@ -206,7 +206,29 @@ test('never attaches an AIT USA event to a lead from another business unit', asy
   assert.equal(client.calls.some((call) => call.sql.includes('lead-foreign-unit-a')), false);
 });
 
-test('routes multiple same-business-unit AIT USA leads to durable review before contact mutation and keeps replay idempotent', async () => {
+test('AIT USA follow-up events reuse the sole active Opportunity and closed history allows one new Opportunity', async () => {
+  const existingClient = createOpportunityEventClient([
+    { id: 'active-1', status: 'Follow Up', assigned_user_id: 'owner-existing', source_name: 'Original source' },
+    { id: 'closed-1', status: 'Dropped / Quit' },
+  ]);
+  const existing = await ingestAitUsaCrmEvent(existingClient, {
+    organizationId: 'org-1', businessUnitId: 'unit-1', event: event(),
+  });
+  assert.equal(existing.leadId, 'active-1');
+  assert.equal(existingClient.calls.some((call) => call.sql.includes('insert into leads')), false);
+
+  const closedClient = createOpportunityEventClient([
+    { id: 'closed-1', status: 'Dropped / Quit' },
+    { id: 'closed-2', status: 'Course Completed' },
+  ]);
+  const created = await ingestAitUsaCrmEvent(closedClient, {
+    organizationId: 'org-1', businessUnitId: 'unit-1', event: event(),
+  });
+  assert.equal(created.leadId, 'lead-created-1');
+  assert.equal(closedClient.calls.filter((call) => call.sql.includes('insert into leads')).length, 1);
+});
+
+test('routes multiple active same-business-unit AIT USA Opportunities to durable review before contact mutation and keeps replay idempotent', async () => {
   const client = createMultipleSameBusinessUnitLeadClient();
   const input = {
     organizationId: 'org-1',
@@ -229,7 +251,7 @@ test('routes multiple same-business-unit AIT USA leads to durable review before 
   assert.equal(client.calls.filter((call) => call.sql.includes('insert into import_review_items')).length, 1);
   const reviewActivity = client.calls.find((call) =>
     call.sql.includes('insert into activity_events') &&
-    String(call.values[3] || '').includes('contact_identity_review:multiple_same_business_unit_leads'),
+    String(call.values[3] || '').includes('contact_identity_review:multiple_active_opportunities'),
   );
   assert.ok(reviewActivity);
 });
@@ -450,6 +472,25 @@ function createCrossBusinessUnitLeadClient() {
         return { rows: sql.includes('business_unit_id = $2') ? [] : [{ id: 'lead-foreign-unit-a' }] };
       }
       if (sql.includes('insert into leads')) return { rows: [{ id: 'lead-unit-b' }] };
+      return { rows: [] };
+    },
+  };
+}
+
+function createOpportunityEventClient(opportunityRows) {
+  const calls = [];
+  return {
+    calls,
+    async query(statement, values = []) {
+      const sql = String(statement);
+      calls.push({ sql, values });
+      if (sql.includes('from activity_events')) return { rows: [] };
+      if (sql.includes('from contacts')) return { rows: [{ id: 'contact-1' }] };
+      if (sql.includes('update contacts')) return { rows: [{ id: 'contact-1' }] };
+      if (sql.includes('from leads')) return { rows: opportunityRows };
+      if (sql.includes('insert into leads')) return { rows: [{ id: 'lead-created-1' }] };
+      if (sql.includes('insert into notifications')) return { rows: [{ id: 'notification-1' }] };
+      if (sql.includes('insert into tasks')) return { rows: [{ id: 'task-1' }] };
       return { rows: [] };
     },
   };

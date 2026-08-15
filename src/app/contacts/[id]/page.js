@@ -31,6 +31,7 @@ import { appendContactNote, contactDetailPageState, loadContactTimeline } from '
 import { useRecordScopeRegistration } from '@/components/RecordScopeContext';
 import { InternalNoteComposer } from '@/components/ContactTimelineNoteFields';
 import FollowUpOutcomeDialog from '@/components/FollowUpOutcomeDialog';
+import OpportunityLifecycleField from '@/components/OpportunityLifecycleField';
 import {
   buildContactFollowUpLookup,
   followUpSubmissionTaskId,
@@ -431,6 +432,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     access,
     dataSource,
     businessUnits,
+    replaceContactFromServer,
   } = useCRM();
   const [activeTab, setActiveTab] = useState('timeline');
   const [timelineFilter, setTimelineFilter] = useState('all');
@@ -484,6 +486,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState(null);
+  const [startOpportunityOpen, setStartOpportunityOpen] = useState(false);
+  const [startOpportunityBusy, setStartOpportunityBusy] = useState(false);
+  const [startOpportunityError, setStartOpportunityError] = useState('');
+  const [startOpportunityForm, setStartOpportunityForm] = useState({ status: 'New Lead', assignedTo: '', reason: '' });
   const [activeProfileEditTab, setActiveProfileEditTab] = useState('general');
   const [archiveConfirmOpen, setArchiveConfirmOpen] = useState(false);
   const [archiveReason, setArchiveReason] = useState('');
@@ -573,6 +579,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     editForm.status !== contact.status &&
     isWorkflowStatusClosed(contact.status, contactBusinessUnit) &&
     !isWorkflowStatusClosed(editForm.status, contactBusinessUnit),
+  );
+  const isEnteringClosedStatus = Boolean(
+    editForm &&
+    contact?.hasLeadStatus &&
+    editForm.status &&
+    editForm.status !== contact.status &&
+    isWorkflowStatusClosed(editForm.status, contactBusinessUnit),
   );
   const detailView = buildContactDetailViewModel({
     contact,
@@ -962,6 +975,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       ...contact,
       assignedTo: contact?.assignedTo || '',
       statusChangeReason: '',
+      terminalStatusReason: '',
       leadProfile: {
         programInterest: contact?.programInterest || '',
         preferredDay: contact?.preferredDay || '',
@@ -974,7 +988,43 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         sourceDetail: contact?.sourceDetail || '',
       },
     });
+    setStartOpportunityOpen(false);
+    setStartOpportunityError('');
+    setStartOpportunityForm({
+      status: 'New Lead',
+      assignedTo: coordinatorUiPolicy.lockedOwnerUserId || contact?.assignedTo || '',
+      reason: '',
+    });
     setIsEditModalOpen(true);
+  };
+
+  const startOpportunity = async () => {
+    if (!contact?.id || !contactBusinessUnit?.id || startOpportunityBusy) return;
+    setStartOpportunityBusy(true);
+    setStartOpportunityError('');
+    try {
+      const response = await fetch(`/api/contacts/${contact.id}/opportunities`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          businessUnitId: contactBusinessUnit.id,
+          status: startOpportunityForm.status,
+          assignedTo: coordinatorUiPolicy.lockedOwnerUserId || startOpportunityForm.assignedTo || '',
+          reason: startOpportunityForm.reason,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Opportunity could not be started.');
+      replaceContactFromServer(payload.contact);
+      setEditForm((current) => ({ ...current, ...payload.contact, terminalStatusReason: '', statusChangeReason: '' }));
+      setStartOpportunityOpen(false);
+      setTimelineReloadKey((key) => key + 1);
+      toast('Opportunity started');
+    } catch (error) {
+      setStartOpportunityError(error.message || 'Opportunity could not be started.');
+    } finally {
+      setStartOpportunityBusy(false);
+    }
   };
 
   const openPersonModal = (person = null) => {
@@ -1142,6 +1192,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       toast('Choose why this closed status is being reopened.', 'error');
       return;
     }
+    if (isEnteringClosedStatus && !editForm.terminalStatusReason?.trim()) {
+      setActiveProfileEditTab('general');
+      toast('Add a reason for closing this Opportunity.', 'error');
+      return;
+    }
     const shouldPromptForCourse = isAitUsaContact &&
       editForm.status !== contact.status &&
       isEnrolledWorkflowStatus(editForm.status) &&
@@ -1149,10 +1204,19 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     const profilePatch = { ...editForm };
     delete profilePatch.notes;
     delete profilePatch.timeline;
+    if (isAitUsaContact && !contact.hasLeadStatus) {
+      delete profilePatch.status;
+      delete profilePatch.currentStage;
+      delete profilePatch.opportunityId;
+      delete profilePatch.assignedTo;
+      delete profilePatch.leadProfile;
+      delete profilePatch.courseMetadata;
+    }
     updateContact(contact.id, {
       ...profilePatch,
       ...(coordinatorUiPolicy.lockedOwnerUserId ? { assignedTo: coordinatorUiPolicy.lockedOwnerUserId } : {}),
       statusChangeReason: isClosedStatusReopen ? editForm.statusChangeReason : '',
+      terminalStatusReason: isEnteringClosedStatus ? editForm.terminalStatusReason : '',
       ...(editForm.leadProfile ? { leadProfile: editForm.leadProfile } : {}),
     })
       .then(() => {
@@ -1785,7 +1849,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       {access.canWriteCrm && (
         <div className={s.actionPanel} aria-label={`${detailView.profileTitle} actions`}>
           <div className={s.actionPanelHeader}>Actions</div>
-          {nextStatus && (
+          {nextStatus && (!isAitUsaContact || contact.hasLeadStatus) && (
             <button
               className={`${s.statusStepButton} btn btn-block`}
               type="button"
@@ -2882,11 +2946,64 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   </div>
                   <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-status">Status</label>
-                    <select id="profile-edit-status" className="input select" value={editForm.status} onChange={e => setEditForm({...editForm, status: e.target.value})}>
-                      {[...new Set([...(contactStatusOptions || PIPELINE_STATUSES), ...(editForm.status ? [editForm.status] : [])])].map(st => <option key={st} value={st}>{st}</option>)}
-                    </select>
+                    <OpportunityLifecycleField
+                      isAitUsa={isAitUsaContact}
+                      hasLeadStatus={contact.hasLeadStatus}
+                      status={editForm.status}
+                      statuses={contactStatusOptions || PIPELINE_STATUSES}
+                      onStatusChange={e => setEditForm({...editForm, status: e.target.value, terminalStatusReason: ''})}
+                      onStart={() => setStartOpportunityOpen(true)}
+                    />
                   </div>
                 </div>
+                {isAitUsaContact && !contact.hasLeadStatus && startOpportunityOpen && (
+                  <div className="profile-editor-account-action" aria-label="Start Opportunity">
+                    <div className="grid-2">
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="start-opportunity-status">Initial Opportunity status</label>
+                        <select
+                          id="start-opportunity-status"
+                          className="input select"
+                          value={startOpportunityForm.status}
+                          onChange={(event) => setStartOpportunityForm((current) => ({ ...current, status: event.target.value }))}
+                        >
+                          {contactStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+                        </select>
+                      </div>
+                      {coordinatorUiPolicy.canManageCoordinatorAssignments && (
+                        <div className="form-group">
+                          <label className="form-label" htmlFor="start-opportunity-owner">Assigned To</label>
+                          <select
+                            id="start-opportunity-owner"
+                            className="input select"
+                            value={startOpportunityForm.assignedTo}
+                            onChange={(event) => setStartOpportunityForm((current) => ({ ...current, assignedTo: event.target.value }))}
+                          >
+                            <option value="">Unassigned</option>
+                            {ownerOptions.map((owner) => <option key={owner.id} value={owner.id}>{owner.label}</option>)}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="start-opportunity-reason">Reason</label>
+                      <textarea
+                        id="start-opportunity-reason"
+                        className="textarea"
+                        rows={2}
+                        value={startOpportunityForm.reason}
+                        placeholder="Required when the initial status is closed"
+                        onChange={(event) => setStartOpportunityForm((current) => ({ ...current, reason: event.target.value }))}
+                      />
+                    </div>
+                    {startOpportunityError && <div className={s.courseError}>{startOpportunityError}</div>}
+                    <div>
+                      <button className="btn btn-primary" type="button" onClick={startOpportunity} disabled={startOpportunityBusy}>
+                        {startOpportunityBusy ? 'Starting…' : 'Start opportunity'}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {isClosedStatusReopen && (
                   <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-reopen-reason">Reopen reason</label>
@@ -2903,6 +3020,19 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <div className="profile-editor-helper">
                       Use correction only for data-entry mistakes. For a new class or program, choose new course follow-up so history shows this is re-engagement, not an erased completion.
                     </div>
+                  </div>
+                )}
+                {isEnteringClosedStatus && (
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-terminal-reason">Outcome reason</label>
+                    <textarea
+                      id="profile-edit-terminal-reason"
+                      className="textarea"
+                      rows={2}
+                      value={editForm.terminalStatusReason || ''}
+                      placeholder="Explain why this Opportunity is moving to a closed status"
+                      onChange={e => setEditForm({...editForm, terminalStatusReason: e.target.value})}
+                    />
                   </div>
                 )}
                 {coordinatorUiPolicy.canManageCoordinatorAssignments ? (

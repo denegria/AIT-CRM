@@ -3,7 +3,12 @@ import {
   recordInboundLeadAssignmentActivity,
   resolveDefaultInboundLeadOwnerUserId,
 } from '../crm/assignment.js';
-import { normalizeLifecycleStatus } from '../crm/lifecycle.js';
+import {
+  normalizeLifecycleStatus,
+  WORKFLOW_KEYS,
+  workflowKeyForBusinessUnit,
+} from '../crm/lifecycle.js';
+import { resolveAitUsaActiveOpportunity } from '../crm/ait-usa-opportunities.js';
 import {
   intendedLearningLocationFromWebsiteLead,
   leadProfilePatchFromWebsiteLead,
@@ -821,29 +826,34 @@ function parseTimestamp(value) {
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
-export async function resolveWebsiteLeadBusinessUnitId(client, { organizationId, lead, businessUnitMap = {} }) {
+export async function resolveWebsiteLeadBusinessUnit(client, { organizationId, lead, businessUnitMap = {} }) {
   const mapped = businessUnitMap[lead.sourceKey] || businessUnitMap[lead.sourceName] || businessUnitMap.default || '';
   const requested = lead.businessUnitHint || mapped;
 
   if (requested) {
     const byId = await client.query(
-      'select id from business_units where organization_id = $1 and id::text = $2 and is_active = true limit 1',
+      'select id, name from business_units where organization_id = $1 and id::text = $2 and is_active = true limit 1',
       [organizationId, requested],
     );
-    if (byId.rows[0]?.id) return byId.rows[0].id;
+    if (byId.rows[0]?.id) return byId.rows[0];
 
     const byName = await client.query(
-      'select id from business_units where organization_id = $1 and lower(name) = lower($2) and is_active = true limit 1',
+      'select id, name from business_units where organization_id = $1 and lower(name) = lower($2) and is_active = true limit 1',
       [organizationId, requested],
     );
-    if (byName.rows[0]?.id) return byName.rows[0].id;
+    if (byName.rows[0]?.id) return byName.rows[0];
   }
 
   const fallback = await client.query(
-    'select id from business_units where organization_id = $1 and is_active = true order by name asc limit 1',
+    'select id, name from business_units where organization_id = $1 and is_active = true order by name asc limit 1',
     [organizationId],
   );
-  return fallback.rows[0]?.id || null;
+  return fallback.rows[0] || null;
+}
+
+export async function resolveWebsiteLeadBusinessUnitId(client, options) {
+  const businessUnit = await resolveWebsiteLeadBusinessUnit(client, options);
+  return businessUnit?.id || null;
 }
 
 export async function findDuplicateWebsiteLeadSubmission(client, { organizationId, externalId }) {
@@ -1143,6 +1153,37 @@ async function persistLead(client, organizationId, businessUnitId, contactId, le
   return leadId;
 }
 
+async function attachWebsiteInquiryToOpportunity(client, {
+  organizationId,
+  businessUnitId,
+  contactId,
+  leadId,
+  lead,
+  rowNumber,
+}) {
+  await client.query(
+    'insert into activity_events (organization_id, business_unit_id, contact_id, lead_id, event_type, message, source_sheet, source_row, occurred_at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9)',
+    [
+      organizationId,
+      businessUnitId,
+      contactId,
+      leadId,
+      'website_lead_captured',
+      lead.message || 'Website lead submitted.',
+      WEBSITE_LEAD_SOURCE_SHEET,
+      rowNumber,
+      parseTimestamp(lead.submittedAt),
+    ],
+  );
+  const detailsNote = leadFormDetailsNote(lead);
+  if (detailsNote) {
+    await client.query(
+      'insert into notes (organization_id, business_unit_id, contact_id, lead_id, body) values ($1, $2, $3, $4, $5)',
+      [organizationId, businessUnitId, contactId, leadId, detailsNote],
+    );
+  }
+}
+
 export async function persistWebsiteLeadImportAudit(
   client,
   {
@@ -1157,11 +1198,14 @@ export async function persistWebsiteLeadImportAudit(
     duplicate = null,
     identity = null,
     identityReviewReason = null,
+    opportunityReviewReason = null,
   },
 ) {
-  const needsReview = Boolean(duplicate) || Boolean(identityReviewReason) || identity?.status === 'ambiguous';
+  const needsReview = Boolean(duplicate) || Boolean(identityReviewReason) || Boolean(opportunityReviewReason) || identity?.status === 'ambiguous';
   const reviewReason = duplicate
     ? 'Website lead matched an existing external submission id.'
+    : opportunityReviewReason
+      ? `Website lead Opportunity needs review: ${opportunityReviewReason}.`
     : identityReviewReason || identity?.status === 'ambiguous'
       ? `Website lead identity needs review: ${identityReviewReason || identity.reason}.`
       : 'Website lead captured and promoted to CRM.';
@@ -1246,7 +1290,11 @@ export async function persistWebsiteLeadImportAudit(
       reviewReason,
       needsReview ? 'pending' : 'resolved',
       JSON.stringify({
-        action: duplicate ? 'review_duplicate_website_lead' : needsReview ? 'review_contact_identity' : 'verify_website_lead',
+        action: duplicate
+          ? 'review_duplicate_website_lead'
+          : opportunityReviewReason
+            ? 'review_active_opportunity_conflict'
+            : needsReview ? 'review_contact_identity' : 'verify_website_lead',
         normalizedRecordId: normalized.rows[0]?.id || null,
         contactId,
         leadId,
@@ -1284,6 +1332,7 @@ async function acquireWebsiteLeadLocks(client, { organizationId, businessUnitId,
 export async function ingestWebsiteLeadSubmission(client, {
   organizationId,
   businessUnitId,
+  businessUnit: preparedBusinessUnit = null,
   body,
   lead: preparedLead = null,
 }) {
@@ -1370,6 +1419,40 @@ export async function ingestWebsiteLeadSubmission(client, {
       };
     }
 
+
+    const businessUnit = preparedBusinessUnit || { id: businessUnitId, name: '' };
+    const isAitUsa = workflowKeyForBusinessUnit(businessUnit) === WORKFLOW_KEYS.AIT_USA;
+    const opportunityResolution = isAitUsa && identity.status === 'exact'
+      ? await resolveAitUsaActiveOpportunity({
+          client,
+          organization: organizationId,
+          businessUnit,
+          contact: identity.contactId,
+        })
+      : { status: 'none', leadId: null, opportunity: null };
+    if (opportunityResolution.status === 'ambiguous') {
+      const sourceRowId = await persistWebsiteLeadImportAudit(client, {
+        batchId,
+        rowNumber,
+        body: payload,
+        lead,
+        businessUnitId,
+        contactId: null,
+        leadId: null,
+        identity,
+        opportunityReviewReason: 'multiple_active_opportunities',
+      });
+      await client.query('commit');
+      return {
+        ok: true,
+        duplicate: false,
+        review: true,
+        sourceRowId,
+        contactId: null,
+        leadId: null,
+      };
+    }
+
     const contactId = await upsertContact(client, organizationId, businessUnitId, lead, identity);
     if (!contactId) {
       const sourceRowId = await persistWebsiteLeadImportAudit(client, {
@@ -1394,13 +1477,27 @@ export async function ingestWebsiteLeadSubmission(client, {
         identity,
       };
     }
-    const assignedUserId = await resolveDefaultInboundLeadOwnerUserId(client, {
-      organizationId,
-      businessUnitId,
-      sourceType: WEBSITE_LEAD_SOURCE_TYPE,
-      sourceKey: lead.externalId || lead.sourceKey || String(rowNumber),
-    });
-    const leadId = await persistLead(client, organizationId, businessUnitId, contactId, lead, 'pending', rowNumber, assignedUserId);
+    let assignedUserId = opportunityResolution.opportunity?.assignedUserId || null;
+    let leadId = opportunityResolution.leadId;
+    const createdOpportunity = !leadId;
+    if (createdOpportunity) {
+      assignedUserId = await resolveDefaultInboundLeadOwnerUserId(client, {
+        organizationId,
+        businessUnitId,
+        sourceType: WEBSITE_LEAD_SOURCE_TYPE,
+        sourceKey: lead.externalId || lead.sourceKey || String(rowNumber),
+      });
+      leadId = await persistLead(client, organizationId, businessUnitId, contactId, lead, 'pending', rowNumber, assignedUserId);
+    } else {
+      await attachWebsiteInquiryToOpportunity(client, {
+        organizationId,
+        businessUnitId,
+        contactId,
+        leadId,
+        lead,
+        rowNumber,
+      });
+    }
     const sourceRowId = await persistWebsiteLeadImportAudit(client, {
       batchId,
       rowNumber,
@@ -1455,10 +1552,12 @@ export async function ingestWebsiteLeadSubmission(client, {
       ownerUserId: assignedUserId,
       metadata: inboundLeadMetadata,
     });
-    await client.query(
-      'update leads set original_notes = replace(original_notes, $1, $2), updated_at = now() where id = $3',
-      ['source_row_id=pending', 'source_row_id=' + sourceRowId, leadId],
-    );
+    if (createdOpportunity) {
+      await client.query(
+        'update leads set original_notes = replace(original_notes, $1, $2), updated_at = now() where id = $3',
+        ['source_row_id=pending', 'source_row_id=' + sourceRowId, leadId],
+      );
+    }
     await client.query('commit');
 
     return {

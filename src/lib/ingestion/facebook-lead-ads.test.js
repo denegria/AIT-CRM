@@ -47,6 +47,7 @@ function leadgenFixture(overrides = {}) {
 function createServiceClient({
   duplicateLeadgen = false,
   businessUnitId = 'bu-1',
+  businessUnitName = 'Main Signs',
   contactId = 'contact-1',
   leadId = 'lead-1',
   sourceRowId = 'source-row-5',
@@ -54,6 +55,7 @@ function createServiceClient({
   existingContact = null,
   existingLead = null,
   leadRepairRows = null,
+  activeOpportunities = [],
 } = {}) {
   const calls = [];
   return {
@@ -79,16 +81,19 @@ function createServiceClient({
           return { rows: duplicateLeadgen ? [{ exists: 1 }] : [] };
         }
         if (
-          normalized.startsWith('select id from business_units')
+          normalized.startsWith('select id, name from business_units')
           && normalized.includes('(id::text = $2 or lower(name) = lower($2))')
         ) {
-          return { rows: businessUnitId ? [{ id: businessUnitId }] : [] };
+          return { rows: businessUnitId ? [{ id: businessUnitId, name: businessUnitName }] : [] };
         }
         if (
-          normalized.startsWith('select id from business_units')
+          normalized.startsWith('select id, name from business_units')
           && normalized.includes('order by name asc')
         ) {
-          return { rows: businessUnitId ? [{ id: businessUnitId }] : [] };
+          return { rows: businessUnitId ? [{ id: businessUnitId, name: businessUnitName }] : [] };
+        }
+        if (normalized.startsWith('select id, name from business_units') && normalized.includes('id = $2')) {
+          return { rows: businessUnitId ? [{ id: businessUnitId, name: businessUnitName }] : [] };
         }
         if (normalized.startsWith('select u.id, u.name, u.email from users u')) {
           return { rows: [{ id: 'user-owner-1', name: 'Owner One', email: 'owner@example.com' }] };
@@ -108,6 +113,12 @@ function createServiceClient({
         ) {
           return { rows: [] };
         }
+        if (normalized.startsWith('select id from contacts where organization_id') && normalized.includes('lower(email)')) {
+          return { rows: existingContact ? [{ id: existingContact.id }] : [] };
+        }
+        if (normalized.startsWith('select id from contacts where organization_id') && normalized.includes('regexp_replace')) {
+          return { rows: [] };
+        }
         if (normalized.startsWith('insert into import_source_rows')) {
           return { rows: [{ id: sourceRowId }] };
         }
@@ -123,6 +134,9 @@ function createServiceClient({
         ) {
           return { rows: existingLead ? [existingLead] : [] };
         }
+        if (normalized.startsWith('select id, organization_id, business_unit_id, contact_id, status')) {
+          return { rows: activeOpportunities };
+        }
         if (normalized.startsWith('update leads set')) {
           const rows = leadRepairRows ?? [{ id: existingLead?.id || 'lead-existing' }];
           return { rows, rowCount: rows.length };
@@ -133,6 +147,7 @@ function createServiceClient({
         if (normalized.startsWith('insert into activity_events')) {
           return { rows: [] };
         }
+        if (normalized.startsWith('insert into notes')) return { rows: [] };
         if (normalized.startsWith('insert into notifications')) {
           return { rows: [{ id: 'notification-1' }] };
         }
@@ -509,6 +524,86 @@ test('auto-promotion links existing contacts without overwriting populated PII',
     'bu-1',
     'org-1',
   ]);
+});
+
+test('AIT USA Facebook auto-promotion reuses the sole active Opportunity and preserves its owner', async () => {
+  const { client, calls } = createServiceClient({
+    businessUnitId: 'bu-usa',
+    businessUnitName: 'AIT USA Institute',
+    existingContact: { id: 'contact-existing', primary_business_unit_id: 'bu-usa' },
+    activeOpportunities: [{
+      id: 'opportunity-existing',
+      status: 'Follow Up',
+      assigned_user_id: 'owner-existing',
+      source_name: 'Original source',
+    }],
+  });
+  const result = await ingestFacebookLeadAdsEvents(client, {
+    organizationId: 'org-1',
+    batchId: 'batch-1',
+    events: [leadgenFixture()],
+    metaConfig: metaConfig(),
+    fetchLeadDetails: async () => ({ ok: true, lead: graphLeadFixture() }),
+    autoPromote: true,
+  });
+
+  assert.equal(result.eventResults[0].leadId, 'opportunity-existing');
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false);
+  const task = calls.find((call) => call.sql.startsWith('with intake_lock as'));
+  assert.equal(task.params.includes('owner-existing'), true);
+});
+
+test('AIT USA Facebook auto-promotion sends multiple active Opportunities to review without CRM mutation', async () => {
+  const { client, calls } = createServiceClient({
+    businessUnitId: 'bu-usa',
+    businessUnitName: 'AIT USA Institute',
+    existingContact: { id: 'contact-existing', primary_business_unit_id: 'bu-usa' },
+    activeOpportunities: [
+      { id: 'active-1', status: 'New Lead' },
+      { id: 'active-2', status: 'Enrolled' },
+    ],
+  });
+  const result = await ingestFacebookLeadAdsEvents(client, {
+    organizationId: 'org-1',
+    batchId: 'batch-1',
+    events: [leadgenFixture()],
+    metaConfig: metaConfig(),
+    fetchLeadDetails: async () => ({ ok: true, lead: graphLeadFixture() }),
+    autoPromote: true,
+  });
+
+  assert.equal(result.promoted, 0);
+  assert.equal(result.eventResults[0].review, true);
+  assert.equal(result.eventResults[0].contactId, null);
+  assert.equal(result.eventResults[0].leadId, null);
+  assert.equal(calls.some((call) => call.sql.startsWith('update contacts')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into notifications')), false);
+  const review = calls.find((call) => call.sql.startsWith('insert into import_review_items'));
+  assert.match(review.params[2], /multiple active Opportunities/);
+});
+
+test('closed AIT USA Facebook Opportunity history allows one new Opportunity', async () => {
+  const { client, calls } = createServiceClient({
+    businessUnitId: 'bu-usa',
+    businessUnitName: 'AIT USA Institute',
+    existingContact: { id: 'contact-existing', primary_business_unit_id: 'bu-usa' },
+    activeOpportunities: [
+      { id: 'closed-1', status: 'Dropped / Quit' },
+      { id: 'closed-2', status: 'Course Completed' },
+    ],
+  });
+  const result = await ingestFacebookLeadAdsEvents(client, {
+    organizationId: 'org-1',
+    batchId: 'batch-1',
+    events: [leadgenFixture()],
+    metaConfig: metaConfig(),
+    fetchLeadDetails: async () => ({ ok: true, lead: graphLeadFixture() }),
+    autoPromote: true,
+  });
+
+  assert.equal(result.eventResults[0].leadId, 'lead-1');
+  assert.equal(calls.filter((call) => call.sql.startsWith('insert into leads')).length, 1);
 });
 
 test('records Graph failures for review without creating CRM rows', async () => {

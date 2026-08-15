@@ -27,6 +27,7 @@ import {
 } from '@/lib/crm/course-metadata.js';
 import {
   evaluateLifecycleTransition,
+  isClosedLifecycleStatus,
   requireLifecycleStatus,
   WORKFLOW_KEYS,
   workflowKeyForBusinessUnit,
@@ -37,6 +38,10 @@ import {
   latestLeadForContact,
   updateContactWithLeadAndNotes,
 } from '@/lib/crm/write-helpers.js';
+import {
+  loadScopedOpportunityById,
+  resolveAitUsaActiveOpportunity,
+} from '@/lib/crm/ait-usa-opportunities.js';
 import { createOrReuseArchiveApprovalTask } from '@/lib/tasks/archive-approvals.js';
 import { toTaskPayload } from '@/lib/tasks/service.js';
 import { workflowFromLead } from '@/lib/sales-workflow';
@@ -74,7 +79,7 @@ async function loadBusinessUnitForWorkflow(db, session, businessUnitId) {
   return businessUnit || null;
 }
 
-function toContactPayload(row, lead = null, noteRows = [], businessUnit = null, activityEventRows = []) {
+export function toContactPayload(row, lead = null, noteRows = [], businessUnit = null, activityEventRows = []) {
   const workflow = workflowFromLead(lead, { businessUnit });
   const enrollmentSignals = buildAitUsaEnrollmentSignals({
     contact: row,
@@ -103,6 +108,7 @@ function toContactPayload(row, lead = null, noteRows = [], businessUnit = null, 
     primaryBusinessUnitId: row.primaryBusinessUnitId || '',
     businessUnitName: businessUnit?.name || '',
     hasLeadStatus: Boolean(lead),
+    opportunityId: lead?.id || '',
     workflowKey: workflow.workflowKey,
     workflowLabel: workflow.workflowLabel,
     status: workflow.status,
@@ -250,6 +256,17 @@ export async function POST(request) {
   } catch (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
+  const initialTerminalReason = String(body.terminalStatusReason || '').trim();
+  if (
+    workflowKeyForBusinessUnit(businessUnit) === WORKFLOW_KEYS.AIT_USA &&
+    isClosedLifecycleStatus(status, { businessUnit }) &&
+    !initialTerminalReason
+  ) {
+    return NextResponse.json(
+      { error: 'A reason is required to create an AIT USA Opportunity in a closed status.' },
+      { status: 400 },
+    );
+  }
 
   let contactAddress;
   try {
@@ -279,6 +296,7 @@ export async function POST(request) {
       assignedUserId,
       ...leadProfilePatchToDrizzleValues(leadProfilePatchFromPayload(body, { allowClear: false })),
     } : null,
+    initialLeadStatusReason: initialTerminalReason || null,
     initialNote: normalizeAppendNoteInput(body.appendNote || body.initialNote),
   });
 
@@ -335,15 +353,54 @@ export async function PATCH(request) {
   }
 
   let lead = await latestLeadForContact(db, session.user.organizationId, id);
+  const statusBusinessUnitId = hasBusinessUnitPatch && patch.primaryBusinessUnitId
+    ? patch.primaryBusinessUnitId
+    : existing.primaryBusinessUnitId || lead?.businessUnitId;
+  const statusBusinessUnit = await loadBusinessUnitForWorkflow(db, session, statusBusinessUnitId);
+  const isAitUsaWorkflow = workflowKeyForBusinessUnit(statusBusinessUnit) === WORKFLOW_KEYS.AIT_USA;
+  if (isAitUsaWorkflow) {
+    const activeOpportunity = await resolveAitUsaActiveOpportunity({
+      client: db,
+      organization: session.user.organizationId,
+      businessUnit: statusBusinessUnit,
+      contact: existing,
+      lock: false,
+    });
+    if (activeOpportunity.status === 'ambiguous') {
+      return NextResponse.json(
+        { error: 'This Contact has multiple active Opportunities. Review and resolve the conflict before editing status.' },
+        { status: 409 },
+      );
+    }
+    if (activeOpportunity.status === 'exact') {
+      lead = await loadScopedOpportunityById(db, {
+        organizationId: session.user.organizationId,
+        businessUnitId: statusBusinessUnit.id,
+        contactId: id,
+        opportunityId: activeOpportunity.leadId,
+      });
+    } else if (body.opportunityId) {
+      if (!isUuid(body.opportunityId)) {
+        return NextResponse.json({ error: 'Selected Opportunity id is invalid.' }, { status: 400 });
+      }
+      lead = await loadScopedOpportunityById(db, {
+        organizationId: session.user.organizationId,
+        businessUnitId: statusBusinessUnit.id,
+        contactId: id,
+        opportunityId: body.opportunityId,
+      });
+      if (!lead) {
+        return NextResponse.json({ error: 'Selected Opportunity was not found for this Contact.' }, { status: 409 });
+      }
+    } else {
+      lead = null;
+    }
+  }
   try {
     assertCanAccessContactLead(session, lead, existing);
   } catch (error) {
     return crmErrorResponse(error);
   }
-  const statusBusinessUnitId = hasBusinessUnitPatch && patch.primaryBusinessUnitId
-    ? patch.primaryBusinessUnitId
-    : lead?.businessUnitId || existing.primaryBusinessUnitId;
-  const statusBusinessUnit = await loadBusinessUnitForWorkflow(db, session, statusBusinessUnitId);
   if ('address' in body) {
     try {
       patch.address = contactAddressForWrite(body.address, statusBusinessUnit);
@@ -359,7 +416,9 @@ export async function PATCH(request) {
   }
   if ('status' in body && !lead) {
     return NextResponse.json(
-      { error: 'Contact has no lead lifecycle status to update.' },
+      { error: isAitUsaWorkflow
+        ? 'Contact has no Opportunity lifecycle status to update. Start an Opportunity first.'
+        : 'Contact has no lead lifecycle status to update.' },
       { status: 400 },
     );
   }
@@ -383,7 +442,7 @@ export async function PATCH(request) {
           fromStatus: lead.status,
           toStatus: body.status,
           businessUnit: statusBusinessUnit,
-          canReopenClosedStatus: session.user.canAccessAllBusinessUnits,
+          canReopenClosedStatus: isAitUsaWorkflow ? false : session.user.canAccessAllBusinessUnits,
           reopenClosedStatusReason: body.statusChangeReason || body.reopenClosedStatusReason || '',
         });
       } catch (error) {
@@ -391,6 +450,20 @@ export async function PATCH(request) {
       }
       if (!transition.allowed) {
         return NextResponse.json({ error: transition.reason }, { status: 403 });
+      }
+      if (
+        isAitUsaWorkflow &&
+        transition.changed &&
+        isClosedLifecycleStatus(transition.toStatus, { businessUnit: statusBusinessUnit })
+      ) {
+        const terminalReason = String(body.terminalStatusReason || '').trim();
+        if (!terminalReason) {
+          return NextResponse.json(
+            { error: 'A reason is required when moving an AIT USA Opportunity into a closed status.' },
+            { status: 400 },
+          );
+        }
+        transition.reason = terminalReason;
       }
       leadPatch.status = transition.toStatus;
       leadPatch.currentStage = transition.toStatus;

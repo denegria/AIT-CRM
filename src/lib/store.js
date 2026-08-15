@@ -550,6 +550,12 @@ export function CRMProvider({ children, initialData }) {
     }
     return Promise.resolve(null);
   }, [access.canWriteCrm, callContactsApi, contacts, isPostgres]);
+  const replaceContactFromServer = useCallback((contact) => {
+    if (!contact?.id) return;
+    setContacts((current) => current.map((entry) => (
+      entry.id === contact.id ? { ...entry, ...contact } : entry
+    )));
+  }, []);
   const addContact = useCallback((d) => {
     if (isPostgres && !access.canWriteCrm) {
       return Promise.reject(crmWriteAccessError());
@@ -735,7 +741,7 @@ export function CRMProvider({ children, initialData }) {
     currentBusinessUnitId: effectiveBusinessUnitId, currentBusinessUnit, setCurrentBusinessUnitId,
     canUseConsolidatedScope,
     scopeLabel,
-    contacts: scopedContacts, allContacts: contacts, contactDirectoryIsDeferred, leanShellIsDeferred, addContact, updateContact, deleteContact,
+    contacts: scopedContacts, allContacts: contacts, contactDirectoryIsDeferred, leanShellIsDeferred, addContact, updateContact, replaceContactFromServer, deleteContact,
     dashboardSummary,
     dashboardSummaryIsDeferred,
     dashboardSummaryLoaded: dashboardSummaryStatus === 'ready',

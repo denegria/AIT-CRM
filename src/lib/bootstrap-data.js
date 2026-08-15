@@ -314,6 +314,7 @@ export function mapContacts(
       submittedAt,
       sourceActivityDate,
       hasLeadStatus: Boolean(lead),
+      opportunityId: lead?.id || '',
       leadId: lead?.id || '',
     }, {
       businessUnit,
@@ -361,6 +362,7 @@ export function mapContacts(
       primaryBusinessUnitId: contact.primaryBusinessUnitId || '',
       businessUnitName: businessUnit?.name || '',
       hasLeadStatus: Boolean(lead),
+      opportunityId: lead?.id || '',
       isPipelineEligible,
       workflowKey: workflow.workflowKey,
       workflowLabel: workflow.workflowLabel,
