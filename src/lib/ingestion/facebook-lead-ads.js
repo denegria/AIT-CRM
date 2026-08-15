@@ -289,10 +289,34 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
     sourceKey: event.leadgenId || event.id || sourceRowId || String(rowNumber || ''),
   });
 
+  let existingLead = null;
+  if (sourceRowId) {
+    const existingLeadResult = await client.query(
+      `
+        select
+          l.id,
+          l.contact_id as linked_contact_id,
+          c.id as contact_id,
+          l.assigned_user_id
+        from leads l
+        left join contacts c
+          on c.id = l.contact_id
+         and c.organization_id = l.organization_id
+        where l.organization_id = $1
+          and l.source_type = 'facebook_lead_ads'
+          and l.original_notes like $2
+        order by l.created_at asc
+        limit 1
+      `,
+      [organizationId, `%source_row_id=${sourceRowId}%`],
+    );
+    existingLead = existingLeadResult.rows[0] || null;
+  }
+
   const existing = await findExistingContact(client, organizationId, details);
-  let contactId = existing?.id || null;
+  let contactId = existingLead?.contact_id || existing?.id || null;
   if (contactId) {
-    await client.query(
+    const contactUpdate = await client.query(
       `
         update contacts
         set
@@ -304,11 +328,17 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
           source_label = coalesce(nullif(source_label, ''), 'Facebook Ads'),
           primary_business_unit_id = coalesce(primary_business_unit_id, $7),
           updated_at = now()
-        where id = $1
+        where id = $1 and organization_id = $8
+        returning id
       `,
-      [contactId, details.name, details.company, details.phone, details.email, details.address, businessUnitId],
+      [contactId, details.name, details.company, details.phone, details.email, details.address, businessUnitId, organizationId],
     );
+    if (!contactUpdate.rowCount) contactId = null;
   } else {
+    contactId = null;
+  }
+
+  if (!contactId) {
     const inserted = await client.query(
       `
         insert into contacts
@@ -328,49 +358,80 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
     extraFieldNotes.length ? `Facebook form answers:\n${extraFieldNotes.map((line) => `- ${line}`).join('\n')}` : '',
   ].filter(Boolean).join('\n\n');
 
-  const lead = await client.query(
-    `
-      insert into leads
-      (
-        organization_id, business_unit_id, contact_id, source_type, source_name, status, current_stage,
-        original_notes, assigned_user_id, program_interest, preferred_day, preferred_schedule,
-        test_interest, education_level, school_name, location_preference, profile_details, source_detail
-      )
-      values ($1, $2, $3, 'facebook_lead_ads', 'Facebook Ads', 'New Lead', 'New Lead', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
-      returning id
-    `,
-    [
-      organizationId,
-      businessUnitId,
-      contactId,
-      originalNotes,
-      assignedUserId,
-      profileValues.program_interest || null,
-      profileValues.preferred_day || null,
-      profileValues.preferred_schedule || null,
-      profileValues.test_interest || null,
-      profileValues.education_level || null,
-      profileValues.school_name || null,
-      profileValues.location_preference || null,
-      profileValues.profile_details || null,
-      profileValues.source_detail || null,
-    ],
-  );
-  const leadId = lead.rows[0]?.id || null;
+  let leadId = existingLead?.id || null;
+  let leadAssignedUserId = existingLead?.assigned_user_id || assignedUserId;
+  if (!leadId) {
+    const lead = await client.query(
+      `
+        insert into leads
+        (
+          organization_id, business_unit_id, contact_id, source_type, source_name, status, current_stage,
+          original_notes, assigned_user_id, program_interest, preferred_day, preferred_schedule,
+          test_interest, education_level, school_name, location_preference, profile_details, source_detail
+        )
+        values ($1, $2, $3, 'facebook_lead_ads', 'Facebook Ads', 'New Lead', 'New Lead', $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+        returning id
+      `,
+      [
+        organizationId,
+        businessUnitId,
+        contactId,
+        originalNotes,
+        assignedUserId,
+        profileValues.program_interest || null,
+        profileValues.preferred_day || null,
+        profileValues.preferred_schedule || null,
+        profileValues.test_interest || null,
+        profileValues.education_level || null,
+        profileValues.school_name || null,
+        profileValues.location_preference || null,
+        profileValues.profile_details || null,
+        profileValues.source_detail || null,
+      ],
+    );
+    leadId = lead.rows[0]?.id || null;
+    leadAssignedUserId = assignedUserId;
+  }
+
+  if (existingLead?.id && (existingLead.linked_contact_id !== contactId || !existingLead.assigned_user_id)) {
+    const leadRepair = await client.query(
+      `
+        update leads
+        set contact_id = $2,
+            assigned_user_id = coalesce(assigned_user_id, $3),
+            updated_at = now()
+        where id = $1 and organization_id = $4
+        returning id
+      `,
+      [existingLead.id, contactId, leadAssignedUserId, organizationId],
+    );
+    if (leadRepair.rowCount !== 1 || leadRepair.rows[0]?.id !== existingLead.id) {
+      throw new Error('Organization-scoped Facebook lead repair did not affect the expected Lead.');
+    }
+  }
 
   await recordInboundLeadAssignmentActivity(client, {
     organizationId,
     businessUnitId,
     contactId,
     leadId,
-    ownerUserId: assignedUserId,
+    ownerUserId: leadAssignedUserId,
   });
 
   await client.query(
     `
       insert into activity_events
       (organization_id, business_unit_id, contact_id, lead_id, event_type, message, source_sheet, source_row, occurred_at)
-      values ($1, $2, $3, $4, 'facebook_lead_captured', $5, $6, $7, now())
+      select $1, $2, $3, $4, 'facebook_lead_captured', $5, $6, $7, now()
+      where not exists (
+        select 1
+        from activity_events
+        where organization_id = $1
+          and lead_id = $4
+          and event_type = 'facebook_lead_captured'
+          and source_sheet = $6
+          and source_row = $7
+      )
     `,
     [
       organizationId,
@@ -412,10 +473,10 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
     contactName: details.name,
     detail: inboundLeadDetail,
     idempotencyKey: inboundLeadIdempotencyKey,
-    ownerUserId: assignedUserId,
+    ownerUserId: leadAssignedUserId,
     metadata: inboundLeadMetadata,
   });
-  return { contactId, leadId, assignedUserId, reason: null };
+  return { contactId, leadId, assignedUserId: leadAssignedUserId, reason: null, alreadyExists: Boolean(existingLead) };
 }
 
 export async function promoteFacebookLeadProposalToCrm(

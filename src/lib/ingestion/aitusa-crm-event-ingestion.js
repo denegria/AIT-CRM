@@ -1,7 +1,13 @@
 import { createInboundLeadNotification } from '../notifications/service.js';
 import { createInboundLeadIntakeTask } from '../tasks/intake.js';
+import { classifyContactIdentity } from '../crm/contact-identity.js';
 
 const FOLLOW_UP_EVENTS = new Set(['placement_completed', 'advisor_handoff_requested']);
+const AITUSA_CRM_REVIEW_BATCH_SOURCE_NAME = 'AIT USA Refresh Events';
+const AITUSA_CRM_REVIEW_BATCH_SOURCE_TYPE = 'aitusa_crm_event';
+const AITUSA_CRM_REVIEW_SOURCE_SHEET = 'aitusa_crm_event';
+const AITUSA_CRM_REVIEW_FILE_NAME = 'aitusa-crm-event-identity-review';
+const AITUSA_CRM_REVIEW_TYPE = 'aitusa_crm_identity_review';
 
 // This is intentionally separate from website-lead import promotion. A launch
 // event is a timeline fact, not a new form submission. The transaction lock
@@ -13,26 +19,97 @@ export async function ingestAitUsaCrmEvent(client, { organizationId, businessUni
   try {
     await client.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [`aitusa-crm-event:${organizationId}:${eventKey}`]);
     const prior = await client.query(
-      `select contact_id, lead_id from activity_events
+      `select contact_id, lead_id, metadata_json from activity_events
        where organization_id = $1 and metadata_json->>'aitusa_event_idempotency_key' = $2
        order by occurred_at desc limit 1`,
       [organizationId, eventKey],
     );
-    if (prior.rows[0]?.contact_id) {
+    if (prior.rows[0]) {
       await client.query('commit');
-      return { acknowledged: true, duplicate: true, contactId: prior.rows[0].contact_id, leadId: prior.rows[0].lead_id || null };
+      return {
+        acknowledged: true,
+        duplicate: true,
+        review: priorIdentityReview(prior.rows[0]),
+        contactId: prior.rows[0].contact_id || null,
+        leadId: prior.rows[0].lead_id || null,
+      };
     }
 
     const contact = event.contact || {};
-    const contactIdentity = contactIdentityLockKey(contact);
-    if (contactIdentity) {
+    for (const contactIdentity of contactIdentityLockKeys(contact)) {
       await client.query(
         'select pg_advisory_xact_lock(hashtextextended($1, 0))',
         [`aitusa-crm-contact:${organizationId}:${contactIdentity}`],
       );
     }
-    const contactId = await upsertEventContact(client, { organizationId, businessUnitId, contact });
-    let leadId = await findExistingEventLead(client, { organizationId, contactId });
+    const identity = await classifyContactIdentity(client, {
+      organizationId,
+      email: contact.email,
+      phone: contact.phone,
+    });
+    const identityReviewReason = contactIdentityReviewReason(identity);
+    if (identityReviewReason) {
+      const reviewRecord = await recordContactIdentityReview(client, {
+        organizationId,
+        businessUnitId,
+        event,
+        identity,
+        reason: identityReviewReason,
+      });
+      await client.query('commit');
+      return {
+        acknowledged: true,
+        duplicate: false,
+        review: true,
+        contactId: null,
+        leadId: null,
+        identity,
+        reviewRecord,
+      };
+    }
+    const existingLead = identity.status === 'exact'
+      ? await findExistingEventLead(client, { organizationId, businessUnitId, contactId: identity.contactId })
+      : { status: 'none', leadId: null };
+    if (existingLead.status === 'ambiguous') {
+      const reviewRecord = await recordContactIdentityReview(client, {
+        organizationId,
+        businessUnitId,
+        event,
+        identity,
+        reason: 'multiple_same_business_unit_leads',
+      });
+      await client.query('commit');
+      return {
+        acknowledged: true,
+        duplicate: false,
+        review: true,
+        contactId: null,
+        leadId: null,
+        identity,
+        reviewRecord,
+      };
+    }
+    const contactId = await upsertEventContact(client, { organizationId, businessUnitId, contact, identity });
+    if (!contactId) {
+      const reviewRecord = await recordContactIdentityReview(client, {
+        organizationId,
+        businessUnitId,
+        event,
+        identity,
+        reason: 'exact_contact_not_available_for_organization',
+      });
+      await client.query('commit');
+      return {
+        acknowledged: true,
+        duplicate: false,
+        review: true,
+        contactId: null,
+        leadId: null,
+        identity,
+        reviewRecord,
+      };
+    }
+    let leadId = existingLead.leadId;
     if (!leadId && FOLLOW_UP_EVENTS.has(event.eventType)) {
       leadId = await createEventLead(client, { organizationId, businessUnitId, contactId, event });
     }
@@ -68,26 +145,193 @@ export async function ingestAitUsaCrmEvent(client, { organizationId, businessUni
   }
 }
 
-function contactIdentityLockKey(contact) {
-  const email = typeof contact.email === 'string' ? contact.email.trim().toLowerCase() : '';
-  if (email) return `email:${email}`;
-  const phone = typeof contact.phone === 'string' ? contact.phone.replace(/[^0-9+]/g, '') : '';
-  return phone ? `phone:${phone}` : null;
+function priorIdentityReview(prior) {
+  const metadata = typeof prior.metadata_json === 'string'
+    ? JSON.parse(prior.metadata_json)
+    : prior.metadata_json;
+  return Boolean(metadata?.contactIdentity?.reason);
 }
 
-async function upsertEventContact(client, { organizationId, businessUnitId, contact }) {
-  const found = await client.query(
-    `select id from contacts where organization_id = $1 and
-      ((nullif($2, '') is not null and lower(email) = lower($2)) or (nullif($3, '') is not null and regexp_replace(coalesce(phone, ''), '[^0-9+]', '', 'g') = $3))
-     order by updated_at desc limit 1`,
-    [organizationId, contact.email || '', contact.phone || ''],
+function contactIdentityLockKeys(contact) {
+  const email = typeof contact.email === 'string' ? contact.email.trim().toLowerCase() : '';
+  const phone = typeof contact.phone === 'string' ? contact.phone.replace(/[^0-9+]/g, '') : '';
+  return [
+    email ? `email:${email}` : null,
+    phone ? `phone:${phone}` : null,
+  ].filter(Boolean).sort();
+}
+
+function contactIdentityReviewReason(identity) {
+  if (identity.status === 'ambiguous') return identity.reason;
+  if (!identity.evidence?.email && !identity.evidence?.phone) return 'no_usable_contact_identity';
+  return null;
+}
+
+async function recordContactIdentityReview(client, { organizationId, businessUnitId, event, identity, reason }) {
+  const metadata = {
+    ...safeEventMetadata(event),
+    contactIdentity: {
+      status: identity.status,
+      reason,
+      matches: identity.matches,
+    },
+  };
+  await client.query(
+    `insert into activity_events
+     (organization_id, business_unit_id, contact_id, lead_id, event_type, message, metadata_json, occurred_at)
+     values ($1, $2, null, null, $3, $4, $5::jsonb, $6::timestamptz)`,
+    [
+      organizationId,
+      businessUnitId,
+      `aitusa.${event.eventType}`,
+      `${safeTimelineMessage(event)} | contact_identity_review:${reason}`,
+      JSON.stringify(metadata),
+      event.occurredAt,
+    ],
   );
-  if (found.rows[0]?.id) {
-    await client.query(
-      `update contacts set name = coalesce(nullif($2, ''), name), email = coalesce(nullif($3, ''), email), phone = coalesce(nullif($4, ''), phone), updated_at = now() where id = $1`,
-      [found.rows[0].id, contact.firstName || '', contact.email || '', contact.phone || ''],
+
+  return persistAitUsaIdentityImportReview(client, {
+    organizationId,
+    businessUnitId,
+    event,
+    identity,
+    reason,
+  });
+}
+
+async function persistAitUsaIdentityImportReview(client, {
+  organizationId,
+  businessUnitId,
+  event,
+  identity,
+  reason,
+}) {
+  await client.query(
+    'select pg_advisory_xact_lock(hashtextextended($1, 0))',
+    [`aitusa-crm-review-batch:${organizationId}:${businessUnitId}`],
+  );
+  const batch = await client.query(
+    `select id from import_batches
+     where organization_id = $1 and business_unit_id = $2 and source_type = $3 and file_name = $4
+     order by created_at desc limit 1 for update`,
+    [organizationId, businessUnitId, AITUSA_CRM_REVIEW_BATCH_SOURCE_TYPE, AITUSA_CRM_REVIEW_FILE_NAME],
+  );
+  let batchId = batch.rows[0]?.id || null;
+  if (!batchId) {
+    const created = await client.query(
+      `insert into import_batches
+       (organization_id, business_unit_id, source_name, source_type, file_name, sheet_name, status)
+       values ($1, $2, $3, $4, $5, $6, 'staging') returning id`,
+      [
+        organizationId,
+        businessUnitId,
+        AITUSA_CRM_REVIEW_BATCH_SOURCE_NAME,
+        AITUSA_CRM_REVIEW_BATCH_SOURCE_TYPE,
+        AITUSA_CRM_REVIEW_FILE_NAME,
+        AITUSA_CRM_REVIEW_SOURCE_SHEET,
+      ],
     );
-    return found.rows[0].id;
+    batchId = created.rows[0]?.id || null;
+  }
+  if (!batchId) throw new Error('Unable to create AIT USA identity review batch.');
+
+  await client.query('select id from import_batches where id = $1 for update', [batchId]);
+  const rowNumberResult = await client.query(
+    'select coalesce(max(source_row_number), 0)::int as max_row from import_source_rows where import_batch_id = $1',
+    [batchId],
+  );
+  const rowNumber = Number(rowNumberResult.rows[0]?.max_row || 0) + 1;
+  const reviewEvidence = {
+    email: identity.evidence?.email || null,
+    phone: identity.evidence?.phone || null,
+    matches: identity.matches || { email: [], phone: [] },
+    reason,
+  };
+  const rawValues = {
+    source: AITUSA_CRM_REVIEW_BATCH_SOURCE_TYPE,
+    event_id: event.eventId,
+    idempotency_key: event.idempotencyKey,
+    correlation_id: event.correlationId,
+    event_type: event.eventType,
+    occurred_at: event.occurredAt,
+    contact_identity: reviewEvidence,
+    metadata: safeEventMetadata(event),
+  };
+  const sourceRow = await client.query(
+    `insert into import_source_rows
+     (import_batch_id, source_sheet, source_row_number, raw_values_json, raw_text, parse_status)
+     values ($1, $2, $3, $4::jsonb, $5, 'parsed') returning id`,
+    [
+      batchId,
+      AITUSA_CRM_REVIEW_SOURCE_SHEET,
+      rowNumber,
+      JSON.stringify(rawValues),
+      JSON.stringify(rawValues),
+    ],
+  );
+  const sourceRowId = sourceRow.rows[0]?.id || null;
+  if (!sourceRowId) throw new Error('Unable to create AIT USA identity review source row.');
+
+  const proposedContact = {
+    email: reviewEvidence.email,
+    phone: reviewEvidence.phone,
+    business_unit_id: businessUnitId,
+    contact_id: null,
+    identity_classification: {
+      status: identity.status,
+      reason,
+      matches: reviewEvidence.matches,
+    },
+  };
+  const proposedLead = {
+    source_type: AITUSA_CRM_REVIEW_BATCH_SOURCE_TYPE,
+    event_id: event.eventId,
+    idempotency_key: event.idempotencyKey,
+    event_type: event.eventType,
+    correlation_id: event.correlationId,
+    business_unit_id: businessUnitId,
+    contact_id: null,
+    lead_id: null,
+  };
+  const normalized = await client.query(
+    `insert into import_normalized_records
+     (import_batch_id, source_row_id, record_type, proposed_contact_json, proposed_lead_json, confidence_score, status)
+     values ($1, $2, 'lead', $3::jsonb, $4::jsonb, $5, 'needs_review') returning id`,
+    [batchId, sourceRowId, JSON.stringify(proposedContact), JSON.stringify(proposedLead), 0.25],
+  );
+  const normalizedRecordId = normalized.rows[0]?.id || null;
+  if (!normalizedRecordId) throw new Error('Unable to create AIT USA identity review record.');
+
+  const review = await client.query(
+    `insert into import_review_items
+     (import_batch_id, source_row_id, review_type, reason, review_status, proposed_resolution_json)
+     values ($1, $2, $3, $4, 'pending', $5::jsonb) returning id`,
+    [
+      batchId,
+      sourceRowId,
+      AITUSA_CRM_REVIEW_TYPE,
+      `AIT USA event identity needs review: ${reason}.`,
+      JSON.stringify({
+        action: 'review_contact_identity',
+        normalizedRecordId,
+        contactId: null,
+        leadId: null,
+        identityClassification: proposedContact.identity_classification,
+      }),
+    ],
+  );
+  const reviewId = review.rows[0]?.id || null;
+  if (!reviewId) throw new Error('Unable to create AIT USA identity review item.');
+  return { batchId, sourceRowId, normalizedRecordId, reviewId };
+}
+
+async function upsertEventContact(client, { organizationId, businessUnitId, contact, identity }) {
+  if (identity.status === 'exact') {
+    const updated = await client.query(
+      `update contacts set name = coalesce(nullif($3, ''), name), email = coalesce(nullif($4, ''), email), phone = coalesce(nullif($5, ''), phone), updated_at = now() where id = $1 and organization_id = $2 returning id`,
+      [identity.contactId, organizationId, contact.firstName || '', contact.email || '', contact.phone || ''],
+    );
+    return updated.rows[0]?.id || null;
   }
   const inserted = await client.query(
     `insert into contacts (organization_id, primary_business_unit_id, name, email, phone, source_label)
@@ -97,13 +341,15 @@ async function upsertEventContact(client, { organizationId, businessUnitId, cont
   return inserted.rows[0]?.id || null;
 }
 
-async function findExistingEventLead(client, { organizationId, contactId }) {
+async function findExistingEventLead(client, { organizationId, businessUnitId, contactId }) {
   const existing = await client.query(
-    `select id from leads where organization_id = $1 and contact_id = $2 order by created_at asc limit 1`,
-    [organizationId, contactId],
+    `select id from leads where organization_id = $1 and business_unit_id = $2 and contact_id = $3`,
+    [organizationId, businessUnitId, contactId],
   );
-  if (existing.rows[0]?.id) return existing.rows[0].id;
-  return null;
+  const ids = [...new Set(existing.rows.map((row) => row.id).filter(Boolean))].sort();
+  if (ids.length > 1) return { status: 'ambiguous', leadId: null };
+  if (ids.length === 1) return { status: 'exact', leadId: ids[0] };
+  return { status: 'none', leadId: null };
 }
 
 async function createEventLead(client, { organizationId, businessUnitId, contactId, event }) {

@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   collectWebsiteLeadSubmittedSecrets,
+  findDuplicateWebsiteLeadSubmission,
   ingestWebsiteLeadSubmission,
   normalizeWebsiteLeadSubmission,
+  resolveSingleOrganizationId,
   sanitizeWebhookBodyForAudit,
   verifyWebsiteLeadSecret,
 } from './website-leads.js';
@@ -228,6 +230,25 @@ test('redacts secret-like values from audit payloads', () => {
   assert.equal(JSON.stringify(sanitized).includes('shared-secret'), false);
 });
 
+test('resolves an organization only when exactly one organization exists', async () => {
+  const calls = [];
+  const resolve = async (rows) => resolveSingleOrganizationId({
+    async query(sql) {
+      calls.push(sql);
+      return { rows };
+    },
+  });
+
+  assert.equal(await resolve([]), null);
+  assert.equal(await resolve([{ id: 'org-1' }]), 'org-1');
+  assert.equal(await resolve([{ id: 'org-1' }, { id: 'org-2' }]), null);
+  assert.deepEqual(calls, [
+    'select id from organizations order by created_at asc limit 2',
+    'select id from organizations order by created_at asc limit 2',
+    'select id from organizations order by created_at asc limit 2',
+  ]);
+});
+
 test('records duplicate externalId submissions for review without creating CRM rows', async () => {
   const { client, calls } = createDuplicateClient();
 
@@ -264,6 +285,193 @@ test('records duplicate externalId submissions for review without creating CRM r
   assert.equal(proposedLead.lead_id, 'lead-existing');
   assert.equal(proposedLead.duplicate_lead_id, 'lead-existing');
   assert.equal(normalizedInsert.params[6], 'needs_review');
+});
+
+test('serializes a replay before rechecking its duplicate state, creating at most one contact and lead', async () => {
+  const { client, calls } = createWebsitePromotionClient({ duplicateAfterFirstPromotion: true });
+  const input = {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-1',
+    body: { externalId: 'replay-001', email: 'replay@example.com', message: 'Replay-safe submission' },
+  };
+
+  const first = await ingestWebsiteLeadSubmission(client, input);
+  const second = await ingestWebsiteLeadSubmission(client, input);
+
+  assert.equal(first.duplicate, false);
+  assert.deepEqual(second, {
+    ok: true,
+    duplicate: true,
+    contactId: 'contact-1',
+    leadId: 'lead-1',
+  });
+  assert.equal(calls.filter((call) => call.sql.startsWith('insert into contacts')).length, 1);
+  assert.equal(calls.filter((call) => call.sql.startsWith('insert into leads')).length, 1);
+  const duplicateLookup = calls.find((call) => call.sql.startsWith('select l.id as lead_id'));
+  const firstLock = calls.findIndex((call) => call.sql.startsWith('select pg_advisory_xact_lock'));
+  const duplicateLookupIndex = calls.indexOf(duplicateLookup);
+  assert.ok(firstLock >= 0);
+  assert.ok(duplicateLookupIndex > firstLock);
+  assert.ok(calls.some((call) => call.params[0] === 'website-lead-external:org-1:replay-001'));
+  assert.ok(calls.some((call) => call.params[0] === 'website-lead-contact:org-1:email:replay@example.com'));
+});
+
+test('replays an ambiguous external-id website submission from its durable review without duplicate audit records', async () => {
+  const { client, calls } = createIdentityReviewClient({
+    emailRows: [{ id: 'contact-a' }, { id: 'contact-b' }],
+    phoneRows: [],
+  });
+  const input = {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-1',
+    body: { externalId: 'ambiguous-replay-001', email: 'ambiguous@example.com' },
+  };
+
+  const first = await ingestWebsiteLeadSubmission(client, input);
+  const replay = await ingestWebsiteLeadSubmission(client, input);
+
+  assert.equal(first.review, true);
+  assert.equal(first.duplicate, false);
+  assert.deepEqual(replay, {
+    ok: true,
+    duplicate: true,
+    review: true,
+    contactId: null,
+    leadId: null,
+  });
+  assert.equal(calls.filter((call) => call.sql.startsWith('insert into import_source_rows')).length, 1);
+  assert.equal(calls.filter((call) => call.sql.startsWith('insert into import_normalized_records')).length, 1);
+  assert.equal(calls.filter((call) => call.sql.startsWith('insert into import_review_items')).length, 1);
+  const reviewLookup = calls.find((call) => call.sql.startsWith('select 1 from import_normalized_records'));
+  assert.deepEqual(reviewLookup.params, ['org-1', 'bu-1', 'website_form', 'ambiguous-replay-001']);
+});
+
+test('does not dedupe ambiguous website reviews without a durable external id', async () => {
+  const { client, calls } = createIdentityReviewClient({
+    emailRows: [{ id: 'contact-a' }, { id: 'contact-b' }],
+    phoneRows: [],
+  });
+  const input = {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-1',
+    body: { email: 'no-external-id@example.com' },
+  };
+
+  await ingestWebsiteLeadSubmission(client, input);
+  await ingestWebsiteLeadSubmission(client, input);
+
+  assert.equal(calls.filter((call) => call.sql.startsWith('insert into import_source_rows')).length, 2);
+  assert.equal(calls.filter((call) => call.sql.startsWith('insert into import_normalized_records')).length, 2);
+  assert.equal(calls.filter((call) => call.sql.startsWith('insert into import_review_items')).length, 2);
+  assert.equal(calls.some((call) => call.sql.startsWith('select 1 from import_normalized_records')), false);
+});
+
+test('scopes website Import Review batches to business units without duplicating an organization-level Contact', async () => {
+  const { client, calls, historicalNullBusinessUnitBatchId } = createBusinessUnitScopedWebsiteClient();
+  const first = await ingestWebsiteLeadSubmission(client, {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-a',
+    body: { externalId: 'bu-a-shared-contact', email: 'shared@example.com', message: 'Division A' },
+  });
+  const second = await ingestWebsiteLeadSubmission(client, {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-b',
+    body: { externalId: 'bu-b-shared-contact', email: 'shared@example.com', message: 'Division B' },
+  });
+
+  assert.equal(first.contactId, 'contact-shared');
+  assert.equal(second.contactId, 'contact-shared');
+  assert.equal(calls.filter((call) => call.sql.startsWith('insert into contacts')).length, 1);
+  const batchLookups = calls.filter((call) => call.sql.startsWith('select id from import_batches where organization_id'));
+  assert.deepEqual(batchLookups.map((call) => call.params.slice(0, 2)), [['org-1', 'bu-a'], ['org-1', 'bu-b']]);
+  for (const lookup of batchLookups) {
+    assert.match(lookup.sql, /organization_id = \$1 and business_unit_id = \$2/);
+  }
+  const createdBatches = calls.filter((call) => call.sql.startsWith('insert into import_batches'));
+  assert.deepEqual(createdBatches.map((call) => call.params.slice(0, 2)), [['org-1', 'bu-a'], ['org-1', 'bu-b']]);
+  const sourceRows = calls.filter((call) => call.sql.startsWith('insert into import_source_rows'));
+  assert.deepEqual(sourceRows.map((call) => call.params[0]), ['batch-bu-a', 'batch-bu-b']);
+  assert.equal(sourceRows.some((call) => call.params[0] === historicalNullBusinessUnitBatchId), false);
+  assert.ok(calls.some((call) => call.params[0] === 'website-lead-batch:org-1:bu-a'));
+  assert.ok(calls.some((call) => call.params[0] === 'website-lead-batch:org-1:bu-b'));
+});
+
+test('ignores a dirty cross-tenant embedded lead reference during duplicate lookup', async () => {
+  const calls = [];
+  const duplicate = await findDuplicateWebsiteLeadSubmission({
+    async query(sql, params = []) {
+      calls.push({ sql: String(sql).replace(/\s+/g, ' ').trim(), params });
+      // A legacy normalized record points to another organization's lead. The
+      // scoped joins must exclude it before it can be returned to the caller.
+      return { rows: [] };
+    },
+  }, { organizationId: 'org-1', externalId: 'dirty-foreign-lead' });
+
+  assert.equal(duplicate, null);
+  assert.match(calls[0].sql, /l\.organization_id = ib\.organization_id/);
+  assert.match(calls[0].sql, /c\.organization_id = ib\.organization_id/);
+  assert.deepEqual(calls[0].params, ['org-1', 'website_form', 'dirty-foreign-lead']);
+});
+
+test('keeps ambiguous website-lead identity candidates in import review without CRM mutation', async () => {
+  for (const scenario of [
+    { name: 'duplicate email', emailRows: [{ id: 'contact-a' }, { id: 'contact-b' }], phoneRows: [] },
+    { name: 'duplicate phone', emailRows: [], phoneRows: [{ id: 'contact-a' }, { id: 'contact-b' }] },
+    { name: 'split email and phone', emailRows: [{ id: 'contact-email' }], phoneRows: [{ id: 'contact-phone' }] },
+  ]) {
+    const { client, calls } = createIdentityReviewClient(scenario);
+    const result = await ingestWebsiteLeadSubmission(client, {
+      organizationId: 'org-1',
+      businessUnitId: 'bu-1',
+      body: { externalId: `identity-${scenario.name}`, email: 'ana@example.com', phone: '(555) 010-1000' },
+    });
+
+    assert.equal(result.review, true, scenario.name);
+    assert.equal(result.contactId, null, scenario.name);
+    assert.equal(result.leadId, null, scenario.name);
+    assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), false, scenario.name);
+    assert.equal(calls.some((call) => call.sql.startsWith('update contacts')), false, scenario.name);
+    assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false, scenario.name);
+    const normalized = calls.find((call) => call.sql.startsWith('insert into import_normalized_records'));
+    assert.equal(normalized.params[6], 'needs_review', scenario.name);
+    const review = calls.find((call) => call.sql.startsWith('insert into import_review_items'));
+    assert.match(review.params[3], /identity needs review/, scenario.name);
+  }
+});
+
+test('keeps a submission with no usable identity in import review without CRM mutation', async () => {
+  const { client, calls } = createIdentityReviewClient({ emailRows: [], phoneRows: [] });
+  const result = await ingestWebsiteLeadSubmission(client, {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-1',
+    body: { externalId: 'no-identity-001', message: 'Please call me.' },
+  });
+
+  assert.equal(result.review, true);
+  assert.equal(result.contactId, null);
+  assert.equal(result.leadId, null);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false);
+  const review = calls.find((call) => call.sql.startsWith('insert into import_review_items'));
+  assert.match(review.params[3], /no_usable_contact_identity/);
+});
+
+test('fails closed to import review when an exact contact cannot be updated in the caller organization', async () => {
+  const { client, calls } = createExactContactMissingClient();
+  const result = await ingestWebsiteLeadSubmission(client, {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-1',
+    body: { externalId: 'exact-missing-001', email: 'exact@example.com' },
+  });
+
+  assert.equal(result.review, true);
+  assert.equal(result.contactId, null);
+  assert.equal(result.leadId, null);
+  const update = calls.find((call) => call.sql.startsWith('update contacts'));
+  assert.match(update.sql, /where id = \$1 and organization_id = \$2 returning id/);
+  assert.deepEqual(update.params.slice(0, 2), ['contact-exact', 'org-1']);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false);
 });
 
 test('creates a notification after a new website lead is promoted', async () => {
@@ -496,6 +704,9 @@ function createDuplicateClient() {
         const normalizedSql = String(sql).replace(/\s+/g, ' ').trim();
         calls.push({ sql: normalizedSql, params });
 
+        if (normalizedSql.startsWith('select pg_advisory_xact_lock')) {
+          return { rows: [] };
+        }
         if (normalizedSql.startsWith('select l.id as lead_id')) {
           return { rows: [{ lead_id: 'lead-existing', contact_id: 'contact-existing' }] };
         }
@@ -527,8 +738,9 @@ function createDuplicateClient() {
   };
 }
 
-function createWebsitePromotionClient() {
+function createWebsitePromotionClient({ duplicateAfterFirstPromotion = false } = {}) {
   const calls = [];
+  let promoted = false;
   return {
     calls,
     client: {
@@ -536,9 +748,13 @@ function createWebsitePromotionClient() {
         const normalizedSql = String(sql).replace(/\s+/g, ' ').trim();
         calls.push({ sql: normalizedSql, params });
 
-        if (normalizedSql.startsWith('select l.id as lead_id')) {
+        if (normalizedSql.startsWith('select pg_advisory_xact_lock')) {
           return { rows: [] };
         }
+        if (normalizedSql.startsWith('select l.id as lead_id')) {
+          return { rows: duplicateAfterFirstPromotion && promoted ? [{ lead_id: 'lead-1', contact_id: 'contact-1' }] : [] };
+        }
+        if (normalizedSql.startsWith('select 1 from import_normalized_records')) return { rows: [] };
         if (normalizedSql.startsWith('select id from import_batches where organization_id')) {
           return { rows: [{ id: 'batch-1' }] };
         }
@@ -564,6 +780,7 @@ function createWebsitePromotionClient() {
           return { rows: [{ id: 'contact-1' }] };
         }
         if (normalizedSql.startsWith('insert into leads')) {
+          promoted = true;
           return { rows: [{ id: 'lead-1' }] };
         }
         if (normalizedSql.startsWith('insert into activity_events')) {
@@ -600,6 +817,116 @@ function createWebsitePromotionClient() {
           return { rows: [] };
         }
 
+        throw new Error('Unexpected query: ' + normalizedSql);
+      },
+    },
+  };
+}
+
+function createIdentityReviewClient({ emailRows, phoneRows }) {
+  const calls = [];
+  let reviewPersisted = false;
+  return {
+    calls,
+    client: {
+      async query(sql, params = []) {
+        const normalizedSql = String(sql).replace(/\s+/g, ' ').trim();
+        calls.push({ sql: normalizedSql, params });
+        if (normalizedSql.startsWith('select pg_advisory_xact_lock')) return { rows: [] };
+        if (normalizedSql.startsWith('select l.id as lead_id')) return { rows: [] };
+        if (normalizedSql.startsWith('select 1 from import_normalized_records')) {
+          return { rows: reviewPersisted ? [{ exists: 1 }] : [] };
+        }
+        if (normalizedSql.startsWith('select id from import_batches where organization_id')) return { rows: [{ id: 'batch-1' }] };
+        if (normalizedSql === 'begin' || normalizedSql === 'commit' || normalizedSql === 'rollback') return { rows: [] };
+        if (normalizedSql.startsWith('select id from import_batches where id = $1 for update')) return { rows: [{ id: 'batch-1' }] };
+        if (normalizedSql.startsWith('select coalesce(max(source_row_number)')) return { rows: [{ max_row: 2 }] };
+        if (normalizedSql.includes('lower(email)')) return { rows: emailRows };
+        if (normalizedSql.includes('regexp_replace(coalesce(phone')) return { rows: phoneRows };
+        if (normalizedSql.startsWith('insert into import_source_rows')) return { rows: [{ id: 'source-row-3' }] };
+        if (normalizedSql.startsWith('insert into import_normalized_records')) return { rows: [{ id: 'normalized-3' }] };
+        if (normalizedSql.startsWith('insert into import_review_items')) {
+          reviewPersisted = true;
+          return { rows: [] };
+        }
+        throw new Error('Unexpected query: ' + normalizedSql);
+      },
+    },
+  };
+}
+
+function createExactContactMissingClient() {
+  const calls = [];
+  return {
+    calls,
+    client: {
+      async query(sql, params = []) {
+        const normalizedSql = String(sql).replace(/\s+/g, ' ').trim();
+        calls.push({ sql: normalizedSql, params });
+        if (normalizedSql.startsWith('select pg_advisory_xact_lock')) return { rows: [] };
+        if (normalizedSql.startsWith('select l.id as lead_id')) return { rows: [] };
+        if (normalizedSql.startsWith('select 1 from import_normalized_records')) return { rows: [] };
+        if (normalizedSql.startsWith('select id from import_batches where organization_id')) return { rows: [{ id: 'batch-1' }] };
+        if (normalizedSql === 'begin' || normalizedSql === 'commit' || normalizedSql === 'rollback') return { rows: [] };
+        if (normalizedSql.startsWith('select id from import_batches where id = $1 for update')) return { rows: [{ id: 'batch-1' }] };
+        if (normalizedSql.startsWith('select coalesce(max(source_row_number)')) return { rows: [{ max_row: 2 }] };
+        if (normalizedSql.includes('lower(email)')) return { rows: [{ id: 'contact-exact' }] };
+        if (normalizedSql.startsWith('update contacts')) return { rows: [] };
+        if (normalizedSql.startsWith('insert into import_source_rows')) return { rows: [{ id: 'source-row-3' }] };
+        if (normalizedSql.startsWith('insert into import_normalized_records')) return { rows: [{ id: 'normalized-3' }] };
+        if (normalizedSql.startsWith('insert into import_review_items')) return { rows: [] };
+        throw new Error('Unexpected query: ' + normalizedSql);
+      },
+    },
+  };
+}
+
+function createBusinessUnitScopedWebsiteClient() {
+  const calls = [];
+  const batches = new Map();
+  let contactCreated = false;
+  let sourceRowCount = 0;
+  const historicalNullBusinessUnitBatchId = 'historical-null-bu';
+  return {
+    calls,
+    historicalNullBusinessUnitBatchId,
+    client: {
+      async query(sql, params = []) {
+        const normalizedSql = String(sql).replace(/\s+/g, ' ').trim();
+        calls.push({ sql: normalizedSql, params });
+        if (normalizedSql.startsWith('select pg_advisory_xact_lock')) return { rows: [] };
+        if (normalizedSql.startsWith('select l.id as lead_id')) return { rows: [] };
+        if (normalizedSql.startsWith('select 1 from import_normalized_records')) return { rows: [] };
+        if (normalizedSql.startsWith('select id from import_batches where organization_id')) {
+          return { rows: batches.has(params[1]) ? [{ id: batches.get(params[1]) }] : [] };
+        }
+        if (normalizedSql.startsWith('insert into import_batches')) {
+          const batchId = `batch-${params[1]}`;
+          batches.set(params[1], batchId);
+          return { rows: [{ id: batchId }] };
+        }
+        if (normalizedSql === 'begin' || normalizedSql === 'commit' || normalizedSql === 'rollback') return { rows: [] };
+        if (normalizedSql.startsWith('select id from import_batches where id = $1 for update')) return { rows: [{ id: params[0] }] };
+        if (normalizedSql.startsWith('select coalesce(max(source_row_number)')) return { rows: [{ max_row: 0 }] };
+        if (normalizedSql.startsWith('select id from contacts where organization_id')) {
+          return { rows: contactCreated ? [{ id: 'contact-shared' }] : [] };
+        }
+        if (normalizedSql.startsWith('insert into contacts')) {
+          contactCreated = true;
+          return { rows: [{ id: 'contact-shared' }] };
+        }
+        if (normalizedSql.startsWith('update contacts')) return { rows: [{ id: 'contact-shared' }] };
+        if (normalizedSql.startsWith('select u.id, u.name, u.email from users u')) return { rows: [] };
+        if (normalizedSql.startsWith('select id, name, email from users')) return { rows: [] };
+        if (normalizedSql.startsWith('insert into leads')) return { rows: [{ id: `lead-${params[1]}` }] };
+        if (normalizedSql.startsWith('insert into activity_events')) return { rows: [] };
+        if (normalizedSql.startsWith('insert into notes')) return { rows: [] };
+        if (normalizedSql.startsWith('insert into import_source_rows')) return { rows: [{ id: `source-row-${++sourceRowCount}` }] };
+        if (normalizedSql.startsWith('insert into import_normalized_records')) return { rows: [{ id: `normalized-${sourceRowCount}` }] };
+        if (normalizedSql.startsWith('insert into import_review_items')) return { rows: [] };
+        if (normalizedSql.startsWith('insert into notifications')) return { rows: [{ id: 'notification-1' }] };
+        if (normalizedSql.startsWith('with intake_lock as')) return { rows: [{ id: 'task-1' }] };
+        if (normalizedSql.startsWith('update leads set original_notes')) return { rows: [] };
         throw new Error('Unexpected query: ' + normalizedSql);
       },
     },

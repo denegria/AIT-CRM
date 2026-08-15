@@ -163,7 +163,15 @@ export async function recordInboundLeadAssignmentActivity(client, {
     `
       insert into activity_events
       (organization_id, business_unit_id, contact_id, lead_id, event_type, message, occurred_at)
-      values ($1, $2, $3, $4, $5, $6, now())
+      select $1, $2, $3, $4, $5, $6, now()
+      where not exists (
+        select 1
+        from activity_events
+        where organization_id = $1
+          and lead_id = $4
+          and event_type = $5
+          and message = $6
+      )
     `,
     [
       organizationId,

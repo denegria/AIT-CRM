@@ -21,6 +21,7 @@ import {
 } from '../communication-consent/sms-consent.js';
 import { normalizeWorkflowTags } from '../sales-workflow.js';
 import { createInboundLeadIntakeTask } from '../tasks/intake.js';
+import { classifyContactIdentity } from '../crm/contact-identity.js';
 
 export const WEBSITE_LEAD_SECRET_HEADER = 'x-ait-webhook-secret';
 export const WEBSITE_LEAD_SOURCE_TYPE = 'website_form';
@@ -845,34 +846,19 @@ export async function resolveWebsiteLeadBusinessUnitId(client, { organizationId,
   return fallback.rows[0]?.id || null;
 }
 
-async function findExistingContact(client, organizationId, lead) {
-  if (lead.email) {
-    const result = await client.query(
-      'select id from contacts where organization_id = $1 and lower(email) = lower($2) order by updated_at desc limit 1',
-      [organizationId, lead.email],
-    );
-    if (result.rows[0]) return result.rows[0];
-  }
-
-  if (lead.phone) {
-    const result = await client.query(
-      'select id from contacts where organization_id = $1 and regexp_replace(coalesce(phone, \'\'), \'[^0-9+]\', \'\', \'g\') = $2 order by updated_at desc limit 1',
-      [organizationId, lead.phone],
-    );
-    if (result.rows[0]) return result.rows[0];
-  }
-
-  return null;
-}
-
 export async function findDuplicateWebsiteLeadSubmission(client, { organizationId, externalId }) {
   if (!externalId) return null;
   const result = await client.query(
     `
-      select l.id as lead_id, l.contact_id
+      select l.id as lead_id, c.id as contact_id
       from import_normalized_records nr
       join import_batches ib on ib.id = nr.import_batch_id
-      left join leads l on l.id::text = nullif(nr.proposed_lead_json->>'lead_id', '')
+      join leads l
+        on l.id::text = nullif(nr.proposed_lead_json->>'lead_id', '')
+       and l.organization_id = ib.organization_id
+      left join contacts c
+        on c.id = l.contact_id
+       and c.organization_id = ib.organization_id
       where ib.organization_id = $1
         and ib.source_type = $2
         and nr.record_type = 'lead'
@@ -887,16 +873,47 @@ export async function findDuplicateWebsiteLeadSubmission(client, { organizationI
   return result.rows[0]?.lead_id ? result.rows[0] : null;
 }
 
-async function getOrCreateBatch(client, organizationId) {
+export async function hasExistingWebsiteLeadReviewSubmission(client, { organizationId, businessUnitId, externalId }) {
+  if (!externalId) return false;
+  const result = await client.query(
+    `
+      select 1
+      from import_normalized_records nr
+      join import_batches ib on ib.id = nr.import_batch_id
+      join import_review_items ri
+        on ri.import_batch_id = nr.import_batch_id
+       and ri.source_row_id = nr.source_row_id
+      where ib.organization_id = $1
+        and ib.business_unit_id = $2
+        and ib.source_type = $3
+        and nr.record_type = 'lead'
+        and coalesce(nr.proposed_lead_json->>'source_type', '') = $3
+        and coalesce(nr.proposed_lead_json->>'external_id', '') = $4
+        and nullif(nr.proposed_lead_json->>'lead_id', '') is null
+        and nr.status = 'needs_review'
+        and ri.review_status = 'pending'
+      limit 1
+    `,
+    [organizationId, businessUnitId, WEBSITE_LEAD_SOURCE_TYPE, externalId],
+  );
+  return Boolean(result.rows[0]);
+}
+
+export async function resolveSingleOrganizationId(client) {
+  const result = await client.query('select id from organizations order by created_at asc limit 2');
+  return result.rows.length === 1 && result.rows[0]?.id ? result.rows[0].id : null;
+}
+
+async function getOrCreateBatch(client, organizationId, businessUnitId) {
   const existing = await client.query(
-    'select id from import_batches where organization_id = $1 and source_type = $2 and source_name = $3 order by created_at desc limit 1',
-    [organizationId, WEBSITE_LEAD_SOURCE_TYPE, WEBSITE_LEAD_BATCH_SOURCE_NAME],
+    'select id from import_batches where organization_id = $1 and business_unit_id = $2 and source_type = $3 and source_name = $4 order by created_at desc limit 1 for update',
+    [organizationId, businessUnitId, WEBSITE_LEAD_SOURCE_TYPE, WEBSITE_LEAD_BATCH_SOURCE_NAME],
   );
   if (existing.rows[0]?.id) return existing.rows[0].id;
 
   const inserted = await client.query(
-    'insert into import_batches (organization_id, source_name, source_type, file_name, status) values ($1, $2, $3, $4, $5) returning id',
-    [organizationId, WEBSITE_LEAD_BATCH_SOURCE_NAME, WEBSITE_LEAD_SOURCE_TYPE, WEBSITE_LEAD_BATCH_FILE_NAME, 'active'],
+    'insert into import_batches (organization_id, business_unit_id, source_name, source_type, file_name, status) values ($1, $2, $3, $4, $5, $6) returning id',
+    [organizationId, businessUnitId, WEBSITE_LEAD_BATCH_SOURCE_NAME, WEBSITE_LEAD_SOURCE_TYPE, WEBSITE_LEAD_BATCH_FILE_NAME, 'active'],
   );
   return inserted.rows[0]?.id || null;
 }
@@ -909,15 +926,14 @@ async function nextSourceRowNumber(client, batchId) {
   return Number(result.rows[0]?.max_row || 0) + 1;
 }
 
-async function upsertContact(client, organizationId, businessUnitId, lead) {
+async function upsertContact(client, organizationId, businessUnitId, lead, identity) {
   const intendedLearningLocation = intendedLearningLocationFromWebsiteLead(lead);
-  const existing = await findExistingContact(client, organizationId, lead);
-  if (existing?.id) {
-    await client.query(
-      'update contacts set name = coalesce(nullif($2, \'\'), name), company_name = coalesce(nullif($3, \'\'), company_name), phone = coalesce(nullif($4, \'\'), phone), email = coalesce(nullif($5, \'\'), email), address = coalesce(nullif($6, \'\'), address), source_label = $7, primary_business_unit_id = coalesce(primary_business_unit_id, $8), updated_at = now() where id = $1',
-      [existing.id, lead.name, lead.company, lead.phone, lead.email, intendedLearningLocation, WEBSITE_LEAD_SOURCE_NAME, businessUnitId],
+  if (identity.status === 'exact') {
+    const updated = await client.query(
+      'update contacts set name = coalesce(nullif($3, \'\'), name), company_name = coalesce(nullif($4, \'\'), company_name), phone = coalesce(nullif($5, \'\'), phone), email = coalesce(nullif($6, \'\'), email), address = coalesce(nullif($7, \'\'), address), source_label = $8, primary_business_unit_id = coalesce(primary_business_unit_id, $9), updated_at = now() where id = $1 and organization_id = $2 returning id',
+      [identity.contactId, organizationId, lead.name, lead.company, lead.phone, lead.email, intendedLearningLocation, WEBSITE_LEAD_SOURCE_NAME, businessUnitId],
     );
-    return existing.id;
+    return updated.rows[0]?.id || null;
   }
 
   const inserted = await client.query(
@@ -1129,8 +1145,26 @@ async function persistLead(client, organizationId, businessUnitId, contactId, le
 
 export async function persistWebsiteLeadImportAudit(
   client,
-  { batchId, rowNumber, body, lead, businessUnitId, contactId, leadId, assignedUserId = null, duplicate = null },
+  {
+    batchId,
+    rowNumber,
+    body,
+    lead,
+    businessUnitId,
+    contactId,
+    leadId,
+    assignedUserId = null,
+    duplicate = null,
+    identity = null,
+    identityReviewReason = null,
+  },
 ) {
+  const needsReview = Boolean(duplicate) || Boolean(identityReviewReason) || identity?.status === 'ambiguous';
+  const reviewReason = duplicate
+    ? 'Website lead matched an existing external submission id.'
+    : identityReviewReason || identity?.status === 'ambiguous'
+      ? `Website lead identity needs review: ${identityReviewReason || identity.reason}.`
+      : 'Website lead captured and promoted to CRM.';
   const rawValues = {
     source: WEBSITE_LEAD_SOURCE_TYPE,
     submission_type: lead.submissionType || SUBMISSION_TYPES.WEBSITE_LEAD,
@@ -1159,6 +1193,7 @@ export async function persistWebsiteLeadImportAudit(
     source_label: WEBSITE_LEAD_SOURCE_NAME,
     business_unit_id: businessUnitId,
     contact_id: contactId,
+    identity_classification: identity,
   };
   const proposedLead = {
     source_type: WEBSITE_LEAD_SOURCE_TYPE,
@@ -1186,6 +1221,7 @@ export async function persistWebsiteLeadImportAudit(
     lead_id: leadId,
     assigned_user_id: assignedUserId,
     duplicate_lead_id: duplicate?.lead_id || null,
+    identity_classification: identity,
   };
 
   const normalized = await client.query(
@@ -1196,8 +1232,8 @@ export async function persistWebsiteLeadImportAudit(
       'lead',
       JSON.stringify(proposedContact),
       JSON.stringify(proposedLead),
-      duplicate ? 0.5 : 0.85,
-      duplicate ? 'needs_review' : 'promoted',
+      needsReview ? 0.5 : 0.85,
+      needsReview ? 'needs_review' : 'promoted',
     ],
   );
 
@@ -1207,19 +1243,42 @@ export async function persistWebsiteLeadImportAudit(
       batchId,
       sourceRowId,
       'website_lead_review',
-      duplicate ? 'Website lead matched an existing external submission id.' : 'Website lead captured and promoted to CRM.',
-      duplicate ? 'pending' : 'resolved',
+      reviewReason,
+      needsReview ? 'pending' : 'resolved',
       JSON.stringify({
-        action: duplicate ? 'review_duplicate_website_lead' : 'verify_website_lead',
+        action: duplicate ? 'review_duplicate_website_lead' : needsReview ? 'review_contact_identity' : 'verify_website_lead',
         normalizedRecordId: normalized.rows[0]?.id || null,
         contactId,
         leadId,
         duplicateLeadId: duplicate?.lead_id || null,
+        identityClassification: identity,
       }),
     ],
   );
 
   return sourceRowId;
+}
+
+function contactIdentityReviewReason(identity) {
+  if (identity.status === 'ambiguous') return identity.reason;
+  if (!identity.evidence?.email && !identity.evidence?.phone) return 'no_usable_contact_identity';
+  return null;
+}
+
+function websiteLeadLockKeys({ organizationId, businessUnitId, lead }) {
+  const keys = [
+    `website-lead-batch:${organizationId}:${businessUnitId}`,
+    lead.externalId ? `website-lead-external:${organizationId}:${lead.externalId}` : null,
+    lead.email ? `website-lead-contact:${organizationId}:email:${lead.email}` : null,
+    lead.phone ? `website-lead-contact:${organizationId}:phone:${lead.phone}` : null,
+  ].filter(Boolean);
+  return [...new Set(keys)].sort();
+}
+
+async function acquireWebsiteLeadLocks(client, { organizationId, businessUnitId, lead }) {
+  for (const key of websiteLeadLockKeys({ organizationId, businessUnitId, lead })) {
+    await client.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [key]);
+  }
 }
 
 export async function ingestWebsiteLeadSubmission(client, {
@@ -1236,16 +1295,16 @@ export async function ingestWebsiteLeadSubmission(client, {
     throw new Error('JSON object body is required.');
   }
 
-  const duplicate = await findDuplicateWebsiteLeadSubmission(client, {
-    organizationId,
-    externalId: lead.externalId,
-  });
-  const batchId = await getOrCreateBatch(client, organizationId);
-
   await client.query('begin');
   try {
+    await acquireWebsiteLeadLocks(client, { organizationId, businessUnitId, lead });
+    const batchId = await getOrCreateBatch(client, organizationId, businessUnitId);
     await client.query('select id from import_batches where id = $1 for update', [batchId]);
     const rowNumber = await nextSourceRowNumber(client, batchId);
+    const duplicate = await findDuplicateWebsiteLeadSubmission(client, {
+      organizationId,
+      externalId: lead.externalId,
+    });
     if (duplicate) {
       await persistWebsiteLeadImportAudit(client, {
         batchId,
@@ -1266,13 +1325,81 @@ export async function ingestWebsiteLeadSubmission(client, {
       };
     }
 
+    if (await hasExistingWebsiteLeadReviewSubmission(client, {
+      organizationId,
+      businessUnitId,
+      externalId: lead.externalId,
+    })) {
+      await client.query('commit');
+      return {
+        ok: true,
+        duplicate: true,
+        review: true,
+        contactId: null,
+        leadId: null,
+      };
+    }
+
+    const identity = await classifyContactIdentity(client, {
+      organizationId,
+      email: lead.email,
+      phone: lead.phone,
+    });
+    const identityReviewReason = contactIdentityReviewReason(identity);
+    if (identityReviewReason) {
+      const sourceRowId = await persistWebsiteLeadImportAudit(client, {
+        batchId,
+        rowNumber,
+        body: payload,
+        lead,
+        businessUnitId,
+        contactId: null,
+        leadId: null,
+        identity,
+        identityReviewReason,
+      });
+      await client.query('commit');
+      return {
+        ok: true,
+        duplicate: false,
+        review: true,
+        sourceRowId,
+        contactId: null,
+        leadId: null,
+        identity,
+      };
+    }
+
+    const contactId = await upsertContact(client, organizationId, businessUnitId, lead, identity);
+    if (!contactId) {
+      const sourceRowId = await persistWebsiteLeadImportAudit(client, {
+        batchId,
+        rowNumber,
+        body: payload,
+        lead,
+        businessUnitId,
+        contactId: null,
+        leadId: null,
+        identity,
+        identityReviewReason: 'exact_contact_not_available_for_organization',
+      });
+      await client.query('commit');
+      return {
+        ok: true,
+        duplicate: false,
+        review: true,
+        sourceRowId,
+        contactId: null,
+        leadId: null,
+        identity,
+      };
+    }
     const assignedUserId = await resolveDefaultInboundLeadOwnerUserId(client, {
       organizationId,
       businessUnitId,
       sourceType: WEBSITE_LEAD_SOURCE_TYPE,
       sourceKey: lead.externalId || lead.sourceKey || String(rowNumber),
     });
-    const contactId = await upsertContact(client, organizationId, businessUnitId, lead);
     const leadId = await persistLead(client, organizationId, businessUnitId, contactId, lead, 'pending', rowNumber, assignedUserId);
     const sourceRowId = await persistWebsiteLeadImportAudit(client, {
       batchId,
@@ -1283,6 +1410,7 @@ export async function ingestWebsiteLeadSubmission(client, {
       contactId,
       leadId,
       assignedUserId,
+      identity,
     });
     await recordWebsiteLeadSmsConsent(client, {
       organizationId,

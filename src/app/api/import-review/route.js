@@ -195,7 +195,7 @@ export async function PATCH(request) {
         organizationId: auth.organizationId,
       });
 
-      if (!result.updatedIds.length && !result.updatedReviewItemIds?.length) {
+      if (!result.updatedIds.length && !result.updatedReviewItemIds?.length && !result.promotionOutcomes?.length) {
         return NextResponse.json({ error: 'No matching staged records found.' }, { status: 404 });
       }
 

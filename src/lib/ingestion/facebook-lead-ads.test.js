@@ -6,6 +6,7 @@ import {
   facebookLeadgenEventKey,
   ingestFacebookLeadAdsEvents,
   parseFacebookLeadAdsFormBusinessUnitMap,
+  promoteFacebookLeadProposalToCrm,
 } from './facebook-lead-ads.js';
 import {
   createMetaProviderConfig,
@@ -51,6 +52,8 @@ function createServiceClient({
   sourceRowId = 'source-row-5',
   normalizedId = 'normalized-5',
   existingContact = null,
+  existingLead = null,
+  leadRepairRows = null,
 } = {}) {
   const calls = [];
   return {
@@ -112,7 +115,17 @@ function createServiceClient({
           return { rows: [{ id: contactId }] };
         }
         if (normalized.startsWith('update contacts set')) {
-          return { rows: [] };
+          return { rows: [{ id: params[0] }], rowCount: 1 };
+        }
+        if (
+          normalized.startsWith('select id, contact_id, assigned_user_id from leads')
+          || normalized.startsWith('select l.id, l.contact_id as linked_contact_id')
+        ) {
+          return { rows: existingLead ? [existingLead] : [] };
+        }
+        if (normalized.startsWith('update leads set')) {
+          const rows = leadRepairRows ?? [{ id: existingLead?.id || 'lead-existing' }];
+          return { rows, rowCount: rows.length };
         }
         if (normalized.startsWith('insert into leads')) {
           return { rows: [{ id: leadId }] };
@@ -494,6 +507,7 @@ test('auto-promotion links existing contacts without overwriting populated PII',
     'ada@example.com',
     '123 Loop St',
     'bu-1',
+    'org-1',
   ]);
 });
 
@@ -549,4 +563,89 @@ test('records Graph failures for review without creating CRM rows', async () => 
     blockedReason: 'Invalid lead id',
     mappingSource: 'page_map',
   });
+});
+
+test('replaying an existing imported lead repairs side effects without inserting another lead', async () => {
+  const { client, calls } = createServiceClient({
+    existingLead: {
+      id: 'lead-existing',
+      linked_contact_id: 'contact-existing',
+      contact_id: 'contact-existing',
+      assigned_user_id: 'user-owner-1',
+    },
+    existingContact: { id: 'contact-existing', primary_business_unit_id: 'bu-1' },
+  });
+
+  const result = await promoteFacebookLeadProposalToCrm(client, 'org-1', {
+    proposedContact: { name: 'Ada Lovelace', email: 'ada@example.com', business_unit_id: 'bu-1' },
+    proposedLead: { source_type: 'facebook_webhook', leadgen_id: 'leadgen-1', form_id: 'form-1', business_unit_id: 'bu-1' },
+    sourceRowId: 'source-row-5',
+    rowNumber: 12,
+  });
+
+  assert.equal(result.leadId, 'lead-existing');
+  assert.equal(result.alreadyExists, true);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false);
+  assert.equal(calls.some((call) => call.sql.includes("'facebook_lead_captured'")), true);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into notifications')), true);
+  assert.equal(calls.some((call) => call.sql.startsWith('with intake_lock as')), true);
+});
+
+test('dirty cross-tenant lead links never update or return the foreign contact', async () => {
+  const { client, calls } = createServiceClient({
+    contactId: 'contact-in-org',
+    existingLead: {
+      id: 'lead-existing',
+      linked_contact_id: 'contact-foreign',
+      contact_id: null,
+      assigned_user_id: 'user-owner-1',
+    },
+  });
+
+  const result = await promoteFacebookLeadProposalToCrm(client, 'org-1', {
+    proposedContact: { name: 'Ada Lovelace', email: 'ada@example.com', business_unit_id: 'bu-1' },
+    proposedLead: { source_type: 'facebook_webhook', leadgen_id: 'leadgen-1', form_id: 'form-1', business_unit_id: 'bu-1' },
+    sourceRowId: 'source-row-5',
+    rowNumber: 12,
+  });
+
+  const leadLookup = calls.find((call) => call.sql.startsWith('select l.id, l.contact_id as linked_contact_id'));
+  assert.match(leadLookup.sql, /left join contacts c/);
+  assert.match(leadLookup.sql, /c\.organization_id = l\.organization_id/);
+  assert.equal(calls.some((call) => call.sql.startsWith('update contacts set') && call.params[0] === 'contact-foreign'), false);
+  const leadRepair = calls.find((call) => call.sql.startsWith('update leads set'));
+  assert.match(leadRepair.sql, /returning id/);
+  assert.equal(leadRepair.params[1], 'contact-in-org');
+  assert.equal(result.contactId, 'contact-in-org');
+  assert.notEqual(result.contactId, 'contact-foreign');
+});
+
+test('zero-row organization-scoped Lead repair fails and rolls back the CRM transaction', async () => {
+  const { client, calls } = createServiceClient({
+    contactId: 'contact-in-org',
+    existingLead: {
+      id: 'lead-existing',
+      linked_contact_id: 'contact-foreign',
+      contact_id: null,
+      assigned_user_id: 'user-owner-1',
+    },
+    leadRepairRows: [],
+  });
+
+  await client.query('begin');
+  await assert.rejects(
+    () => promoteFacebookLeadProposalToCrm(client, 'org-1', {
+      proposedContact: { name: 'Ada Lovelace', email: 'ada@example.com', business_unit_id: 'bu-1' },
+      proposedLead: { source_type: 'facebook_webhook', leadgen_id: 'leadgen-1', form_id: 'form-1', business_unit_id: 'bu-1' },
+      sourceRowId: 'source-row-5',
+      rowNumber: 12,
+    }),
+    /Organization-scoped Facebook lead repair did not affect the expected Lead/,
+  );
+  await client.query('rollback');
+
+  const leadRepair = calls.find((call) => call.sql.startsWith('update leads set'));
+  assert.match(leadRepair.sql, /returning id/);
+  assert.equal(calls.at(-1).sql, 'rollback');
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into notifications')), false);
 });

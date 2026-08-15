@@ -6,8 +6,23 @@ function normalizeSql(sql) {
   return String(sql).replace(/\s+/g, ' ').trim().toLowerCase();
 }
 
-function createClient({ batchSourceType = 'facebook_messenger', batchBusinessUnitId = 'bu-1' } = {}) {
+function createClient({
+  batchSourceType = 'facebook_messenger',
+  batchBusinessUnitId = 'bu-1',
+  recordStatus = 'pending',
+  recordLeadId = null,
+  claimWins = true,
+  crmLeadId = 'lead-1',
+  failureStage = null,
+} = {}) {
   const calls = [];
+  let failureRaised = false;
+  const maybeFail = (stage) => {
+    if (failureStage === stage && !failureRaised) {
+      failureRaised = true;
+      throw new Error(`simulated ${stage} failure`);
+    }
+  };
 
   return {
     calls,
@@ -18,6 +33,13 @@ function createClient({ batchSourceType = 'facebook_messenger', batchBusinessUni
 
         if (normalized === 'begin' || normalized === 'commit' || normalized === 'rollback') {
           return { rows: [] };
+        }
+
+        if (
+          normalized.startsWith('select pg_advisory_lock')
+          || normalized.startsWith('select pg_advisory_unlock')
+        ) {
+          return { rows: [{ pg_advisory_lock: true }] };
         }
 
         if (normalized.startsWith('select id from import_batches where id = $1 and organization_id = $2')) {
@@ -48,7 +70,9 @@ function createClient({ batchSourceType = 'facebook_messenger', batchBusinessUni
               source_row_id: 'source-row-1',
               source_row_number: 12,
               organization_id: 'org-1',
+              batch_business_unit_id: batchBusinessUnitId,
               record_type: 'lead',
+              status: recordStatus,
               proposed_contact_json: {
                 name: 'Ada Lovelace',
                 email: 'ada@example.com',
@@ -66,15 +90,49 @@ function createClient({ batchSourceType = 'facebook_messenger', batchBusinessUni
                 form_id: 'form-1',
                 business_unit_id: 'bu-1',
                 contact_id: null,
-                lead_id: null,
+                lead_id: recordLeadId,
                 assigned_user_id: null,
               },
             }],
           };
         }
 
+        if (normalized.startsWith('select bu.id from business_units bu')) {
+          return { rows: params[2] === 'bu-2' ? [] : [{ id: 'bu-1' }] };
+        }
+
         if (normalized.startsWith('update import_normalized_records set status = $1')) {
           return { rows: [{ id: 'record-1', record_type: 'lead', status: params[0] }] };
+        }
+
+        if (normalized.startsWith("update import_normalized_records nr set status = 'promoting'")) {
+          if (!claimWins) return { rows: [], rowCount: 0 };
+          return {
+            rowCount: 1,
+            rows: [{
+              id: 'record-1',
+              source_row_id: 'source-row-1',
+              source_row_number: 12,
+              organization_id: 'org-1',
+              record_type: 'lead',
+              status: 'promoting',
+              proposed_contact_json: {
+                name: 'Ada Lovelace',
+                email: 'ada@example.com',
+                phone: '555-0100',
+                company_name: 'Analytical Signs',
+                address: '123 Loop St',
+                business_unit_id: 'bu-1',
+              },
+              proposed_lead_json: {
+                source_type: 'facebook_webhook',
+                leadgen_id: 'leadgen-1',
+                form_id: 'form-1',
+                business_unit_id: 'bu-1',
+                lead_id: recordLeadId,
+              },
+            }],
+          };
         }
 
         if (normalized.startsWith('update import_review_items iri set')) {
@@ -103,27 +161,48 @@ function createClient({ batchSourceType = 'facebook_messenger', batchBusinessUni
           return { rows: [] };
         }
 
+        if (
+          normalized.startsWith('select id, contact_id, assigned_user_id from leads')
+          || normalized.startsWith('select l.id, l.contact_id as linked_contact_id')
+        ) {
+          return { rows: [] };
+        }
+
         if (normalized.startsWith('insert into contacts')) {
+          maybeFail('contact');
           return { rows: [{ id: 'contact-1' }] };
         }
 
         if (normalized.startsWith('insert into leads')) {
-          return { rows: [{ id: 'lead-1' }] };
+          maybeFail('lead');
+          return { rows: [{ id: crmLeadId }] };
         }
 
         if (normalized.startsWith('insert into activity_events')) {
+          if (params[4] === 'lead.assigned') maybeFail('assignment');
+          if (normalized.includes("'facebook_lead_captured'")) maybeFail('capture_activity');
           return { rows: [] };
         }
 
         if (normalized.startsWith('insert into notifications')) {
+          maybeFail('notification');
           return { rows: [{ id: 'notification-1' }] };
         }
 
         if (normalized.startsWith('with intake_lock as')) {
+          maybeFail('intake_task');
           return { rows: [{ id: 'task-activity-1' }] };
         }
 
+        if (normalized.startsWith('update leads set')) {
+          return { rows: [{ id: 'lead-1' }], rowCount: 1 };
+        }
+
         if (normalized.startsWith('update import_normalized_records set proposed_contact_json')) {
+          return { rows: [], rowCount: 1 };
+        }
+
+        if (normalized.startsWith('update import_normalized_records set proposed_lead_json')) {
           return { rows: [], rowCount: 1 };
         }
 
@@ -403,6 +482,68 @@ test('approving staged Facebook leads promotes them into CRM records', async () 
   assert.equal(JSON.parse(promotionUpdate.params[3]).lead_id, 'lead-1');
 });
 
+test('a concurrent approval that loses the claim does not write CRM records', async () => {
+  const { client, calls } = createClient({ claimWins: false });
+
+  const result = await updateImportReviewStatus(client, {
+    batchId: 'batch-1',
+    status: 'approved',
+    recordIds: ['record-1'],
+  });
+
+  assert.deepEqual(result.promotedRecords, []);
+  assert.deepEqual(result.promotionFailures, []);
+  assert.equal(result.promotionOutcomes[0].outcome, 'already_claimed');
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false);
+});
+
+test('a retry after promotion success returns already-promoted without another CRM write', async () => {
+  const { client, calls } = createClient({ recordStatus: 'promoted', recordLeadId: 'lead-1' });
+
+  const result = await updateImportReviewStatus(client, {
+    batchId: 'batch-1',
+    status: 'approved',
+    recordIds: ['record-1'],
+  });
+
+  assert.equal(result.promotionOutcomes[0].outcome, 'already_promoted');
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false);
+});
+
+test('promotion failure rolls the claimed row back to recoverable needs_review', async () => {
+  const { client, calls } = createClient({ crmLeadId: null });
+
+  const result = await updateImportReviewStatus(client, {
+    batchId: 'batch-1',
+    status: 'approved',
+    recordIds: ['record-1'],
+  });
+
+  assert.equal(result.promotionFailures.length, 1);
+  assert.equal(result.promotionFailures[0].outcome, 'promotion_failed');
+  assert.equal(result.promotionFailures[0].reason, 'CRM promotion returned no lead id.');
+  const recoveryUpdate = calls.find((call) => call.sql.startsWith('update import_normalized_records set proposed_lead_json'));
+  assert.ok(recoveryUpdate);
+  assert.equal(recoveryUpdate.params[0], 'batch-1');
+  assert.equal(calls.some((call) => call.sql.includes("status = 'needs_review'")), true);
+});
+
+test('stale non-reviewable status is not overwritten by an approval retry', async () => {
+  const { client, calls } = createClient({ recordStatus: 'rejected' });
+
+  const result = await updateImportReviewStatus(client, {
+    batchId: 'batch-1',
+    status: 'approved',
+    recordIds: ['record-1'],
+  });
+
+  assert.equal(result.promotionOutcomes[0].outcome, 'stale_status');
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false);
+});
+
 
 test('organization-scoped approvals constrain batch and staged record lookups', async () => {
   const { client, calls } = createClient();
@@ -458,6 +599,200 @@ test('operator workbook approvals require a business unit on the batch', async (
 
   assert.equal(calls.some((call) => call.sql === 'begin'), true);
   assert.equal(calls.some((call) => call.sql === 'rollback'), true);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false);
+});
+
+function createTwoClientPromotionHarness({ initialStatus = 'pending' } = {}) {
+  const state = {
+    status: initialStatus,
+    contactId: null,
+    leadId: null,
+    leadCreates: 0,
+    blockedClients: 0,
+    owner: null,
+    firstLockAcquired: null,
+    firstLockResolve: null,
+    firstReleaseResolve: null,
+    blockedResolve: null,
+  };
+  state.firstLockAcquired = new Promise((resolve) => { state.firstLockResolve = resolve; });
+  state.firstRelease = new Promise((resolve) => { state.firstReleaseResolve = resolve; });
+  state.blocked = new Promise((resolve) => { state.blockedResolve = resolve; });
+
+  const record = () => ({
+    id: 'record-1',
+    source_row_id: 'source-row-1',
+    source_row_number: 12,
+    organization_id: 'org-1',
+    batch_business_unit_id: 'bu-1',
+    record_type: 'lead',
+    status: state.status,
+    proposed_contact_json: {
+      name: 'Ada Lovelace', email: 'ada@example.com', phone: '555-0100', business_unit_id: 'bu-1',
+    },
+    proposed_lead_json: {
+      source_type: 'facebook_webhook', leadgen_id: 'leadgen-1', form_id: 'form-1',
+      business_unit_id: 'bu-1', contact_id: state.contactId, lead_id: state.leadId, assigned_user_id: null,
+    },
+  });
+
+  function clientFor(clientId, { holdFirstLock = false } = {}) {
+    const calls = [];
+    return {
+      calls,
+      client: {
+        async query(sql, params = []) {
+          const normalized = normalizeSql(sql);
+          calls.push({ sql: normalized, params });
+          if (normalized === 'begin' || normalized === 'commit' || normalized === 'rollback') return { rows: [] };
+          if (normalized.startsWith('select pg_advisory_lock')) {
+            if (!state.owner) {
+              state.owner = clientId;
+              if (clientId === 'client-1') {
+                state.firstLockResolve();
+                if (holdFirstLock) await state.firstRelease;
+              }
+              return { rows: [] };
+            }
+            state.blockedClients += 1;
+            state.blockedResolve();
+            await new Promise((resolve) => {
+              const check = () => {
+                if (!state.owner) resolve();
+                else setTimeout(check, 0);
+              };
+              check();
+            });
+            state.owner = clientId;
+            return { rows: [] };
+          }
+          if (normalized.startsWith('select pg_advisory_unlock')) {
+            if (state.owner === clientId) state.owner = null;
+            return { rows: [{ pg_advisory_unlock: true }] };
+          }
+          if (normalized.startsWith('select ib.id, ib.source_name, ib.source_type')) {
+            return { rows: [{
+              id: params[0], source_name: 'Import Review Test', source_type: 'facebook_messenger',
+              file_name: 'test.xlsx', file_hash: 'hash-1', sheet_name: null, status: 'loaded',
+              business_unit_id: 'bu-1', business_unit_name: 'AIT Signs', created_at: new Date(),
+            }] };
+          }
+          if (normalized.startsWith('select nr.id, nr.source_row_id')) return { rows: [record()] };
+          if (normalized.startsWith('select bu.id from business_units bu')) return { rows: [{ id: 'bu-1' }] };
+          if (normalized.startsWith("update import_normalized_records nr set status = 'promoting'")) {
+            if (!['pending', 'needs_review', 'promoting'].includes(state.status)) return { rows: [], rowCount: 0 };
+            state.status = 'promoting';
+            return { rows: [{ ...record(), status: 'promoting' }], rowCount: 1 };
+          }
+          if (normalized.startsWith('update import_review_items')) return { rows: [], rowCount: 1 };
+          if (normalized.startsWith('select u.id, u.name, u.email from users u')) return { rows: [{ id: 'owner-1', name: 'Owner', email: 'owner@example.com' }] };
+          if (normalized.startsWith('select id, primary_business_unit_id from contacts')) return { rows: state.contactId ? [{ id: state.contactId, primary_business_unit_id: 'bu-1' }] : [] };
+          if (
+            normalized.startsWith('select id, contact_id, assigned_user_id from leads')
+            || normalized.startsWith('select l.id, l.contact_id as linked_contact_id')
+          ) {
+            return { rows: state.leadId ? [{ id: state.leadId, contact_id: state.contactId, assigned_user_id: 'owner-1' }] : [] };
+          }
+          if (normalized.startsWith('insert into contacts')) {
+            state.contactId = 'contact-1';
+            return { rows: [{ id: state.contactId }] };
+          }
+          if (normalized.startsWith('insert into leads')) {
+            state.leadCreates += 1;
+            state.leadId = 'lead-1';
+            return { rows: [{ id: state.leadId }] };
+          }
+          if (normalized.startsWith('update contacts')) return { rows: [] };
+          if (normalized.startsWith('update leads')) return { rows: [{ id: state.leadId }], rowCount: 1 };
+          if (normalized.startsWith('insert into activity_events')) return { rows: [] };
+          if (normalized.startsWith('insert into notifications')) return { rows: [{ id: 'notification-1' }] };
+          if (normalized.startsWith('with intake_lock as')) return { rows: [{ id: 'task-1' }] };
+          if (normalized.startsWith('update import_normalized_records set proposed_contact_json')) {
+            state.status = 'promoted';
+            return { rows: [], rowCount: 1 };
+          }
+          if (normalized.startsWith('update import_normalized_records set proposed_lead_json')) {
+            state.status = 'needs_review';
+            return { rows: [], rowCount: 1 };
+          }
+          throw new Error(`Unexpected harness query: ${normalized}`);
+        },
+      },
+    };
+  }
+
+  return { state, firstClient: clientFor('client-1', { holdFirstLock: true }), secondClient: clientFor('client-2') };
+}
+
+test('two approval clients block on the session lock and converge with one CRM lead', async () => {
+  const harness = createTwoClientPromotionHarness();
+  const request = { batchId: 'batch-1', status: 'approved', recordIds: ['record-1'] };
+  const first = updateImportReviewStatus(harness.firstClient.client, request);
+  await harness.state.firstLockAcquired;
+  const second = updateImportReviewStatus(harness.secondClient.client, request);
+  await harness.state.blocked;
+  assert.equal(harness.state.blockedClients, 1);
+  harness.state.firstReleaseResolve();
+
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+  assert.equal(harness.state.leadCreates, 1);
+  assert.equal(harness.state.status, 'promoted');
+  assert.deepEqual(
+    [firstResult.promotionOutcomes[0].outcome, secondResult.promotionOutcomes[0].outcome].sort(),
+    ['already_promoted', 'promoted'],
+  );
+});
+
+test('a crash after the CRM transaction commits is replayed from the promoting row without a duplicate lead', async () => {
+  const harness = createTwoClientPromotionHarness();
+  harness.state.firstReleaseResolve();
+  await assert.rejects(
+    updateImportReviewStatus(harness.firstClient.client, {
+      batchId: 'batch-1', status: 'approved', recordIds: ['record-1'],
+      afterCrmCommit: async () => { throw new Error('simulated process crash after CRM commit'); },
+    }),
+    /simulated process crash after CRM commit/,
+  );
+  assert.equal(harness.state.status, 'promoting');
+  assert.equal(harness.state.leadCreates, 1);
+
+  const retry = await updateImportReviewStatus(harness.secondClient.client, {
+    batchId: 'batch-1', status: 'approved', recordIds: ['record-1'],
+  });
+  assert.equal(harness.state.status, 'promoted');
+  assert.equal(harness.state.leadCreates, 1);
+  assert.equal(retry.promotionOutcomes[0].outcome, 'already_promoted');
+});
+
+test('promotion rolls back the CRM transaction after every CRM side-effect stage', async () => {
+  for (const failureStage of ['contact', 'lead', 'assignment', 'capture_activity', 'notification', 'intake_task']) {
+    const { client, calls } = createClient({ failureStage });
+    const result = await updateImportReviewStatus(client, {
+      batchId: 'batch-1', status: 'approved', recordIds: ['record-1'],
+    });
+    assert.equal(result.promotionFailures[0].outcome, 'promotion_failed', failureStage);
+    const failedStageIndex = calls.findIndex((call) => (
+      (failureStage === 'contact' && call.sql.startsWith('insert into contacts'))
+      || (failureStage === 'lead' && call.sql.startsWith('insert into leads'))
+      || (failureStage === 'assignment' && call.params[4] === 'lead.assigned')
+      || (failureStage === 'capture_activity' && call.sql.includes("'facebook_lead_captured'"))
+      || (failureStage === 'notification' && call.sql.startsWith('insert into notifications'))
+      || (failureStage === 'intake_task' && call.sql.startsWith('with intake_lock as'))
+    ));
+    const rollbackIndex = calls.findIndex((call, index) => index > failedStageIndex && call.sql === 'rollback');
+    assert.ok(failedStageIndex >= 0, failureStage);
+    assert.ok(rollbackIndex > failedStageIndex, failureStage);
+  }
+});
+
+test('business-unit mismatch fails closed before any CRM mutation', async () => {
+  const { client, calls } = createClient({ batchBusinessUnitId: 'bu-2' });
+  const result = await updateImportReviewStatus(client, {
+    batchId: 'batch-1', status: 'approved', recordIds: ['record-1'],
+  });
+  assert.equal(result.promotionFailures[0].outcome, 'promotion_failed');
+  assert.match(result.promotionFailures[0].reason, /not active, allowed, or in the import batch scope/);
   assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), false);
   assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false);
 });

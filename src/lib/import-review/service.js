@@ -8,6 +8,8 @@ const DEFAULT_SAMPLE_LIMIT = 10;
 const OPERATOR_REVIEW_SOURCE_TYPES = ['xlsx', 'csv', 'spreadsheet'];
 const REVIEWABLE_RECORD_STATUSES = ['pending', 'needs_review'];
 const REVIEWABLE_ITEM_STATUSES = ['pending', 'needs_review'];
+const PROMOTION_CLAIM_STATUS = 'promoting';
+const PROMOTION_CLAIM_KEY = '__importReviewPromotion';
 const AIT_SIGNS_DECISION_SHEETS = ['1. INTERESADOS', 'WORK ORDER TERMINADOS Y PAGADOS'];
 const AIT_SIGNS_DECISION_TYPES = ['misc_text', 'note'];
 const QUALITY_FLAG_FILTERS = {
@@ -781,6 +783,7 @@ export async function updateImportReviewStatus(client, {
   reason = null,
   operatorDecisionAction = null,
   organizationId = null,
+  afterCrmCommit = null,
 }) {
   if (!VALID_IMPORT_REVIEW_STATUSES.has(status)) {
     throw new Error('Invalid review status.');
@@ -833,21 +836,28 @@ export async function updateImportReviewStatus(client, {
       };
     }
 
-    const updateIds = records.map((row) => row.id);
     const sourceRowIds = [...new Set(records.map((row) => row.source_row_id).filter(Boolean))];
-    const updateResult = await client.query(
-      `
-        update import_normalized_records
-        set status = $1
-        where import_batch_id = $2
-          and id = any($3::uuid[])
-        returning id, record_type, status
-      `,
-      [status, resolvedBatchId, updateIds],
-    );
+    const promotionCandidates = status === 'approved'
+      ? records.filter((record) => isFacebookLeadRecord(record))
+      : [];
+    const ordinaryRecords = records.filter((record) => !promotionCandidates.some((candidate) => candidate.id === record.id));
+    const updateResult = ordinaryRecords.length
+      ? await client.query(
+        `
+          update import_normalized_records
+          set status = $1
+          where import_batch_id = $2
+            and id = any($3::uuid[])
+            and status = any($4::text[])
+          returning id, record_type, status
+        `,
+        [status, resolvedBatchId, ordinaryRecords.map((row) => row.id), REVIEWABLE_RECORD_STATUSES],
+      )
+      : { rows: [] };
 
     let updatedReviewItems = 0;
-    if (sourceRowIds.length) {
+    const ordinarySourceRowIds = [...new Set(ordinaryRecords.map((row) => row.source_row_id).filter(Boolean))];
+    if (ordinarySourceRowIds.length) {
       const reviewResult = await client.query(
         `
           update import_review_items
@@ -860,23 +870,34 @@ export async function updateImportReviewStatus(client, {
             reviewed_at = now()
           where import_batch_id = $2
             and source_row_id = any($3::uuid[])
+            and review_status = any($5::text[])
         `,
         [
           status,
           resolvedBatchId,
-          sourceRowIds,
+          ordinarySourceRowIds,
           reason ? JSON.stringify({ operatorReason: reason }) : null,
+          REVIEWABLE_ITEM_STATUSES,
         ],
       );
       updatedReviewItems = reviewResult.rowCount;
     }
 
-    let promotedRecords = [];
-    if (status === 'approved') {
-      promotedRecords = await promoteApprovedFacebookLeadRecords(client, resolvedBatchId, records);
-    }
-
     await client.query('commit');
+
+    const promotedRecords = [];
+    const promotionFailures = [];
+    const promotionOutcomes = [];
+    for (const record of promotionCandidates) {
+      const outcome = await promoteImportReviewRecordWithLock(client, {
+        batchId: resolvedBatchId,
+        record,
+        afterCrmCommit,
+      });
+      if (outcome.promoted) promotedRecords.push(outcome.promoted);
+      if (outcome.failure) promotionFailures.push(outcome.failure);
+      promotionOutcomes.push(outcome.result);
+    }
 
     return {
       batchId: resolvedBatchId,
@@ -886,10 +907,253 @@ export async function updateImportReviewStatus(client, {
       sourceRowIds,
       updatedReviewItems,
       promotedRecords,
+      promotionFailures,
+      promotionOutcomes,
     };
   } catch (error) {
     await client.query('rollback');
     throw error;
+  }
+}
+
+async function acquirePromotionLock(client, organizationId, recordId) {
+  const lockKey = `import-review:${organizationId}:${recordId}`;
+  await client.query(
+    'select pg_advisory_lock(hashtextextended($1::text, 0))',
+    [lockKey],
+  );
+  return lockKey;
+}
+
+async function releasePromotionLock(client, lockKey) {
+  if (!lockKey) return;
+  try {
+    await client.query(
+      'select pg_advisory_unlock(hashtextextended($1::text, 0))',
+      [lockKey],
+    );
+  } catch {
+    // A lost PostgreSQL session releases a session advisory lock automatically.
+  }
+}
+
+async function loadPromotionRecord(client, batchId, recordId, { forUpdate = false } = {}) {
+  const result = await client.query(
+    `
+      select
+        nr.id,
+        nr.source_row_id,
+        sr.source_row_number,
+        ib.organization_id,
+        ib.business_unit_id as batch_business_unit_id,
+        nr.record_type,
+        nr.status,
+        nr.proposed_contact_json,
+        nr.proposed_lead_json
+      from import_normalized_records nr
+      join import_batches ib on ib.id = nr.import_batch_id
+      join import_source_rows sr on sr.id = nr.source_row_id
+      where nr.import_batch_id = $1 and nr.id = $2
+      ${forUpdate ? 'for update' : ''}
+    `,
+    [batchId, recordId],
+  );
+  return result.rows[0] || null;
+}
+
+async function validatePromotionBusinessUnit(client, record) {
+  const proposedContact = record.proposed_contact_json || {};
+  const proposedLead = record.proposed_lead_json || {};
+  const ids = [...new Set([
+    proposedContact.business_unit_id,
+    proposedLead.business_unit_id,
+  ].filter(Boolean).map(String))];
+
+  if (!ids.length) {
+    return { ok: false, reason: 'Facebook lead promotion requires a business unit.' };
+  }
+  if (ids.length > 1) {
+    return { ok: false, reason: 'Proposed contact and lead business units do not match.' };
+  }
+
+  const result = await client.query(
+    `
+      select bu.id
+      from business_units bu
+      where bu.id::text = $1
+        and bu.organization_id = $2
+        and bu.is_active = true
+        and ($3::uuid is null or bu.id = $3::uuid)
+      limit 1
+    `,
+    [ids[0], record.organization_id, record.batch_business_unit_id || null],
+  );
+  if (!result.rows[0]?.id) {
+    return { ok: false, reason: 'Proposed business unit is not active, allowed, or in the import batch scope.' };
+  }
+  return { ok: true, businessUnitId: result.rows[0].id };
+}
+
+async function claimPromotionRecord(client, batchId, record) {
+  const claimToken = globalThis.crypto.randomUUID();
+  const claimResult = await client.query(
+    `
+      update import_normalized_records nr
+      set
+        status = '${PROMOTION_CLAIM_STATUS}',
+        proposed_lead_json = coalesce(nr.proposed_lead_json, '{}'::jsonb)
+          || jsonb_build_object(
+            '${PROMOTION_CLAIM_KEY}',
+            jsonb_build_object('token', $4, 'claimedAt', now())
+          )
+      where nr.import_batch_id = $1
+        and nr.id = $2
+        and (
+          nr.status = any($3::text[])
+          or nr.status = '${PROMOTION_CLAIM_STATUS}'
+        )
+      returning nr.id, nr.source_row_id, nr.record_type,
+        nr.proposed_contact_json, nr.proposed_lead_json, nr.status
+    `,
+    [batchId, record.id, REVIEWABLE_RECORD_STATUSES, claimToken],
+  );
+  if (!claimResult.rowCount) return null;
+
+  if (record.source_row_id) {
+    await client.query(
+      `
+        update import_review_items
+        set review_status = '${PROMOTION_CLAIM_STATUS}', reviewed_at = now()
+        where import_batch_id = $1
+          and source_row_id = $2
+          and review_status = any($3::text[])
+      `,
+      [batchId, record.source_row_id, REVIEWABLE_ITEM_STATUSES],
+    );
+  }
+  return { ...record, ...claimResult.rows[0], claimToken };
+}
+
+async function promoteImportReviewRecordWithLock(client, { batchId, record, afterCrmCommit = null }) {
+  const lockKey = await acquirePromotionLock(client, record.organization_id, record.id);
+  try {
+    let claimedRecord;
+    let claimToken;
+    await client.query('begin');
+    try {
+      const current = await loadPromotionRecord(client, batchId, record.id, { forUpdate: true });
+      if (!current) {
+        await client.query('commit');
+        return { result: promotionOutcomeForRecord(record, 'stale_status') };
+      }
+      if (current.status === 'promoted') {
+        await client.query('commit');
+        return { result: promotionOutcomeForRecord(current, 'already_promoted') };
+      }
+      if (current.status === 'approved') {
+        await client.query('commit');
+        return { result: promotionOutcomeForRecord(current, 'already_approved') };
+      }
+      if (!isPendingFacebookLeadRecord(current)) {
+        await client.query('commit');
+        return { result: promotionOutcomeForRecord(current, 'stale_status') };
+      }
+
+      const businessUnit = await validatePromotionBusinessUnit(client, current);
+      if (!businessUnit.ok) {
+        await client.query('commit');
+        return {
+          failure: {
+            id: current.id,
+            sourceRowId: current.source_row_id,
+            outcome: 'promotion_failed',
+            reason: businessUnit.reason,
+          },
+          result: {
+            ...promotionOutcomeForRecord(current, 'promotion_failed'),
+            reason: businessUnit.reason,
+          },
+        };
+      }
+
+      claimedRecord = await claimPromotionRecord(client, batchId, current);
+      if (!claimedRecord) {
+        await client.query('commit');
+        return { result: promotionOutcomeForRecord(current, 'already_claimed') };
+      }
+      claimToken = claimedRecord.claimToken;
+      await client.query('commit');
+    } catch (error) {
+      await client.query('rollback');
+      throw error;
+    }
+
+    let crmWrite;
+    try {
+      await client.query('begin');
+      crmWrite = await promoteFacebookLeadProposalToCrm(client, claimedRecord.organization_id, {
+        proposedContact: claimedRecord.proposed_contact_json || {},
+        proposedLead: claimedRecord.proposed_lead_json || {},
+        sourceRowId: claimedRecord.source_row_id,
+        rowNumber: claimedRecord.source_row_number,
+      });
+      if (!crmWrite.leadId) {
+        throw new Error(crmWrite.reason || 'CRM promotion returned no lead id.');
+      }
+      await client.query('commit');
+    } catch (error) {
+      await client.query('rollback');
+      const failure = {
+        id: claimedRecord.id,
+        sourceRowId: claimedRecord.source_row_id,
+        outcome: 'promotion_failed',
+        reason: error.message || 'CRM promotion failed.',
+      };
+      await finalizePromotion(client, {
+        batchId,
+        record: claimedRecord,
+        claimToken,
+        status: 'needs_review',
+        failureReason: failure.reason,
+      });
+      return { failure, result: failure };
+    }
+
+    if (afterCrmCommit) await afterCrmCommit({ record: claimedRecord, crmWrite });
+
+    const nextContact = {
+      ...(claimedRecord.proposed_contact_json || {}),
+      contact_id: crmWrite.contactId,
+    };
+    const nextLead = {
+      ...(claimedRecord.proposed_lead_json || {}),
+      contact_id: crmWrite.contactId,
+      lead_id: crmWrite.leadId,
+      assigned_user_id: crmWrite.assignedUserId || null,
+      notes: 'Import review approved and promoted to CRM lead.',
+    };
+    delete nextLead[PROMOTION_CLAIM_KEY];
+
+    await finalizePromotion(client, {
+      batchId,
+      record: claimedRecord,
+      claimToken,
+      status: 'promoted',
+      proposedContact: nextContact,
+      proposedLead: nextLead,
+    });
+    const promoted = {
+      id: claimedRecord.id,
+      sourceRowId: claimedRecord.source_row_id,
+      contactId: crmWrite.contactId,
+      leadId: crmWrite.leadId,
+    };
+    return {
+      promoted,
+      result: { ...promoted, outcome: crmWrite.alreadyExists ? 'already_promoted' : 'promoted' },
+    };
+  } finally {
+    await releasePromotionLock(client, lockKey);
   }
 }
 
@@ -949,61 +1213,111 @@ function buildOperatorReviewPatch({ reason = null, operatorDecisionAction = null
 
 function isPendingFacebookLeadRecord(record) {
   const proposedLead = record.proposed_lead_json || {};
+  const status = record.status || 'pending';
   return record.record_type === 'lead'
     && proposedLead.source_type === 'facebook_webhook'
-    && proposedLead.lead_id === null;
+    && (status === PROMOTION_CLAIM_STATUS || (REVIEWABLE_RECORD_STATUSES.includes(status) && proposedLead.lead_id === null));
 }
 
-async function promoteApprovedFacebookLeadRecords(client, batchId, records) {
-  const promotedRecords = [];
-  const facebookLeadRecords = records.filter(isPendingFacebookLeadRecord);
+function isFacebookLeadRecord(record) {
+  const proposedLead = record.proposed_lead_json || {};
+  return record.record_type === 'lead' && proposedLead.source_type === 'facebook_webhook';
+}
 
-  for (const record of facebookLeadRecords) {
-    const crmWrite = await promoteFacebookLeadProposalToCrm(client, record.organization_id, {
-      proposedContact: record.proposed_contact_json || {},
-      proposedLead: record.proposed_lead_json || {},
-      sourceRowId: record.source_row_id,
-      rowNumber: record.source_row_number,
-    });
+function promotionOutcomeForRecord(record, outcome) {
+  return {
+    id: record.id,
+    sourceRowId: record.source_row_id,
+    outcome,
+    status: record.status || null,
+  };
+}
 
-    if (!crmWrite.leadId) {
-      throw new Error(`Facebook lead ${record.id} could not be promoted: ${crmWrite.reason || 'unknown reason'}.`);
+async function finalizePromotion(client, {
+  batchId,
+  record,
+  claimToken,
+  status,
+  proposedContact = null,
+  proposedLead = null,
+  failureReason = null,
+}) {
+  await client.query('begin');
+  try {
+    if (status === 'promoted') {
+      const promotionResult = await client.query(
+        `
+          update import_normalized_records
+          set
+            proposed_contact_json = $3::jsonb,
+            proposed_lead_json = $4::jsonb,
+            status = 'promoted'
+          where import_batch_id = $1
+            and id = $2
+            and status = '${PROMOTION_CLAIM_STATUS}'
+            and proposed_lead_json->'${PROMOTION_CLAIM_KEY}'->>'token' = $5
+        `,
+        [batchId, record.id, JSON.stringify(proposedContact), JSON.stringify(proposedLead), claimToken],
+      );
+      if (!promotionResult.rowCount) {
+        const error = new Error('Promotion claim was lost before finalization.');
+        error.code = 'IMPORT_REVIEW_CLAIM_LOST';
+        throw error;
+      }
+      await client.query(
+        `
+          update import_review_items
+          set review_status = 'approved', reviewed_at = now()
+          where import_batch_id = $1
+            and source_row_id = $2
+            and review_status = '${PROMOTION_CLAIM_STATUS}'
+        `,
+        [batchId, record.source_row_id],
+      );
+    } else {
+      const failurePatch = JSON.stringify({
+        promotionFailure: {
+          reason: failureReason || 'CRM promotion failed.',
+          recordedAt: new Date().toISOString(),
+        },
+      });
+      const recoveryResult = await client.query(
+        `
+          update import_normalized_records
+          set
+            proposed_lead_json = (coalesce(proposed_lead_json, '{}'::jsonb) - '${PROMOTION_CLAIM_KEY}') || $3::jsonb,
+            status = 'needs_review'
+          where import_batch_id = $1
+            and id = $2
+            and status = '${PROMOTION_CLAIM_STATUS}'
+            and proposed_lead_json->'${PROMOTION_CLAIM_KEY}'->>'token' = $4
+        `,
+        [batchId, record.id, failurePatch, claimToken],
+      );
+      if (!recoveryResult.rowCount) {
+        const error = new Error('Promotion claim was lost before recovery.');
+        error.code = 'IMPORT_REVIEW_CLAIM_LOST';
+        throw error;
+      }
+      await client.query(
+        `
+          update import_review_items
+          set
+            review_status = 'needs_review',
+            proposed_resolution_json = coalesce(proposed_resolution_json, '{}'::jsonb) || $3::jsonb,
+            reviewed_at = now()
+          where import_batch_id = $1
+            and source_row_id = $2
+            and review_status = '${PROMOTION_CLAIM_STATUS}'
+        `,
+        [batchId, record.source_row_id, failurePatch],
+      );
     }
-
-    const nextContact = {
-      ...(record.proposed_contact_json || {}),
-      contact_id: crmWrite.contactId,
-    };
-    const nextLead = {
-      ...(record.proposed_lead_json || {}),
-      contact_id: crmWrite.contactId,
-      lead_id: crmWrite.leadId,
-      assigned_user_id: crmWrite.assignedUserId || null,
-      notes: 'Import review approved and promoted to CRM lead.',
-    };
-
-    await client.query(
-      `
-        update import_normalized_records
-        set
-          proposed_contact_json = $3::jsonb,
-          proposed_lead_json = $4::jsonb,
-          status = 'promoted'
-        where import_batch_id = $1
-          and id = $2
-      `,
-      [batchId, record.id, JSON.stringify(nextContact), JSON.stringify(nextLead)],
-    );
-
-    promotedRecords.push({
-      id: record.id,
-      sourceRowId: record.source_row_id,
-      contactId: crmWrite.contactId,
-      leadId: crmWrite.leadId,
-    });
+    await client.query('commit');
+  } catch (error) {
+    await client.query('rollback');
+    throw error;
   }
-
-  return promotedRecords;
 }
 
 async function loadReviewItemsBySourceRow(client, batchId, sourceRowIds) {
@@ -1047,6 +1361,7 @@ async function findRecordsForStatusUpdate(client, batchId, { recordIds, rowSelec
           sr.source_row_number,
           ib.organization_id,
           nr.record_type,
+          nr.status,
           nr.proposed_contact_json,
           nr.proposed_lead_json
         from import_normalized_records nr
@@ -1073,6 +1388,7 @@ async function findRecordsForStatusUpdate(client, batchId, { recordIds, rowSelec
           sr.source_row_number,
           ib.organization_id,
           nr.record_type,
+          nr.status,
           nr.proposed_contact_json,
           nr.proposed_lead_json
         from import_normalized_records nr

@@ -6,6 +6,7 @@ import {
   hasWebsiteLeadContactSignal,
   ingestWebsiteLeadSubmission,
   normalizeWebsiteLeadSubmission,
+  resolveSingleOrganizationId,
   resolveWebsiteLeadBusinessUnitId,
   verifyWebsiteLeadSecret,
   websiteLeadAuthFailureDiagnostics,
@@ -90,8 +91,7 @@ async function withClient(handler) {
 }
 
 async function getOrganizationId(client) {
-  const result = await client.query('select id from organizations order by created_at asc limit 1');
-  return result.rows[0]?.id || null;
+  return resolveSingleOrganizationId(client);
 }
 
 function websiteLeadSecretInputs(request) {
@@ -178,12 +178,13 @@ export async function POST(request) {
             ok: true,
             acknowledged: true,
             duplicate: result.duplicate,
+            review: result.review === true,
             contactId: result.contactId,
             leadId: result.leadId,
-          }, { status: result.duplicate ? 202 : 201 });
+          }, { status: result.duplicate || result.review ? 202 : 201 });
         }
         const result = await ingestAitUsaCrmEvent(client, { organizationId, businessUnitId, event: aitUsaEvent.event });
-        return NextResponse.json({ ok: true, acknowledged: result.acknowledged === true, duplicate: result.duplicate, contactId: result.contactId, leadId: result.leadId }, { status: result.duplicate ? 202 : 201 });
+        return NextResponse.json({ ok: true, acknowledged: result.acknowledged === true, duplicate: result.duplicate, review: result.review === true, contactId: result.contactId, leadId: result.leadId }, { status: result.duplicate || result.review ? 202 : 201 });
       });
     } catch (error) {
       return jsonError(error.message || 'Failed to ingest AIT USA CRM event.', 500);
@@ -216,6 +217,16 @@ export async function POST(request) {
         body: payload,
         lead,
       });
+
+      if (result.review) {
+        return NextResponse.json({
+          ok: true,
+          duplicate: result.duplicate === true,
+          review: true,
+          contactId: null,
+          leadId: null,
+        }, { status: 202 });
+      }
 
       if (result.duplicate) {
         return NextResponse.json({
