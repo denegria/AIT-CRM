@@ -22,8 +22,55 @@ import {
 } from './follow-up-selection.js';
 import { normalizeFollowUpChannel, normalizeFollowUpOutcome } from './follow-up.js';
 import { supersedeOpenTaskRemovalApprovalInTransaction } from './removal-approvals.js';
+import { withLockedAitUsaOpportunityMutation } from '../crm/ait-usa-opportunities.js';
+import { isNoFurtherProspectingLifecycleStatus } from '../crm/lifecycle.js';
 
 export { AUTOMATED_INBOUND_FOLLOW_UP_SOURCE_LABEL, isEligibleAutomatedInboundFollowUpTask } from './integrity-policy.js';
+
+function runFollowUpWrite({
+  db,
+  aitUsaOpportunityMutation,
+  leadPatch,
+  leadStatusChange,
+  cancelOpenFollowUps,
+  write,
+}) {
+  if (!aitUsaOpportunityMutation) {
+    return db.transaction((tx) => write(tx, {
+      leadPatch,
+      leadStatusChange,
+      cancelOpenFollowUps,
+    }));
+  }
+
+  return withLockedAitUsaOpportunityMutation({
+    db,
+    ...aitUsaOpportunityMutation,
+    write: ({ tx, opportunity, transition }) => {
+      const effectiveLeadStatusChange = transition ? {
+        ...transition,
+        ...(transition.changed && (leadStatusChange?.reason || aitUsaOpportunityMutation.terminalReason)
+          ? { reason: leadStatusChange?.reason || aitUsaOpportunityMutation.terminalReason }
+          : {}),
+      } : leadStatusChange;
+      return write(tx, {
+        opportunity,
+        leadPatch: leadPatch ? {
+          ...leadPatch,
+          ...(transition ? {
+            status: transition.toStatus,
+            currentStage: transition.toStatus,
+          } : {}),
+        } : null,
+        leadStatusChange: effectiveLeadStatusChange,
+        cancelOpenFollowUps: Boolean(
+          effectiveLeadStatusChange?.changed &&
+          isNoFurtherProspectingLifecycleStatus(effectiveLeadStatusChange.toStatus),
+        ),
+      });
+    },
+  });
+}
 
 function compactObject(value) {
   return Object.fromEntries(
@@ -566,10 +613,21 @@ export async function completeFollowUpTaskWithActivity({
   cancelOpenFollowUpsContext = {},
   followUpOutcome,
   followUpChannel,
+  aitUsaOpportunityMutation = null,
 }) {
   normalizeFollowUpOutcome(followUpOutcome);
   normalizeFollowUpChannel(followUpChannel);
-  return db.transaction(async (tx) => {
+  return runFollowUpWrite({
+    db,
+    aitUsaOpportunityMutation,
+    leadPatch,
+    leadStatusChange,
+    cancelOpenFollowUps,
+    write: async (tx, {
+      leadPatch: effectiveLeadPatch,
+      leadStatusChange: effectiveLeadStatusChange,
+      cancelOpenFollowUps: effectiveCancelOpenFollowUps,
+    }) => {
     if ([TASK_STATUSES.COMPLETED, TASK_STATUSES.CANCELED].includes(existingTask.status)) {
       throw createFollowUpSelectionError(
         'The selected follow-up task was already completed or canceled. Refresh the task queue before logging another outcome.',
@@ -615,7 +673,9 @@ export async function completeFollowUpTaskWithActivity({
       task,
       eventType: followUpActivity.eventType,
       message: followUpActivity.message,
-      metadataJson: followUpActivity.metadataJson,
+      metadataJson: effectiveLeadStatusChange
+        ? { ...(followUpActivity.metadataJson || {}), statusTransition: effectiveLeadStatusChange }
+        : followUpActivity.metadataJson,
       occurredAt: followUpActivity.occurredAt || new Date(),
     }));
 
@@ -646,23 +706,23 @@ export async function completeFollowUpTaskWithActivity({
     }
 
     let lead = null;
-    if (leadPatch && task.leadId) {
+    if (effectiveLeadPatch && task.leadId) {
       [lead] = await tx
         .update(leads)
-        .set(leadPatch)
+        .set(effectiveLeadPatch)
         .where(and(eq(leads.id, task.leadId), eq(leads.organizationId, organizationId)))
         .returning();
 
-      if (lead && leadStatusChange?.changed) {
+      if (lead && effectiveLeadStatusChange?.changed) {
         await tx.insert(leadStatusHistory).values({
           organizationId,
           businessUnitId: lead.businessUnitId,
           contactId: lead.contactId,
           leadId: lead.id,
-          fromStatus: leadStatusChange.fromStatus,
-          toStatus: leadStatusChange.toStatus,
+          fromStatus: effectiveLeadStatusChange.fromStatus,
+          toStatus: effectiveLeadStatusChange.toStatus,
           actorUserId,
-          reason: leadStatusChange.reason || null,
+          reason: effectiveLeadStatusChange.reason || null,
           occurredAt: new Date(),
         });
       }
@@ -683,7 +743,7 @@ export async function completeFollowUpTaskWithActivity({
       }
     }
 
-    if (cancelOpenFollowUps) {
+    if (effectiveCancelOpenFollowUps) {
       await reconcileAutomatedInboundFollowUpTasks(tx, {
         organizationId,
         actorUserId,
@@ -727,6 +787,7 @@ export async function completeFollowUpTaskWithActivity({
     }
 
     return { task, lead, nextTask };
+    },
   });
 }
 
@@ -746,10 +807,21 @@ export async function recordFollowUpActivity({
   cancelOpenFollowUpsContext = {},
   followUpOutcome,
   followUpChannel,
+  aitUsaOpportunityMutation = null,
 }) {
   normalizeFollowUpOutcome(followUpOutcome);
   normalizeFollowUpChannel(followUpChannel);
-  return db.transaction(async (tx) => {
+  return runFollowUpWrite({
+    db,
+    aitUsaOpportunityMutation,
+    leadPatch,
+    leadStatusChange,
+    cancelOpenFollowUps,
+    write: async (tx, {
+      leadPatch: effectiveLeadPatch,
+      leadStatusChange: effectiveLeadStatusChange,
+      cancelOpenFollowUps: effectiveCancelOpenFollowUps,
+    }) => {
     await tx.insert(activityEvents).values({
       organizationId,
       businessUnitId: context.businessUnitId,
@@ -758,7 +830,9 @@ export async function recordFollowUpActivity({
       workOrderId: context.workOrderId || null,
       eventType: followUpActivity.eventType,
       message: followUpActivity.message,
-      metadataJson: followUpActivity.metadataJson || {},
+      metadataJson: effectiveLeadStatusChange
+        ? { ...(followUpActivity.metadataJson || {}), statusTransition: effectiveLeadStatusChange }
+        : followUpActivity.metadataJson || {},
       actorUserId,
       occurredAt: followUpActivity.occurredAt || new Date(),
     });
@@ -781,23 +855,23 @@ export async function recordFollowUpActivity({
     }
 
     let lead = null;
-    if (leadPatch && context.leadId) {
+    if (effectiveLeadPatch && context.leadId) {
       [lead] = await tx
         .update(leads)
-        .set(leadPatch)
+        .set(effectiveLeadPatch)
         .where(and(eq(leads.id, context.leadId), eq(leads.organizationId, organizationId)))
         .returning();
 
-      if (lead && leadStatusChange?.changed) {
+      if (lead && effectiveLeadStatusChange?.changed) {
         await tx.insert(leadStatusHistory).values({
           organizationId,
           businessUnitId: lead.businessUnitId,
           contactId: lead.contactId,
           leadId: lead.id,
-          fromStatus: leadStatusChange.fromStatus,
-          toStatus: leadStatusChange.toStatus,
+          fromStatus: effectiveLeadStatusChange.fromStatus,
+          toStatus: effectiveLeadStatusChange.toStatus,
           actorUserId,
-          reason: leadStatusChange.reason || null,
+          reason: effectiveLeadStatusChange.reason || null,
           occurredAt: new Date(),
         });
       }
@@ -818,7 +892,7 @@ export async function recordFollowUpActivity({
       }
     }
 
-    if (cancelOpenFollowUps) {
+    if (effectiveCancelOpenFollowUps) {
       await reconcileAutomatedInboundFollowUpTasks(tx, {
         organizationId,
         actorUserId,
@@ -858,6 +932,7 @@ export async function recordFollowUpActivity({
     }
 
     return { lead, nextTask };
+    },
   });
 }
 

@@ -20,7 +20,12 @@ import {
   resolveContactById,
 } from '@/lib/crm/access.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
-import { evaluateLifecycleTransition, isNoFurtherProspectingLifecycleStatus } from '@/lib/crm/lifecycle.js';
+import {
+  evaluateLifecycleTransition,
+  isNoFurtherProspectingLifecycleStatus,
+  WORKFLOW_KEYS,
+  workflowKeyForBusinessUnit,
+} from '@/lib/crm/lifecycle.js';
 import {
   leadProfilePatchFromPayload,
   leadProfilePatchToDrizzleValues,
@@ -498,6 +503,7 @@ export async function POST(request) {
 export async function PATCH(request, runtime = {}) {
   const requirePermissionForRequest = runtime.requirePermissionForRequest || requirePermission;
   const getDbForRequest = runtime.getDbForRequest || getDb;
+  const completeFollowUpForRequest = runtime.completeFollowUpForRequest || completeFollowUpTaskWithActivity;
   const { error, session } = await requirePermissionForRequest(request, PERMISSIONS.CRM_WRITE);
   if (error) return error;
 
@@ -738,7 +744,7 @@ export async function PATCH(request, runtime = {}) {
           }
         : null;
 
-      const { task, nextTask } = await completeFollowUpTaskWithActivity({
+      const { task, nextTask } = await completeFollowUpForRequest({
         db,
         organizationId: session.user.organizationId,
         actorUserId: session.user.id,
@@ -768,6 +774,22 @@ export async function PATCH(request, runtime = {}) {
         },
         followUpOutcome: completion.outcome,
         followUpChannel: completion.channel,
+        ...(workflowKeyForBusinessUnit(businessUnit) === WORKFLOW_KEYS.AIT_USA && leadPatch && lead ? {
+          aitUsaOpportunityMutation: {
+            organizationId: session.user.organizationId,
+            businessUnit,
+            contact: exactContext.contact,
+            expectedOpportunityId: lead.id,
+            toStatus: suggestedLeadStatus || undefined,
+            reopenReason: 'new_course_follow_up',
+            terminalReason: leadStatusChange?.reason || `Follow-up outcome: ${completion.outcome}`,
+            authorize: ({ opportunity }) => assertCanAccessContactLead(
+              session,
+              opportunity,
+              exactContext.contact,
+            ),
+          },
+        } : {}),
         profileActivity: leadProfileUpdateSummary
           ? {
               eventType: 'lead_profile.updated',

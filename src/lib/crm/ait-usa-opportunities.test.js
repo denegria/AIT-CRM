@@ -309,3 +309,33 @@ test('non-status AIT USA Opportunity mutation also uses the shared lock and expe
   assert.equal(writeTx, tx);
   assert.match(calls[0], /pg_advisory_xact_lock/);
 });
+
+test('locked mutation reauthorizes the reloaded Opportunity before any writer side effect', async () => {
+  const reassigned = { id: 'active-a', status: 'Follow Up', assigned_user_id: 'other-owner' };
+  const tx = {
+    async query(text) {
+      const normalized = String(text).replace(/\s+/g, ' ').trim();
+      if (normalized.includes('order by created_at')) return { rows: [reassigned] };
+      if (normalized.includes('where id = $1 and organization_id = $2')) return { rows: [reassigned] };
+      return { rows: [] };
+    },
+  };
+  let wrote = false;
+  await assert.rejects(
+    withLockedAitUsaOpportunityMutation({
+      db: { transaction: (handler) => handler(tx) },
+      organizationId: 'org-1',
+      businessUnit: scope.businessUnit,
+      contact: scope.contact,
+      expectedOpportunityId: 'active-a',
+      toStatus: 'Follow Up',
+      authorize: ({ opportunity }) => {
+        assert.equal(opportunity.assignedUserId, 'other-owner');
+        throw Object.assign(new Error('Assignment changed.'), { status: 403 });
+      },
+      write: () => { wrote = true; },
+    }),
+    (error) => error.status === 403 && /Assignment changed/.test(error.message),
+  );
+  assert.equal(wrote, false);
+});

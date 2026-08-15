@@ -71,6 +71,21 @@ function taskReadDb(calls, { throwAfterTaskRead = null } = {}) {
   };
 }
 
+function sequentialReadDb(...rows) {
+  let index = 0;
+  return {
+    select() {
+      const result = rows[index++] || [];
+      return {
+        from() { return this; },
+        where() { return this; },
+        limit() { return Promise.resolve(result); },
+        then(resolve) { resolve(result); },
+      };
+    },
+  };
+}
+
 const invalidPayloads = Object.freeze([
   { channel: 'phone', note: 'Typed note survives.' },
   { outcome: 'invented_positive', channel: 'phone', note: 'Typed note survives.' },
@@ -158,4 +173,66 @@ test('both routes accept explicit valid outcome/channel and continue into their 
     taskSentinel,
   );
   assert.deepEqual(taskCalls, { reads: 2, transactions: 0, inserts: 0, updates: 0 });
+});
+
+test('both follow-up routes bind AIT USA Lead mutations to the selected Opportunity and in-lock authorization', async () => {
+  const contact = {
+    id: ids.contact,
+    organizationId: ids.organization,
+    primaryBusinessUnitId: ids.businessUnit,
+    name: 'Student',
+  };
+  const lead = {
+    id: ids.lead,
+    organizationId: ids.organization,
+    businessUnitId: ids.businessUnit,
+    contactId: ids.contact,
+    assignedUserId: ids.user,
+    status: 'New Lead',
+    currentStage: 'New Lead',
+  };
+  const businessUnit = { id: ids.businessUnit, name: 'AIT USA Institute' };
+  const payload = {
+    taskId: ids.task,
+    contactId: ids.contact,
+    leadId: ids.lead,
+    outcome: 'reached_interested',
+    channel: 'phone',
+    note: 'Interested in the next class.',
+  };
+
+  let taskServiceInput = null;
+  const taskResponse = await patchTask(
+    jsonRequest('http://localhost/api/tasks', { id: ids.task, action: 'complete', ...payload }, 'PATCH'),
+    {
+      requirePermissionForRequest: permission,
+      getDbForRequest: () => sequentialReadDb([selectedTask], [contact], [lead], [businessUnit]),
+      completeFollowUpForRequest: async (input) => {
+        taskServiceInput = input;
+        return { task: { ...selectedTask, status: 'completed' }, nextTask: null };
+      },
+    },
+  );
+  assert.equal(taskResponse.status, 200);
+  assert.equal(taskServiceInput.aitUsaOpportunityMutation.expectedOpportunityId, ids.lead);
+  assert.equal(taskServiceInput.aitUsaOpportunityMutation.toStatus, 'Follow Up');
+  assert.equal(typeof taskServiceInput.aitUsaOpportunityMutation.authorize, 'function');
+
+  let contactServiceInput = null;
+  const contactResponse = await postContactFollowUp(
+    jsonRequest(`http://localhost/api/contacts/${ids.contact}/follow-up`, payload),
+    { params: Promise.resolve({ id: ids.contact }) },
+    {
+      requirePermissionForRequest: permission,
+      getDbForRequest: () => sequentialReadDb([contact], [selectedTask], [lead], [businessUnit]),
+      completeFollowUpForRequest: async (input) => {
+        contactServiceInput = input;
+        return { task: { ...selectedTask, status: 'completed' }, nextTask: null };
+      },
+    },
+  );
+  assert.equal(contactResponse.status, 200);
+  assert.equal(contactServiceInput.aitUsaOpportunityMutation.expectedOpportunityId, ids.lead);
+  assert.equal(contactServiceInput.aitUsaOpportunityMutation.toStatus, 'Follow Up');
+  assert.equal(typeof contactServiceInput.aitUsaOpportunityMutation.authorize, 'function');
 });

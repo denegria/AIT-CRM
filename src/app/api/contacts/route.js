@@ -576,6 +576,7 @@ export async function PATCH(request, _context = {}, overrides = {}) {
         toStatus: 'status' in body ? body.status : undefined,
         reopenReason: body.statusChangeReason || body.reopenClosedStatusReason || '',
         terminalReason: body.terminalStatusReason || '',
+        authorize: ({ opportunity }) => assertCanAccessContactLead(session, opportunity, existing),
         write: ({ tx, opportunity, transition }) => updateContactInTransactionForRequest({
           ...writeValues,
           tx,
@@ -597,6 +598,14 @@ export async function PATCH(request, _context = {}, overrides = {}) {
     return error?.status
       ? crmErrorResponse(error)
       : NextResponse.json({ error: error.message || 'Contact update failed.' }, { status: 500 });
+  }
+
+  if (isAitUsaWorkflow && lead && hasLeadPatch) {
+    activeOpportunityCount = result.lead && !isClosedLifecycleStatus(
+      result.lead.status || result.lead.currentStage,
+      { businessUnit: statusBusinessUnit },
+    ) ? 1 : 0;
+    hasAitUsaOpportunityConflict = false;
   }
 
   const resultBusinessUnit = await loadBusinessUnitForRequest(

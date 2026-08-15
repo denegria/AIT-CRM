@@ -14,6 +14,47 @@ const expectedNeonProjectId = String(process.env.AIT_USA_OPPORTUNITY_RACE_EXPECT
 const ALLOWED_NON_PRODUCTION_NEON_BRANCH_IDS = new Set(['br-broad-hill-aptjpyea']);
 const ALLOWED_NEON_PROJECT_IDS = new Set(['plain-band-07005942']);
 const REFUSED_PRODUCTION_NEON_BRANCH_IDS = new Set(['br-purple-bar-aphafrgp']);
+const BARRIER_DEADLINE_MS = 5_000;
+const CLEANUP_DEADLINE_MS = 3_000;
+
+function deferred() {
+  let resolve;
+  const promise = new Promise((resolvePromise) => { resolve = resolvePromise; });
+  let released = false;
+  return {
+    promise,
+    release(value) {
+      if (released) return;
+      released = true;
+      resolve(value);
+    },
+  };
+}
+
+async function withDeadline(promise, label, timeoutMs = BARRIER_DEADLINE_MS) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} exceeded ${timeoutMs}ms.`)), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function advisoryLockQueryBarrier() {
+  const issued = deferred();
+  return {
+    promise: issued.promise,
+    onQuery(query) {
+      const text = typeof query === 'string' ? query : query?.text || '';
+      if (/pg_advisory_xact_lock/i.test(text)) issued.release({ text });
+    },
+  };
+}
 
 function assertExplicitSafeDatabase(url) {
   if (confirmation !== 'allow-safe-race-writes') {
@@ -50,60 +91,142 @@ async function assertRuntimeDatabaseIdentity(client) {
   }
 }
 
-async function waitForAdvisoryLockWait(observer, processId) {
-  for (let attempt = 0; attempt < 100; attempt += 1) {
-    const result = await observer.query(
-      `select
-         exists (
-           select 1 from pg_locks
-           where pid = $1 and locktype = 'advisory' and granted = false
-         ) as waiting,
-         coalesce((select query from pg_stat_activity where pid = $1), '') as query`,
-      [processId],
-    );
-    if (result.rows[0]?.waiting && /pg_advisory_xact_lock/i.test(result.rows[0]?.query || '')) return;
-    await new Promise((resolve) => setTimeout(resolve, 20));
+async function observeAdvisoryLockWait(observer, processId) {
+  let rows = [];
+  try {
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const result = await observer.query(
+        `select locktype, mode, granted, classid::text, objid::text, objsubid::text
+         from pg_locks
+         where pid = $1 and locktype = 'advisory'
+         order by granted, mode`,
+        [processId],
+      );
+      rows = result.rows;
+      if (rows.some((row) => row.granted === false)) {
+        return { observed: true, rows, error: null };
+      }
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    return { observed: false, rows, error: null };
+  } catch (error) {
+    return { observed: false, rows, error: error.message };
   }
-  throw new Error('Contender never reached a proven pg_advisory_xact_lock wait barrier.');
 }
 
-function transactionDb(client, searchPath) {
+function transactionDb(client, searchPath, {
+  onQuery,
+  onBackendPid,
+  transactionTag = `ait-usa-race-${randomUUID()}`,
+} = {}) {
   return {
     async transaction(handler) {
       await client.query('begin');
       try {
+        const backend = await client.query(
+          "select pg_backend_pid()::int as pid, set_config('application_name', $1, true) as application_name",
+          [transactionTag],
+        );
+        onBackendPid?.({
+          pid: backend.rows[0].pid,
+          applicationName: backend.rows[0].application_name,
+        });
         await client.query(`set local search_path to ${searchPath}`);
-        const result = await handler(client);
+        const transactionClient = {
+          query(query, values) {
+            onQuery?.(query, values);
+            return client.query(query, values);
+          },
+        };
+        const result = await handler(transactionClient);
         await client.query('commit');
         return result;
       } catch (error) {
-        await client.query('rollback');
+        await client.query('rollback').catch(() => {});
         throw error;
       }
     },
   };
 }
 
+function trackPromise(promises, promise) {
+  promises.push(promise);
+  promise.catch(() => {});
+  return promise;
+}
+
+async function cancelAndTerminateRecordedBackends(observer, backends) {
+  await Promise.all([...backends.values()].map(async ({ pid, applicationName }) => {
+    const current = await withDeadline(
+      observer.query(
+        `select pid, application_name, state
+         from pg_stat_activity
+         where pid = $1 and application_name = $2`,
+        [pid, applicationName],
+      ),
+      `inspect backend ${pid}`,
+      CLEANUP_DEADLINE_MS,
+    ).catch(() => null);
+    if (!current?.rows.length) return;
+
+    await withDeadline(
+      observer.query('select pg_cancel_backend($1)', [pid]),
+      `cancel backend ${pid}`,
+      CLEANUP_DEADLINE_MS,
+    ).catch(() => {});
+    const stillOwned = await withDeadline(
+      observer.query(
+        'select exists (select 1 from pg_stat_activity where pid = $1 and application_name = $2) as owned',
+        [pid, applicationName],
+      ),
+      `recheck backend ${pid}`,
+      CLEANUP_DEADLINE_MS,
+    ).catch(() => null);
+    if (stillOwned?.rows[0]?.owned) {
+      await withDeadline(
+        observer.query('select pg_terminate_backend($1)', [pid]),
+        `terminate backend ${pid}`,
+        CLEANUP_DEADLINE_MS,
+      ).catch(() => {});
+    }
+  }));
+}
+
+async function endClient(client, label) {
+  await withDeadline(client.end(), `end ${label}`, CLEANUP_DEADLINE_MS).catch(() => {
+    client.connection?.stream?.destroy();
+  });
+}
+
 test('two PostgreSQL clients serialize reopen versus Start/ingestion creation under the shared advisory lock', {
   skip: !databaseUrl ? 'Set the explicit safe race database URL and confirmation to run this harness.' : false,
+  timeout: 30_000,
 }, async () => {
   assertExplicitSafeDatabase(databaseUrl);
   const { Client } = await import('pg');
   const setup = new Client({ connectionString: databaseUrl });
+  const observer = new Client({ connectionString: databaseUrl });
   const firstClient = new Client({ connectionString: databaseUrl });
   const secondClient = new Client({ connectionString: databaseUrl });
   const schema = `ait_usa_race_${randomUUID().replaceAll('-', '')}`;
   const quotedSchema = `"${schema}"`;
   const businessUnit = { id: 'bu-usa', name: 'AIT USA Institute' };
   const contact = { id: 'contact-1' };
-  let releaseFirst;
-  let firstEntered;
+  const firstEntered = deferred();
+  const releaseFirst = deferred();
+  const replacementReady = deferred();
+  const releaseReplacement = deferred();
+  const inFlight = [];
+  const backends = new Map();
+  const recordBackend = (backend) => backends.set(backend.applicationName, backend);
   let schemaCreated = false;
-  const firstEnteredPromise = new Promise((resolve) => { firstEntered = resolve; });
-  const releaseFirstPromise = new Promise((resolve) => { releaseFirst = resolve; });
 
-  await Promise.all([setup.connect(), firstClient.connect(), secondClient.connect()]);
   try {
+    await withDeadline(
+      Promise.all([setup.connect(), observer.connect(), firstClient.connect(), secondClient.connect()]),
+      'connect race harness clients',
+      10_000,
+    );
     await assertRuntimeDatabaseIdentity(setup);
     await setup.query(`create schema ${quotedSchema}`);
     schemaCreated = true;
@@ -126,8 +249,11 @@ test('two PostgreSQL clients serialize reopen versus Start/ingestion creation un
        values ('closed-1', 'org-1', 'bu-usa', 'contact-1', 'Not Interested', 'Not Interested')`,
     );
 
-    const first = withLockedAitUsaClosedOpportunityReopen({
-      db: transactionDb(firstClient, quotedSchema),
+    const first = trackPromise(inFlight, withLockedAitUsaClosedOpportunityReopen({
+      db: transactionDb(firstClient, quotedSchema, {
+        onBackendPid: recordBackend,
+        transactionTag: `${schema}:reopen`,
+      }),
       organizationId: 'org-1',
       businessUnit,
       contact,
@@ -135,17 +261,23 @@ test('two PostgreSQL clients serialize reopen versus Start/ingestion creation un
       toStatus: 'Follow Up',
       reopenReason: 'correction',
       write: async ({ tx }) => {
-        firstEntered();
-        await releaseFirstPromise;
+        firstEntered.release();
+        await releaseFirst.promise;
         await tx.query("update leads set status = 'Follow Up', current_stage = 'Follow Up' where id = 'closed-1'");
         return 'first-won';
       },
-    });
-    await firstEnteredPromise;
+    }));
+    await withDeadline(firstEntered.promise, 'first transaction write barrier');
 
     let secondSettled = false;
     let secondCreated = false;
-    const second = transactionDb(secondClient, quotedSchema).transaction(async (tx) => {
+    const secondLockIssued = advisoryLockQueryBarrier();
+    const secondTag = `${schema}:create`;
+    const second = trackPromise(inFlight, transactionDb(secondClient, quotedSchema, {
+      onQuery: secondLockIssued.onQuery,
+      onBackendPid: recordBackend,
+      transactionTag: secondTag,
+    }).transaction(async (tx) => {
       const resolution = await resolveAitUsaActiveOpportunity({
         client: tx,
         organization: 'org-1',
@@ -159,13 +291,23 @@ test('two PostgreSQL clients serialize reopen versus Start/ingestion creation un
         );
       }
       return resolution;
-    }).finally(() => { secondSettled = true; });
+    }).finally(() => { secondSettled = true; }));
 
-    await waitForAdvisoryLockWait(setup, secondClient.processID);
-    assert.equal(secondSettled, false, 'second client must remain blocked at the proven advisory-lock barrier');
-    releaseFirst();
-    assert.equal(await first, 'first-won');
-    const secondResolution = await second;
+    await withDeadline(secondLockIssued.promise, 'second advisory-lock query issuance');
+    const secondBackend = backends.get(secondTag);
+    assert.ok(secondBackend?.pid, 'second transaction must expose its transaction-pinned PostgreSQL backend PID');
+    const secondObservation = await withDeadline(
+      observeAdvisoryLockWait(observer, secondBackend.pid),
+      'observe second advisory-lock wait',
+    );
+    assert.equal(
+      secondSettled,
+      false,
+      `second transaction settled after issuing the advisory lock; observer=${JSON.stringify(secondObservation)}`,
+    );
+    releaseFirst.release();
+    assert.equal(await withDeadline(first, 'first transaction completion'), 'first-won');
+    const secondResolution = await withDeadline(second, 'second transaction completion');
     assert.equal(secondResolution.status, 'exact');
     assert.equal(secondResolution.leadId, 'closed-1');
     assert.equal(secondCreated, false);
@@ -182,11 +324,11 @@ test('two PostgreSQL clients serialize reopen versus Start/ingestion creation un
     const staleRead = await setup.query(`select id, status from ${quotedSchema}.leads where id = 'active-a'`);
     assert.equal(staleRead.rows[0].status, 'Follow Up');
 
-    let releaseReplacement;
-    let replacementReady;
-    const releaseReplacementPromise = new Promise((resolve) => { releaseReplacement = resolve; });
-    const replacementReadyPromise = new Promise((resolve) => { replacementReady = resolve; });
-    const replacement = transactionDb(secondClient, quotedSchema).transaction(async (tx) => {
+    const replacementTag = `${schema}:replace`;
+    const replacement = trackPromise(inFlight, transactionDb(secondClient, quotedSchema, {
+      onBackendPid: recordBackend,
+      transactionTag: replacementTag,
+    }).transaction(async (tx) => {
       const before = await resolveAitUsaActiveOpportunity({
         client: tx,
         organization: 'org-1',
@@ -198,34 +340,87 @@ test('two PostgreSQL clients serialize reopen versus Start/ingestion creation un
       await tx.query(
         "insert into leads (id, organization_id, business_unit_id, contact_id, status, current_stage) values ('active-b', 'org-1', 'bu-usa', 'contact-1', 'New Lead', 'New Lead')",
       );
-      replacementReady();
-      await releaseReplacementPromise;
-    });
-    await replacementReadyPromise;
+      replacementReady.release();
+      await releaseReplacement.promise;
+    }));
+    await withDeadline(replacementReady.promise, 'replacement transaction write barrier');
 
     let staleWriterCalled = false;
     let staleSettled = false;
-    const stalePatch = withLockedAitUsaOpportunityMutation({
-      db: transactionDb(firstClient, quotedSchema),
+    const staleLockIssued = advisoryLockQueryBarrier();
+    const staleTag = `${schema}:stale`;
+    const stalePatch = trackPromise(inFlight, withLockedAitUsaOpportunityMutation({
+      db: transactionDb(firstClient, quotedSchema, {
+        onQuery: staleLockIssued.onQuery,
+        onBackendPid: recordBackend,
+        transactionTag: staleTag,
+      }),
       organizationId: 'org-1',
       businessUnit,
       contact,
       expectedOpportunityId: staleRead.rows[0].id,
       toStatus: staleRead.rows[0].status,
       write: async () => { staleWriterCalled = true; },
-    }).finally(() => { staleSettled = true; });
-    await waitForAdvisoryLockWait(setup, firstClient.processID);
-    assert.equal(staleSettled, false, 'stale PATCH must wait at the proven advisory-lock barrier');
-    releaseReplacement();
-    await replacement;
-    await assert.rejects(stalePatch, (error) => error.status === 409);
+    }).finally(() => { staleSettled = true; }));
+    await withDeadline(staleLockIssued.promise, 'stale PATCH advisory-lock query issuance');
+    const staleBackend = backends.get(staleTag);
+    assert.ok(staleBackend?.pid, 'stale transaction must expose its transaction-pinned PostgreSQL backend PID');
+    const staleObservation = await withDeadline(
+      observeAdvisoryLockWait(observer, staleBackend.pid),
+      'observe stale PATCH advisory-lock wait',
+    );
+    assert.equal(
+      staleSettled,
+      false,
+      `stale PATCH settled after issuing the advisory lock; observer=${JSON.stringify(staleObservation)}`,
+    );
+    releaseReplacement.release();
+    await withDeadline(replacement, 'replacement transaction completion');
+    await withDeadline(
+      assert.rejects(stalePatch, (error) => error.status === 409),
+      'stale PATCH rejection',
+    );
     assert.equal(staleWriterCalled, false);
     const finalActive = await setup.query(
       `select id from ${quotedSchema}.leads where status in ('New Lead', 'Follow Up') order by id`,
     );
     assert.deepEqual(finalActive.rows.map((row) => row.id), ['active-b']);
   } finally {
-    if (schemaCreated) await setup.query(`drop schema if exists ${quotedSchema} cascade`).catch(() => {});
-    await Promise.all([setup.end(), firstClient.end(), secondClient.end()]);
+    releaseFirst.release();
+    releaseReplacement.release();
+
+    await withDeadline(
+      Promise.allSettled(inFlight),
+      'settle released race transactions',
+      1_000,
+    ).catch(() => {});
+    await cancelAndTerminateRecordedBackends(observer, backends);
+    await withDeadline(
+      Promise.allSettled(inFlight),
+      'settle cancelled race transactions',
+      CLEANUP_DEADLINE_MS,
+    ).catch(() => {});
+
+    let cleanupError = null;
+    if (schemaCreated) {
+      try {
+        await withDeadline(
+          observer.query(`drop schema if exists ${quotedSchema} cascade`),
+          `drop schema ${schema}`,
+          BARRIER_DEADLINE_MS,
+        );
+      } catch (error) {
+        cleanupError = error;
+      }
+    }
+    await Promise.all([
+      endClient(firstClient, 'first race client'),
+      endClient(secondClient, 'second race client'),
+    ]);
+    await Promise.all([
+      endClient(setup, 'setup client'),
+      endClient(observer, 'observer client'),
+    ]);
+    if (cleanupError) throw cleanupError;
   }
 });

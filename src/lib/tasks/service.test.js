@@ -535,3 +535,187 @@ test('follow-up write services reject omitted or unknown outcome and channel bef
     assert.deepEqual(calls, { transactions: 0, inserts: 0, updates: 0 });
   }
 });
+
+test('AIT USA follow-up services reject stale Opportunity identity before task, Lead, or activity writes', async () => {
+  for (const surface of ['task completion', 'contact outreach']) {
+    const calls = { transactions: 0, queries: 0, updates: 0, inserts: 0 };
+    const tx = {
+      async query(text) {
+        calls.queries += 1;
+        const normalized = String(text).replace(/\s+/g, ' ').trim();
+        if (normalized.includes('order by created_at')) {
+          return {
+            rows: [{
+              id: 'active-b',
+              organization_id: 'org-1',
+              business_unit_id: 'bu-1',
+              contact_id: 'contact-1',
+              status: 'New Lead',
+              current_stage: 'New Lead',
+            }],
+          };
+        }
+        return { rows: [] };
+      },
+      update() {
+        calls.updates += 1;
+        throw new Error('A stale Opportunity must not update a task or Lead.');
+      },
+      insert() {
+        calls.inserts += 1;
+        throw new Error('A stale Opportunity must not insert activity or history.');
+      },
+    };
+    const db = {
+      transaction(callback) {
+        calls.transactions += 1;
+        return callback(tx);
+      },
+    };
+    const aitUsaOpportunityMutation = {
+      organizationId: 'org-1',
+      businessUnit: { id: 'bu-1', name: 'AIT USA Institute' },
+      contact: { id: 'contact-1' },
+      expectedOpportunityId: 'historical-or-stale-a',
+      toStatus: 'Follow Up',
+      reopenReason: surface === 'task completion' ? 'new_course_follow_up' : '',
+      terminalReason: `Follow-up outcome from ${surface}`,
+    };
+
+    const operation = surface === 'task completion'
+      ? completeFollowUpTaskWithActivity({
+          db,
+          organizationId: 'org-1',
+          actorUserId: 'actor-1',
+          existingTask: followUpTask({ leadId: 'historical-or-stale-a' }),
+          taskPatch: { status: 'completed' },
+          followUpActivity: { eventType: 'follow_up.reached_interested', message: 'Interested.' },
+          leadPatch: { status: 'Follow Up', currentStage: 'Follow Up' },
+          leadStatusChange: { changed: true, fromStatus: 'Not Interested', toStatus: 'Follow Up' },
+          followUpOutcome: 'reached_interested',
+          followUpChannel: 'phone',
+          aitUsaOpportunityMutation,
+        })
+      : recordFollowUpActivity({
+          db,
+          organizationId: 'org-1',
+          actorUserId: 'actor-1',
+          context: { businessUnitId: 'bu-1', contactId: 'contact-1', leadId: 'historical-or-stale-a' },
+          followUpActivity: { eventType: 'follow_up.reached_interested', message: 'Interested.' },
+          leadPatch: { status: 'Follow Up', currentStage: 'Follow Up' },
+          leadStatusChange: { changed: false, fromStatus: 'Follow Up', toStatus: 'Follow Up' },
+          followUpOutcome: 'reached_interested',
+          followUpChannel: 'phone',
+          aitUsaOpportunityMutation,
+        });
+
+    await assert.rejects(operation, (error) => error.status === 409);
+    assert.equal(calls.transactions, 1, surface);
+    assert.ok(calls.queries >= 2, surface);
+    assert.equal(calls.updates, 0, surface);
+    assert.equal(calls.inserts, 0, surface);
+  }
+});
+
+test('locked AIT USA follow-up uses the committed transition reason and cancellation policy in one transaction', async () => {
+  const inserts = [];
+  const patches = [];
+  let transactionCount = 0;
+  let reconciliationReads = 0;
+  const lockedLead = {
+    id: 'active-a',
+    organization_id: 'org-1',
+    business_unit_id: 'bu-1',
+    contact_id: 'contact-1',
+    status: 'New Lead',
+    current_stage: 'New Lead',
+  };
+  const tx = {
+    async query(text) {
+      const normalized = String(text).replace(/\s+/g, ' ').trim();
+      if (normalized.includes('order by created_at')) return { rows: [lockedLead] };
+      if (normalized.includes('where id = $1 and organization_id = $2')) return { rows: [lockedLead] };
+      return { rows: [] };
+    },
+    insert() {
+      return {
+        values(value) {
+          inserts.push(value);
+          return Promise.resolve();
+        },
+      };
+    },
+    update() {
+      return {
+        set(patch) {
+          patches.push(patch);
+          return this;
+        },
+        where() { return this; },
+        returning() {
+          return Promise.resolve([{
+            id: 'active-a',
+            organizationId: 'org-1',
+            businessUnitId: 'bu-1',
+            contactId: 'contact-1',
+            status: patches.at(-1).status,
+            currentStage: patches.at(-1).currentStage,
+          }]);
+        },
+      };
+    },
+    select() {
+      reconciliationReads += 1;
+      return {
+        from() { return this; },
+        innerJoin() { return this; },
+        where() { return Promise.resolve([]); },
+      };
+    },
+  };
+
+  await recordFollowUpActivity({
+    db: {
+      transaction(callback) {
+        transactionCount += 1;
+        return callback(tx);
+      },
+    },
+    organizationId: 'org-1',
+    actorUserId: 'actor-1',
+    context: { businessUnitId: 'bu-1', contactId: 'contact-1', leadId: 'active-a' },
+    followUpActivity: {
+      eventType: 'follow_up.enrolled_or_won',
+      message: 'Enrolled.',
+      metadataJson: { statusTransition: { fromStatus: 'stale', toStatus: 'stale' } },
+    },
+    leadPatch: { status: 'Enrolled', currentStage: 'Enrolled' },
+    leadStatusChange: {
+      changed: true,
+      fromStatus: 'New Lead',
+      toStatus: 'Enrolled',
+      reason: 'Follow-up outcome: enrolled_or_won',
+    },
+    cancelOpenFollowUps: false,
+    followUpOutcome: 'enrolled_or_won',
+    followUpChannel: 'phone',
+    aitUsaOpportunityMutation: {
+      organizationId: 'org-1',
+      businessUnit: { id: 'bu-1', name: 'AIT USA Institute' },
+      contact: { id: 'contact-1' },
+      expectedOpportunityId: 'active-a',
+      toStatus: 'Enrolled',
+      terminalReason: 'Follow-up outcome: enrolled_or_won',
+    },
+  });
+
+  assert.equal(transactionCount, 1);
+  assert.equal(patches[0].status, 'Enrolled');
+  assert.equal(reconciliationReads, 1, 'committed Enrolled transition must drive cancellation reconciliation');
+  const history = inserts.find((value) => value.leadId === 'active-a' && value.fromStatus === 'New Lead');
+  assert.equal(history.reason, 'Follow-up outcome: enrolled_or_won');
+  const activity = inserts.find((value) => value.eventType === 'follow_up.enrolled_or_won');
+  assert.equal(activity.metadataJson.statusTransition.fromStatus, 'New Lead');
+  assert.equal(activity.metadataJson.statusTransition.toStatus, 'Enrolled');
+  assert.equal(activity.metadataJson.statusTransition.reason, 'Follow-up outcome: enrolled_or_won');
+});

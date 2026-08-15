@@ -225,6 +225,7 @@ export async function withLockedAitUsaOpportunityMutation({
   toStatus,
   reopenReason = '',
   terminalReason = '',
+  authorize = null,
   write,
 }) {
   return db.transaction(async (tx) => {
@@ -264,6 +265,8 @@ export async function withLockedAitUsaOpportunityMutation({
     ) {
       throw createCrmError('The Opportunity changed while this Contact was open. Refresh before saving.', 409);
     }
+
+    if (authorize) await authorize({ tx, opportunity, resolution });
 
     let transition = null;
     if (toStatus !== undefined && toStatus !== null) {

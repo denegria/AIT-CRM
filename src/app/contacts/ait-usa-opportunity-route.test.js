@@ -249,6 +249,102 @@ test('direct unchanged-status full UI PATCH enters the locked expected-opportuni
   assert.equal(transactionWrites, 0);
 });
 
+test('direct AIT USA PATCH reports post-write active Opportunity counts', async () => {
+  for (const scenario of [
+    { from: 'Follow Up', to: 'Not Interested', pre: 'exact', expected: 0 },
+    { from: 'Not Interested', to: 'Follow Up', pre: 'none', expected: 1 },
+    { from: 'Follow Up', to: 'Follow Up', pre: 'exact', expected: 1 },
+  ]) {
+    const selected = {
+      id: ids.opportunity,
+      organizationId: ids.organization,
+      businessUnitId: ids.businessUnit,
+      contactId: ids.contact,
+      status: scenario.from,
+      currentStage: scenario.from,
+      assignedUserId: ids.otherUser,
+    };
+    const response = await PATCH(
+      patchRequest({
+        id: ids.contact,
+        opportunityId: ids.opportunity,
+        status: scenario.to,
+        statusChangeReason: scenario.from === 'Not Interested' ? 'correction' : undefined,
+        terminalStatusReason: scenario.to === 'Not Interested' ? 'Student declined.' : undefined,
+      }),
+      {},
+      {
+        requirePermissionForRequest: async () => ({ error: null, session: elevatedSession }),
+        getDbForRequest: () => dbRows([contact]),
+        latestLeadForContactForRequest: async () => selected,
+        loadBusinessUnitForRequest: async () => businessUnit,
+        resolveActiveOpportunityForRequest: async () => ({
+          status: scenario.pre,
+          leadId: scenario.pre === 'exact' ? ids.opportunity : null,
+          opportunity: scenario.pre === 'exact' ? selected : null,
+          activeCount: scenario.pre === 'exact' ? 1 : 0,
+        }),
+        loadScopedOpportunityForRequest: async () => selected,
+        withLockedMutationForRequest: async (input) => {
+          await input.authorize({ opportunity: selected });
+          return input.write({
+            tx: {},
+            opportunity: selected,
+            transition: {
+              allowed: true,
+              changed: scenario.from !== scenario.to,
+              fromStatus: scenario.from,
+              toStatus: scenario.to,
+            },
+          });
+        },
+        updateContactInTransactionForRequest: async (input) => ({
+          contact,
+          lead: { ...input.existingLead, ...input.leadPatch },
+          noteRows: [],
+          activityEventRows: [],
+        }),
+      },
+    );
+    assert.equal(response.status, 200, `${scenario.from} -> ${scenario.to}`);
+    assert.equal((await response.json()).contact.activeOpportunityCount, scenario.expected);
+  }
+});
+
+test('direct AIT USA PATCH rechecks regular Coordinator ownership under the lock', async () => {
+  const initiallyOwned = {
+    id: ids.opportunity,
+    organizationId: ids.organization,
+    businessUnitId: ids.businessUnit,
+    contactId: ids.contact,
+    status: 'Follow Up',
+    currentStage: 'Follow Up',
+    assignedUserId: ids.user,
+  };
+  let writes = 0;
+  const response = await PATCH(
+    patchRequest({ id: ids.contact, opportunityId: ids.opportunity, status: 'Follow Up' }),
+    {},
+    {
+      requirePermissionForRequest: async () => ({ error: null, session }),
+      getDbForRequest: () => dbRows([contact]),
+      latestLeadForContactForRequest: async () => initiallyOwned,
+      loadBusinessUnitForRequest: async () => businessUnit,
+      resolveActiveOpportunityForRequest: async () => ({
+        status: 'exact', leadId: ids.opportunity, opportunity: initiallyOwned, activeCount: 1,
+      }),
+      loadScopedOpportunityForRequest: async () => initiallyOwned,
+      withLockedMutationForRequest: async (input) => {
+        await input.authorize({ opportunity: { ...initiallyOwned, assignedUserId: ids.otherUser } });
+        return input.write({ tx: {}, opportunity: initiallyOwned, transition: null });
+      },
+      updateContactInTransactionForRequest: async () => { writes += 1; },
+    },
+  );
+  assert.equal(response.status, 403);
+  assert.equal(writes, 0);
+});
+
 test('Start opportunity validates explicit status before database access', async () => {
   const response = await POST(
     request({ businessUnitId: ids.businessUnit }),

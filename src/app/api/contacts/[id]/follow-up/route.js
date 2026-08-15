@@ -10,13 +10,19 @@ import {
 } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import {
+  assertCanAccessContactLead,
   assertCanAssignUser,
   canAccessBusinessUnit,
   isRegularCoordinatorSession,
   resolveContactById,
 } from '@/lib/crm/access.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
-import { evaluateLifecycleTransition, isNoFurtherProspectingLifecycleStatus } from '@/lib/crm/lifecycle.js';
+import {
+  evaluateLifecycleTransition,
+  isNoFurtherProspectingLifecycleStatus,
+  WORKFLOW_KEYS,
+  workflowKeyForBusinessUnit,
+} from '@/lib/crm/lifecycle.js';
 import {
   leadProfilePatchFromPayload,
   leadProfilePatchToDrizzleValues,
@@ -273,6 +279,8 @@ export async function GET(request, { params }) {
 export async function POST(request, { params }, runtime = {}) {
   const requirePermissionForRequest = runtime.requirePermissionForRequest || requirePermission;
   const getDbForRequest = runtime.getDbForRequest || getDb;
+  const completeFollowUpForRequest = runtime.completeFollowUpForRequest || completeFollowUpTaskWithActivity;
+  const recordFollowUpForRequest = runtime.recordFollowUpForRequest || recordFollowUpActivity;
   const { error, session } = await requirePermissionForRequest(request, PERMISSIONS.CRM_WRITE);
   if (error) return error;
 
@@ -404,7 +412,7 @@ export async function POST(request, { params }, runtime = {}) {
       : null;
 
     if (existingTask) {
-      const { task, nextTask } = await completeFollowUpTaskWithActivity({
+      const { task, nextTask } = await completeFollowUpForRequest({
         db,
         organizationId: session.user.organizationId,
         actorUserId: session.user.id,
@@ -440,6 +448,18 @@ export async function POST(request, { params }, runtime = {}) {
         },
         followUpOutcome: completion.outcome,
         followUpChannel: completion.channel,
+        ...(workflowKeyForBusinessUnit(businessUnit) === WORKFLOW_KEYS.AIT_USA && transition.leadPatch && lead ? {
+          aitUsaOpportunityMutation: {
+            organizationId: session.user.organizationId,
+            businessUnit,
+            contact,
+            expectedOpportunityId: lead.id,
+            toStatus: leadStatusForFollowUpOutcome(completion.outcome, businessUnit) || undefined,
+            reopenReason: 'new_course_follow_up',
+            terminalReason: transition.leadStatusChange?.reason || `Follow-up outcome: ${completion.outcome}`,
+            authorize: ({ opportunity }) => assertCanAccessContactLead(session, opportunity, contact),
+          },
+        } : {}),
         profileActivity: transition.profileActivity,
         nextTaskValues,
         nextTaskEventMetadata: compactObject({
@@ -456,7 +476,7 @@ export async function POST(request, { params }, runtime = {}) {
       });
     }
 
-    const { nextTask } = await recordFollowUpActivity({
+    const { nextTask } = await recordFollowUpForRequest({
       db,
       organizationId: session.user.organizationId,
       actorUserId: session.user.id,
@@ -478,6 +498,18 @@ export async function POST(request, { params }, runtime = {}) {
       cancelOpenFollowUps: false,
       followUpOutcome: completion.outcome,
       followUpChannel: completion.channel,
+      ...(workflowKeyForBusinessUnit(businessUnit) === WORKFLOW_KEYS.AIT_USA && transition.leadPatch && lead ? {
+        aitUsaOpportunityMutation: {
+          organizationId: session.user.organizationId,
+          businessUnit,
+          contact,
+          expectedOpportunityId: lead.id,
+          toStatus: leadStatusForFollowUpOutcome(completion.outcome, businessUnit) || undefined,
+          reopenReason: 'new_course_follow_up',
+          terminalReason: transition.leadStatusChange?.reason || `Follow-up outcome: ${completion.outcome}`,
+          authorize: ({ opportunity }) => assertCanAccessContactLead(session, opportunity, contact),
+        },
+      } : {}),
       profileActivity: transition.profileActivity,
       nextTaskValues,
       nextTaskEventMetadata: compactObject({
