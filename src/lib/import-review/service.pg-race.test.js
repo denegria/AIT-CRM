@@ -324,8 +324,9 @@ test('real PostgreSQL Import Review promotion serializes concurrent approvals an
       { contacts: 1, leads: 1, tasks: 1, notifications: 1, record_status: 'promoted' },
     );
 
-    await assert.rejects(
-      updateImportReviewStatus(crashClient, {
+    let crashError = null;
+    try {
+      await updateImportReviewStatus(crashClient, {
         batchId,
         status: 'approved',
         recordIds: [crashRecord.recordId],
@@ -334,9 +335,11 @@ test('real PostgreSQL Import Review promotion serializes concurrent approvals an
           await crashClient.end();
           throw new Error('simulated process crash after committed CRM promotion');
         },
-      }),
-      (error) => /simulated process crash after committed CRM promotion|Client was closed and is not queryable/.test(error.message),
-    );
+      });
+    } catch (error) {
+      crashError = error;
+    }
+    assert.match(crashError?.message || '', /simulated process crash after committed CRM promotion|Client was closed and is not queryable/);
     const afterCrash = await verifySinglePromotion(setup, {
       organizationId,
       sourceRowId: crashRecord.sourceRowId,
