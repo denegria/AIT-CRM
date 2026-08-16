@@ -178,6 +178,7 @@ const REGULAR_COORDINATOR_ROUTE_PREFIXES = Object.freeze([
   '/contacts',
   '/pipeline',
   '/tasks',
+  '/recovery-queue',
   '/work-orders',
   '/active-classes',
 ]);

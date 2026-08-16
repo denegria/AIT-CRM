@@ -5,7 +5,7 @@ import { allTables } from './schema.js';
 let pool;
 let db;
 
-function getPool() {
+export function getPool() {
   if (!process.env.DATABASE_URL) {
     throw new Error('DATABASE_URL is required to use the Postgres backend');
   }

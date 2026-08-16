@@ -19,6 +19,7 @@ const nav = [
   { href: '/contacts', label: 'Contacts', Icon: Users },
   { href: '/pipeline', label: 'Pipeline', Icon: Columns3 },
   { href: '/tasks', label: 'Tasks', Icon: ListTodo },
+  { href: '/recovery-queue', label: 'Recovery Queue', mobileLabel: 'Recovery', Icon: ListTodo },
   { href: '/active-classes', label: 'Active Classes', mobileLabel: 'Classes', Icon: BookOpenCheck },
   { href: '/team-monitor', label: 'Team Monitor', Icon: UsersRound },
   { href: '/inbox', label: 'Inbox', Icon: Inbox },
@@ -32,7 +33,7 @@ const nav = [
 ];
 
 const mobilePrimaryPriority = ['/', '/clients', '/contacts', '/pipeline', '/tasks', '/work-orders'];
-const regularCoordinatorNav = new Set(['/', '/clients', '/contacts', '/pipeline', '/tasks', '/active-classes', '/work-orders']);
+const regularCoordinatorNav = new Set(['/', '/clients', '/contacts', '/pipeline', '/tasks', '/recovery-queue', '/active-classes', '/work-orders']);
 const scopePersistenceKeys = ['ait-crm-business-unit-scope', 'ait-crm-scope-user-id'];
 
 const themeOptions = [
