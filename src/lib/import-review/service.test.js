@@ -1,10 +1,65 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadImportReviewDecisionRows, loadImportReviewRows, updateImportReviewStatus } from './service.js';
+import {
+  loadImportReviewDecisionRows,
+  loadImportReviewRows,
+  loadImportReviewSummary,
+  updateImportReviewStatus,
+} from './service.js';
 
 function normalizeSql(sql) {
   return String(sql).replace(/\s+/g, ' ').trim().toLowerCase();
 }
+
+test('Import Review summary preserves its payload while serializing one-client queries', async () => {
+  const resultRows = [
+    [{ status: 'parsed', count: 5 }],
+    [{ status: 'pending', count: 3 }, { status: 'promoted', count: 2 }],
+    [{ status: 'needs_review', count: 2 }],
+    [{ count: 5 }],
+    [{ record_type: 'lead', count: 5 }],
+    [{ review_type: 'identity', count: 2 }],
+    [{ disposition: 'follow_up', count: 3 }],
+    [{ flag: 'phone_only', count: 1 }],
+    [{ source_sheet: 'Leads', disposition: 'follow_up', count: 3 }],
+    [{ reason: 'Phone only / no name', count: 1 }],
+    [{ reason: 'Wrong number', count: 1 }],
+  ];
+  let activeQueries = 0;
+  let maxActiveQueries = 0;
+  let queryIndex = 0;
+  const calls = [];
+  const client = {
+    async query(sql, params) {
+      const index = queryIndex++;
+      calls.push({ sql: normalizeSql(sql), params });
+      activeQueries += 1;
+      maxActiveQueries = Math.max(maxActiveQueries, activeQueries);
+      await Promise.resolve();
+      activeQueries -= 1;
+      return { rows: resultRows[index] };
+    },
+  };
+
+  const summary = await loadImportReviewSummary(client, 'batch-1');
+
+  assert.equal(calls.length, 11);
+  assert.equal(maxActiveQueries, 1);
+  assert.ok(calls.every((call) => call.params[0] === 'batch-1'));
+  assert.deepEqual(summary, {
+    counts: { sourceRows: 5, normalizedRecords: 5, reviewItems: 2 },
+    sourceRowStatusCounts: resultRows[0],
+    normalizedStatusCounts: resultRows[1],
+    recordTypeCounts: resultRows[4],
+    reviewStatusCounts: resultRows[2],
+    reviewTypeCounts: resultRows[5],
+    qualityDispositionCounts: resultRows[6],
+    qualityFlagCounts: resultRows[7],
+    qualityDispositionSheetCounts: resultRows[8],
+    needsReviewReasonCounts: resultRows[9],
+    suppressReasonCounts: resultRows[10],
+  });
+});
 
 function createClient({
   batchSourceType = 'facebook_messenger',

@@ -296,44 +296,32 @@ export async function listImportReviewBatches(client, { organizationId = null, b
 }
 
 export async function loadImportReviewSummary(client, batchId) {
-  const [
-    sourceRowStatusCounts,
-    normalizedStatusCounts,
-    reviewStatusCounts,
-    sourceRowTotal,
-    recordTypeCounts,
-    reviewTypeCounts,
-    qualityDispositionCounts,
-    qualityFlagCounts,
-    qualityDispositionSheetCounts,
-    needsReviewReasonCounts,
-    suppressReasonCounts,
-  ] = await Promise.all([
-    client.query(
+  const summaryQueries = [
+    () => client.query(
       'select parse_status as status, count(*)::int as count from import_source_rows where import_batch_id = $1 group by parse_status',
       [batchId],
     ),
-    client.query(
+    () => client.query(
       'select status, count(*)::int as count from import_normalized_records where import_batch_id = $1 group by status',
       [batchId],
     ),
-    client.query(
+    () => client.query(
       'select review_status as status, count(*)::int as count from import_review_items where import_batch_id = $1 group by review_status',
       [batchId],
     ),
-    client.query(
+    () => client.query(
       'select count(*)::int as count from import_source_rows where import_batch_id = $1',
       [batchId],
     ),
-    client.query(
+    () => client.query(
       'select record_type, count(*)::int as count from import_normalized_records where import_batch_id = $1 group by record_type order by count(*)::int desc, record_type asc',
       [batchId],
     ),
-    client.query(
+    () => client.query(
       'select review_type, count(*)::int as count from import_review_items where import_batch_id = $1 group by review_type order by count(*)::int desc, review_type asc',
       [batchId],
     ),
-    client.query(
+    () => client.query(
       `
         select proposed_lead_json->'leadMetadata'->>'qualityDisposition' as disposition, count(*)::int as count
         from import_normalized_records
@@ -345,7 +333,7 @@ export async function loadImportReviewSummary(client, batchId) {
       `,
       [batchId],
     ),
-    client.query(
+    () => client.query(
       `
         select flag->>'code' as flag, count(*)::int as count
         from import_normalized_records,
@@ -357,7 +345,7 @@ export async function loadImportReviewSummary(client, batchId) {
       `,
       [batchId],
     ),
-    client.query(
+    () => client.query(
       `
         select
           coalesce(sr.source_sheet, 'Unknown sheet') as source_sheet,
@@ -373,7 +361,7 @@ export async function loadImportReviewSummary(client, batchId) {
       `,
       [batchId],
     ),
-    client.query(
+    () => client.query(
       `
         select reason, count(*)::int as count
         from (
@@ -410,7 +398,7 @@ export async function loadImportReviewSummary(client, batchId) {
       `,
       [batchId],
     ),
-    client.query(
+    () => client.query(
       `
         select reason, count(*)::int as count
         from (
@@ -434,7 +422,22 @@ export async function loadImportReviewSummary(client, batchId) {
       `,
       [batchId],
     ),
-  ]);
+  ];
+  const summaryResults = [];
+  for (const query of summaryQueries) summaryResults.push(await query());
+  const [
+    sourceRowStatusCounts,
+    normalizedStatusCounts,
+    reviewStatusCounts,
+    sourceRowTotal,
+    recordTypeCounts,
+    reviewTypeCounts,
+    qualityDispositionCounts,
+    qualityFlagCounts,
+    qualityDispositionSheetCounts,
+    needsReviewReasonCounts,
+    suppressReasonCounts,
+  ] = summaryResults;
 
   return {
     counts: {
