@@ -146,15 +146,13 @@ queue_rows as (
     'This exact open commitment is past due.',
     c.id, c.name, c.phone, c.email,
     coalesce(task_lead.id, ll.lead_id),
-    coalesce(task_lead.status, ll.lead_status),
-    coalesce(
-      nullif(task_lead.source_name, ''),
-      nullif(task_lead.source_type, ''),
-      ll.lead_source
-    ),
-    coalesce(task_lead.assigned_user_id, ll.assigned_user_id),
-    coalesce(task_lead_owner.name, ll.assigned_user_name),
-    coalesce(task_lead.created_at, ll.lead_created_at),
+    case when task_lead.id is not null then task_lead.status else ll.lead_status end,
+    case when task_lead.id is not null then
+      coalesce(nullif(task_lead.source_name, ''), nullif(task_lead.source_type, ''), 'Unknown source')
+    else ll.lead_source end,
+    case when task_lead.id is not null then task_lead.assigned_user_id else ll.assigned_user_id end,
+    case when task_lead.id is not null then task_lead_owner.name else ll.assigned_user_name end,
+    case when task_lead.id is not null then task_lead.created_at else ll.lead_created_at end,
     vt.task_id, vt.task_title, vt.task_status, vt.task_due_at, vt.task_owner_user_id, vt.task_owner_user_name,
     greatest(0, floor(extract(epoch from (now() - vt.task_due_at)) / 86400))::int,
     case
