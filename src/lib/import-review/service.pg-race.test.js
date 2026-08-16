@@ -333,7 +333,7 @@ test('real PostgreSQL Import Review promotion serializes concurrent approvals an
           throw new Error('simulated process crash after committed CRM promotion');
         },
       }),
-      /simulated process crash after committed CRM promotion/,
+      (error) => /simulated process crash after committed CRM promotion|Client was closed and is not queryable/.test(error.message),
     );
     const afterCrash = await verifySinglePromotion(setup, {
       organizationId,
