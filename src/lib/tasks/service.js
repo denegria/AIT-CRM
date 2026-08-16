@@ -93,7 +93,7 @@ function createTaskStaleWriteError() {
 }
 
 export function parseExpectedTaskUpdatedAt(value) {
-  const raw = String(value || '').trim();
+  const raw = value instanceof Date ? value : String(value || '').trim();
   const expectedUpdatedAt = raw ? new Date(raw) : null;
   if (!expectedUpdatedAt || Number.isNaN(expectedUpdatedAt.getTime())) {
     const error = createCrmError('Task version is required. Refresh the queue and try again.', 400);

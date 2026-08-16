@@ -149,7 +149,7 @@ test('generic task update advances the loaded version and writes audit events on
     taskPatch: { title: updatedTask.title, updatedAt: new Date(expectedUpdatedAt) },
     eventType: 'updated',
     eventMessage: 'Updated task.',
-    expectedUpdatedAt,
+    expectedUpdatedAt: new Date(expectedUpdatedAt),
   });
 
   assert.equal(result.task.title, updatedTask.title);
@@ -179,7 +179,7 @@ test('stale generic task update changes zero rows and creates no audit events', 
       taskPatch: { title: 'Stale title' },
       eventType: 'updated',
       eventMessage: 'Updated task.',
-      expectedUpdatedAt,
+      expectedUpdatedAt: new Date(expectedUpdatedAt),
     }),
     (error) => error.status === 409 && error.code === TASK_STALE_WRITE_ERROR_CODE && /Refresh/.test(error.message),
   );
