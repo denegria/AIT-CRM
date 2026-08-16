@@ -120,6 +120,7 @@ function createClient({
               organization_id: 'org-1',
               record_type: 'lead',
               status: 'promoting',
+              claim_token: params[3],
               proposed_contact_json: {
                 name: 'Ada Lovelace',
                 email: 'ada@example.com',
@@ -690,7 +691,7 @@ function createTwoClientPromotionHarness({ initialStatus = 'pending' } = {}) {
           if (normalized.startsWith("update import_normalized_records nr set status = 'promoting'")) {
             if (!['pending', 'needs_review', 'promoting'].includes(state.status)) return { rows: [], rowCount: 0 };
             state.status = 'promoting';
-            return { rows: [{ ...record(), status: 'promoting' }], rowCount: 1 };
+            return { rows: [{ ...record(), status: 'promoting', claim_token: params[3] }], rowCount: 1 };
           }
           if (normalized.startsWith('update import_review_items')) return { rows: [], rowCount: 1 };
           if (normalized.startsWith('select u.id, u.name, u.email from users u')) return { rows: [{ id: 'owner-1', name: 'Owner', email: 'owner@example.com' }] };

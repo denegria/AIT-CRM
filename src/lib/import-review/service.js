@@ -1013,11 +1013,14 @@ async function claimPromotionRecord(client, batchId, record) {
           or nr.status = '${PROMOTION_CLAIM_STATUS}'
         )
       returning nr.id, nr.source_row_id, nr.record_type,
-        nr.proposed_contact_json, nr.proposed_lead_json, nr.status
+        nr.proposed_contact_json, nr.proposed_lead_json, nr.status,
+        nr.proposed_lead_json->'${PROMOTION_CLAIM_KEY}'->>'token' as claim_token
     `,
     [batchId, record.id, REVIEWABLE_RECORD_STATUSES, claimToken],
   );
   if (!claimResult.rowCount) return null;
+  const storedClaimToken = claimResult.rows[0]?.claim_token;
+  if (!storedClaimToken) throw new Error('Promotion claim token was not stored by PostgreSQL.');
 
   if (record.source_row_id) {
     await client.query(
@@ -1031,7 +1034,7 @@ async function claimPromotionRecord(client, batchId, record) {
       [batchId, record.source_row_id, REVIEWABLE_ITEM_STATUSES],
     );
   }
-  return { ...record, ...claimResult.rows[0], claimToken };
+  return { ...record, ...claimResult.rows[0], claimToken: storedClaimToken };
 }
 
 async function promoteImportReviewRecordWithLock(client, { batchId, record, afterCrmCommit = null }) {
