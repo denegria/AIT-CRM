@@ -1004,7 +1004,7 @@ async function claimPromotionRecord(client, batchId, record) {
         proposed_lead_json = coalesce(nr.proposed_lead_json, '{}'::jsonb)
           || jsonb_build_object(
             '${PROMOTION_CLAIM_KEY}',
-            jsonb_build_object('token', $4, 'claimedAt', now())
+            jsonb_build_object('token', $4::text, 'claimedAt', now())
           )
       where nr.import_batch_id = $1
         and nr.id = $2
