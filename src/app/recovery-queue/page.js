@@ -199,7 +199,7 @@ export default function RecoveryQueuePage() {
                     {item.contact.email && <span>{item.contact.email}</span>}
                   </div>
                 </div>
-                <Link className="btn btn-primary" href={itemHref(item)}>{itemActionLabel(item)}</Link>
+                <Link className="btn btn-primary" href={itemHref(item)} prefetch={false}>{itemActionLabel(item)}</Link>
               </article>
             ))}
           </div>
