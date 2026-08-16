@@ -339,6 +339,7 @@ test('real PostgreSQL Import Review promotion serializes concurrent approvals an
     } catch (error) {
       crashError = error;
     }
+    console.info('Import Review crash signal captured:', crashError?.message || 'none');
     assert.match(crashError?.message || '', /simulated process crash after committed CRM promotion|Client was closed and is not queryable/);
     const afterCrash = await verifySinglePromotion(setup, {
       organizationId,
@@ -352,6 +353,7 @@ test('real PostgreSQL Import Review promotion serializes concurrent approvals an
       notifications: 1,
       record_status: 'promoting',
     });
+    console.info('Import Review crash state verified; starting recovery retry.');
 
     const retry = await updateImportReviewStatus(retryClient, {
       batchId,
@@ -360,6 +362,7 @@ test('real PostgreSQL Import Review promotion serializes concurrent approvals an
       organizationId,
     });
     assert.equal(retry.promotionOutcomes[0].outcome, 'already_promoted');
+    console.info('Import Review recovery retry finalized without a duplicate.');
     assert.deepEqual(
       await verifySinglePromotion(setup, {
         organizationId,
