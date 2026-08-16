@@ -35,6 +35,8 @@ test('Recovery Queue query is organization, division, and regular-owner scoped',
   assert.match(calls[0].sql, /task_owner_user_id = \$2::uuid/);
   assert.match(calls[0].sql, /l\.business_unit_id = any\(\$3::uuid\[\]\)/);
   assert.match(calls[0].sql, /\$4::boolean or assigned_user_id is not null/);
+  assert.match(calls[0].sql, /task_lead\.id = vt\.lead_id/);
+  assert.match(calls[0].sql, /offset least\(/);
 });
 
 test('Recovery Queue query keeps deterministic lanes and excludes Retargeting eligibility', () => {

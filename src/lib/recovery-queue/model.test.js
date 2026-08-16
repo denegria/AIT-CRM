@@ -60,10 +60,28 @@ test('Senior queue counts every visible row and paginates the selected lane exac
   assert.deepEqual(payload.items.map((item) => item.key), ['unassigned:3']);
 });
 
+test('normalized Senior request keeps unassigned access when payload construction normalizes again', () => {
+  const request = normalizeRecoveryQueueRequest({
+    lane: 'unassigned',
+    canViewUnassigned: true,
+  });
+  const payload = buildRecoveryQueuePayload(
+    [row('unassigned', 1)],
+    request,
+    { unassigned: 1 },
+  );
+
+  assert.equal(request.canViewUnassigned, true);
+  assert.equal(payload.lane, 'unassigned');
+  assert.equal(payload.lanes.find((lane) => lane.key === 'unassigned').count, 1);
+  assert.deepEqual(payload.items.map((item) => item.key), ['unassigned:1']);
+});
+
 test('queue request bounds invalid lanes and page sizes', () => {
   const request = normalizeRecoveryQueueRequest({ lane: 'made_up', page: '-4', pageSize: 500, canViewUnassigned: true });
   assert.equal(request.lane, 'first_contact');
   assert.equal(request.page, 1);
   assert.equal(request.pageSize, 100);
+  assert.equal(request.canViewUnassigned, true);
   assert.ok(Array.isArray(request.lanes));
 });

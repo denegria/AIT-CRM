@@ -145,7 +145,16 @@ queue_rows as (
     'overdue:' || vt.task_id::text,
     'This exact open commitment is past due.',
     c.id, c.name, c.phone, c.email,
-    ll.lead_id, ll.lead_status, ll.lead_source, ll.assigned_user_id, ll.assigned_user_name, ll.lead_created_at,
+    coalesce(task_lead.id, ll.lead_id),
+    coalesce(task_lead.status, ll.lead_status),
+    coalesce(
+      nullif(task_lead.source_name, ''),
+      nullif(task_lead.source_type, ''),
+      ll.lead_source
+    ),
+    coalesce(task_lead.assigned_user_id, ll.assigned_user_id),
+    coalesce(task_lead_owner.name, ll.assigned_user_name),
+    coalesce(task_lead.created_at, ll.lead_created_at),
     vt.task_id, vt.task_title, vt.task_status, vt.task_due_at, vt.task_owner_user_id, vt.task_owner_user_name,
     greatest(0, floor(extract(epoch from (now() - vt.task_due_at)) / 86400))::int,
     case
@@ -165,6 +174,10 @@ queue_rows as (
    and c.organization_id = $1
    and c.archived_at is null
   left join latest_leads ll on ll.contact_id = c.id
+  left join leads task_lead
+    on task_lead.id = vt.lead_id
+   and task_lead.organization_id = $1
+  left join users task_lead_owner on task_lead_owner.id = task_lead.assigned_user_id
   where vt.task_due_at < now()
     and (vt.task_status <> 'snoozed' or vt.snoozed_until is null or vt.snoozed_until <= now())
 
@@ -240,7 +253,17 @@ select
           coalesce(task_due_at, lead_created_at) asc nulls last,
           item_key asc
         limit $6
-        offset $7
+        offset least(
+          $7::int,
+          greatest(
+            (
+              select ((count(*) - 1) / $6::int) * $6::int
+              from queue_rows selected_lane_rows
+              where selected_lane_rows.lane = $5
+            ),
+            0
+          )
+        )
       ) page_rows
     ),
     '[]'::jsonb

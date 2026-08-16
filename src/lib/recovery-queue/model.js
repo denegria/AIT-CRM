@@ -55,6 +55,7 @@ export function normalizeRecoveryQueueRequest({
     lane: normalizedLane,
     page: integer(page, 1),
     pageSize: Math.min(integer(pageSize, DEFAULT_RECOVERY_QUEUE_PAGE_SIZE), MAX_RECOVERY_QUEUE_PAGE_SIZE),
+    canViewUnassigned: Boolean(canViewUnassigned),
     lanes,
   };
 }
