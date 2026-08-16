@@ -832,7 +832,9 @@ test('promotion rolls back the CRM transaction after every CRM side-effect stage
       || (failureStage === 'notification' && call.sql.startsWith('insert into notifications'))
       || (failureStage === 'intake_task' && call.sql.startsWith('with intake_lock as'))
     ));
-    const rollbackIndex = calls.findIndex((call, index) => index > failedStageIndex && call.sql === 'rollback');
+    const rollbackIndex = calls.findIndex((call, index) => (
+      index > failedStageIndex && call.sql === 'rollback to savepoint import_review_crm_write'
+    ));
     assert.ok(failedStageIndex >= 0, failureStage);
     assert.ok(rollbackIndex > failedStageIndex, failureStage);
   }
