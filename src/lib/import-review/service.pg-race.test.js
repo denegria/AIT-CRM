@@ -180,9 +180,11 @@ async function verifySinglePromotion(client, { organizationId, sourceRowId, reco
 
 async function endClient(client) {
   if (!client) return;
-  await client.end().catch(() => {
+  try {
+    await client.end();
+  } catch {
     client.connection?.stream?.destroy();
-  });
+  }
 }
 
 test('real PostgreSQL Import Review promotion serializes concurrent approvals and recovers after a committed-session crash', {
