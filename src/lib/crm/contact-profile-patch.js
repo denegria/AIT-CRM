@@ -28,6 +28,7 @@ export function buildContactProfilePatch({
   contact = {},
   isAitUsa = false,
   lockedOwnerUserId = '',
+  canManageAssignments = true,
   isClosedStatusReopen = false,
   isEnteringClosedStatus = false,
 } = {}) {
@@ -51,10 +52,16 @@ export function buildContactProfilePatch({
     delete patch.leadProfile;
     delete patch.courseMetadata;
   }
+  if (isAitUsa && !canManageAssignments) {
+    delete patch.assignedTo;
+  } else if (isAitUsa && patch.assignedTo === contact.assignedTo) {
+    delete patch.assignedTo;
+  }
   const canMutateOpportunity = !(isAitUsa && (!contact.hasLeadStatus || contact.opportunityConflict));
+  const canApplyLockedOwner = canMutateOpportunity && lockedOwnerUserId && (!isAitUsa || canManageAssignments);
   return {
     ...patch,
-    ...(canMutateOpportunity && lockedOwnerUserId ? { assignedTo: lockedOwnerUserId } : {}),
+    ...(canApplyLockedOwner ? { assignedTo: lockedOwnerUserId } : {}),
     statusChangeReason: isClosedStatusReopen ? editForm.statusChangeReason : '',
     terminalStatusReason: isEnteringClosedStatus ? editForm.terminalStatusReason : '',
     ...(canMutateOpportunity && editForm.leadProfile ? { leadProfile: editForm.leadProfile } : {}),

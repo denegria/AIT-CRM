@@ -865,7 +865,7 @@ function createWebsitePromotionClient({
         if (normalizedSql.startsWith('select coalesce(max(source_row_number)')) {
           return { rows: [{ max_row: 2 }] };
         }
-        if (normalizedSql.startsWith('select u.id, u.name, u.email from users u')) {
+        if (normalizedSql.startsWith('select u.id, u.name, u.email,')) {
           return { rows: [] };
         }
         if (normalizedSql.startsWith('select id, name, email from users')) {
@@ -1020,7 +1020,7 @@ function createBusinessUnitScopedWebsiteClient() {
           return { rows: [{ id: 'contact-shared' }] };
         }
         if (normalizedSql.startsWith('update contacts')) return { rows: [{ id: 'contact-shared' }] };
-        if (normalizedSql.startsWith('select u.id, u.name, u.email from users u')) return { rows: [] };
+        if (normalizedSql.startsWith('select u.id, u.name, u.email,')) return { rows: [] };
         if (normalizedSql.startsWith('select id, name, email from users')) return { rows: [] };
         if (normalizedSql.startsWith('insert into leads')) return { rows: [{ id: `lead-${params[1]}` }] };
         if (normalizedSql.startsWith('insert into activity_events')) return { rows: [] };

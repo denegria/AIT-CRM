@@ -96,7 +96,7 @@ function createServiceClient({
         if (normalized.startsWith('select id, name from business_units') && normalized.includes('id = $2')) {
           return { rows: businessUnitId ? [{ id: businessUnitId, name: businessUnitName }] : [] };
         }
-        if (normalized.startsWith('select u.id, u.name, u.email from users u')) {
+        if (normalized.startsWith('select u.id, u.name, u.email,')) {
           return { rows: [{ id: 'user-owner-1', name: 'Owner One', email: 'owner@example.com' }] };
         }
         if (normalized.startsWith('select id, name, email from users')) {

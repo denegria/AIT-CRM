@@ -268,6 +268,23 @@ function snapshotDetail(items, category, linkedRecordCount = 0, emptyText = 'No 
   return `Latest ${dateLabel(latest)}`;
 }
 
+function isEligibleAitUsaOwner(owner, businessUnitId) {
+  const roleKeys = (owner?.roleKeys || []).map((key) => String(key).trim());
+  const elevated = roleKeys.some((key) => ['admin', 'senior_coordinator', 'sales_manager'].includes(key));
+  const regular = roleKeys.some((key) => ['account_coordinator', 'account_manager'].includes(key));
+  return Boolean(
+    regular &&
+    !elevated &&
+    businessUnitId &&
+    (owner?.businessUnitIds || []).includes(businessUnitId)
+  );
+}
+
+function canManageAitUsaAssignmentsForUser(user) {
+  const roleKeys = [user?.primaryRoleKey, ...(user?.roleKeys || [])].filter(Boolean);
+  return roleKeys.some((key) => ['admin', 'senior_coordinator'].includes(String(key).trim()));
+}
+
 function financialCategory(record = {}) {
   const type = String(record.type || '').toLowerCase();
   if (type.includes('estimate')) return 'estimate';
@@ -462,6 +479,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       .map((employee) => ({
         id: employee.id,
         label: employee.name || employee.email || 'Unnamed User',
+        roleKeys: employee.roleKeys || [],
+        businessUnitIds: employee.businessUnitIds || [],
       }));
     if (currentUser?.id && !mapped.some((employee) => employee.id === currentUser.id)) {
       return [
@@ -472,6 +491,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     return mapped;
   }, [currentUser, employees]);
   const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
+  const canManageAitUsaAssignments = canManageAitUsaAssignmentsForUser(currentUser);
   const [noteInput, setNoteInput] = useState('');
   const [noteSaving, setNoteSaving] = useState(false);
   const noteSaveInFlight = useRef(false);
@@ -596,6 +616,15 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const showLinkedPeoplePanel = isClientMode && detailView.workflowKey === WORKFLOW_KEYS.AIT_SIGNS;
   const showSchoolLocationField = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA;
   const isAitUsaContact = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA || /ait usa|institute/i.test(contactBusinessUnit?.name || '');
+  const canManageContactAssignments = isAitUsaContact
+    ? canManageAitUsaAssignments
+    : coordinatorUiPolicy.canManageCoordinatorAssignments;
+  const aitUsaOwnerOptions = isAitUsaContact
+    ? ownerOptions.filter((owner) => (
+        isEligibleAitUsaOwner(owner, contactBusinessUnit?.id) ||
+        owner.id === contact?.assignedTo
+      ))
+    : ownerOptions;
   const canGenerateStudentReceipt = !isAitUsaContact || isEnrolledStudent(contact);
   const hasWorkOrders = contactWorkOrders.length > 0;
   const hasInvoices = contactInvoices.length > 0;
@@ -993,7 +1022,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     setStartOpportunityError('');
     setStartOpportunityForm({
       status: 'New Lead',
-      assignedTo: coordinatorUiPolicy.lockedOwnerUserId || contact?.assignedTo || '',
+      assignedTo: isAitUsaContact && !canManageContactAssignments
+        ? ''
+        : coordinatorUiPolicy.lockedOwnerUserId || contact?.assignedTo || '',
       reason: '',
     });
     setIsEditModalOpen(true);
@@ -1010,7 +1041,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         body: JSON.stringify({
           businessUnitId: contactBusinessUnit.id,
           status: startOpportunityForm.status,
-          assignedTo: coordinatorUiPolicy.lockedOwnerUserId || startOpportunityForm.assignedTo || '',
+          assignedTo: isAitUsaContact && !canManageContactAssignments
+            ? ''
+            : coordinatorUiPolicy.lockedOwnerUserId || startOpportunityForm.assignedTo || '',
           reason: startOpportunityForm.reason,
         }),
       });
@@ -1207,6 +1240,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       contact,
       isAitUsa: isAitUsaContact,
       lockedOwnerUserId: coordinatorUiPolicy.lockedOwnerUserId,
+      canManageAssignments: canManageContactAssignments,
       isClosedStatusReopen,
       isEnteringClosedStatus,
     });
@@ -2963,7 +2997,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                           {contactStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
                         </select>
                       </div>
-                      {coordinatorUiPolicy.canManageCoordinatorAssignments && (
+                      {canManageContactAssignments && (
                         <div className="form-group">
                           <label className="form-label" htmlFor="start-opportunity-owner">Assigned To</label>
                           <select
@@ -2973,7 +3007,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                             onChange={(event) => setStartOpportunityForm((current) => ({ ...current, assignedTo: event.target.value }))}
                           >
                             <option value="">Unassigned</option>
-                            {ownerOptions.map((owner) => <option key={owner.id} value={owner.id}>{owner.label}</option>)}
+                            {aitUsaOwnerOptions.map((owner) => <option key={owner.id} value={owner.id}>{owner.label}</option>)}
                           </select>
                         </div>
                       )}
@@ -3028,12 +3062,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     />
                   </div>
                 )}
-                {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
+                {canManageContactAssignments ? (
                   <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-owner">Assigned To</label>
                     <select id="profile-edit-owner" className="input select" value={editForm.assignedTo || ''} disabled={Boolean(isAitUsaContact && contact.opportunityConflict)} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
                       <option value="">Unassigned</option>
-                      {ownerOptions.map((owner) => (
+                      {aitUsaOwnerOptions.map((owner) => (
                         <option key={owner.id} value={owner.id}>{owner.label}</option>
                       ))}
                     </select>

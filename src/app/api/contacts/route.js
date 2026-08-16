@@ -1,7 +1,15 @@
 import { NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
-import { activityEvents, businessUnits, contacts, users } from '@/db/schema.js';
+import {
+  activityEvents,
+  businessUnitMemberships,
+  businessUnits,
+  contacts,
+  roles,
+  userRoles,
+  users,
+} from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import {
   assertCanAccessContactLead,
@@ -12,6 +20,10 @@ import {
   resolveBusinessUnitId,
   resolveOptionalBusinessUnitId,
 } from '@/lib/crm/access.js';
+import {
+  assertCanManageAitUsaAssignments,
+  isEligibleAitUsaCoordinatorRole,
+} from '@/lib/crm/ait-usa-assignment-policy.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
 import { validateManualContactIdentity } from '@/lib/crm/contact-input.js';
 import {
@@ -167,8 +179,10 @@ function hasBusinessUnitRequest(body) {
   return 'businessUnitId' in body || 'primaryBusinessUnitId' in body;
 }
 
-async function resolveAssignableUserId(db, session, value, fieldName = 'assignedTo') {
+async function resolveAssignableUserId(db, session, value, fieldName = 'assignedTo', businessUnit = null) {
   const id = String(value || '').trim();
+  const isAitUsa = workflowKeyForBusinessUnit(businessUnit) === WORKFLOW_KEYS.AIT_USA;
+  if (isAitUsa) assertCanManageAitUsaAssignments(session);
   if (!id) return null;
   if (!isUuid(id)) throw createCrmError(`${fieldName} must be a valid user id.`);
   assertCanAssignUser(session, id);
@@ -184,6 +198,28 @@ async function resolveAssignableUserId(db, session, value, fieldName = 'assigned
     .limit(1);
 
   if (!user) throw createCrmError('Assigned user not found.', 404);
+  if (isAitUsa) {
+    const [roleRows, membershipRows] = await Promise.all([
+      db
+        .select({ key: roles.key })
+        .from(userRoles)
+        .innerJoin(roles, eq(userRoles.roleId, roles.id))
+        .where(and(
+          eq(userRoles.userId, id),
+          eq(roles.organizationId, session.user.organizationId),
+        )),
+      db
+        .select({ businessUnitId: businessUnitMemberships.businessUnitId })
+        .from(businessUnitMemberships)
+        .where(eq(businessUnitMemberships.userId, id)),
+    ]);
+    if (!isEligibleAitUsaCoordinatorRole(roleRows.map((row) => row.key).filter(Boolean))) {
+      throw createCrmError('Selected AIT USA assignee must be a regular Coordinator.');
+    }
+    if (!membershipRows.some((row) => row.businessUnitId === businessUnit.id)) {
+      throw createCrmError('Selected assignee does not belong to the AIT USA business unit.');
+    }
+  }
   return user.id;
 }
 
@@ -244,18 +280,20 @@ export async function POST(request) {
   } catch (error) {
     return crmErrorResponse(error);
   }
-  let assignedUserId = null;
-  try {
-    assignedUserId = await resolveAssignableUserId(
-      db,
-      session,
-      body.assignedTo || (isRegularCoordinatorSession(session) ? session.user.id : ''),
-    );
-  } catch (error) {
-    return crmErrorResponse(error);
-  }
   let status;
   const businessUnit = await loadBusinessUnitForWorkflow(db, session, businessUnitId);
+  let assignedUserId = null;
+  const isAitUsaCreate = workflowKeyForBusinessUnit(businessUnit) === WORKFLOW_KEYS.AIT_USA;
+  const requestedOwnerId = String(
+    body.assignedTo || (!isAitUsaCreate && isRegularCoordinatorSession(session) ? session.user.id : ''),
+  ).trim();
+  if (requestedOwnerId) {
+    try {
+      assignedUserId = await resolveAssignableUserId(db, session, requestedOwnerId, 'assignedTo', businessUnit);
+    } catch (error) {
+      return crmErrorResponse(error);
+    }
+  }
   try {
     status = requireLifecycleStatus(body.status || 'New Lead', { businessUnit });
   } catch (error) {
@@ -513,7 +551,13 @@ export async function PATCH(request, _context = {}, overrides = {}) {
     if ('source' in body) leadPatch.sourceName = body.source || null;
     if ('assignedTo' in body) {
       try {
-        leadPatch.assignedUserId = await resolveAssignableUserId(db, session, body.assignedTo);
+        leadPatch.assignedUserId = await resolveAssignableUserId(
+          db,
+          session,
+          body.assignedTo,
+          'assignedTo',
+          statusBusinessUnit,
+        );
       } catch (error) {
         return crmErrorResponse(error);
       }

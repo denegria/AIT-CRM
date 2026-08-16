@@ -153,7 +153,7 @@ function createClient({
           return { rows: [], rowCount: 1 };
         }
 
-        if (normalized.startsWith('select u.id, u.name, u.email from users u')) {
+        if (normalized.startsWith('select u.id, u.name, u.email,')) {
           return { rows: [{ id: 'owner-1', name: 'Owner One', email: 'owner@example.com' }] };
         }
 
@@ -738,7 +738,7 @@ function createTwoClientPromotionHarness({ initialStatus = 'pending' } = {}) {
             return { rows: [{ ...record(), status: 'promoting', claim_token: params[3] }], rowCount: 1 };
           }
           if (normalized.startsWith('update import_review_items')) return { rows: [], rowCount: 1 };
-          if (normalized.startsWith('select u.id, u.name, u.email from users u')) return { rows: [{ id: 'owner-1', name: 'Owner', email: 'owner@example.com' }] };
+          if (normalized.startsWith('select u.id, u.name, u.email,')) return { rows: [{ id: 'owner-1', name: 'Owner', email: 'owner@example.com' }] };
           if (normalized.startsWith('select id, primary_business_unit_id from contacts')) return { rows: state.contactId ? [{ id: state.contactId, primary_business_unit_id: 'bu-1' }] : [] };
           if (
             normalized.startsWith('select id, contact_id, assigned_user_id from leads')

@@ -34,7 +34,7 @@ test('default inbound owner prefers business-unit members and skips imports', as
     async query(sql, params = []) {
       const normalized = String(sql).replace(/\s+/g, ' ').trim().toLowerCase();
       calls.push({ sql: normalized, params });
-      if (normalized.startsWith('select u.id, u.name, u.email')) {
+      if (normalized.startsWith('select u.id, u.name, u.email,')) {
         return { rows: [{ id: 'user-bu', name: 'Business Unit Owner' }] };
       }
       if (normalized.startsWith('select id, name, email from users')) {
@@ -61,5 +61,35 @@ test('default inbound owner prefers business-unit members and skips imports', as
     sourceKey: 'historical-row-1',
   });
   assert.equal(importOwner, null);
+  assert.equal(calls.length, 1);
+});
+
+test('AIT USA inbound inquiries remain unassigned without organization fallback', async () => {
+  const calls = [];
+  const client = {
+    async query(sql, params = []) {
+      const normalized = String(sql).replace(/\s+/g, ' ').trim().toLowerCase();
+      calls.push({ sql: normalized, params });
+      if (normalized.startsWith('select u.id, u.name, u.email,')) {
+        return {
+          rows: [{
+            id: 'user-bu',
+            name: 'Business Unit Member',
+            business_unit_name: 'AIT USA Institute',
+          }],
+        };
+      }
+      throw new Error('Organization fallback must not run for AIT USA.');
+    },
+  };
+
+  const ownerUserId = await resolveDefaultInboundLeadOwnerUserId(client, {
+    organizationId: 'org-1',
+    businessUnitId: 'bu-usa',
+    sourceType: 'facebook_lead_ads',
+    sourceKey: 'lead-1',
+  });
+
+  assert.equal(ownerUserId, null);
   assert.equal(calls.length, 1);
 });

@@ -5,6 +5,7 @@ import {
   INBOUND_LEAD_SOURCE_TYPES,
   isCurrentInboundLeadProvenance,
 } from './lead-provenance.js';
+import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from './lifecycle.js';
 
 export const LEAD_ASSIGNMENT_EVENT_TYPE = 'lead.assigned';
 
@@ -50,20 +51,37 @@ export async function resolveDefaultInboundLeadOwnerUserId(client, {
   const scopedUsers = businessUnitId
     ? await client.query(
         `
-          select u.id, u.name, u.email
-          from users u
-          join business_unit_memberships bum on bum.user_id = u.id
-          where u.organization_id = $1
+          select
+            u.id,
+            u.name,
+            u.email,
+            bu.name as business_unit_name,
+            bu.label as business_unit_label
+          from business_units bu
+          left join business_unit_memberships bum on bum.business_unit_id = bu.id
+          left join users u on u.id = bum.user_id
+            and u.organization_id = $1
             and u.is_active = true
-            and bum.business_unit_id = $2
+          where bu.organization_id = $1
+            and bu.id = $2
+            and bu.is_active = true
           order by coalesce(nullif(u.name, ''), u.email, u.id::text), u.id
         `,
         [organizationId, businessUnitId],
       )
     : { rows: [] };
 
-  const fallbackUsers = scopedUsers.rows.length
-    ? scopedUsers
+  const scopedBusinessUnit = scopedUsers.rows[0]
+    ? {
+        name: scopedUsers.rows[0].business_unit_name,
+        label: scopedUsers.rows[0].business_unit_label,
+      }
+    : null;
+  if (workflowKeyForBusinessUnit(scopedBusinessUnit) === WORKFLOW_KEYS.AIT_USA) return null;
+  const scopedOwnerRows = scopedUsers.rows.filter((user) => user?.id);
+
+  const fallbackUsers = scopedOwnerRows.length
+    ? { rows: scopedOwnerRows }
     : await client.query(
         `
           select id, name, email

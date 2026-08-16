@@ -187,6 +187,23 @@ function matchesOwnerSearch(owner, query) {
   return haystack.includes(query.trim().toLowerCase());
 }
 
+function isEligibleAitUsaOwner(owner, businessUnitId) {
+  const roleKeys = (owner?.roleKeys || []).map((key) => String(key).trim());
+  const elevated = roleKeys.some((key) => ['admin', 'senior_coordinator', 'sales_manager'].includes(key));
+  const regular = roleKeys.some((key) => ['account_coordinator', 'account_manager'].includes(key));
+  return Boolean(
+    regular &&
+    !elevated &&
+    businessUnitId &&
+    (owner?.businessUnitIds || []).includes(businessUnitId)
+  );
+}
+
+function canManageAitUsaAssignmentsForUser(user) {
+  const roleKeys = [user?.primaryRoleKey, ...(user?.roleKeys || [])].filter(Boolean);
+  return roleKeys.some((key) => ['admin', 'senior_coordinator'].includes(String(key).trim()));
+}
+
 const ALWAYS_VISIBLE_SEGMENT_IDS = new Set([
   'needs_first_contact',
   'needs_next_follow_up',
@@ -391,6 +408,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     locationFilter,
   } = contactFilterStateFromParams(searchParams);
   const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
+  const canManageAitUsaAssignments = canManageAitUsaAssignmentsForUser(currentUser);
   const effectiveOwnerFilter = coordinatorUiPolicy.lockedOwnerUserId || ownerFilter;
   const hasExplicitLeadDateFilter =
     searchParams.has('leadDateScope') ||
@@ -531,6 +549,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         id: employee.id,
         label: employee.name || employee.email || 'Unnamed User',
         email: employee.email || '',
+        roleKeys: employee.roleKeys || [],
+        businessUnitIds: employee.businessUnitIds || [],
         initials: ownerInitials(employee.name || employee.email || 'Unnamed User'),
         meta: ownerMeta(employee),
       }));
@@ -570,13 +590,15 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const openNew = () => {
     if (!canWrite) return;
     const defaultStatuses = statusOptionsForBusinessUnitId(defaultBusinessUnitId);
+    const defaultBusinessUnit = businessUnitById.get(defaultBusinessUnitId) || null;
+    const defaultIsAitUsa = workflowForBusinessUnit(defaultBusinessUnit).key === WORKFLOW_KEYS.AIT_USA;
     setForm({
       ...empty,
       status: defaultStatuses[0] || empty.status,
       currentStage: defaultStatuses[0] || empty.status,
       businessUnitId: defaultBusinessUnitId,
       primaryBusinessUnitId: defaultBusinessUnitId,
-      assignedTo: coordinatorUiPolicy.lockedOwnerUserId || empty.assignedTo,
+      assignedTo: defaultIsAitUsa ? '' : coordinatorUiPolicy.lockedOwnerUserId || empty.assignedTo,
     });
     setFormError('');
     setDrawer('new');
@@ -633,7 +655,11 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     } else {
       delete payload.appendNote;
     }
-    if (coordinatorUiPolicy.lockedOwnerUserId) {
+    if (isAitUsaForm && !canManageAitUsaAssignments) {
+      delete payload.assignedTo;
+    } else if (isAitUsaForm && drawer !== 'new' && payload.assignedTo === drawer.assignedTo) {
+      delete payload.assignedTo;
+    } else if (coordinatorUiPolicy.lockedOwnerUserId) {
       payload.assignedTo = coordinatorUiPolicy.lockedOwnerUserId;
     }
     if (drawer === 'new') {
@@ -959,6 +985,15 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const formBusinessUnitId = form.businessUnitId || form.primaryBusinessUnitId || '';
   const formBusinessUnit = businessUnitById.get(formBusinessUnitId) || null;
   const isAitUsaForm = workflowForBusinessUnit(formBusinessUnit).key === WORKFLOW_KEYS.AIT_USA;
+  const canManageFormAssignments = isAitUsaForm
+    ? canManageAitUsaAssignments
+    : coordinatorUiPolicy.canManageCoordinatorAssignments;
+  const formOwnerOptions = isAitUsaForm
+    ? ownerOptions.filter((owner) => (
+        isEligibleAitUsaOwner(owner, formBusinessUnitId) ||
+        (drawer !== 'new' && owner.id === form.assignedTo)
+      ))
+    : ownerOptions;
   const formSchoolLocationOptions = schoolLocationOptions(form.address);
 
   if (!loaded) {
@@ -1502,18 +1537,25 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
               </div>
             </div>
             <div className="contact-dialog-routing-details">
-              {coordinatorUiPolicy.canManageCoordinatorAssignments ? (
+              {canManageFormAssignments ? (
                 <div className="form-group">
                   <label className="form-label">Assigned To</label>
                   <select className="input select" value={form.assignedTo || ''} onChange={e => setForm(f => ({...f, assignedTo: e.target.value}))}>
                     <option value="">Unassigned</option>
-                    {ownerOptions.map((owner) => (
+                    {formOwnerOptions.map((owner) => (
                       <option key={owner.id} value={owner.id}>{owner.label}</option>
                     ))}
                   </select>
                 </div>
               ) : (
-                <input type="hidden" value={form.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
+                isAitUsaForm ? (
+                  <div className="form-group">
+                    <label className="form-label">Assigned To</label>
+                    <div className="profile-editor-helper">Unassigned until a Senior Coordinator assigns this Opportunity.</div>
+                  </div>
+                ) : (
+                  <input type="hidden" value={form.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
+                )
               )}
               <div className="form-group">
                 <label className="form-label">{scopeLabel}</label>

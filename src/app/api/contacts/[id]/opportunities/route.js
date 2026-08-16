@@ -15,9 +15,11 @@ import {
   assertCanAccessContactLead,
   canAccessBusinessUnit,
   canAccessContact,
-  isRegularCoordinatorSession,
 } from '@/lib/crm/access.js';
-import { isAssignableEmployee } from '@/lib/crm/assignable-employees.js';
+import {
+  assertCanManageAitUsaAssignments,
+  isEligibleAitUsaCoordinatorRole,
+} from '@/lib/crm/ait-usa-assignment-policy.js';
 import {
   isClosedLifecycleStatus,
   requireLifecycleStatus,
@@ -35,10 +37,9 @@ function jsonError(error, status = 400) {
 }
 
 async function resolveStartOpportunityOwner(db, session, requestedOwnerId, businessUnitId) {
-  const assignedUserId = isRegularCoordinatorSession(session)
-    ? session.user.id
-    : String(requestedOwnerId || '').trim() || null;
+  const assignedUserId = String(requestedOwnerId || '').trim() || null;
   if (!assignedUserId) return null;
+  assertCanManageAitUsaAssignments(session);
   if (!isUuid(assignedUserId)) throw Object.assign(new Error('Assigned user must be a valid user id.'), { status: 400 });
   assertCanAssignUser(session, assignedUserId);
 
@@ -69,10 +70,10 @@ async function resolveStartOpportunityOwner(db, session, requestedOwnerId, busin
       .where(eq(businessUnitMemberships.userId, assignedUserId)),
   ]);
   const roleKeys = roleRows.map((row) => row.key).filter(Boolean);
-  if (!isAssignableEmployee({ ...assignedUser, roleKeys })) {
-    throw Object.assign(new Error('Selected assignee is not assignable to CRM Opportunities.'), { status: 400 });
+  if (!isEligibleAitUsaCoordinatorRole(roleKeys)) {
+    throw Object.assign(new Error('Selected AIT USA assignee must be a regular Coordinator.'), { status: 400 });
   }
-  if (roleKeys.includes('admin') || membershipRows.some((row) => row.businessUnitId === businessUnitId)) {
+  if (membershipRows.some((row) => row.businessUnitId === businessUnitId)) {
     return assignedUserId;
   }
   throw Object.assign(new Error('Selected assignee does not belong to this Opportunity business unit.'), { status: 400 });

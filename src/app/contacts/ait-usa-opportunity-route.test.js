@@ -123,6 +123,17 @@ test('conflicted AIT USA unrelated-name PATCH body is not classified as an Oppor
   assert.equal(hasOpportunityMutationRequest(body), false);
 });
 
+test('regular Coordinator AIT USA profile saves omit assignment fields', () => {
+  const body = buildContactProfilePatch({
+    editForm: fullBootstrapContactPayload({ assignedTo: ids.user }),
+    contact: { hasLeadStatus: true, opportunityConflict: false, assignedTo: ids.user },
+    isAitUsa: true,
+    lockedOwnerUserId: ids.user,
+    canManageAssignments: false,
+  });
+  assert.equal(Object.prototype.hasOwnProperty.call(body, 'assignedTo'), false);
+});
+
 test('direct PATCH allows conflict-safe Contact-only edits with no Lead update', async () => {
   const selectedActive = {
     id: ids.opportunity,
@@ -229,7 +240,13 @@ test('direct unchanged-status full UI PATCH enters the locked expected-opportuni
     {},
     {
       requirePermissionForRequest: async () => ({ error: null, session: elevatedSession }),
-      getDbForRequest: () => dbRows([contact], [{ id: ids.businessUnit }], [{ id: ids.otherUser }]),
+      getDbForRequest: () => dbRows(
+        [contact],
+        [{ id: ids.businessUnit }],
+        [{ id: ids.otherUser }],
+        [{ key: 'account_coordinator' }],
+        [{ businessUnitId: ids.businessUnit }],
+      ),
       latestLeadForContactForRequest: async () => activeA,
       loadBusinessUnitForRequest: async () => businessUnit,
       resolveActiveOpportunityForRequest: async () => ({ status: 'exact', leadId: ids.opportunity, opportunity: activeA, activeCount: 1 }),
@@ -358,8 +375,8 @@ test('Start opportunity validates explicit status before database access', async
   assert.match((await response.json()).error, /initial Opportunity status/);
 });
 
-test('regular Coordinator start is self-assigned and returns an allowlisted Contact/Opportunity shape', async () => {
-  let serviceInput = null;
+test('regular Coordinator cannot explicitly claim a new AIT USA Opportunity', async () => {
+  let started = false;
   const response = await POST(
     request({
       businessUnitId: ids.businessUnit,
@@ -369,13 +386,25 @@ test('regular Coordinator start is self-assigned and returns an allowlisted Cont
     { params: Promise.resolve({ id: ids.contact }) },
     {
       requirePermissionForRequest: async () => ({ error: null, session: policyAllowedRegularSession }),
-      getDbForRequest: () => dbRows(
-        [contact],
-        [businessUnit],
-        [{ id: ids.user, name: 'Coordinator', email: 'coordinator@aitusa.org', isActive: true }],
-        [{ key: 'account_coordinator' }],
-        [{ businessUnitId: ids.businessUnit }],
-      ),
+      getDbForRequest: () => dbRows([contact], [businessUnit]),
+      startOpportunityForRequest: async () => { started = true; },
+    },
+  );
+  const payload = await response.json();
+
+  assert.equal(response.status, 403);
+  assert.match(payload.error, /Only Senior Coordinators or administrators/);
+  assert.equal(started, false);
+});
+
+test('regular Coordinator can record a new AIT USA Opportunity only as unassigned', async () => {
+  let serviceInput = null;
+  const response = await POST(
+    request({ businessUnitId: ids.businessUnit, status: 'New Lead', assignedTo: '' }),
+    { params: Promise.resolve({ id: ids.contact }) },
+    {
+      requirePermissionForRequest: async () => ({ error: null, session: policyAllowedRegularSession }),
+      getDbForRequest: () => dbRows([contact], [businessUnit]),
       startOpportunityForRequest: async (input) => {
         serviceInput = input;
         return {
@@ -384,7 +413,7 @@ test('regular Coordinator start is self-assigned and returns an allowlisted Cont
             id: ids.opportunity,
             status: 'New Lead',
             currentStage: 'New Lead',
-            assignedUserId: ids.user,
+            assignedUserId: null,
             sourceName: 'Manual',
           },
         };
@@ -394,14 +423,13 @@ test('regular Coordinator start is self-assigned and returns an allowlisted Cont
   const payload = await response.json();
 
   assert.equal(response.status, 201);
-  assert.equal(serviceInput.assignedUserId, ids.user);
+  assert.equal(serviceInput.assignedUserId, null);
   assert.equal(payload.contact.businessUnitName, 'AIT USA Institute');
   assert.equal(payload.contact.opportunityId, ids.opportunity);
   const serialized = JSON.stringify(payload);
   for (const forbidden of ['candidateIds', 'matchingContactIds', 'importReview', 'auditMetadata', 'secret']) {
     assert.doesNotMatch(serialized, new RegExp(forbidden, 'i'));
   }
-  assert.equal(serialized.includes(ids.otherUser), false);
 });
 
 test('starting in an AIT USA terminal alias requires an employee reason', async () => {
@@ -453,7 +481,7 @@ for (const fixture of [
     user: { id: ids.otherUser, name: 'Student', email: 'student@aitusa.org', isActive: true },
     roles: [{ key: 'student' }],
     memberships: [{ businessUnitId: ids.businessUnit }],
-    error: /not assignable/,
+    error: /regular Coordinator/,
   },
 ]) {
   test(`elevated Start opportunity rejects ${fixture.name}`, async () => {
@@ -512,8 +540,7 @@ test('elevated Start opportunity permits null owner consistently with manual Con
   assert.equal(serviceInput.assignedUserId, null);
 });
 
-test('elevated Start opportunity permits an admin assignee without explicit BU membership', async () => {
-  let serviceInput;
+test('elevated Start opportunity rejects an administrator as the target owner', async () => {
   const response = await POST(
     request({ businessUnitId: ids.businessUnit, status: 'New Lead', assignedTo: ids.otherUser }),
     { params: Promise.resolve({ id: ids.contact }) },
@@ -526,14 +553,10 @@ test('elevated Start opportunity permits an admin assignee without explicit BU m
         [{ key: 'admin' }],
         [],
       ),
-      startOpportunityForRequest: async (input) => {
-        serviceInput = input;
-        return { status: 'created', opportunity: { id: ids.opportunity, status: 'New Lead', currentStage: 'New Lead', assignedUserId: ids.otherUser } };
-      },
     },
   );
-  assert.equal(response.status, 201);
-  assert.equal(serviceInput.assignedUserId, ids.otherUser);
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /regular Coordinator/);
 });
 
 test('new AIT USA terminal status forwards the UI/API outcome reason into the audit service', async () => {
