@@ -187,7 +187,7 @@ async function endClient(client) {
   }
 }
 
-test('real PostgreSQL Import Review promotion serializes concurrent approvals and recovers after a committed-session crash', {
+test('real PostgreSQL Import Review promotion serializes concurrent approvals and recovers after a connection crash', {
   skip: !databaseUrl
     ? 'Set the explicit safe Import Review race database URL, confirmation, identity, and target base URL.'
     : false,
@@ -333,25 +333,25 @@ test('real PostgreSQL Import Review promotion serializes concurrent approvals an
         organizationId,
         afterCrmCommit: async () => {
           await crashClient.end();
-          throw new Error('simulated process crash after committed CRM promotion');
+          throw new Error('simulated process crash before atomic promotion commit');
         },
       });
     } catch (error) {
       crashError = error;
     }
     console.info('Import Review crash signal captured:', crashError?.message || 'none');
-    assert.match(crashError?.message || '', /simulated process crash after committed CRM promotion|Client was closed and is not queryable/);
+    assert.match(crashError?.message || '', /simulated process crash before atomic promotion commit|Client was closed and is not queryable/);
     const afterCrash = await verifySinglePromotion(setup, {
       organizationId,
       sourceRowId: crashRecord.sourceRowId,
       recordId: crashRecord.recordId,
     });
     assert.deepEqual(afterCrash, {
-      contacts: 2,
-      leads: 1,
-      tasks: 1,
-      notifications: 1,
-      record_status: 'promoting',
+      contacts: 1,
+      leads: 0,
+      tasks: 0,
+      notifications: 0,
+      record_status: 'pending',
     });
     console.info('Import Review crash state verified; starting recovery retry.');
 
@@ -361,7 +361,7 @@ test('real PostgreSQL Import Review promotion serializes concurrent approvals an
       recordIds: [crashRecord.recordId],
       organizationId,
     });
-    assert.equal(retry.promotionOutcomes[0].outcome, 'already_promoted');
+    assert.equal(retry.promotionOutcomes[0].outcome, 'promoted');
     console.info('Import Review recovery retry finalized without a duplicate.');
     assert.deepEqual(
       await verifySinglePromotion(setup, {

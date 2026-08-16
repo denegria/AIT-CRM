@@ -31,15 +31,20 @@ function createClient({
         const normalized = normalizeSql(sql);
         calls.push({ sql: normalized, params });
 
-        if (normalized === 'begin' || normalized === 'commit' || normalized === 'rollback') {
+        if (
+          normalized === 'begin'
+          || normalized === 'commit'
+          || normalized === 'rollback'
+          || normalized.startsWith('savepoint ')
+          || normalized.startsWith('rollback to savepoint ')
+        ) {
           return { rows: [] };
         }
 
         if (
-          normalized.startsWith('select pg_advisory_lock')
-          || normalized.startsWith('select pg_advisory_unlock')
+          normalized.startsWith('select pg_advisory_xact_lock')
         ) {
-          return { rows: [{ pg_advisory_lock: true }] };
+          return { rows: [{ pg_advisory_xact_lock: true }] };
         }
 
         if (normalized.startsWith('select id from import_batches where id = $1 and organization_id = $2')) {
@@ -644,14 +649,57 @@ function createTwoClientPromotionHarness({ initialStatus = 'pending' } = {}) {
 
   function clientFor(clientId, { holdFirstLock = false } = {}) {
     const calls = [];
+    let transactionSnapshot = null;
+    let savepointSnapshot = null;
+    const snapshot = () => ({
+      status: state.status,
+      contactId: state.contactId,
+      leadId: state.leadId,
+      leadCreates: state.leadCreates,
+    });
+    const restore = (stored) => {
+      if (!stored) return;
+      state.status = stored.status;
+      state.contactId = stored.contactId;
+      state.leadId = stored.leadId;
+      state.leadCreates = stored.leadCreates;
+    };
+    const releaseTransactionLock = () => {
+      if (state.owner === clientId) state.owner = null;
+    };
     return {
       calls,
       client: {
         async query(sql, params = []) {
           const normalized = normalizeSql(sql);
           calls.push({ sql: normalized, params });
-          if (normalized === 'begin' || normalized === 'commit' || normalized === 'rollback') return { rows: [] };
-          if (normalized.startsWith('select pg_advisory_lock')) {
+          if (normalized === 'begin') {
+            transactionSnapshot = snapshot();
+            savepointSnapshot = null;
+            return { rows: [] };
+          }
+          if (normalized.startsWith('savepoint ')) {
+            savepointSnapshot = snapshot();
+            return { rows: [] };
+          }
+          if (normalized.startsWith('rollback to savepoint ')) {
+            restore(savepointSnapshot);
+            return { rows: [] };
+          }
+          if (normalized === 'commit') {
+            transactionSnapshot = null;
+            savepointSnapshot = null;
+            releaseTransactionLock();
+            return { rows: [] };
+          }
+          if (normalized === 'rollback') {
+            restore(transactionSnapshot);
+            transactionSnapshot = null;
+            savepointSnapshot = null;
+            releaseTransactionLock();
+            return { rows: [] };
+          }
+          if (normalized.startsWith('select pg_advisory_xact_lock')) {
             if (!state.owner) {
               state.owner = clientId;
               if (clientId === 'client-1') {
@@ -671,10 +719,6 @@ function createTwoClientPromotionHarness({ initialStatus = 'pending' } = {}) {
             });
             state.owner = clientId;
             return { rows: [] };
-          }
-          if (normalized.startsWith('select pg_advisory_unlock')) {
-            if (state.owner === clientId) state.owner = null;
-            return { rows: [{ pg_advisory_unlock: true }] };
           }
           if (normalized.startsWith('select ib.id, ib.source_name, ib.source_type')) {
             return { rows: [{
@@ -733,7 +777,7 @@ function createTwoClientPromotionHarness({ initialStatus = 'pending' } = {}) {
   return { state, firstClient: clientFor('client-1', { holdFirstLock: true }), secondClient: clientFor('client-2') };
 }
 
-test('two approval clients block on the session lock and converge with one CRM lead', async () => {
+test('two approval clients block on the transaction lock and converge with one CRM lead', async () => {
   const harness = createTwoClientPromotionHarness();
   const request = { batchId: 'batch-1', status: 'approved', recordIds: ['record-1'] };
   const first = updateImportReviewStatus(harness.firstClient.client, request);
@@ -752,25 +796,25 @@ test('two approval clients block on the session lock and converge with one CRM l
   );
 });
 
-test('a crash after the CRM transaction commits is replayed from the promoting row without a duplicate lead', async () => {
+test('a crash before the atomic promotion commit rolls back and retries without a duplicate lead', async () => {
   const harness = createTwoClientPromotionHarness();
   harness.state.firstReleaseResolve();
   await assert.rejects(
     updateImportReviewStatus(harness.firstClient.client, {
       batchId: 'batch-1', status: 'approved', recordIds: ['record-1'],
-      afterCrmCommit: async () => { throw new Error('simulated process crash after CRM commit'); },
+      afterCrmCommit: async () => { throw new Error('simulated process crash before promotion commit'); },
     }),
-    /simulated process crash after CRM commit/,
+    /simulated process crash before promotion commit/,
   );
-  assert.equal(harness.state.status, 'promoting');
-  assert.equal(harness.state.leadCreates, 1);
+  assert.equal(harness.state.status, 'pending');
+  assert.equal(harness.state.leadCreates, 0);
 
   const retry = await updateImportReviewStatus(harness.secondClient.client, {
     batchId: 'batch-1', status: 'approved', recordIds: ['record-1'],
   });
   assert.equal(harness.state.status, 'promoted');
   assert.equal(harness.state.leadCreates, 1);
-  assert.equal(retry.promotionOutcomes[0].outcome, 'already_promoted');
+  assert.equal(retry.promotionOutcomes[0].outcome, 'promoted');
 });
 
 test('promotion rolls back the CRM transaction after every CRM side-effect stage', async () => {

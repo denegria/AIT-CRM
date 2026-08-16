@@ -911,7 +911,7 @@ export async function updateImportReviewStatus(client, {
       promotionOutcomes,
     };
   } catch (error) {
-    await client.query('rollback');
+    await client.query('rollback').catch(() => {});
     throw error;
   }
 }
@@ -919,22 +919,9 @@ export async function updateImportReviewStatus(client, {
 async function acquirePromotionLock(client, organizationId, recordId) {
   const lockKey = `import-review:${organizationId}:${recordId}`;
   await client.query(
-    'select pg_advisory_lock(hashtextextended($1::text, 0))',
+    'select pg_advisory_xact_lock(hashtextextended($1::text, 0))',
     [lockKey],
   );
-  return lockKey;
-}
-
-async function releasePromotionLock(client, lockKey) {
-  if (!lockKey) return;
-  try {
-    await client.query(
-      'select pg_advisory_unlock(hashtextextended($1::text, 0))',
-      [lockKey],
-    );
-  } catch {
-    // A lost PostgreSQL session releases a session advisory lock automatically.
-  }
 }
 
 async function loadPromotionRecord(client, batchId, recordId, { forUpdate = false } = {}) {
@@ -1038,62 +1025,53 @@ async function claimPromotionRecord(client, batchId, record) {
 }
 
 async function promoteImportReviewRecordWithLock(client, { batchId, record, afterCrmCommit = null }) {
-  const lockKey = await acquirePromotionLock(client, record.organization_id, record.id);
+  await client.query('begin');
   try {
-    let claimedRecord;
-    let claimToken;
-    await client.query('begin');
-    try {
-      const current = await loadPromotionRecord(client, batchId, record.id, { forUpdate: true });
-      if (!current) {
-        await client.query('commit');
-        return { result: promotionOutcomeForRecord(record, 'stale_status') };
-      }
-      if (current.status === 'promoted') {
-        await client.query('commit');
-        return { result: promotionOutcomeForRecord(current, 'already_promoted') };
-      }
-      if (current.status === 'approved') {
-        await client.query('commit');
-        return { result: promotionOutcomeForRecord(current, 'already_approved') };
-      }
-      if (!isPendingFacebookLeadRecord(current)) {
-        await client.query('commit');
-        return { result: promotionOutcomeForRecord(current, 'stale_status') };
-      }
-
-      const businessUnit = await validatePromotionBusinessUnit(client, current);
-      if (!businessUnit.ok) {
-        await client.query('commit');
-        return {
-          failure: {
-            id: current.id,
-            sourceRowId: current.source_row_id,
-            outcome: 'promotion_failed',
-            reason: businessUnit.reason,
-          },
-          result: {
-            ...promotionOutcomeForRecord(current, 'promotion_failed'),
-            reason: businessUnit.reason,
-          },
-        };
-      }
-
-      claimedRecord = await claimPromotionRecord(client, batchId, current);
-      if (!claimedRecord) {
-        await client.query('commit');
-        return { result: promotionOutcomeForRecord(current, 'already_claimed') };
-      }
-      claimToken = claimedRecord.claimToken;
+    await acquirePromotionLock(client, record.organization_id, record.id);
+    const current = await loadPromotionRecord(client, batchId, record.id, { forUpdate: true });
+    if (!current) {
       await client.query('commit');
-    } catch (error) {
-      await client.query('rollback');
-      throw error;
+      return { result: promotionOutcomeForRecord(record, 'stale_status') };
+    }
+    if (current.status === 'promoted') {
+      await client.query('commit');
+      return { result: promotionOutcomeForRecord(current, 'already_promoted') };
+    }
+    if (current.status === 'approved') {
+      await client.query('commit');
+      return { result: promotionOutcomeForRecord(current, 'already_approved') };
+    }
+    if (!isPendingFacebookLeadRecord(current)) {
+      await client.query('commit');
+      return { result: promotionOutcomeForRecord(current, 'stale_status') };
     }
 
+    const businessUnit = await validatePromotionBusinessUnit(client, current);
+    if (!businessUnit.ok) {
+      await client.query('commit');
+      return {
+        failure: {
+          id: current.id,
+          sourceRowId: current.source_row_id,
+          outcome: 'promotion_failed',
+          reason: businessUnit.reason,
+        },
+        result: {
+          ...promotionOutcomeForRecord(current, 'promotion_failed'),
+          reason: businessUnit.reason,
+        },
+      };
+    }
+
+    const claimedRecord = await claimPromotionRecord(client, batchId, current);
+    if (!claimedRecord) {
+      await client.query('commit');
+      return { result: promotionOutcomeForRecord(current, 'already_claimed') };
+    }
+    const claimToken = claimedRecord.claimToken;
+    await client.query('savepoint import_review_crm_write');
     let crmWrite;
     try {
-      await client.query('begin');
       crmWrite = await promoteFacebookLeadProposalToCrm(client, claimedRecord.organization_id, {
         proposedContact: claimedRecord.proposed_contact_json || {},
         proposedLead: claimedRecord.proposed_lead_json || {},
@@ -1103,9 +1081,8 @@ async function promoteImportReviewRecordWithLock(client, { batchId, record, afte
       if (!crmWrite.leadId) {
         throw new Error(crmWrite.reason || 'CRM promotion returned no lead id.');
       }
-      await client.query('commit');
     } catch (error) {
-      await client.query('rollback');
+      await client.query('rollback to savepoint import_review_crm_write');
       const failure = {
         id: claimedRecord.id,
         sourceRowId: claimedRecord.source_row_id,
@@ -1119,6 +1096,7 @@ async function promoteImportReviewRecordWithLock(client, { batchId, record, afte
         status: 'needs_review',
         failureReason: failure.reason,
       });
+      await client.query('commit');
       return { failure, result: failure };
     }
 
@@ -1145,6 +1123,7 @@ async function promoteImportReviewRecordWithLock(client, { batchId, record, afte
       proposedContact: nextContact,
       proposedLead: nextLead,
     });
+    await client.query('commit');
     const promoted = {
       id: claimedRecord.id,
       sourceRowId: claimedRecord.source_row_id,
@@ -1155,8 +1134,9 @@ async function promoteImportReviewRecordWithLock(client, { batchId, record, afte
       promoted,
       result: { ...promoted, outcome: crmWrite.alreadyExists ? 'already_promoted' : 'promoted' },
     };
-  } finally {
-    await releasePromotionLock(client, lockKey);
+  } catch (error) {
+    await client.query('rollback').catch(() => {});
+    throw error;
   }
 }
 
@@ -1245,9 +1225,7 @@ async function finalizePromotion(client, {
   proposedLead = null,
   failureReason = null,
 }) {
-  await client.query('begin');
-  try {
-    if (status === 'promoted') {
+  if (status === 'promoted') {
       const promotionResult = await client.query(
         `
           update import_normalized_records
@@ -1277,7 +1255,7 @@ async function finalizePromotion(client, {
         `,
         [batchId, record.source_row_id],
       );
-    } else {
+  } else {
       const failurePatch = JSON.stringify({
         promotionFailure: {
           reason: failureReason || 'CRM promotion failed.',
@@ -1315,11 +1293,6 @@ async function finalizePromotion(client, {
         `,
         [batchId, record.source_row_id, failurePatch],
       );
-    }
-    await client.query('commit');
-  } catch (error) {
-    await client.query('rollback');
-    throw error;
   }
 }
 
