@@ -199,6 +199,7 @@ function editDraftFromTask(task) {
     contactId: task.contactId || '',
     priority: task.priority || 'medium',
     recurrenceFrequency: task.recurrence?.frequency || 'none',
+    expectedUpdatedAt: task.updatedAt || '',
   };
 }
 
@@ -725,6 +726,7 @@ export default function FollowUpQueuePage() {
           body: JSON.stringify({
             id: task.id,
             action,
+            expectedUpdatedAt: task.updatedAt,
             ...(action === 'complete' && task.taskType === 'follow_up' ? {
               contactId: task.contactId || null,
               leadId: task.leadId || null,
@@ -1156,6 +1158,7 @@ export default function FollowUpQueuePage() {
             contactId: editDraft.contactId || null,
             priority: editDraft.priority,
             recurrence: { frequency: editDraft.recurrenceFrequency },
+            expectedUpdatedAt: editDraft.expectedUpdatedAt,
           }),
         });
         const payload = await response.json().catch(() => ({}));

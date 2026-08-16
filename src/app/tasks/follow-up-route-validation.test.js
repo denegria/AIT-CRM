@@ -45,7 +45,7 @@ function jsonRequest(url, body, method = 'POST') {
   });
 }
 
-function taskReadDb(calls, { throwAfterTaskRead = null } = {}) {
+function taskReadDb(calls, { selected = selectedTask, throwAfterTaskRead = null } = {}) {
   return {
     transaction() {
       calls.transactions += 1;
@@ -65,11 +65,66 @@ function taskReadDb(calls, { throwAfterTaskRead = null } = {}) {
       return {
         from() { return this; },
         where() { return this; },
-        limit() { return Promise.resolve([selectedTask]); },
+        limit() { return Promise.resolve([selected]); },
       };
     },
   };
 }
+
+test('generic task edits require and forward the caller loaded task version', async () => {
+  const expectedUpdatedAt = '2026-08-16T05:00:00.123Z';
+  const genericTask = {
+    ...selectedTask,
+    taskType: 'manual_reminder',
+    updatedAt: new Date(expectedUpdatedAt),
+  };
+  const missingVersionCalls = { reads: 0, transactions: 0, inserts: 0, updates: 0 };
+  let serviceCalls = 0;
+  const missingVersionResponse = await patchTask(
+    jsonRequest('http://localhost/api/tasks', {
+      id: ids.task,
+      action: 'update',
+      title: 'Call tomorrow',
+    }, 'PATCH'),
+    {
+      requirePermissionForRequest: permission,
+      getDbForRequest: () => taskReadDb(missingVersionCalls, { selected: genericTask }),
+      updateTaskForRequest: async () => {
+        serviceCalls += 1;
+        return { task: genericTask };
+      },
+    },
+  );
+  assert.equal(missingVersionResponse.status, 400);
+  assert.deepEqual(await missingVersionResponse.json(), {
+    error: 'Task version is required. Refresh the queue and try again.',
+    code: 'task_version_required',
+  });
+  assert.equal(serviceCalls, 0);
+
+  const currentVersionCalls = { reads: 0, transactions: 0, inserts: 0, updates: 0 };
+  let serviceInput = null;
+  const updatedTask = { ...genericTask, title: 'Call tomorrow' };
+  const currentVersionResponse = await patchTask(
+    jsonRequest('http://localhost/api/tasks', {
+      id: ids.task,
+      action: 'update',
+      title: updatedTask.title,
+      expectedUpdatedAt,
+    }, 'PATCH'),
+    {
+      requirePermissionForRequest: permission,
+      getDbForRequest: () => taskReadDb(currentVersionCalls, { selected: genericTask }),
+      updateTaskForRequest: async (input) => {
+        serviceInput = input;
+        return { task: updatedTask };
+      },
+    },
+  );
+  assert.equal(currentVersionResponse.status, 200);
+  assert.equal(serviceInput.existingTask.id, ids.task);
+  assert.equal(serviceInput.expectedUpdatedAt.toISOString(), expectedUpdatedAt);
+});
 
 function sequentialReadDb(...rows) {
   let index = 0;

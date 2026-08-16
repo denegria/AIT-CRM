@@ -343,14 +343,16 @@ export default function Dashboard() {
     if (!access.canWriteCrm) throw new Error('CRM write access is required.');
     if (patch.completed !== true) throw new Error('Dashboard tasks can only be marked complete here.');
 
+    const loadedTask = myTasks.find((task) => task.id === taskId);
     const task = await completeDashboardTaskAndReload({
       taskId,
+      expectedUpdatedAt: loadedTask?.updatedAt,
       dataSource,
       reloadTasks: loadTasks,
     });
     toast('Task completed');
     return task;
-  }, [access.canWriteCrm, dataSource, loadTasks, toast]);
+  }, [access.canWriteCrm, dataSource, loadTasks, myTasks, toast]);
 
   if (
     !loaded ||

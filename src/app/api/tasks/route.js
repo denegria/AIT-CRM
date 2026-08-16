@@ -59,6 +59,7 @@ import {
   createTaskWithEvents,
   listTasks,
   loadLatestFollowUpOutcomePreviews,
+  parseExpectedTaskUpdatedAt,
   toTaskPayload,
   updateTaskWithEvents,
 } from '@/lib/tasks/service.js';
@@ -504,6 +505,8 @@ export async function PATCH(request, runtime = {}) {
   const requirePermissionForRequest = runtime.requirePermissionForRequest || requirePermission;
   const getDbForRequest = runtime.getDbForRequest || getDb;
   const completeFollowUpForRequest = runtime.completeFollowUpForRequest || completeFollowUpTaskWithActivity;
+  const completeRecurringForRequest = runtime.completeRecurringForRequest || completeRecurringTaskWithNextTask;
+  const updateTaskForRequest = runtime.updateTaskForRequest || updateTaskWithEvents;
   const { error, session } = await requirePermissionForRequest(request, PERMISSIONS.CRM_WRITE);
   if (error) return error;
 
@@ -817,6 +820,7 @@ export async function PATCH(request, runtime = {}) {
       });
     }
 
+    const expectedUpdatedAt = parseExpectedTaskUpdatedAt(body.expectedUpdatedAt);
     const ownerInput = Object.prototype.hasOwnProperty.call(body, 'ownerUserId')
       ? body.ownerUserId
       : body.assignedTo;
@@ -861,7 +865,7 @@ export async function PATCH(request, runtime = {}) {
         active: true,
         source: recurrence.source || 'manual',
       };
-      const { task, nextTask } = await completeRecurringTaskWithNextTask({
+      const { task, nextTask } = await completeRecurringForRequest({
         db,
         organizationId: session.user.organizationId,
         actorUserId: session.user.id,
@@ -873,6 +877,7 @@ export async function PATCH(request, runtime = {}) {
           recurrence: nextRecurrence,
           createdFromTaskId: existingTask.id,
         }),
+        expectedUpdatedAt,
       });
 
       return NextResponse.json({
@@ -881,7 +886,7 @@ export async function PATCH(request, runtime = {}) {
       });
     }
 
-    const { task } = await updateTaskWithEvents({
+    const { task } = await updateTaskForRequest({
       db,
       organizationId: session.user.organizationId,
       actorUserId: session.user.id,
@@ -889,6 +894,7 @@ export async function PATCH(request, runtime = {}) {
       taskPatch: compactTaskPatch(taskPatch),
       eventType: transition.eventType,
       eventMessage: transition.message,
+      expectedUpdatedAt,
     });
 
     return NextResponse.json({ task: toTaskPayload(task, { session }) });

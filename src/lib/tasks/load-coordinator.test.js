@@ -143,9 +143,11 @@ test('queued force refresh recovers after predecessor failure and releases the r
 test('overlapping different-task completions each confirm against a reload started after their PATCH', async () => {
   const taskA = 'task-a';
   const taskB = 'task-b';
+  const taskAVersion = '2026-08-10T11:58:00.000Z';
+  const taskBVersion = '2026-08-10T11:59:00.000Z';
   let serverTasks = [
-    { id: taskA, status: 'open', completed: false },
-    { id: taskB, status: 'open', completed: false },
+    { id: taskA, status: 'open', completed: false, updatedAt: taskAVersion },
+    { id: taskB, status: 'open', completed: false, updatedAt: taskBVersion },
   ];
   let renderedTasks = serverTasks.map((task) => ({ ...task }));
   let reloadRequests = 0;
@@ -191,9 +193,19 @@ test('overlapping different-task completions each confirm against a reload start
     }, options);
   };
 
-  const completionA = completeDashboardTaskAndReload({ taskId: taskA, fetcher, reloadTasks });
+  const completionA = completeDashboardTaskAndReload({
+    taskId: taskA,
+    expectedUpdatedAt: taskAVersion,
+    fetcher,
+    reloadTasks,
+  });
   completionA.then(() => { completionAResolved = true; });
-  const completionB = completeDashboardTaskAndReload({ taskId: taskB, fetcher, reloadTasks });
+  const completionB = completeDashboardTaskAndReload({
+    taskId: taskB,
+    expectedUpdatedAt: taskBVersion,
+    fetcher,
+    reloadTasks,
+  });
 
   await firstReloadStarted.promise;
   await taskBCommitted.promise;

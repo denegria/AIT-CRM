@@ -8,6 +8,7 @@ import {
 } from './task-completion.js';
 
 const taskId = 'fd4dff2a-a70d-4c94-b03d-7734202d58bf';
+const expectedUpdatedAt = '2026-08-10T11:59:00.000Z';
 
 function response({ ok = true, payload = {} } = {}) {
   return {
@@ -18,9 +19,10 @@ function response({ ok = true, payload = {} } = {}) {
   };
 }
 
-test('Dashboard completion submits only the task id and existing complete action', async () => {
+test('Dashboard completion submits the task id, loaded version, and existing complete action', async () => {
   const requests = [];
   const receipt = await requestDashboardTaskCompletion(taskId, {
+    expectedUpdatedAt,
     fetcher: async (...args) => {
       requests.push(args);
       return response({
@@ -45,7 +47,7 @@ test('Dashboard completion submits only the task id and existing complete action
   assert.deepEqual(requests[0][1], {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id: taskId, action: 'complete' }),
+    body: JSON.stringify({ id: taskId, action: 'complete', expectedUpdatedAt }),
   });
   assert.deepEqual(receipt, {
     id: taskId,
@@ -68,6 +70,7 @@ test('Dashboard completion resolves only after reload returns the persisted comp
   };
   const result = await completeDashboardTaskAndReload({
     taskId,
+    expectedUpdatedAt,
     fetcher: async () => response({ payload: { task: { id: taskId, status: 'completed' } } }),
     reloadTasks: async (options) => {
       reloadCalls.push(options);
@@ -84,6 +87,7 @@ test('rejected completion stays failed and does not run a success reload', async
   await assert.rejects(
     completeDashboardTaskAndReload({
       taskId,
+      expectedUpdatedAt,
       fetcher: async () => response({
         ok: false,
         payload: {
@@ -106,6 +110,7 @@ test('completion fails closed when reload does not confirm the completed state',
   await assert.rejects(
     completeDashboardTaskAndReload({
       taskId,
+      expectedUpdatedAt,
       fetcher: async () => response({ payload: { task: { id: taskId, status: 'completed' } } }),
       reloadTasks: async () => [{ id: taskId, status: 'open', completed: false }],
     }),
@@ -123,6 +128,7 @@ test('unavailable durable persistence produces an error state without any local 
       taskId,
       complete: () => completeDashboardTaskAndReload({
         taskId,
+        expectedUpdatedAt,
         dataSource: 'local',
         fetcher: async () => {
           fetchCount += 1;
@@ -150,7 +156,7 @@ test('unavailable durable persistence produces an error state without any local 
 
   const dashboardSource = fs.readFileSync(new URL('../../app/page.js', import.meta.url), 'utf8');
   assert.doesNotMatch(dashboardSource, /\bupdateTask\b/);
-  assert.match(dashboardSource, /completeDashboardTaskAndReload\(\{\s*taskId,\s*dataSource,\s*reloadTasks: loadTasks,/s);
+  assert.match(dashboardSource, /completeDashboardTaskAndReload\(\{\s*taskId,\s*expectedUpdatedAt: loadedTask\?\.updatedAt,\s*dataSource,\s*reloadTasks: loadTasks,/s);
 });
 
 test('completion interaction exposes pending then success or failure without swallowing the error', async () => {

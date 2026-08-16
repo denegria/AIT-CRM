@@ -25,13 +25,17 @@ export function toDashboardTaskCompletionReceipt(task = {}) {
   };
 }
 
-export async function requestDashboardTaskCompletion(taskId, { fetcher = globalThis.fetch } = {}) {
+export async function requestDashboardTaskCompletion(taskId, {
+  expectedUpdatedAt,
+  fetcher = globalThis.fetch,
+} = {}) {
   if (!taskId) throw new Error('A task id is required.');
+  if (!expectedUpdatedAt) throw new Error('Task version is required. Refresh the dashboard and try again.');
 
   const response = await fetcher('/api/tasks', {
     method: 'PATCH',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ id: taskId, action: 'complete' }),
+    body: JSON.stringify({ id: taskId, action: 'complete', expectedUpdatedAt }),
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -46,6 +50,7 @@ export async function requestDashboardTaskCompletion(taskId, { fetcher = globalT
 
 export async function completeDashboardTaskAndReload({
   taskId,
+  expectedUpdatedAt,
   dataSource = 'postgres',
   fetcher = globalThis.fetch,
   reloadTasks,
@@ -57,7 +62,7 @@ export async function completeDashboardTaskAndReload({
     throw new Error('Task reload is required after completion.');
   }
 
-  await requestDashboardTaskCompletion(taskId, { fetcher });
+  await requestDashboardTaskCompletion(taskId, { expectedUpdatedAt, fetcher });
   const reloadedTasks = await reloadTasks({ force: true });
   const reloadedTask = (reloadedTasks || []).find((task) => task.id === taskId);
   if (!isPersistedTaskCompletion(reloadedTask, taskId)) {

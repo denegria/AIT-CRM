@@ -21,6 +21,7 @@ const task = {
   title: 'Call student',
   status: 'open',
   completed: false,
+  updatedAt: '2026-08-10T11:59:00.000Z',
 };
 
 function render(props = {}) {
@@ -111,6 +112,7 @@ test('TaskList completion controller renders pending, reload-backed success, ope
       taskACompletionCalls += 1;
       return completeDashboardTaskAndReload({
         taskId: taskA.id,
+        expectedUpdatedAt: taskA.updatedAt,
         fetcher: async () => response({ task: { id: taskA.id, status: 'completed' } }),
         reloadTasks: async () => {
           await successReload.promise;

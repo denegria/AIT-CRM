@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, or, sql } from 'drizzle-orm';
 import {
   activityEvents,
   contacts,
@@ -82,6 +82,46 @@ function compactObject(value) {
   return Object.fromEntries(
     Object.entries(value).filter(([, entry]) => entry !== undefined),
   );
+}
+
+export const TASK_STALE_WRITE_ERROR_CODE = 'task_stale_write';
+
+function createTaskStaleWriteError() {
+  const error = createCrmError('This task changed. Refresh the queue and try again.', 409);
+  error.code = TASK_STALE_WRITE_ERROR_CODE;
+  return error;
+}
+
+export function parseExpectedTaskUpdatedAt(value) {
+  const raw = String(value || '').trim();
+  const expectedUpdatedAt = raw ? new Date(raw) : null;
+  if (!expectedUpdatedAt || Number.isNaN(expectedUpdatedAt.getTime())) {
+    const error = createCrmError('Task version is required. Refresh the queue and try again.', 400);
+    error.code = 'task_version_required';
+    throw error;
+  }
+  return expectedUpdatedAt;
+}
+
+function taskVersionConditions(expectedUpdatedAt) {
+  const nextMillisecond = new Date(expectedUpdatedAt.getTime() + 1);
+  return [
+    gte(tasks.updatedAt, expectedUpdatedAt),
+    lt(tasks.updatedAt, nextMillisecond),
+  ];
+}
+
+function taskPatchAdvancingVersion(taskPatch, expectedUpdatedAt) {
+  const nextMillisecond = new Date(expectedUpdatedAt.getTime() + 1);
+  const requestedUpdatedAt = taskPatch?.updatedAt instanceof Date
+    ? taskPatch.updatedAt
+    : new Date(taskPatch?.updatedAt || 0);
+  return {
+    ...taskPatch,
+    updatedAt: !Number.isNaN(requestedUpdatedAt.getTime()) && requestedUpdatedAt >= nextMillisecond
+      ? requestedUpdatedAt
+      : nextMillisecond,
+  };
 }
 
 function currentInboundLeadProvenanceCondition() {
@@ -458,13 +498,21 @@ export async function updateTaskWithEvents({
   eventType,
   eventMessage,
   metadataJson = {},
+  expectedUpdatedAt,
 }) {
+  const expectedVersion = parseExpectedTaskUpdatedAt(expectedUpdatedAt);
   return db.transaction(async (tx) => {
     let [task] = await tx
       .update(tasks)
-      .set(taskPatch)
-      .where(and(eq(tasks.id, existingTask.id), eq(tasks.organizationId, organizationId)))
+      .set(taskPatchAdvancingVersion(taskPatch, expectedVersion))
+      .where(and(
+        eq(tasks.id, existingTask.id),
+        eq(tasks.organizationId, organizationId),
+        ...taskVersionConditions(expectedVersion),
+      ))
       .returning();
+
+    if (!task) throw createTaskStaleWriteError();
 
     await tx.insert(taskEvents).values(taskEventValues({
       organizationId,
@@ -508,20 +556,23 @@ export async function completeRecurringTaskWithNextTask({
   taskPatch,
   nextDueAt,
   nextTaskMetadataJson = {},
+  expectedUpdatedAt,
 }) {
+  const expectedVersion = parseExpectedTaskUpdatedAt(expectedUpdatedAt);
   return db.transaction(async (tx) => {
     let [task] = await tx
       .update(tasks)
-      .set(taskPatch)
+      .set(taskPatchAdvancingVersion(taskPatch, expectedVersion))
       .where(and(
         eq(tasks.id, existingTask.id),
         eq(tasks.organizationId, organizationId),
         eq(tasks.status, existingTask.status),
+        ...taskVersionConditions(expectedVersion),
       ))
       .returning();
 
     if (!task) {
-      throw createCrmError('Task was already updated. Refresh the queue and try again.', 409);
+      throw createTaskStaleWriteError();
     }
 
     if ([TASK_STATUSES.COMPLETED, TASK_STATUSES.CANCELED].includes(existingTask.status)) {

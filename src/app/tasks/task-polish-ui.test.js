@@ -44,3 +44,9 @@ test('New Task clears a field error when that field is corrected', () => {
   assert.match(tasksSource, /clearCreateValidationError\(Object\.keys\(patch\)\);/);
   assert.match(tasksSource, /clearCreateValidationError\(\['businessUnitId'\]\);/);
 });
+
+test('generic task actions and the edit form submit the loaded task version', () => {
+  assert.match(tasksSource, /expectedUpdatedAt: task\.updatedAt/);
+  assert.match(tasksSource, /expectedUpdatedAt: editDraft\.expectedUpdatedAt/);
+  assert.match(tasksSource, /expectedUpdatedAt: task\.updatedAt \|\| ''/);
+});

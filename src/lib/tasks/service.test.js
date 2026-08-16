@@ -5,7 +5,9 @@ import {
   completeFollowUpTaskWithActivity,
   reconcileAutomatedInboundFollowUpTasks,
   recordFollowUpActivity,
+  TASK_STALE_WRITE_ERROR_CODE,
   toTaskPayload,
+  updateTaskWithEvents,
 } from './service.js';
 
 test('task payload exposes the server cancellation decision when a session is provided', () => {
@@ -88,6 +90,101 @@ function followUpTask(overrides = {}) {
     ...overrides,
   };
 }
+
+function genericTaskUpdateDb(returnedTasks = []) {
+  const inserts = [];
+  const patches = [];
+  const conditions = [];
+  const tx = {
+    update() {
+      return {
+        set(patch) {
+          patches.push(patch);
+          return this;
+        },
+        where(condition) {
+          conditions.push(condition);
+          return this;
+        },
+        returning() {
+          return Promise.resolve(returnedTasks);
+        },
+      };
+    },
+    insert() {
+      return {
+        values(value) {
+          inserts.push(value);
+          return Promise.resolve();
+        },
+      };
+    },
+  };
+  return {
+    db: { transaction: (callback) => callback(tx) },
+    inserts,
+    patches,
+    conditions,
+  };
+}
+
+test('generic task update advances the loaded version and writes audit events once', async () => {
+  const expectedUpdatedAt = '2026-08-16T05:00:00.123Z';
+  const existingTask = followUpTask({
+    taskType: 'manual_reminder',
+    updatedAt: new Date(expectedUpdatedAt),
+  });
+  const updatedTask = {
+    ...existingTask,
+    title: 'Call student tomorrow',
+    updatedAt: new Date('2026-08-16T05:00:01.000Z'),
+  };
+  const { db, inserts, patches, conditions } = genericTaskUpdateDb([updatedTask]);
+
+  const result = await updateTaskWithEvents({
+    db,
+    organizationId: 'org-1',
+    actorUserId: 'actor-1',
+    existingTask,
+    taskPatch: { title: updatedTask.title, updatedAt: new Date(expectedUpdatedAt) },
+    eventType: 'updated',
+    eventMessage: 'Updated task.',
+    expectedUpdatedAt,
+  });
+
+  assert.equal(result.task.title, updatedTask.title);
+  assert.equal(patches[0].updatedAt.toISOString(), '2026-08-16T05:00:00.124Z');
+  assert.equal(inserts.length, 2);
+  const condition = new PgDialect().sqlToQuery(conditions[0]);
+  assert.match(condition.sql, />=/);
+  assert.match(condition.sql, /</);
+  assert.ok(condition.params.includes(expectedUpdatedAt));
+  assert.ok(condition.params.includes('2026-08-16T05:00:00.124Z'));
+});
+
+test('stale generic task update changes zero rows and creates no audit events', async () => {
+  const expectedUpdatedAt = '2026-08-16T05:00:00.123Z';
+  const existingTask = followUpTask({
+    taskType: 'manual_reminder',
+    updatedAt: new Date('2026-08-16T05:01:00.000Z'),
+  });
+  const { db, inserts } = genericTaskUpdateDb([]);
+
+  await assert.rejects(
+    updateTaskWithEvents({
+      db,
+      organizationId: 'org-1',
+      actorUserId: 'actor-1',
+      existingTask,
+      taskPatch: { title: 'Stale title' },
+      eventType: 'updated',
+      eventMessage: 'Updated task.',
+      expectedUpdatedAt,
+    }),
+    (error) => error.status === 409 && error.code === TASK_STALE_WRITE_ERROR_CODE && /Refresh/.test(error.message),
+  );
+  assert.equal(inserts.length, 0);
+});
 
 function reconciliationTx({ selectedTasks, updatedTasks = [] }) {
   const inserts = [];
