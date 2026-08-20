@@ -18,17 +18,24 @@ delivery recovery. A CRM delivery problem never changes an academic decision.
 - `placement_review_adjusted`
 - `placement_review_additional_review_required`
 
-The placement object must contain opaque `reviewId` and `resultId`, and its
-public `reviewStatus` must match the event suffix. `confirmed` and `adjusted`
-also require a public `finalLevelKey`. The allowlist permits only opaque IDs,
-public status/level keys, channel preference, verified-email/mobile booleans,
-and versioned channel-consent evidence. It rejects raw answers, writing,
-reviewer rationale, account/claim tokens, and provider data.
+Review events have an exact envelope: common fields plus `source`, `placement`,
+and `consent`. `placement` contains only opaque `reviewId`/`resultId`/
+`attemptId`, public `state`, and `finalLevel` when final; `consent` contains
+only preference and channel-specific evidence. No legacy lead, practice, UTM,
+scoring/count, contact, raw-answer, writing, rationale, token, or provider
+fields are accepted. The canonical state map is `created → pending`,
+`started → in_review`, with `confirmed`, `adjusted`, and
+`additional_review_required` exact. Only final states carry `finalLevel`.
 
 Each event is transactionally locked by its existing idempotency key. A replay
 returns acknowledgement without another timeline entry, task, notification, or
 delivery record. The CRM appends one privacy-safe `aitusa.<eventType>` timeline
 event; it contains no learner response, rationale, or token.
+
+Authenticated placement-review events require an explicit active
+`WEBSITE_LEADS_BUSINESS_UNIT_MAP.aitusa_refresh` mapping. They never inherit
+the generic website-lead/first-business-unit fallback. CRM synchronizes the
+review-ID task even without a contact or when identity linkage is ambiguous.
 
 ## CRM task and RBAC
 
@@ -42,25 +49,27 @@ CRM creates or reuses exactly one task with source ID `review:<opaque-review-id>
   the AIT USA outbox can retry/dead-letter safely.
 
 `confirmed` and `adjusted` complete that exact task only in the same committed
-transaction that records CRM acknowledgement. `additional_review_required`
-reopens that same task. Task events retain CRM workflow audit without claiming
-academic authorship.
+transaction that records CRM acknowledgement. Stale `created`/`started` events
+cannot regress a final task; only `additional_review_required` reopens it.
+Task events retain CRM workflow audit without claiming academic authorship.
 
 ## Delivery posture and recovery
 
 Provider delivery is deliberately **disabled** in this implementation. A
-verified account email is recorded as the durable `queued` baseline, but it is
-not dispatched. SMS is always suppressed unless a separate future implementation
-has both service-SMS consent and explicitly approved Telnyx/profile readiness;
-marketing consent is never used. Automated WhatsApp is suppressed.
+verified account email plus advisor-email consent is recorded as the durable
+`queued` baseline, but it is not dispatched. SMS is always suppressed unless a
+future implementation has service-SMS consent, **verified mobile**, and approved
+Telnyx/profile readiness; marketing consent is never used. Automated WhatsApp
+is suppressed.
 
 Existing task metadata and task events record privacy-safe delivery outcomes
 (`queued`, `sent`, `delivered`, `failed`, `bounced`, `opted_out`, `suppressed`)
 with correlation IDs. The transport-free
-`recordPlacementReviewDeliveryOutcome` service is the future callback/retry
-boundary: `failed`, `bounced`, `opted_out`, and `suppressed` reopen the CRM
-task/due date for a safe correction, preference change, or resend. It does not
-alter academic state or create a second placement decision.
+`recordPlacementReviewDeliveryOutcome` is the transaction/advisory-lock-safe
+callback/retry boundary. `failed`, `bounced`, `opted_out`, and `suppressed`
+reopen or keep open CRM work. Bounce, opt-out, suppression, DNC, and
+wrong-number outcomes are sticky and cannot be silently re-queued. It never
+alters academic state or creates a second placement decision.
 
 No provider credentials, recipient values, message bodies, raw review content,
 or tokens are stored in this workflow.

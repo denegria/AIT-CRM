@@ -7,6 +7,7 @@ import {
   ingestWebsiteLeadSubmission,
   normalizeWebsiteLeadSubmission,
   resolveSingleOrganizationId,
+  resolveAitUsaEventBusinessUnit,
   resolveWebsiteLeadBusinessUnit,
   verifyWebsiteLeadSecret,
   websiteLeadAuthFailureDiagnostics,
@@ -158,9 +159,8 @@ export async function POST(request) {
           ? aitUsaEventToWebsiteLeadBody(aitUsaEvent.event)
           : null;
         const normalizedLead = leadBody ? normalizeWebsiteLeadSubmission(leadBody) : null;
-        const businessUnit = await resolveWebsiteLeadBusinessUnit(client, {
+        const businessUnit = await resolveAitUsaEventBusinessUnit(client, {
           organizationId,
-          lead: normalizedLead?.lead || { sourceKey: 'aitusa_refresh', sourceName: 'AIT USA Refresh' },
           businessUnitMap: parseJsonEnv(BUSINESS_UNIT_MAP_ENV),
         });
         const businessUnitId = businessUnit?.id || null;

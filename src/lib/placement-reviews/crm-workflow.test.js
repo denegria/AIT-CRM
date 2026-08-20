@@ -11,16 +11,12 @@ function event(overrides = {}) {
   return {
     eventType: 'placement_review_created',
     correlationId: 'placement-correlation-0001',
-    contact: { email: 'learner@example.test' },
-    consent: { serviceSms: false },
+    consent: { communicationPreference: 'sms', advisorContactEmail: true, serviceSms: false, marketingSms: false, phoneCall: false, whatsappContact: false, verifiedEmail: true, verifiedMobile: false },
     placement: {
       reviewId: 'placement-review-opaque-0001',
       resultId: 'placement-result-opaque-0001',
-      reviewStatus: 'created',
-      recommendedLevelKey: 'level-2',
-      verifiedEmail: true,
-      verifiedMobile: false,
-      communicationPreference: 'sms',
+      attemptId: 'placement-attempt-opaque-0001',
+      state: 'pending',
     },
     ...overrides,
   };
@@ -46,15 +42,48 @@ function client({ existingTask = null } = {}) {
 
 test('plans email as queued-only baseline and keeps SMS/WhatsApp provider dispatch disabled', () => {
   const outcomes = planPlacementReviewDelivery({
-    placement: { verifiedEmail: true, communicationPreference: 'sms', correlationId: 'correlation-0001' },
-    contact: { email: 'learner@example.test' },
-    consent: { serviceSms: true },
+    placement: { correlationId: 'correlation-0001' },
+    consent: { communicationPreference: 'sms', advisorContactEmail: true, verifiedEmail: true, verifiedMobile: true, serviceSms: true },
   });
   assert.deepEqual(outcomes, [
     { channel: 'email', status: 'queued', reason: 'verified_account_email_baseline', correlationId: 'correlation-0001' },
     { channel: 'sms', status: 'suppressed', reason: 'sms_provider_readiness_required', correlationId: 'correlation-0001' },
   ]);
   assert.equal(placementReviewHref('opaque-review-id'), '/employee/placement-reviews?review=opaque-review-id');
+  const mobileMissing = planPlacementReviewDelivery({
+    placement: { correlationId: 'correlation-0002' },
+    consent: { communicationPreference: 'sms', advisorContactEmail: false, verifiedEmail: false, verifiedMobile: false, serviceSms: true },
+  });
+  assert.equal(mobileMissing.find((outcome) => outcome.channel === 'sms').reason, 'verified_mobile_required');
+});
+
+test('stale created or started events cannot regress a completed review, while additional review is the only reopen transition', async () => {
+  const existingTask = {
+    id: 'task-placement-1', status: 'completed', owner_user_id: 'senior-aitusa', due_at: '2026-08-20T12:00:00.000Z',
+    metadata_json: { placementReview: { state: 'confirmed', deliveryOutcomes: [] } },
+  };
+  const db = client({ existingTask });
+  const stale = await syncPlacementReviewWorkflow(db, {
+    organizationId: 'org-1', businessUnitId: 'aitusa-1', contactId: null, leadId: null, event: event(),
+  });
+  assert.deepEqual(stale, { taskId: 'task-placement-1', taskStatus: 'completed', ownerUserId: 'senior-aitusa', action: 'ignored', stale: true });
+  assert.equal(db.calls.some((call) => call.sql.startsWith('update tasks')), false);
+});
+
+test('sticky bounced, opt-out, and DNC outcomes cannot be silently re-queued', async () => {
+  const existingTask = {
+    id: 'task-placement-1', status: 'open', owner_user_id: 'senior-aitusa', due_at: '2026-08-20T12:00:00.000Z',
+    metadata_json: { placementReview: { state: 'confirmed', deliveryOutcomes: [{ channel: 'email', status: 'bounced', reason: 'mailbox_unavailable', correlationId: 'placement-correlation-0001', deliveryId: null }] } },
+  };
+  const db = client({ existingTask });
+  const result = await recordPlacementReviewDeliveryOutcome(db, {
+    organizationId: 'org-1', businessUnitId: 'aitusa-1', reviewId: 'placement-review-opaque-0001',
+    outcome: { channel: 'email', status: 'queued', correlationId: 'placement-correlation-0001' },
+  });
+  assert.equal(result.suppressed, true);
+  assert.equal(db.calls.some((call) => call.sql.startsWith('update tasks')), false);
+  assert.equal(db.calls.filter((call) => call.sql === 'begin').length, 1);
+  assert.equal(db.calls.filter((call) => call.sql === 'commit').length, 1);
 });
 
 test('creates one dedicated, senior-assigned placement-review task and an opaque internal notification', async () => {
@@ -78,12 +107,12 @@ test('creates one dedicated, senior-assigned placement-review task and an opaque
 test('authoritative final decisions complete the exact review task and delivery failures reopen CRM work only', async () => {
   const existingTask = {
     id: 'task-placement-1', status: 'in_progress', owner_user_id: 'senior-aitusa', due_at: '2026-08-20T12:00:00.000Z',
-    metadata_json: { placementReview: { deliveryOutcomes: [] } },
+    metadata_json: { placementReview: { state: 'in_review', deliveryOutcomes: [] } },
   };
   const db = client({ existingTask });
   const confirmed = await syncPlacementReviewWorkflow(db, {
     organizationId: 'org-1', businessUnitId: 'aitusa-1', contactId: 'contact-1', leadId: 'lead-1',
-    event: event({ eventType: 'placement_review_confirmed', placement: { ...event().placement, reviewStatus: 'confirmed', finalLevelKey: 'level-2' } }),
+    event: event({ eventType: 'placement_review_confirmed', placement: { ...event().placement, state: 'confirmed', finalLevel: 'level-2' } }),
   });
   assert.equal(confirmed.action, 'complete');
   assert.equal(confirmed.taskStatus, 'completed');
@@ -101,7 +130,7 @@ test('a final decision received after an earlier outbox retry gap still creates 
   const db = client();
   const result = await syncPlacementReviewWorkflow(db, {
     organizationId: 'org-1', businessUnitId: 'aitusa-1', contactId: 'contact-1', leadId: 'lead-1',
-    event: event({ eventType: 'placement_review_adjusted', placement: { ...event().placement, reviewStatus: 'adjusted', finalLevelKey: 'level-3' } }),
+    event: event({ eventType: 'placement_review_adjusted', placement: { ...event().placement, state: 'adjusted', finalLevel: 'level-3' } }),
   });
   assert.equal(result.action, 'complete');
   assert.equal(result.taskStatus, 'completed');
@@ -111,11 +140,11 @@ test('a final decision received after an earlier outbox retry gap still creates 
 
 test('additional review reopens the same source-scoped task without a duplicate create', async () => {
   const db = client({ existingTask: {
-    id: 'task-placement-1', status: 'completed', owner_user_id: 'senior-aitusa', due_at: '2026-08-20T12:00:00.000Z', metadata_json: {},
+    id: 'task-placement-1', status: 'completed', owner_user_id: 'senior-aitusa', due_at: '2026-08-20T12:00:00.000Z', metadata_json: { placementReview: { state: 'confirmed' } },
   } });
   const result = await syncPlacementReviewWorkflow(db, {
     organizationId: 'org-1', businessUnitId: 'aitusa-1', contactId: 'contact-1', leadId: 'lead-1',
-    event: event({ eventType: 'placement_review_additional_review_required', placement: { ...event().placement, reviewStatus: 'additional_review_required' } }),
+    event: event({ eventType: 'placement_review_additional_review_required', placement: { ...event().placement, state: 'additional_review_required' } }),
   });
   assert.equal(result.action, 'reopen');
   assert.equal(db.calls.some((call) => call.sql.startsWith('insert into tasks')), false);

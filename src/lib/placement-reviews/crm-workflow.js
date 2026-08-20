@@ -14,6 +14,7 @@ const REVIEW_EVENT_ACTIONS = Object.freeze({
   placement_review_additional_review_required: 'reopen',
 });
 const RECOVERABLE_DELIVERY_STATUSES = new Set(['failed', 'bounced', 'opted_out', 'suppressed']);
+const FINAL_REVIEW_STATES = new Set(['confirmed', 'adjusted']);
 
 function cleanText(value) {
   return String(value || '').trim();
@@ -35,20 +36,20 @@ export function placementReviewHref(reviewId) {
   return `/employee/placement-reviews?review=${encodeURIComponent(cleanText(reviewId))}`;
 }
 
-export function planPlacementReviewDelivery({ placement = {}, contact = {}, consent = {} } = {}) {
-  const preference = cleanText(placement.communicationPreference || 'portal') || 'portal';
+export function planPlacementReviewDelivery({ placement = {}, consent = {} } = {}) {
+  const preference = consent.communicationPreference || null;
   const correlationId = cleanText(placement.correlationId);
   const outcomes = [];
-  if (placement.verifiedEmail === true && cleanText(contact.email)) {
+  if (consent.verifiedEmail === true && consent.advisorContactEmail === true) {
     outcomes.push({ channel: 'email', status: 'queued', reason: 'verified_account_email_baseline', correlationId });
   } else {
-    outcomes.push({ channel: 'email', status: 'suppressed', reason: 'verified_account_email_required', correlationId });
+    outcomes.push({ channel: 'email', status: 'suppressed', reason: consent.verifiedEmail ? 'advisor_email_consent_required' : 'verified_account_email_required', correlationId });
   }
   if (preference === 'sms') {
     outcomes.push({
       channel: 'sms',
       status: 'suppressed',
-      reason: consent.serviceSms === true ? 'sms_provider_readiness_required' : 'service_sms_consent_required',
+      reason: consent.verifiedMobile !== true ? 'verified_mobile_required' : consent.serviceSms === true ? 'sms_provider_readiness_required' : 'service_sms_consent_required',
       correlationId,
     });
   }
@@ -120,7 +121,6 @@ function taskMetadata({ event, reviewer, existing = null }) {
     : [];
   const plannedDelivery = planPlacementReviewDelivery({
     placement: { ...placement, correlationId: event.correlationId },
-    contact: event.contact,
     consent: event.consent,
   });
   return {
@@ -129,9 +129,9 @@ function taskMetadata({ event, reviewer, existing = null }) {
       ...(prior.placementReview || {}),
       reviewId: placement.reviewId,
       resultId: placement.resultId,
-      reviewStatus: placement.reviewStatus,
-      recommendedLevelKey: placement.recommendedLevelKey || null,
-      finalLevelKey: placement.finalLevelKey || null,
+      state: placement.state,
+      attemptId: placement.attemptId,
+      finalLevel: placement.finalLevel || null,
       correlationId: event.correlationId,
       reviewerTier: reviewer?.tier || prior.placementReview?.reviewerTier || null,
       deliveryMode: 'queued_disabled',
@@ -143,11 +143,22 @@ function taskMetadata({ event, reviewer, existing = null }) {
 
 function mergeDeliveryOutcomes(current = [], next = []) {
   const latest = new Map();
-  for (const outcome of [...current, ...next]) {
+  for (const outcome of current) {
     const normalized = validatePlacementReviewDeliveryOutcome(outcome);
     latest.set(`${normalized.channel}:${normalized.correlationId || ''}`, normalized);
   }
+  for (const outcome of next) {
+    const normalized = validatePlacementReviewDeliveryOutcome(outcome);
+    const key = `${normalized.channel}:${normalized.correlationId || ''}`;
+    const prior = latest.get(key);
+    if (!isStickyDeliveryOutcome(prior)) latest.set(key, normalized);
+  }
   return [...latest.values()];
+}
+
+function isStickyDeliveryOutcome(outcome = {}) {
+  return ['bounced', 'opted_out', 'suppressed'].includes(outcome.status)
+    || ['wrong_number', 'do_not_contact', 'dnc'].includes(cleanText(outcome.reason).toLowerCase());
 }
 
 function actionForEvent(eventType) {
@@ -161,6 +172,21 @@ function taskEventMessage(action) {
   if (action === 'reopen') return 'Additional placement review required; task reopened.';
   if (action === 'start') return 'Placement review started.';
   return 'Placement review task created.';
+}
+
+function transitionFor(existing = null, state) {
+  if (!existing) {
+    if (FINAL_REVIEW_STATES.has(state)) return { action: 'complete', taskStatus: 'completed' };
+    if (state === 'in_review') return { action: 'start', taskStatus: 'in_progress' };
+    return { action: state === 'additional_review_required' ? 'reopen' : 'create', taskStatus: 'open' };
+  }
+  const priorState = metadataJson(existing.metadata_json).placementReview?.state || null;
+  if (state === 'additional_review_required') return { action: 'reopen', taskStatus: 'open' };
+  if (FINAL_REVIEW_STATES.has(priorState)) return { action: 'ignored', taskStatus: existing.status };
+  if ((priorState === 'in_review' || priorState === 'additional_review_required') && state === 'pending') return { action: 'ignored', taskStatus: existing.status };
+  if (state === 'in_review') return { action: 'start', taskStatus: 'in_progress' };
+  if (FINAL_REVIEW_STATES.has(state)) return { action: 'complete', taskStatus: 'completed' };
+  return { action: 'ignored', taskStatus: existing.status };
 }
 
 async function insertTaskEvent(client, { task, organizationId, businessUnitId, action, metadata }) {
@@ -204,7 +230,7 @@ export async function syncPlacementReviewWorkflow(client, {
   event,
 }) {
   const placement = event.placement || {};
-  const action = actionForEvent(event.eventType);
+  actionForEvent(event.eventType);
   await client.query(
     'select pg_advisory_xact_lock(hashtextextended($1, 0))',
     [`aitusa-placement-review:${organizationId}:${businessUnitId}:${placement.reviewId}`],
@@ -213,10 +239,12 @@ export async function syncPlacementReviewWorkflow(client, {
   if (!reviewer?.id) throw new Error('No active AIT USA senior coordinator or administrator is available for placement review assignment.');
 
   const existing = await findPlacementReviewTask(client, { organizationId, businessUnitId, reviewId: placement.reviewId });
+  const transition = transitionFor(existing, placement.state);
+  const action = transition.action === 'ignored' ? 'ignored' : transition.action;
   const metadata = taskMetadata({ event, reviewer, existing });
   let task;
   if (!existing) {
-    const initialStatus = action === 'complete' ? 'completed' : action === 'start' ? 'in_progress' : 'open';
+    const initialStatus = transition.taskStatus;
     const created = await client.query(
       `insert into tasks
        (organization_id, business_unit_id, contact_id, lead_id, title, description, task_type, status, priority, due_at, completed_at, owner_user_id, created_by_user_id, source_type, source_id, source_label, metadata_json)
@@ -229,7 +257,8 @@ export async function syncPlacementReviewWorkflow(client, {
     task = { ...created.rows[0], ownerUserId: created.rows[0]?.owner_user_id, dueAt: created.rows[0]?.due_at, fromStatus: null };
     if (!task.id) throw new Error('Unable to create placement review task.');
   } else {
-    const nextStatus = action === 'complete' ? 'completed' : action === 'start' ? 'in_progress' : 'open';
+    if (action === 'ignored') return { taskId: existing.id, taskStatus: existing.status, ownerUserId: existing.owner_user_id || null, action, stale: true };
+    const nextStatus = transition.taskStatus;
     const updated = await client.query(
       `update tasks set status = $2, owner_user_id = coalesce(owner_user_id, $3), due_at = case when $2 = 'completed' then due_at else now() end,
        completed_at = case when $2 = 'completed' then now() else null end, canceled_at = null, snoozed_until = null, metadata_json = $4::jsonb, updated_at = now()
@@ -254,33 +283,55 @@ export async function recordPlacementReviewDeliveryOutcome(client, {
   outcome,
 }) {
   const normalized = validatePlacementReviewDeliveryOutcome(outcome);
-  const task = await findPlacementReviewTask(client, { organizationId, businessUnitId, reviewId });
-  if (!task) throw new Error('Placement review task was not found.');
-  const prior = metadataJson(task.metadata_json);
-  const metadata = {
-    ...prior,
-    placementReview: {
-      ...(prior.placementReview || {}),
-      deliveryOutcomes: mergeDeliveryOutcomes(prior.placementReview?.deliveryOutcomes || [], [normalized]),
-    },
-  };
-  const reopen = RECOVERABLE_DELIVERY_STATUSES.has(normalized.status);
-  const updated = await client.query(
-    `update tasks set status = case when $2 then 'open' else status end,
-       completed_at = case when $2 then null else completed_at end,
-       due_at = case when $2 then now() else due_at end,
-       metadata_json = $3::jsonb, updated_at = now()
-     where id = $1 and organization_id = $4 returning id, status, owner_user_id, due_at`,
-    [task.id, reopen, JSON.stringify(metadata), organizationId],
-  );
-  const next = updated.rows[0];
-  if (!next?.id) throw new Error('Placement review delivery outcome was not recorded.');
-  await client.query(
-    `insert into task_events
-     (task_id, organization_id, business_unit_id, event_type, from_status, to_status, from_owner_user_id, to_owner_user_id, from_due_at, to_due_at, actor_user_id, message, metadata_json)
-     values ($1, $2, $3, 'automation_action', $4, $5, $6, $6, $7, $8, null, $9, $10::jsonb)`,
-    [task.id, organizationId, businessUnitId, task.status, next.status, task.owner_user_id || null, task.due_at || null, next.due_at || null,
-      `Placement review delivery ${normalized.status}.`, JSON.stringify({ placementReviewDelivery: normalized })],
-  );
-  return { taskId: next.id, taskStatus: next.status, reopened: reopen, outcome: normalized };
+  await client.query('begin');
+  try {
+    await client.query(
+      'select pg_advisory_xact_lock(hashtextextended($1, 0))',
+      [`aitusa-placement-review:${organizationId}:${businessUnitId}:${reviewId}`],
+    );
+    const task = await findPlacementReviewTask(client, { organizationId, businessUnitId, reviewId });
+    if (!task) throw new Error('Placement review task was not found.');
+    const prior = metadataJson(task.metadata_json);
+    const existingOutcomes = prior.placementReview?.deliveryOutcomes || [];
+    const deliveryKey = `${normalized.channel}:${normalized.correlationId || ''}`;
+    const current = existingOutcomes.find((item) => `${item.channel}:${item.correlationId || ''}` === deliveryKey);
+    if (current?.status === normalized.status && current?.reason === normalized.reason && current?.deliveryId === normalized.deliveryId) {
+      await client.query('commit');
+      return { taskId: task.id, taskStatus: task.status, reopened: false, duplicate: true, outcome: current };
+    }
+    if (isStickyDeliveryOutcome(current) && !isStickyDeliveryOutcome(normalized)) {
+      await client.query('commit');
+      return { taskId: task.id, taskStatus: task.status, reopened: false, suppressed: true, outcome: current };
+    }
+    const metadata = {
+      ...prior,
+      placementReview: {
+        ...(prior.placementReview || {}),
+        deliveryOutcomes: mergeDeliveryOutcomes(existingOutcomes, [normalized]),
+      },
+    };
+    const reopen = RECOVERABLE_DELIVERY_STATUSES.has(normalized.status);
+    const updated = await client.query(
+      `update tasks set status = case when $2 then 'open' else status end,
+         completed_at = case when $2 then null else completed_at end,
+         due_at = case when $2 then now() else due_at end,
+         metadata_json = $3::jsonb, updated_at = now()
+       where id = $1 and organization_id = $4 returning id, status, owner_user_id, due_at`,
+      [task.id, reopen, JSON.stringify(metadata), organizationId],
+    );
+    const next = updated.rows[0];
+    if (!next?.id) throw new Error('Placement review delivery outcome was not recorded.');
+    await client.query(
+      `insert into task_events
+       (task_id, organization_id, business_unit_id, event_type, from_status, to_status, from_owner_user_id, to_owner_user_id, from_due_at, to_due_at, actor_user_id, message, metadata_json)
+       values ($1, $2, $3, 'automation_action', $4, $5, $6, $6, $7, $8, null, $9, $10::jsonb)`,
+      [task.id, organizationId, businessUnitId, task.status, next.status, task.owner_user_id || null, task.due_at || null, next.due_at || null,
+        `Placement review delivery ${normalized.status}.`, JSON.stringify({ placementReviewDelivery: normalized })],
+    );
+    await client.query('commit');
+    return { taskId: next.id, taskStatus: next.status, reopened: reopen, outcome: normalized };
+  } catch (error) {
+    await client.query('rollback').catch(() => {});
+    throw error;
+  }
 }

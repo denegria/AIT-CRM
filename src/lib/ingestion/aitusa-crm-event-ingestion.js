@@ -38,6 +38,25 @@ export async function ingestAitUsaCrmEvent(client, { organizationId, businessUni
       };
     }
 
+    if (isAitUsaPlacementReviewEvent(event)) {
+      const metadata = safeEventMetadata(event);
+      await client.query(
+        `insert into activity_events
+         (organization_id, business_unit_id, contact_id, lead_id, event_type, message, metadata_json, occurred_at)
+         values ($1, $2, null, null, $3, $4, $5::jsonb, $6::timestamptz)`,
+        [organizationId, businessUnitId, `aitusa.${event.eventType}`, safeTimelineMessage(event), JSON.stringify(metadata), event.occurredAt],
+      );
+      const placementReview = await syncPlacementReviewWorkflow(client, {
+        organizationId,
+        businessUnitId,
+        contactId: null,
+        leadId: null,
+        event,
+      });
+      await client.query('commit');
+      return { acknowledged: true, duplicate: false, contactId: null, leadId: null, placementReview };
+    }
+
     const contact = event.contact || {};
     for (const contactIdentity of contactIdentityLockKeys(contact)) {
       await client.query(
@@ -130,20 +149,6 @@ export async function ingestAitUsaCrmEvent(client, { organizationId, businessUni
       [organizationId, businessUnitId, contactId, leadId, `aitusa.${event.eventType}`, safeTimelineMessage(event), JSON.stringify(metadata), event.occurredAt],
     );
 
-    let placementReview = null;
-    if (isAitUsaPlacementReviewEvent(event)) {
-      // The activity event is written before task completion. Both are in this
-      // transaction, so a final task state is observable only after this CRM
-      // acknowledgement commits. AIT USA remains the academic authority.
-      placementReview = await syncPlacementReviewWorkflow(client, {
-        organizationId,
-        businessUnitId,
-        contactId,
-        leadId,
-        event,
-      });
-    }
-
     if (FOLLOW_UP_EVENTS.has(event.eventType)) {
       const followUpKey = `aitusa:${event.correlationId}:follow-up`;
       await createInboundLeadNotification(client, {
@@ -161,7 +166,7 @@ export async function ingestAitUsaCrmEvent(client, { organizationId, businessUni
       });
     }
     await client.query('commit');
-    return { acknowledged: true, duplicate: false, contactId, leadId, placementReview };
+    return { acknowledged: true, duplicate: false, contactId, leadId, placementReview: null };
   } catch (error) {
     await client.query('rollback').catch(() => {});
     throw error;

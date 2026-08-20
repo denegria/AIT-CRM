@@ -27,6 +27,14 @@ export const AITUSA_PLACEMENT_REVIEW_EVENT_TYPES = Object.freeze([
   'placement_review_additional_review_required',
 ]);
 
+export const AITUSA_PLACEMENT_REVIEW_EVENT_STATES = Object.freeze({
+  placement_review_created: 'pending',
+  placement_review_started: 'in_review',
+  placement_review_confirmed: 'confirmed',
+  placement_review_adjusted: 'adjusted',
+  placement_review_additional_review_required: 'additional_review_required',
+});
+
 const EVENT_KEYS = new Set([
   'schemaVersion', 'eventId', 'eventType', 'idempotencyKey', 'correlationId',
   'occurredAt', 'source', 'contact', 'consent', 'ageBand', 'goalKeys',
@@ -45,6 +53,7 @@ const FORBIDDEN_KEY = /(?:selected[_-]?answers?|raw[_-]?answers?|writing|resume|
 
 export function validateAitUsaCrmEvent(body) {
   if (!isRecord(body)) return invalid('event_body_required');
+  if (AITUSA_PLACEMENT_REVIEW_EVENT_TYPES.includes(body.eventType)) return validatePlacementReviewEvent(body);
   for (const key of Object.keys(body)) {
     if (!EVENT_KEYS.has(key)) return invalid(`event_field_not_allowed:${key}`);
   }
@@ -68,6 +77,37 @@ export function validateAitUsaCrmEvent(body) {
   if (nestedError) return invalid(nestedError);
   const forbidden = findForbiddenKey(body);
   if (forbidden) return invalid(`event_field_forbidden:${forbidden}`);
+  return { ok: true, event: structuredClone(body) };
+}
+
+function validatePlacementReviewEvent(body) {
+  const allowed = new Set(['schemaVersion', 'eventId', 'eventType', 'idempotencyKey', 'correlationId', 'occurredAt', 'source', 'placement', 'consent']);
+  for (const key of Object.keys(body)) if (!allowed.has(key)) return invalid(`placement_review_field_not_allowed:${key}`);
+  if (body.schemaVersion !== AITUSA_CRM_EVENT_SCHEMA_VERSION) return invalid('event_schema_invalid');
+  if (!safeIdentifier(body.eventId) || !safeIdentifier(body.idempotencyKey) || !safeIdentifier(body.correlationId)) return invalid('event_identifier_invalid');
+  if (!isIsoDate(body.occurredAt)) return invalid('event_occurred_at_invalid');
+  const source = body.source;
+  if (!isExactRecord(source, ['product', 'surface', 'employeeUrl', 'version'])) return invalid('placement_review_source_invalid');
+  if (source.product !== 'aitusa_refresh' || source.surface !== 'staff_tool' || !safeText(source.version, 64)) return invalid('placement_review_source_values_invalid');
+  const placement = body.placement;
+  if (!isExactRecord(placement, ['reviewId', 'resultId', 'attemptId', 'state', 'finalLevel'])) return invalid('placement_review_payload_invalid');
+  if (!safeIdentifier(placement.reviewId) || !safeIdentifier(placement.resultId) || !safeIdentifier(placement.attemptId)) return invalid('placement_review_identifier_invalid');
+  if (placement.state !== AITUSA_PLACEMENT_REVIEW_EVENT_STATES[body.eventType]) return invalid('placement_review_state_invalid');
+  if (!safeEmployeeReviewUrl(source.employeeUrl, placement.reviewId)) return invalid('placement_review_employee_url_invalid');
+  const requiresFinalLevel = placement.state === 'confirmed' || placement.state === 'adjusted';
+  if (requiresFinalLevel !== Object.hasOwn(placement, 'finalLevel')) return invalid('placement_review_final_level_invalid');
+  if (requiresFinalLevel && !safeText(placement.finalLevel, 80)) return invalid('placement_review_final_level_invalid');
+  const consent = body.consent;
+  const consentKeys = ['communicationPreference', 'disclosureVersion', 'disclosureHash', 'sourceUrl', 'optInAction', 'advisorContactEmail', 'serviceSms', 'marketingSms', 'phoneCall', 'whatsappContact', 'verifiedEmail', 'verifiedMobile'];
+  if (!isExactRecord(consent, consentKeys)) return invalid('placement_review_consent_invalid');
+  if (!(consent.communicationPreference === null || ['email', 'sms', 'whatsapp', 'phone'].includes(consent.communicationPreference))) return invalid('placement_review_preference_invalid');
+  for (const key of ['advisorContactEmail', 'serviceSms', 'marketingSms', 'phoneCall', 'whatsappContact', 'verifiedEmail', 'verifiedMobile']) if (typeof consent[key] !== 'boolean') return invalid(`placement_review_consent_${key}_invalid`);
+  for (const key of ['disclosureVersion', 'disclosureHash']) if (consent[key] !== undefined && consent[key] !== null && !safeText(consent[key], 160)) return invalid(`placement_review_consent_${key}_invalid`);
+  if (consent.sourceUrl !== undefined && consent.sourceUrl !== null && !safePath(consent.sourceUrl)) return invalid('placement_review_consent_source_url_invalid');
+  if (consent.optInAction !== undefined && consent.optInAction !== null && consent.optInAction !== 'explicit_checkbox') return invalid('placement_review_consent_opt_in_action_invalid');
+  if (consent.marketingSms && !consent.serviceSms) return invalid('placement_review_marketing_sms_invalid');
+  if (consent.communicationPreference === 'sms' && !consent.verifiedMobile) return invalid('placement_review_verified_mobile_required');
+  if (findForbiddenKey(body)) return invalid('placement_review_field_forbidden');
   return { ok: true, event: structuredClone(body) };
 }
 
@@ -186,9 +226,11 @@ function findForbiddenKey(value, prefix = '') {
 
 function invalid(error) { return { ok: false, error }; }
 function isRecord(value) { return Boolean(value) && typeof value === 'object' && !Array.isArray(value); }
+function isExactRecord(value, allowedKeys) { return isRecord(value) && Object.keys(value).every((key) => allowedKeys.includes(key)); }
 function safeIdentifier(value) { return typeof value === 'string' && /^[A-Za-z0-9._:-]{12,160}$/.test(value); }
 function safeText(value, limit) { return typeof value === 'string' && value.length > 0 && value.length <= limit; }
 function isIsoDate(value) { return typeof value === 'string' && !Number.isNaN(Date.parse(value)); }
 function safePath(value) { return typeof value === 'string' && value.length > 0 && value.length <= 160 && value.startsWith('/') && !/[?#]/.test(value); }
+function safeEmployeeReviewUrl(value, reviewId) { return value === `/employee/placement-reviews?review=${encodeURIComponent(reviewId)}`; }
 function safeEmail(value) { return typeof value === 'string' && value.length <= 254 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value); }
 function safePhone(value) { return typeof value === 'string' && value.length <= 32 && /^[0-9+(). -]+$/.test(value); }

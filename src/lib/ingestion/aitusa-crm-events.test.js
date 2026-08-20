@@ -5,10 +5,12 @@ import {
   AITUSA_CRM_EVENT_SCHEMA_VERSION,
   AITUSA_CRM_EVENT_TYPES,
   AITUSA_PLACEMENT_REVIEW_EVENT_TYPES,
+  AITUSA_PLACEMENT_REVIEW_EVENT_STATES,
   aitUsaEventToWebsiteLeadBody,
   validateAitUsaCrmEvent,
 } from './aitusa-crm-events.js';
 import { ingestAitUsaCrmEvent } from './aitusa-crm-event-ingestion.js';
+import { resolveAitUsaEventBusinessUnit } from './website-leads.js';
 
 function event(overrides = {}) {
   return {
@@ -22,6 +24,32 @@ function event(overrides = {}) {
     contact: { firstName: 'Ana', email: 'ana@example.com' },
     consent: { advisorContactEmail: true, policyVersion: 'fixture-v1' },
     placement: { resultStatus: 'provisional', recommendedLevelKey: 'book-2', answeredQuestionCount: 9, skippedQuestionCount: 1, advisorConfirmationRequired: true, scoringContractVersion: 'v1' },
+    ...overrides,
+  };
+}
+
+function placementReviewEvent(eventType = 'placement_review_adjusted', overrides = {}) {
+  const state = AITUSA_PLACEMENT_REVIEW_EVENT_STATES[eventType];
+  const reviewId = '00000000-0000-4000-8000-000000000001';
+  return {
+    schemaVersion: AITUSA_CRM_EVENT_SCHEMA_VERSION,
+    eventId: `placement-review:${reviewId}:revision:2:${eventType}`,
+    eventType,
+    idempotencyKey: `placement-review:${reviewId}:revision:2:${eventType}`,
+    correlationId: '00000000-0000-4000-8000-000000000003',
+    occurredAt: '2026-08-20T12:00:00.000Z',
+    source: { product: 'aitusa_refresh', surface: 'staff_tool', employeeUrl: `/employee/placement-reviews?review=${reviewId}`, version: 'mis-395-v1' },
+    placement: {
+      reviewId,
+      resultId: '00000000-0000-4000-8000-000000000002',
+      attemptId: '00000000-0000-4000-0000-000000000003',
+      state,
+      ...(state === 'confirmed' || state === 'adjusted' ? { finalLevel: 'Nivel 4' } : {}),
+    },
+    consent: {
+      communicationPreference: 'email', disclosureVersion: 'fixture-v1', disclosureHash: 'fixture-disclosure-hash', sourceUrl: '/placement-test/', optInAction: 'explicit_checkbox',
+      advisorContactEmail: true, serviceSms: false, marketingSms: false, phoneCall: false, whatsappContact: false, verifiedEmail: true, verifiedMobile: false,
+    },
     ...overrides,
   };
 }
@@ -47,8 +75,7 @@ test('allows the complete server event taxonomy without generic browser fields',
   for (const eventType of AITUSA_CRM_EVENT_TYPES) {
     const isLeadEvent = eventType === 'contact_form_submitted' || eventType === 'callback_requested';
     const isPlacementReview = AITUSA_PLACEMENT_REVIEW_EVENT_TYPES.includes(eventType);
-    const reviewStatus = isPlacementReview ? eventType.replace('placement_review_', '') : null;
-    const result = validateAitUsaCrmEvent({
+    const result = validateAitUsaCrmEvent(isPlacementReview ? placementReviewEvent(eventType) : {
       ...event(),
       eventType,
       eventId: `aitusa:${eventType}:fixture-001`,
@@ -57,38 +84,13 @@ test('allows the complete server event taxonomy without generic browser fields',
         consent: { advisorContact: true, sms: false, policyVersion: 'fixture-v1' },
         lead: { formType: eventType === 'callback_requested' ? 'callback_request' : 'contact_form', interest: 'ingles-presencial' },
       } : {}),
-      ...(isPlacementReview ? {
-        placement: {
-          reviewId: 'placement-review-opaque-001',
-          resultId: 'placement-result-opaque-001',
-          reviewStatus,
-          ...(reviewStatus === 'confirmed' || reviewStatus === 'adjusted' ? { finalLevelKey: 'book-2' } : {}),
-          verifiedEmail: true,
-          communicationPreference: 'email',
-        },
-      } : {}),
     });
     assert.equal(result.ok, true, eventType);
   }
 });
 
 test('accepts only privacy-safe placement-review contract fields and requires a matching public review state', () => {
-  const accepted = validateAitUsaCrmEvent(event({
-    eventType: 'placement_review_confirmed',
-    eventId: 'placement-review-confirmed-001',
-    idempotencyKey: 'placement-review-confirmed-001',
-    placement: {
-      reviewId: 'placement-review-opaque-001',
-      resultId: 'placement-result-opaque-001',
-      reviewStatus: 'confirmed',
-      finalLevelKey: 'book-2',
-      recommendedLevelKey: 'book-2',
-      verifiedEmail: true,
-      verifiedMobile: false,
-      communicationPreference: 'email',
-    },
-    consent: { advisorContactEmail: true, serviceSms: false, policyVersion: 'privacy-v2' },
-  }));
+  const accepted = validateAitUsaCrmEvent(placementReviewEvent('placement_review_confirmed'));
   assert.equal(accepted.ok, true);
   assert.equal(validateAitUsaCrmEvent({
     ...accepted.event,
@@ -96,12 +98,22 @@ test('accepts only privacy-safe placement-review contract fields and requires a 
   }).ok, false);
   assert.equal(validateAitUsaCrmEvent({
     ...accepted.event,
-    placement: { ...accepted.event.placement, reviewStatus: 'created' },
-  }).error, 'event_placement_review_status_invalid');
+    placement: { ...accepted.event.placement, state: 'pending' },
+  }).error, 'placement_review_state_invalid');
   assert.equal(validateAitUsaCrmEvent({
     ...accepted.event,
-    placement: { ...accepted.event.placement, finalLevelKey: '' },
-  }).error, 'event_placement_finalLevelKey_invalid');
+    placement: { ...accepted.event.placement, finalLevel: '' },
+  }).error, 'placement_review_final_level_invalid');
+});
+
+test('placement-review events require an explicit aitusa_refresh business-unit map and never use website fallback', async () => {
+  const calls = [];
+  const client = { query: async (sql, values = []) => { calls.push({ sql, values }); return { rows: [{ id: 'aitusa-unit', name: 'AIT USA Institute' }] }; } };
+  assert.equal(await resolveAitUsaEventBusinessUnit(client, { organizationId: 'org-1', businessUnitMap: {} }), null);
+  assert.equal(calls.length, 0);
+  const resolved = await resolveAitUsaEventBusinessUnit(client, { organizationId: 'org-1', businessUnitMap: { aitusa_refresh: 'aitusa-unit' } });
+  assert.equal(resolved.id, 'aitusa-unit');
+  assert.equal(calls.some((call) => call.sql.includes('order by name asc')), false);
 });
 
 test('normalizes full contact and callback events into distinct website lead intake', () => {
@@ -168,6 +180,8 @@ test('keeps legacy source-labelled website leads on the legacy path', async () =
   assert.match(route, /const isAitUsaEvent = body\?\.schemaVersion === AITUSA_CRM_EVENT_SCHEMA_VERSION/);
   assert.match(route, /isAitUsaEvent \? AITUSA_SECRET_ENV : SECRET_ENV/);
   assert.match(route, /AITUSA_CRM_WEBHOOK_SECRET/);
+  assert.match(route, /resolveAitUsaEventBusinessUnit/);
+  assert.doesNotMatch(route, /normalizedLead\?\.lead \|\| \{ sourceKey: 'aitusa_refresh'/);
   assert.match(route, /resolveSingleOrganizationId/);
   assert.doesNotMatch(route, /select id from organizations order by created_at asc limit 1/);
   assert.doesNotMatch(route, /source === 'AIT USA Refresh' \|\|/);
@@ -453,20 +467,7 @@ test('placement-review ingestion is transactionally idempotent and creates one C
       return { rows: [] };
     },
   };
-  const reviewEvent = event({
-    eventType: 'placement_review_created',
-    eventId: 'placement-review-created-event-001',
-    idempotencyKey: 'placement-review-created-event-001',
-    correlationId: 'placement-review-correlation-001',
-    placement: {
-      reviewId: 'placement-review-opaque-001',
-      resultId: 'placement-result-opaque-001',
-      reviewStatus: 'created',
-      recommendedLevelKey: 'book-2',
-      verifiedEmail: true,
-      communicationPreference: 'email',
-    },
-  });
+  const reviewEvent = placementReviewEvent('placement_review_created');
   const first = await ingestAitUsaCrmEvent(client, { organizationId: 'org-1', businessUnitId: 'unit-1', event: reviewEvent });
   const replay = await ingestAitUsaCrmEvent(client, { organizationId: 'org-1', businessUnitId: 'unit-1', event: reviewEvent });
   assert.equal(first.placementReview.taskId, 'task-review-1');
@@ -474,6 +475,9 @@ test('placement-review ingestion is transactionally idempotent and creates one C
   assert.equal(calls.filter((call) => call.sql.includes('insert into activity_events')).length, 1);
   assert.equal(calls.filter((call) => call.sql.includes('insert into tasks')).length, 1);
   assert.equal(calls.filter((call) => call.sql.includes('insert into notifications')).length, 1);
+  assert.equal(calls.some((call) => call.sql.includes('from contacts')), false);
+  assert.equal(calls.some((call) => call.sql.includes('from import_review_items')), false);
+  assert.equal(first.contactId, null);
 });
 
 function createAmbiguousIdentityEventClient() {
