@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import {
   placementReviewHref,
@@ -11,11 +12,12 @@ function event(overrides = {}) {
   return {
     eventType: 'placement_review_created',
     correlationId: 'placement-correlation-0001',
-    consent: { communicationPreference: 'sms', advisorContactEmail: true, serviceSms: false, marketingSms: false, phoneCall: false, whatsappContact: false, verifiedEmail: true, verifiedMobile: false },
+    consent: { communicationPreference: 'email', advisorContactEmail: true, serviceSms: false, marketingSms: false, phoneCall: false, whatsappContact: false, verifiedEmail: true, verifiedMobile: false },
     placement: {
       reviewId: 'placement-review-opaque-0001',
       resultId: 'placement-result-opaque-0001',
       attemptId: 'placement-attempt-opaque-0001',
+      revision: 1,
       state: 'pending',
     },
     ...overrides,
@@ -33,7 +35,7 @@ function client({ existingTask = null } = {}) {
       if (sql.includes("r.key = 'admin'")) return { rows: [] };
       if (sql.startsWith('select id, status, owner_user_id, due_at, metadata_json from tasks')) return { rows: existingTask ? [existingTask] : [] };
       if (sql.startsWith('insert into tasks')) return { rows: [{ id: 'task-placement-1', status: values[6] || 'open', owner_user_id: 'senior-aitusa', due_at: '2026-08-20T12:00:00.000Z' }] };
-      if (sql.startsWith('update tasks')) return { rows: [{ id: existingTask?.id || 'task-placement-1', status: sql.includes("then 'open'") ? 'open' : 'completed', owner_user_id: 'senior-aitusa', due_at: '2026-08-20T12:00:00.000Z' }] };
+      if (sql.startsWith('update tasks')) return { rows: [{ id: existingTask?.id || 'task-placement-1', status: typeof values[1] === 'string' ? values[1] : values[1] ? 'open' : existingTask?.status || 'open', owner_user_id: 'senior-aitusa', due_at: '2026-08-20T12:00:00.000Z' }] };
       if (sql.startsWith('insert into notifications')) return { rows: [{ id: 'notification-placement-1' }] };
       return { rows: [] };
     },
@@ -70,10 +72,10 @@ test('stale created or started events cannot regress a completed review, while a
   assert.equal(db.calls.some((call) => call.sql.startsWith('update tasks')), false);
 });
 
-test('sticky bounced, opt-out, and DNC outcomes cannot be silently re-queued', async () => {
+test('all unresolved delivery outcomes, including failed, cannot be silently re-queued', async () => {
   const existingTask = {
     id: 'task-placement-1', status: 'open', owner_user_id: 'senior-aitusa', due_at: '2026-08-20T12:00:00.000Z',
-    metadata_json: { placementReview: { state: 'confirmed', deliveryOutcomes: [{ channel: 'email', status: 'bounced', reason: 'mailbox_unavailable', correlationId: 'placement-correlation-0001', deliveryId: null }] } },
+    metadata_json: { placementReview: { state: 'confirmed', deliveryOutcomes: [{ channel: 'email', status: 'failed', reason: 'transport_failure', correlationId: 'placement-correlation-0001', deliveryId: null }] } },
   };
   const db = client({ existingTask });
   const result = await recordPlacementReviewDeliveryOutcome(db, {
@@ -84,6 +86,98 @@ test('sticky bounced, opt-out, and DNC outcomes cannot be silently re-queued', a
   assert.equal(db.calls.some((call) => call.sql.startsWith('update tasks')), false);
   assert.equal(db.calls.filter((call) => call.sql === 'begin').length, 1);
   assert.equal(db.calls.filter((call) => call.sql === 'commit').length, 1);
+});
+
+test('revision ordering prevents a delayed additional-review event from reopening a newer final decision', async () => {
+  const db = client({ existingTask: {
+    id: 'task-placement-1', status: 'completed', owner_user_id: 'senior-aitusa', due_at: '2026-08-20T12:00:00.000Z',
+    metadata_json: { placementReview: { state: 'confirmed', revision: 4, deliveryOutcomes: [] } },
+  } });
+  const delayed = await syncPlacementReviewWorkflow(db, {
+    organizationId: 'org-1', businessUnitId: 'aitusa-1', contactId: null, leadId: null,
+    event: event({ eventType: 'placement_review_additional_review_required', placement: { ...event().placement, revision: 3, state: 'additional_review_required' } }),
+  });
+  assert.equal(delayed.action, 'ignored');
+  assert.equal(delayed.taskStatus, 'completed');
+  assert.equal(db.calls.some((call) => call.sql.startsWith('update tasks')), false);
+});
+
+test('the exact vendored producer out-of-order sequence keeps its newer final task completed', async () => {
+  const [finalEvent, delayedEvent] = JSON.parse(await readFile(
+    new URL('../../../docs/fixtures/aitusa-placement-review-crm-events-out-of-order-v1.json', import.meta.url),
+    'utf8',
+  ));
+  const firstDb = client();
+  const final = await syncPlacementReviewWorkflow(firstDb, {
+    organizationId: 'org-1', businessUnitId: 'aitusa-1', contactId: null, leadId: null, event: finalEvent,
+  });
+  assert.equal(final.taskStatus, 'completed');
+  const inserted = firstDb.calls.find((call) => call.sql.startsWith('insert into tasks'));
+  const secondDb = client({ existingTask: {
+    id: final.taskId, status: final.taskStatus, owner_user_id: final.ownerUserId, due_at: '2026-08-20T12:00:00.000Z',
+    metadata_json: JSON.parse(inserted.values.at(-1)),
+  } });
+  const delayed = await syncPlacementReviewWorkflow(secondDb, {
+    organizationId: 'org-1', businessUnitId: 'aitusa-1', contactId: null, leadId: null, event: delayedEvent,
+  });
+  assert.equal(delayed.action, 'ignored');
+  assert.equal(delayed.taskStatus, 'completed');
+  assert.equal(secondDb.calls.some((call) => call.sql.startsWith('update tasks')), false);
+});
+
+test('an equal revision is acknowledged without mutating an already-applied review task', async () => {
+  const db = client({ existingTask: {
+    id: 'task-placement-1', status: 'completed', owner_user_id: 'senior-aitusa', due_at: '2026-08-20T12:00:00.000Z',
+    metadata_json: { placementReview: { state: 'confirmed', revision: 4, deliveryOutcomes: [] } },
+  } });
+  const duplicate = await syncPlacementReviewWorkflow(db, {
+    organizationId: 'org-1', businessUnitId: 'aitusa-1', contactId: null, leadId: null,
+    event: event({ eventType: 'placement_review_confirmed', placement: { ...event().placement, revision: 4, state: 'confirmed', finalLevel: 'level-3' } }),
+  });
+  assert.equal(duplicate.action, 'ignored');
+  assert.equal(duplicate.taskStatus, 'completed');
+  assert.equal(db.calls.some((call) => call.sql.startsWith('update tasks')), false);
+});
+
+test('a newer final decision updates review metadata but cannot close unresolved delivery recovery', async () => {
+  const db = client({ existingTask: {
+    id: 'task-placement-1', status: 'open', owner_user_id: 'senior-aitusa', due_at: '2026-08-20T12:00:00.000Z',
+    metadata_json: { placementReview: { state: 'in_review', revision: 2, deliveryOutcomes: [{ channel: 'email', status: 'failed', reason: 'transport_failure', correlationId: 'placement-correlation-0001' }] } },
+  } });
+  const confirmed = await syncPlacementReviewWorkflow(db, {
+    organizationId: 'org-1', businessUnitId: 'aitusa-1', contactId: null, leadId: null,
+    event: event({ eventType: 'placement_review_confirmed', placement: { ...event().placement, revision: 3, state: 'confirmed', finalLevel: 'level-3' } }),
+  });
+  assert.equal(confirmed.action, 'recovery_open');
+  assert.equal(confirmed.taskStatus, 'open');
+  const update = db.calls.find((call) => call.sql.startsWith('update tasks'));
+  const metadata = JSON.parse(update.values[3]);
+  assert.equal(metadata.placementReview.state, 'confirmed');
+  assert.equal(metadata.placementReview.revision, 3);
+  assert.equal(metadata.placementReview.deliveryOutcomes[0].status, 'failed');
+});
+
+test('every unresolved delivery outcome reopens or keeps the review task open', async () => {
+  const outcomes = [
+    { status: 'failed' },
+    { status: 'bounced' },
+    { status: 'opted_out' },
+    { status: 'suppressed' },
+    { status: 'failed', reason: 'dnc' },
+    { status: 'failed', reason: 'wrong_number' },
+  ];
+  for (const outcome of outcomes) {
+    const db = client({ existingTask: {
+      id: 'task-placement-1', status: 'completed', owner_user_id: 'senior-aitusa', due_at: '2026-08-20T12:00:00.000Z',
+      metadata_json: { placementReview: { state: 'confirmed', revision: 3, deliveryOutcomes: [] } },
+    } });
+    const result = await recordPlacementReviewDeliveryOutcome(db, {
+      organizationId: 'org-1', businessUnitId: 'aitusa-1', reviewId: 'placement-review-opaque-0001',
+      outcome: { channel: 'email', correlationId: `placement-${outcome.status}-${outcome.reason || 'default'}`, ...outcome },
+    });
+    assert.equal(result.reopened, true, JSON.stringify(outcome));
+    assert.equal(result.taskStatus, 'open', JSON.stringify(outcome));
+  }
 });
 
 test('creates one dedicated, senior-assigned placement-review task and an opaque internal notification', async () => {

@@ -1,0 +1,10 @@
+{
+  "fixture": "aitusa-placement-review-crm-envelope-v1.json",
+  "schemaVersion": "aitusa-crm-event-v1",
+  "owner": "AIT USA Institute Refresh",
+  "sourceRepository": "aitusa-institute-refresh",
+  "sourceCommit": "6ab83c8",
+  "sourcePath": "docs/fixtures/aitusa-placement-review-crm-envelope-v1.json",
+  "sha256": "dfe4e0905d6d735f5e73de7186442e92ef3260a4ad29fd21b6e10a155912283e",
+  "mirrorPolicy": "Update this vendored fixture only from the named source fixture and update sourceCommit and sha256 together."
+}

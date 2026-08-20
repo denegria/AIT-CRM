@@ -20,12 +20,19 @@ delivery recovery. A CRM delivery problem never changes an academic decision.
 
 Review events have an exact envelope: common fields plus `source`, `placement`,
 and `consent`. `placement` contains only opaque `reviewId`/`resultId`/
-`attemptId`, public `state`, and `finalLevel` when final; `consent` contains
-only preference and channel-specific evidence. No legacy lead, practice, UTM,
-scoring/count, contact, raw-answer, writing, rationale, token, or provider
-fields are accepted. The canonical state map is `created → pending`,
+`attemptId`, a required positive monotonic `revision`, public `state`, and
+`finalLevel` (maximum 120 characters) when final. `consent.sourceUrl`, when
+present, is a relative path only; `consent` otherwise contains only preference
+and channel-specific evidence. No legacy lead, practice, UTM, scoring/count,
+contact, raw-answer, writing, rationale, token, or provider fields are
+accepted. The canonical state map is `created → pending`,
 `started → in_review`, with `confirmed`, `adjusted`, and
 `additional_review_required` exact. Only final states carry `finalLevel`.
+
+`docs/fixtures/aitusa-placement-review-crm-envelope-v1.json` is a required,
+portable vendored copy of the AIT USA producer fixture. Its adjacent provenance
+file records source ownership, source commit, schema version, and SHA-256; the
+contract test fails if either the file or checksum changes unexpectedly.
 
 Each event is transactionally locked by its existing idempotency key. A replay
 returns acknowledgement without another timeline entry, task, notification, or
@@ -51,7 +58,9 @@ CRM creates or reuses exactly one task with source ID `review:<opaque-review-id>
 `confirmed` and `adjusted` complete that exact task only in the same committed
 transaction that records CRM acknowledgement. Stale `created`/`started` events
 cannot regress a final task; only `additional_review_required` reopens it.
-Task events retain CRM workflow audit without claiming academic authorship.
+CRM stores the last acknowledged `placement.revision`; delayed or duplicate
+revisions are acknowledged without task mutation, so an old additional-review
+event cannot reopen a newer decision. Task events retain CRM workflow audit without claiming academic authorship.
 
 ## Delivery posture and recovery
 
@@ -67,8 +76,10 @@ Existing task metadata and task events record privacy-safe delivery outcomes
 with correlation IDs. The transport-free
 `recordPlacementReviewDeliveryOutcome` is the transaction/advisory-lock-safe
 callback/retry boundary. `failed`, `bounced`, `opted_out`, and `suppressed`
-reopen or keep open CRM work. Bounce, opt-out, suppression, DNC, and
-wrong-number outcomes are sticky and cannot be silently re-queued. It never
+reopen or keep open CRM work. Failed, bounce, opt-out, suppression, DNC, and
+wrong-number outcomes are sticky and cannot be silently re-queued; they force
+the task open until explicit recovery. A later academic confirmation can update
+review metadata but cannot erase or complete delivery recovery work. It never
 alters academic state or creates a second placement decision.
 
 No provider credentials, recipient values, message bodies, raw review content,

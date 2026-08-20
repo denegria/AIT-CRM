@@ -113,13 +113,13 @@ async function findPlacementReviewTask(client, { organizationId, businessUnitId,
   return result.rows[0] || null;
 }
 
-function taskMetadata({ event, reviewer, existing = null }) {
+function taskMetadata({ event, reviewer, existing = null, plannedDelivery = null }) {
   const placement = event.placement || {};
   const prior = metadataJson(existing?.metadata_json || existing?.metadataJson);
   const currentDelivery = Array.isArray(prior.placementReview?.deliveryOutcomes)
     ? prior.placementReview.deliveryOutcomes
     : [];
-  const plannedDelivery = planPlacementReviewDelivery({
+  const nextDelivery = plannedDelivery || planPlacementReviewDelivery({
     placement: { ...placement, correlationId: event.correlationId },
     consent: event.consent,
   });
@@ -131,12 +131,13 @@ function taskMetadata({ event, reviewer, existing = null }) {
       resultId: placement.resultId,
       state: placement.state,
       attemptId: placement.attemptId,
+      revision: placement.revision,
       finalLevel: placement.finalLevel || null,
       correlationId: event.correlationId,
       reviewerTier: reviewer?.tier || prior.placementReview?.reviewerTier || null,
       deliveryMode: 'queued_disabled',
       providerDispatch: 'disabled',
-      deliveryOutcomes: mergeDeliveryOutcomes(currentDelivery, plannedDelivery),
+      deliveryOutcomes: mergeDeliveryOutcomes(currentDelivery, nextDelivery),
     },
   };
 }
@@ -157,8 +158,20 @@ function mergeDeliveryOutcomes(current = [], next = []) {
 }
 
 function isStickyDeliveryOutcome(outcome = {}) {
-  return ['bounced', 'opted_out', 'suppressed'].includes(outcome.status)
+  // Delivery recovery is explicit work. Do not let a later queued/sent update
+  // erase any unresolved outcome; a human-safe correction must record a new
+  // channel/correlation after resolving the original issue.
+  return isUnresolvedDeliveryOutcome(outcome);
+}
+
+function isUnresolvedDeliveryOutcome(outcome = {}) {
+  return RECOVERABLE_DELIVERY_STATUSES.has(outcome.status)
     || ['wrong_number', 'do_not_contact', 'dnc'].includes(cleanText(outcome.reason).toLowerCase());
+}
+
+function hasUnresolvedRecovery(existing = {}) {
+  const metadata = metadataJson(existing.metadata_json || existing.metadataJson);
+  return (metadata.placementReview?.deliveryOutcomes || []).some(isUnresolvedDeliveryOutcome);
 }
 
 function actionForEvent(eventType) {
@@ -171,17 +184,24 @@ function taskEventMessage(action) {
   if (action === 'complete') return 'Placement review decision acknowledged; task completed.';
   if (action === 'reopen') return 'Additional placement review required; task reopened.';
   if (action === 'start') return 'Placement review started.';
+  if (action === 'recovery_open') return 'Placement decision acknowledged; delivery recovery remains open.';
   return 'Placement review task created.';
 }
 
-function transitionFor(existing = null, state) {
+function transitionFor(existing = null, state, revision, plannedDelivery = []) {
+  const deliveryNeedsRecovery = plannedDelivery.some(isUnresolvedDeliveryOutcome);
   if (!existing) {
+    if (deliveryNeedsRecovery) return { action: 'recovery_open', taskStatus: 'open' };
     if (FINAL_REVIEW_STATES.has(state)) return { action: 'complete', taskStatus: 'completed' };
     if (state === 'in_review') return { action: 'start', taskStatus: 'in_progress' };
     return { action: state === 'additional_review_required' ? 'reopen' : 'create', taskStatus: 'open' };
   }
-  const priorState = metadataJson(existing.metadata_json).placementReview?.state || null;
+  const priorMetadata = metadataJson(existing.metadata_json).placementReview || {};
+  const priorState = priorMetadata.state || null;
+  const priorRevision = Number(priorMetadata.revision || 0);
+  if (Number.isInteger(priorRevision) && priorRevision >= revision) return { action: 'ignored', taskStatus: existing.status };
   if (state === 'additional_review_required') return { action: 'reopen', taskStatus: 'open' };
+  if (hasUnresolvedRecovery(existing) || deliveryNeedsRecovery) return { action: 'recovery_open', taskStatus: 'open' };
   if (FINAL_REVIEW_STATES.has(priorState)) return { action: 'ignored', taskStatus: existing.status };
   if ((priorState === 'in_review' || priorState === 'additional_review_required') && state === 'pending') return { action: 'ignored', taskStatus: existing.status };
   if (state === 'in_review') return { action: 'start', taskStatus: 'in_progress' };
@@ -196,7 +216,7 @@ async function insertTaskEvent(client, { task, organizationId, businessUnitId, a
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, null, $11, $12::jsonb)`,
     [
       task.id, organizationId, businessUnitId,
-      action === 'complete' ? 'completed' : action === 'start' ? 'started' : action === 'reopen' ? 'started' : 'created',
+      action === 'complete' ? 'completed' : action === 'start' || action === 'reopen' ? 'started' : action === 'recovery_open' ? 'automation_action' : 'created',
       task.fromStatus || null, task.status, task.fromOwnerUserId || null, task.ownerUserId || null,
       task.fromDueAt || null, task.dueAt || null,
       taskEventMessage(action), JSON.stringify(metadata),
@@ -239,9 +259,13 @@ export async function syncPlacementReviewWorkflow(client, {
   if (!reviewer?.id) throw new Error('No active AIT USA senior coordinator or administrator is available for placement review assignment.');
 
   const existing = await findPlacementReviewTask(client, { organizationId, businessUnitId, reviewId: placement.reviewId });
-  const transition = transitionFor(existing, placement.state);
+  const plannedDelivery = planPlacementReviewDelivery({
+    placement: { ...placement, correlationId: event.correlationId },
+    consent: event.consent,
+  });
+  const transition = transitionFor(existing, placement.state, placement.revision, plannedDelivery);
   const action = transition.action === 'ignored' ? 'ignored' : transition.action;
-  const metadata = taskMetadata({ event, reviewer, existing });
+  const metadata = taskMetadata({ event, reviewer, existing, plannedDelivery });
   let task;
   if (!existing) {
     const initialStatus = transition.taskStatus;
@@ -310,7 +334,7 @@ export async function recordPlacementReviewDeliveryOutcome(client, {
         deliveryOutcomes: mergeDeliveryOutcomes(existingOutcomes, [normalized]),
       },
     };
-    const reopen = RECOVERABLE_DELIVERY_STATUSES.has(normalized.status);
+    const reopen = isUnresolvedDeliveryOutcome(normalized);
     const updated = await client.query(
       `update tasks set status = case when $2 then 'open' else status end,
          completed_at = case when $2 then null else completed_at end,

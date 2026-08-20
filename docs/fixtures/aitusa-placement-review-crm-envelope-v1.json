@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "aitusa-crm-event-v1",
+  "eventId": "placement-review:00000000-0000-4000-8000-000000000001:revision:3:placement_review_adjusted",
+  "eventType": "placement_review_adjusted",
+  "idempotencyKey": "placement-review:00000000-0000-4000-8000-000000000001:revision:3:placement_review_adjusted",
+  "correlationId": "00000000-0000-4000-8000-000000000003",
+  "occurredAt": "2026-08-20T12:00:00.000Z",
+  "source": {
+    "product": "aitusa_refresh",
+    "surface": "staff_tool",
+    "employeeUrl": "/employee/placement-reviews?review=00000000-0000-4000-8000-000000000001",
+    "version": "mis-395-v1"
+  },
+  "placement": {
+    "reviewId": "00000000-0000-4000-8000-000000000001",
+    "resultId": "00000000-0000-4000-8000-000000000002",
+    "attemptId": "00000000-0000-4000-8000-000000000003",
+    "state": "adjusted",
+    "revision": 3,
+    "finalLevel": "Nivel 4"
+  },
+  "consent": {
+    "communicationPreference": "email",
+    "disclosureVersion": "aitusa-placement-contact-2026-08-20-v1",
+    "disclosureHash": "fixture-only-disclosure-hash",
+    "sourceUrl": "/placement-test/",
+    "optInAction": "explicit_checkbox",
+    "advisorContactEmail": true,
+    "serviceSms": false,
+    "marketingSms": false,
+    "phoneCall": false,
+    "whatsappContact": false,
+    "verifiedEmail": true,
+    "verifiedMobile": false
+  }
+}

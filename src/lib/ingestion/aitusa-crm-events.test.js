@@ -43,6 +43,7 @@ function placementReviewEvent(eventType = 'placement_review_adjusted', overrides
       reviewId,
       resultId: '00000000-0000-4000-8000-000000000002',
       attemptId: '00000000-0000-4000-0000-000000000003',
+      revision: 2,
       state,
       ...(state === 'confirmed' || state === 'adjusted' ? { finalLevel: 'Nivel 4' } : {}),
     },
@@ -104,6 +105,14 @@ test('accepts only privacy-safe placement-review contract fields and requires a 
     ...accepted.event,
     placement: { ...accepted.event.placement, finalLevel: '' },
   }).error, 'placement_review_final_level_invalid');
+  assert.equal(validateAitUsaCrmEvent({
+    ...accepted.event,
+    placement: { ...accepted.event.placement, revision: 0 },
+  }).error, 'placement_review_revision_invalid');
+  assert.equal(validateAitUsaCrmEvent({
+    ...accepted.event,
+    consent: { ...accepted.event.consent, sourceUrl: 'https://aitusa.example/placement-test/' },
+  }).error, 'placement_review_consent_source_url_invalid');
 });
 
 test('placement-review events require an explicit aitusa_refresh business-unit map and never use website fallback', async () => {
