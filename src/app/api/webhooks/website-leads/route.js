@@ -154,19 +154,20 @@ export async function POST(request) {
   if (aitUsaEvent?.ok) {
     try {
       return await withClient(async (client) => {
-        const organizationId = await getOrganizationId(client);
-        if (!organizationId) return jsonError('No CRM organization exists.', 503);
-        const leadBody = isAitUsaLeadEvent(aitUsaEvent.event)
-          ? aitUsaEventToWebsiteLeadBody(aitUsaEvent.event)
-          : null;
-        const normalizedLead = leadBody ? normalizeWebsiteLeadSubmission(leadBody) : null;
+        // AIT USA events are authenticated system traffic. Resolve their
+        // dedicated BU before organization discovery so a multi-org CRM never
+        // rejects them through the generic single-org website-lead gate.
         const businessUnit = await resolveAitUsaEventBusinessUnit(client, {
-          organizationId,
           reviewBusinessUnit: process.env[AITUSA_REVIEW_BUSINESS_UNIT_ENV],
           businessUnitMap: parseJsonEnv(BUSINESS_UNIT_MAP_ENV),
         });
         const businessUnitId = businessUnit?.id || null;
-        if (!businessUnitId) return jsonError('No active business unit exists for website lead ingestion.', 503);
+        const organizationId = businessUnit?.organization_id || null;
+        if (!businessUnitId || !organizationId) return jsonError('No active AIT USA business unit is configured for CRM event ingestion.', 503);
+        const leadBody = isAitUsaLeadEvent(aitUsaEvent.event)
+          ? aitUsaEventToWebsiteLeadBody(aitUsaEvent.event)
+          : null;
+        const normalizedLead = leadBody ? normalizeWebsiteLeadSubmission(leadBody) : null;
         if (normalizedLead) {
           if (!hasWebsiteLeadContactSignal(normalizedLead.lead)) {
             return jsonError('At least one of email, phone, or message is required.', 400);

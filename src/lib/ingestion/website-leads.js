@@ -860,7 +860,6 @@ export async function resolveWebsiteLeadBusinessUnitId(client, options) {
 // The explicit product map is a deployment gate that prevents a review task
 // from being created in an arbitrary business unit.
 export async function resolveAitUsaEventBusinessUnit(client, {
-  organizationId,
   reviewBusinessUnit = '',
   businessUnitMap = {},
 }) {
@@ -872,15 +871,15 @@ export async function resolveAitUsaEventBusinessUnit(client, {
     : businessUnitMap.aitusa_refresh;
   if (typeof requested !== 'string' || !requested.trim()) return null;
   const byId = await client.query(
-    'select id, name from business_units where organization_id = $1 and id::text = $2 and is_active = true limit 1',
-    [organizationId, requested],
+    'select id, name, organization_id from business_units where id::text = $1 and is_active = true limit 1',
+    [requested],
   );
   if (byId.rows[0]?.id) return byId.rows[0];
   const byName = await client.query(
-    'select id, name from business_units where organization_id = $1 and lower(name) = lower($2) and is_active = true limit 1',
-    [organizationId, requested],
+    'select id, name, organization_id from business_units where name = $1 and is_active = true limit 2',
+    [requested],
   );
-  return byName.rows[0] || null;
+  return byName.rows.length === 1 ? byName.rows[0] : null;
 }
 
 export async function findDuplicateWebsiteLeadSubmission(client, { organizationId, externalId }) {

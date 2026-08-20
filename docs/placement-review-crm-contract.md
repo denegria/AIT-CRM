@@ -46,8 +46,11 @@ Vercel Sensitive value that cannot safely be amended. An existing
 `WEBSITE_LEADS_BUSINESS_UNIT_MAP.aitusa_refresh` value remains a temporary
 backward-compatible fallback only. If neither resolves to an active unit, the
 endpoint fails closed; it never inherits the generic website-lead/first-
-business-unit fallback. CRM synchronizes the review-ID task even without a
-contact or when identity linkage is ambiguous.
+business-unit fallback. The resolved BU supplies the organization scope, so
+authenticated AIT USA contact and review events work in a multi-organization
+CRM without invoking the generic single-organization resolver. CRM
+synchronizes the review-ID task even without a contact or when identity linkage
+is ambiguous.
 
 ## CRM task and RBAC
 

@@ -120,6 +120,9 @@ do not overwrite it just to append `aitusa_refresh`. The endpoint uses
 `AITUSA_REVIEW_BUSINESS_UNIT` first, retains an existing
 `WEBSITE_LEADS_BUSINESS_UNIT_MAP.aitusa_refresh` mapping only as a temporary
 fallback, and fails closed when neither points to an active unit.
+The resolved active BU supplies the organization scope for authenticated AIT
+USA contact and placement-review events; do not configure or rely on a generic
+single-organization fallback in a multi-organization deployment.
 
 `WEBSITE_LEADS_BUSINESS_UNIT_MAP` is a JSON object. Keys can be source/form/domain identifiers from the incoming payload, and values can be a business-unit id or exact business-unit name:
 

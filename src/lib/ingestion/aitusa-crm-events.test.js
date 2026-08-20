@@ -132,22 +132,45 @@ test('accepts only privacy-safe placement-review contract fields and requires a 
   }).error, 'placement_review_consent_source_url_invalid');
 });
 
-test('placement-review events prefer the dedicated business-unit setting, retain map fallback, and never use website fallback', async () => {
+test('placement-review events resolve a dedicated active BU globally before any single-org website-lead fallback', async () => {
   const calls = [];
-  const client = { query: async (sql, values = []) => { calls.push({ sql, values }); return { rows: [{ id: 'aitusa-unit', name: 'AIT USA Institute' }] }; } };
-  assert.equal(await resolveAitUsaEventBusinessUnit(client, { organizationId: 'org-1', reviewBusinessUnit: '', businessUnitMap: {} }), null);
-  assert.equal(calls.length, 0);
-  const dedicated = await resolveAitUsaEventBusinessUnit(client, {
-    organizationId: 'org-1', reviewBusinessUnit: ' dedicated-aitusa-unit ', businessUnitMap: { aitusa_refresh: 'legacy-aitusa-unit' },
+  const client = { query: async (sql, values = []) => {
+    calls.push({ sql, values });
+    return { rows: [{ id: '06a758b2-55ee-469a-8e48-be54b5f9631a', name: 'AIT USA Institute', organization_id: '5ac8253e-80b8-4f9b-bd07-55d00e0d6ff0' }] };
+  } };
+  const resolved = await resolveAitUsaEventBusinessUnit(client, {
+    reviewBusinessUnit: ' 06a758b2-55ee-469a-8e48-be54b5f9631a ', businessUnitMap: { aitusa_refresh: 'legacy-aitusa-unit' },
   });
-  assert.equal(dedicated.id, 'aitusa-unit');
-  assert.equal(calls.at(-1).values[1], 'dedicated-aitusa-unit');
-  const fallback = await resolveAitUsaEventBusinessUnit(client, {
-    organizationId: 'org-1', businessUnitMap: { aitusa_refresh: 'legacy-aitusa-unit' },
-  });
-  assert.equal(fallback.id, 'aitusa-unit');
-  assert.equal(calls.at(-1).values[1], 'legacy-aitusa-unit');
-  assert.equal(calls.some((call) => call.sql.includes('order by name asc')), false);
+  assert.deepEqual(resolved, { id: '06a758b2-55ee-469a-8e48-be54b5f9631a', name: 'AIT USA Institute', organization_id: '5ac8253e-80b8-4f9b-bd07-55d00e0d6ff0' });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].values[0], '06a758b2-55ee-469a-8e48-be54b5f9631a');
+  assert.doesNotMatch(calls[0].sql, /organization_id = \$1/);
+});
+
+test('placement-review business-unit name resolution is globally unique, with map fallback and invalid values failing closed', async () => {
+  const uniqueNameClient = { query: async (sql) => ({
+    rows: sql.includes('id::text') ? [] : [{ id: 'aitusa-unit', name: 'AIT USA Institute', organization_id: 'org-aitusa' }],
+  }) };
+  const unique = await resolveAitUsaEventBusinessUnit(uniqueNameClient, { reviewBusinessUnit: 'AIT USA Institute' });
+  assert.deepEqual(unique, { id: 'aitusa-unit', name: 'AIT USA Institute', organization_id: 'org-aitusa' });
+
+  const fallbackClient = { query: async (sql, values) => ({
+    rows: sql.includes('id::text') ? [] : [{ id: 'mapped-unit', name: values[0], organization_id: 'org-aitusa' }],
+  }) };
+  const fallback = await resolveAitUsaEventBusinessUnit(fallbackClient, { businessUnitMap: { aitusa_refresh: 'AIT USA Institute' } });
+  assert.equal(fallback.id, 'mapped-unit');
+
+  const duplicateNameClient = { query: async (sql) => ({
+    rows: sql.includes('id::text') ? [] : [
+      { id: 'aitusa-unit-a', name: 'AIT USA Institute', organization_id: 'org-a' },
+      { id: 'aitusa-unit-b', name: 'AIT USA Institute', organization_id: 'org-b' },
+    ],
+  }) };
+  assert.equal(await resolveAitUsaEventBusinessUnit(duplicateNameClient, { reviewBusinessUnit: 'AIT USA Institute' }), null);
+
+  const invalidClient = { query: async () => ({ rows: [] }) };
+  assert.equal(await resolveAitUsaEventBusinessUnit(invalidClient, { reviewBusinessUnit: 'unknown-unit' }), null);
+  assert.equal(await resolveAitUsaEventBusinessUnit(invalidClient, { reviewBusinessUnit: '', businessUnitMap: {} }), null);
 });
 
 test('normalizes full contact and callback events into distinct website lead intake', () => {
@@ -216,8 +239,11 @@ test('keeps legacy source-labelled website leads on the legacy path', async () =
   assert.match(route, /AITUSA_CRM_WEBHOOK_SECRET/);
   assert.match(route, /AITUSA_REVIEW_BUSINESS_UNIT/);
   assert.match(route, /resolveAitUsaEventBusinessUnit/);
-  assert.doesNotMatch(route, /normalizedLead\?\.lead \|\| \{ sourceKey: 'aitusa_refresh'/);
+  assert.match(route, /const organizationId = businessUnit\?\.organization_id \|\| null/);
   assert.match(route, /resolveSingleOrganizationId/);
+  const aitUsaBranch = route.slice(route.indexOf('if (aitUsaEvent?.ok)'), route.indexOf('const { payload, lead }'));
+  assert.doesNotMatch(aitUsaBranch, /getOrganizationId\(client\)/);
+  assert.match(aitUsaBranch, /isAitUsaLeadEvent\(aitUsaEvent\.event\)/);
   assert.doesNotMatch(route, /select id from organizations order by created_at asc limit 1/);
   assert.doesNotMatch(route, /source === 'AIT USA Refresh' \|\|/);
 });
