@@ -39,10 +39,15 @@ returns acknowledgement without another timeline entry, task, notification, or
 delivery record. The CRM appends one privacy-safe `aitusa.<eventType>` timeline
 event; it contains no learner response, rationale, or token.
 
-Authenticated placement-review events require an explicit active
-`WEBSITE_LEADS_BUSINESS_UNIT_MAP.aitusa_refresh` mapping. They never inherit
-the generic website-lead/first-business-unit fallback. CRM synchronizes the
-review-ID task even without a contact or when identity linkage is ambiguous.
+Authenticated placement-review events require `AITUSA_REVIEW_BUSINESS_UNIT`,
+set to an exact active business-unit ID or name. This dedicated server setting
+is preferred because the legacy `WEBSITE_LEADS_BUSINESS_UNIT_MAP` may be a
+Vercel Sensitive value that cannot safely be amended. An existing
+`WEBSITE_LEADS_BUSINESS_UNIT_MAP.aitusa_refresh` value remains a temporary
+backward-compatible fallback only. If neither resolves to an active unit, the
+endpoint fails closed; it never inherits the generic website-lead/first-
+business-unit fallback. CRM synchronizes the review-ID task even without a
+contact or when identity linkage is ambiguous.
 
 ## CRM task and RBAC
 

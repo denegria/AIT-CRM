@@ -110,6 +110,17 @@ Optional env:
 
 - `WEBSITE_LEADS_BUSINESS_UNIT_MAP`
 
+Required for authenticated AIT USA placement-review events:
+
+- `AITUSA_REVIEW_BUSINESS_UNIT` — exact active business-unit ID or name.
+
+This dedicated server value is intentionally separate from
+`WEBSITE_LEADS_BUSINESS_UNIT_MAP`: when the map is a Vercel Sensitive value,
+do not overwrite it just to append `aitusa_refresh`. The endpoint uses
+`AITUSA_REVIEW_BUSINESS_UNIT` first, retains an existing
+`WEBSITE_LEADS_BUSINESS_UNIT_MAP.aitusa_refresh` mapping only as a temporary
+fallback, and fails closed when neither points to an active unit.
+
 `WEBSITE_LEADS_BUSINESS_UNIT_MAP` is a JSON object. Keys can be source/form/domain identifiers from the incoming payload, and values can be a business-unit id or exact business-unit name:
 
 ```json

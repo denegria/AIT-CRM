@@ -859,8 +859,17 @@ export async function resolveWebsiteLeadBusinessUnitId(client, options) {
 // Authenticated AIT USA system events never inherit the website-lead fallback.
 // The explicit product map is a deployment gate that prevents a review task
 // from being created in an arbitrary business unit.
-export async function resolveAitUsaEventBusinessUnit(client, { organizationId, businessUnitMap = {} }) {
-  const requested = businessUnitMap.aitusa_refresh;
+export async function resolveAitUsaEventBusinessUnit(client, {
+  organizationId,
+  reviewBusinessUnit = '',
+  businessUnitMap = {},
+}) {
+  // A dedicated server env is the release-safe primary deployment control:
+  // WEBSITE_LEADS_BUSINESS_UNIT_MAP may be Sensitive and therefore cannot be
+  // safely edited to add this key. Keep the map only as a migration fallback.
+  const requested = typeof reviewBusinessUnit === 'string' && reviewBusinessUnit.trim()
+    ? reviewBusinessUnit.trim()
+    : businessUnitMap.aitusa_refresh;
   if (typeof requested !== 'string' || !requested.trim()) return null;
   const byId = await client.query(
     'select id, name from business_units where organization_id = $1 and id::text = $2 and is_active = true limit 1',

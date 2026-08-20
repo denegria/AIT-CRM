@@ -24,6 +24,7 @@ import { ingestAitUsaCrmEvent } from '@/lib/ingestion/aitusa-crm-event-ingestion
 const SECRET_ENV = 'WEBSITE_LEADS_WEBHOOK_SECRET';
 const AITUSA_SECRET_ENV = 'AITUSA_CRM_WEBHOOK_SECRET';
 const BUSINESS_UNIT_MAP_ENV = 'WEBSITE_LEADS_BUSINESS_UNIT_MAP';
+const AITUSA_REVIEW_BUSINESS_UNIT_ENV = 'AITUSA_REVIEW_BUSINESS_UNIT';
 
 function jsonError(message, status) {
   return NextResponse.json({ error: message }, { status });
@@ -161,6 +162,7 @@ export async function POST(request) {
         const normalizedLead = leadBody ? normalizeWebsiteLeadSubmission(leadBody) : null;
         const businessUnit = await resolveAitUsaEventBusinessUnit(client, {
           organizationId,
+          reviewBusinessUnit: process.env[AITUSA_REVIEW_BUSINESS_UNIT_ENV],
           businessUnitMap: parseJsonEnv(BUSINESS_UNIT_MAP_ENV),
         });
         const businessUnitId = businessUnit?.id || null;

@@ -132,13 +132,21 @@ test('accepts only privacy-safe placement-review contract fields and requires a 
   }).error, 'placement_review_consent_source_url_invalid');
 });
 
-test('placement-review events require an explicit aitusa_refresh business-unit map and never use website fallback', async () => {
+test('placement-review events prefer the dedicated business-unit setting, retain map fallback, and never use website fallback', async () => {
   const calls = [];
   const client = { query: async (sql, values = []) => { calls.push({ sql, values }); return { rows: [{ id: 'aitusa-unit', name: 'AIT USA Institute' }] }; } };
-  assert.equal(await resolveAitUsaEventBusinessUnit(client, { organizationId: 'org-1', businessUnitMap: {} }), null);
+  assert.equal(await resolveAitUsaEventBusinessUnit(client, { organizationId: 'org-1', reviewBusinessUnit: '', businessUnitMap: {} }), null);
   assert.equal(calls.length, 0);
-  const resolved = await resolveAitUsaEventBusinessUnit(client, { organizationId: 'org-1', businessUnitMap: { aitusa_refresh: 'aitusa-unit' } });
-  assert.equal(resolved.id, 'aitusa-unit');
+  const dedicated = await resolveAitUsaEventBusinessUnit(client, {
+    organizationId: 'org-1', reviewBusinessUnit: ' dedicated-aitusa-unit ', businessUnitMap: { aitusa_refresh: 'legacy-aitusa-unit' },
+  });
+  assert.equal(dedicated.id, 'aitusa-unit');
+  assert.equal(calls.at(-1).values[1], 'dedicated-aitusa-unit');
+  const fallback = await resolveAitUsaEventBusinessUnit(client, {
+    organizationId: 'org-1', businessUnitMap: { aitusa_refresh: 'legacy-aitusa-unit' },
+  });
+  assert.equal(fallback.id, 'aitusa-unit');
+  assert.equal(calls.at(-1).values[1], 'legacy-aitusa-unit');
   assert.equal(calls.some((call) => call.sql.includes('order by name asc')), false);
 });
 
@@ -206,6 +214,7 @@ test('keeps legacy source-labelled website leads on the legacy path', async () =
   assert.match(route, /const isAitUsaEvent = body\?\.schemaVersion === AITUSA_CRM_EVENT_SCHEMA_VERSION/);
   assert.match(route, /isAitUsaEvent \? AITUSA_SECRET_ENV : SECRET_ENV/);
   assert.match(route, /AITUSA_CRM_WEBHOOK_SECRET/);
+  assert.match(route, /AITUSA_REVIEW_BUSINESS_UNIT/);
   assert.match(route, /resolveAitUsaEventBusinessUnit/);
   assert.doesNotMatch(route, /normalizedLead\?\.lead \|\| \{ sourceKey: 'aitusa_refresh'/);
   assert.match(route, /resolveSingleOrganizationId/);
