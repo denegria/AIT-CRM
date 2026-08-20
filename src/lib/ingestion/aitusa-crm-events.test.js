@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import {
   AITUSA_CRM_EVENT_SCHEMA_VERSION,
   AITUSA_CRM_EVENT_TYPES,
+  AITUSA_PLACEMENT_REVIEW_EVENT_TYPES,
   aitUsaEventToWebsiteLeadBody,
   validateAitUsaCrmEvent,
 } from './aitusa-crm-events.js';
@@ -45,6 +46,8 @@ test('rejects wrong-type, oversized, and forbidden nested values before persiste
 test('allows the complete server event taxonomy without generic browser fields', () => {
   for (const eventType of AITUSA_CRM_EVENT_TYPES) {
     const isLeadEvent = eventType === 'contact_form_submitted' || eventType === 'callback_requested';
+    const isPlacementReview = AITUSA_PLACEMENT_REVIEW_EVENT_TYPES.includes(eventType);
+    const reviewStatus = isPlacementReview ? eventType.replace('placement_review_', '') : null;
     const result = validateAitUsaCrmEvent({
       ...event(),
       eventType,
@@ -54,9 +57,51 @@ test('allows the complete server event taxonomy without generic browser fields',
         consent: { advisorContact: true, sms: false, policyVersion: 'fixture-v1' },
         lead: { formType: eventType === 'callback_requested' ? 'callback_request' : 'contact_form', interest: 'ingles-presencial' },
       } : {}),
+      ...(isPlacementReview ? {
+        placement: {
+          reviewId: 'placement-review-opaque-001',
+          resultId: 'placement-result-opaque-001',
+          reviewStatus,
+          ...(reviewStatus === 'confirmed' || reviewStatus === 'adjusted' ? { finalLevelKey: 'book-2' } : {}),
+          verifiedEmail: true,
+          communicationPreference: 'email',
+        },
+      } : {}),
     });
     assert.equal(result.ok, true, eventType);
   }
+});
+
+test('accepts only privacy-safe placement-review contract fields and requires a matching public review state', () => {
+  const accepted = validateAitUsaCrmEvent(event({
+    eventType: 'placement_review_confirmed',
+    eventId: 'placement-review-confirmed-001',
+    idempotencyKey: 'placement-review-confirmed-001',
+    placement: {
+      reviewId: 'placement-review-opaque-001',
+      resultId: 'placement-result-opaque-001',
+      reviewStatus: 'confirmed',
+      finalLevelKey: 'book-2',
+      recommendedLevelKey: 'book-2',
+      verifiedEmail: true,
+      verifiedMobile: false,
+      communicationPreference: 'email',
+    },
+    consent: { advisorContactEmail: true, serviceSms: false, policyVersion: 'privacy-v2' },
+  }));
+  assert.equal(accepted.ok, true);
+  assert.equal(validateAitUsaCrmEvent({
+    ...accepted.event,
+    placement: { ...accepted.event.placement, reviewerRationale: 'never send to CRM' },
+  }).ok, false);
+  assert.equal(validateAitUsaCrmEvent({
+    ...accepted.event,
+    placement: { ...accepted.event.placement, reviewStatus: 'created' },
+  }).error, 'event_placement_review_status_invalid');
+  assert.equal(validateAitUsaCrmEvent({
+    ...accepted.event,
+    placement: { ...accepted.event.placement, finalLevelKey: '' },
+  }).error, 'event_placement_finalLevelKey_invalid');
 });
 
 test('normalizes full contact and callback events into distinct website lead intake', () => {
@@ -383,6 +428,52 @@ test('placement completion and advisor handoff share one correlation-scoped foll
     .filter((value) => typeof value === 'string' && value.includes(':follow-up'));
   assert.equal(new Set(followUpKeys).size, 1);
   assert.equal(followUpKeys[0], 'aitusa:claim:fixture-001:follow-up');
+});
+
+test('placement-review ingestion is transactionally idempotent and creates one CRM task/timeline orchestration record', async () => {
+  let recorded = false;
+  const calls = [];
+  const client = {
+    calls,
+    async query(statement, values = []) {
+      const sql = String(statement);
+      calls.push({ sql, values });
+      if (sql.includes('from activity_events')) {
+        return { rows: recorded ? [{ contact_id: 'contact-1', lead_id: 'lead-1', metadata_json: {} }] : [] };
+      }
+      if (sql.includes('from contacts')) return { rows: [{ id: 'contact-1' }] };
+      if (sql.includes('update contacts')) return { rows: [{ id: 'contact-1' }] };
+      if (sql.includes('from leads')) return { rows: [{ id: 'lead-1', status: 'Follow Up', assigned_user_id: 'senior-aitusa', source_name: 'AIT USA Refresh' }] };
+      if (sql.includes("r.key = 'senior_coordinator'")) return { rows: [{ id: 'senior-aitusa', tier: 'senior_coordinator' }] };
+      if (sql.includes("r.key = 'admin'")) return { rows: [] };
+      if (sql.includes('from tasks')) return { rows: [] };
+      if (sql.includes('insert into tasks')) return { rows: [{ id: 'task-review-1', status: 'open', owner_user_id: 'senior-aitusa', due_at: '2026-08-20T12:00:00.000Z' }] };
+      if (sql.includes('insert into activity_events')) { recorded = true; return { rows: [] }; }
+      if (sql.includes('insert into notifications')) return { rows: [{ id: 'notification-review-1' }] };
+      return { rows: [] };
+    },
+  };
+  const reviewEvent = event({
+    eventType: 'placement_review_created',
+    eventId: 'placement-review-created-event-001',
+    idempotencyKey: 'placement-review-created-event-001',
+    correlationId: 'placement-review-correlation-001',
+    placement: {
+      reviewId: 'placement-review-opaque-001',
+      resultId: 'placement-result-opaque-001',
+      reviewStatus: 'created',
+      recommendedLevelKey: 'book-2',
+      verifiedEmail: true,
+      communicationPreference: 'email',
+    },
+  });
+  const first = await ingestAitUsaCrmEvent(client, { organizationId: 'org-1', businessUnitId: 'unit-1', event: reviewEvent });
+  const replay = await ingestAitUsaCrmEvent(client, { organizationId: 'org-1', businessUnitId: 'unit-1', event: reviewEvent });
+  assert.equal(first.placementReview.taskId, 'task-review-1');
+  assert.equal(replay.duplicate, true);
+  assert.equal(calls.filter((call) => call.sql.includes('insert into activity_events')).length, 1);
+  assert.equal(calls.filter((call) => call.sql.includes('insert into tasks')).length, 1);
+  assert.equal(calls.filter((call) => call.sql.includes('insert into notifications')).length, 1);
 });
 
 function createAmbiguousIdentityEventClient() {

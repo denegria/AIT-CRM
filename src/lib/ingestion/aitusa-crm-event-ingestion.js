@@ -2,6 +2,8 @@ import { createInboundLeadNotification } from '../notifications/service.js';
 import { createInboundLeadIntakeTask } from '../tasks/intake.js';
 import { classifyContactIdentity } from '../crm/contact-identity.js';
 import { resolveAitUsaActiveOpportunity } from '../crm/ait-usa-opportunities.js';
+import { isAitUsaPlacementReviewEvent } from './aitusa-crm-events.js';
+import { syncPlacementReviewWorkflow } from '../placement-reviews/crm-workflow.js';
 
 const FOLLOW_UP_EVENTS = new Set(['placement_completed', 'advisor_handoff_requested']);
 const AITUSA_CRM_REVIEW_BATCH_SOURCE_NAME = 'AIT USA Refresh Events';
@@ -128,6 +130,20 @@ export async function ingestAitUsaCrmEvent(client, { organizationId, businessUni
       [organizationId, businessUnitId, contactId, leadId, `aitusa.${event.eventType}`, safeTimelineMessage(event), JSON.stringify(metadata), event.occurredAt],
     );
 
+    let placementReview = null;
+    if (isAitUsaPlacementReviewEvent(event)) {
+      // The activity event is written before task completion. Both are in this
+      // transaction, so a final task state is observable only after this CRM
+      // acknowledgement commits. AIT USA remains the academic authority.
+      placementReview = await syncPlacementReviewWorkflow(client, {
+        organizationId,
+        businessUnitId,
+        contactId,
+        leadId,
+        event,
+      });
+    }
+
     if (FOLLOW_UP_EVENTS.has(event.eventType)) {
       const followUpKey = `aitusa:${event.correlationId}:follow-up`;
       await createInboundLeadNotification(client, {
@@ -145,7 +161,7 @@ export async function ingestAitUsaCrmEvent(client, { organizationId, businessUni
       });
     }
     await client.query('commit');
-    return { acknowledged: true, duplicate: false, contactId, leadId };
+    return { acknowledged: true, duplicate: false, contactId, leadId, placementReview };
   } catch (error) {
     await client.query('rollback').catch(() => {});
     throw error;

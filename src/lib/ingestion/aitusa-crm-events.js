@@ -12,6 +12,19 @@ export const AITUSA_CRM_EVENT_TYPES = Object.freeze([
   'ai_practice_completed',
   'ai_practice_escalated',
   'ai_practice_limit_reached',
+  'placement_review_created',
+  'placement_review_started',
+  'placement_review_confirmed',
+  'placement_review_adjusted',
+  'placement_review_additional_review_required',
+]);
+
+export const AITUSA_PLACEMENT_REVIEW_EVENT_TYPES = Object.freeze([
+  'placement_review_created',
+  'placement_review_started',
+  'placement_review_confirmed',
+  'placement_review_adjusted',
+  'placement_review_additional_review_required',
 ]);
 
 const EVENT_KEYS = new Set([
@@ -22,9 +35,9 @@ const EVENT_KEYS = new Set([
 const NESTED_KEYS = Object.freeze({
   source: new Set(['product', 'surface', 'path', 'version']),
   contact: new Set(['firstName', 'email', 'phone']),
-  consent: new Set(['email', 'sms', 'whatsapp', 'advisorContactEmail', 'advisorContact', 'policyVersion', 'smsDisclosureVersion', 'consentedAt']),
+  consent: new Set(['email', 'sms', 'whatsapp', 'advisorContactEmail', 'advisorContact', 'serviceSms', 'marketingSms', 'policyVersion', 'smsDisclosureVersion', 'serviceSmsDisclosureVersion', 'whatsappDisclosureVersion', 'consentedAt']),
   lead: new Set(['formType', 'interest', 'preferredMode', 'preferredSchedule', 'location', 'ageGroup', 'message']),
-  placement: new Set(['resultId', 'resultStatus', 'recommendedLevelKey', 'recommendedLevelLabel', 'answeredQuestionCount', 'skippedQuestionCount', 'advisorConfirmationRequired', 'scoringContractVersion']),
+  placement: new Set(['reviewId', 'resultId', 'resultStatus', 'reviewStatus', 'recommendedLevelKey', 'recommendedLevelLabel', 'finalLevelKey', 'communicationPreference', 'verifiedEmail', 'verifiedMobile', 'answeredQuestionCount', 'skippedQuestionCount', 'advisorConfirmationRequired', 'scoringContractVersion']),
   practice: new Set(['sessionId', 'state', 'scenario', 'useCase', 'focusCode', 'outcomeCode', 'limitCode', 'turnCount', 'planVersion']),
   utm: new Set(['source', 'medium', 'campaign', 'term', 'content']),
 });
@@ -111,9 +124,11 @@ function validateNestedValues(body) {
     if (contact.phone !== undefined && !safePhone(contact.phone)) return 'event_contact_phone_invalid';
   }
   if (body.consent !== undefined) {
-    for (const key of ['email', 'sms', 'whatsapp', 'advisorContactEmail', 'advisorContact']) if (body.consent[key] !== undefined && typeof body.consent[key] !== 'boolean') return `event_consent_${key}_invalid`;
+    for (const key of ['email', 'sms', 'whatsapp', 'advisorContactEmail', 'advisorContact', 'serviceSms', 'marketingSms']) if (body.consent[key] !== undefined && typeof body.consent[key] !== 'boolean') return `event_consent_${key}_invalid`;
     if (body.consent.policyVersion !== undefined && !safeText(body.consent.policyVersion, 80)) return 'event_consent_policy_version_invalid';
     if (body.consent.smsDisclosureVersion !== undefined && !safeText(body.consent.smsDisclosureVersion, 80)) return 'event_consent_sms_disclosure_version_invalid';
+    if (body.consent.serviceSmsDisclosureVersion !== undefined && !safeText(body.consent.serviceSmsDisclosureVersion, 80)) return 'event_consent_service_sms_disclosure_version_invalid';
+    if (body.consent.whatsappDisclosureVersion !== undefined && !safeText(body.consent.whatsappDisclosureVersion, 80)) return 'event_consent_whatsapp_disclosure_version_invalid';
     if (body.consent.consentedAt !== undefined && !isIsoDate(body.consent.consentedAt)) return 'event_consent_consented_at_invalid';
   }
   if (body.lead !== undefined) {
@@ -127,9 +142,18 @@ function validateNestedValues(body) {
   if (body.ageBand !== undefined && !['under_13', 'age_13_plus'].includes(body.ageBand)) return 'event_age_band_invalid';
   if (body.placement !== undefined) {
     const p = body.placement;
-    for (const key of ['resultId', 'resultStatus', 'recommendedLevelKey', 'recommendedLevelLabel', 'scoringContractVersion']) if (p[key] !== undefined && !safeText(p[key], key === 'recommendedLevelLabel' ? 120 : 80)) return `event_placement_${key}_invalid`;
+    for (const key of ['reviewId', 'resultId', 'resultStatus', 'reviewStatus', 'recommendedLevelKey', 'recommendedLevelLabel', 'finalLevelKey', 'scoringContractVersion']) if (p[key] !== undefined && !safeText(p[key], key === 'recommendedLevelLabel' ? 120 : 80)) return `event_placement_${key}_invalid`;
+    if (p.communicationPreference !== undefined && !['email', 'sms', 'whatsapp', 'portal', 'any'].includes(p.communicationPreference)) return 'event_placement_communication_preference_invalid';
+    for (const key of ['verifiedEmail', 'verifiedMobile']) if (p[key] !== undefined && typeof p[key] !== 'boolean') return `event_placement_${key}_invalid`;
     for (const key of ['answeredQuestionCount', 'skippedQuestionCount']) if (p[key] !== undefined && (!Number.isInteger(p[key]) || p[key] < 0 || p[key] > 1000)) return `event_placement_${key}_invalid`;
     if (p.advisorConfirmationRequired !== undefined && typeof p.advisorConfirmationRequired !== 'boolean') return 'event_placement_advisor_confirmation_required_invalid';
+  }
+  if (isAitUsaPlacementReviewEvent(body)) {
+    const placement = body.placement || {};
+    if (!safeIdentifier(placement.reviewId) || !safeIdentifier(placement.resultId)) return 'event_placement_review_identifier_required';
+    const expectedStatus = body.eventType.replace('placement_review_', '');
+    if (placement.reviewStatus !== expectedStatus) return 'event_placement_review_status_invalid';
+    if (['confirmed', 'adjusted'].includes(expectedStatus) && !safeText(placement.finalLevelKey, 80)) return 'event_placement_final_level_required';
   }
   if (body.practice !== undefined) {
     const p = body.practice;
@@ -142,6 +166,10 @@ function validateNestedValues(body) {
 
 export function isAitUsaLeadEvent(event) {
   return event?.eventType === 'contact_form_submitted' || event?.eventType === 'callback_requested';
+}
+
+export function isAitUsaPlacementReviewEvent(event) {
+  return AITUSA_PLACEMENT_REVIEW_EVENT_TYPES.includes(event?.eventType);
 }
 
 function findForbiddenKey(value, prefix = '') {
