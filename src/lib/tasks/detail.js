@@ -14,6 +14,7 @@ import {
 import { createCrmError } from '@/lib/crm/errors.js';
 import { toTaskPayload } from './service.js';
 import { canReadTaskDetail } from './detail-policy.js';
+import { resolveAitUsaEmployeeReviewUrl } from '@/lib/placement-reviews/employee-link.js';
 
 function toDateString(value) {
   return value?.toISOString?.() || value || null;
@@ -27,6 +28,13 @@ function compactRecord(value) {
 
 function notFoundTaskError() {
   return createCrmError('Task not found.', 404);
+}
+
+export function placementReviewTaskLink(metadataJson, env = process.env) {
+  return resolveAitUsaEmployeeReviewUrl({
+    employeeBaseUrl: env.AITUSA_EMPLOYEE_BASE_URL,
+    employeeUrl: metadataJson?.placementReview?.employeeUrl,
+  });
 }
 
 async function selectOneById(db, table, organizationId, id, selection = undefined) {
@@ -129,8 +137,12 @@ export async function loadTaskDetail({ db, organizationId, session, taskId }) {
 
   const canOpenWorkOrder = workOrder ? canAccessWorkOrder(session, workOrder) : false;
 
+  const taskPayload = toTaskPayload(task, { session });
   return {
-    task: toTaskPayload(task, { session }),
+    task: {
+      ...taskPayload,
+      placementReviewLink: placementReviewTaskLink(taskPayload.metadataJson),
+    },
     context: {
       businessUnit: businessUnit ? compactRecord(businessUnit) : null,
       owner: owner ? compactRecord(owner) : null,

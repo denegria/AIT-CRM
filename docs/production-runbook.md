@@ -113,6 +113,9 @@ Optional env:
 Required for authenticated AIT USA placement-review events:
 
 - `AITUSA_REVIEW_BUSINESS_UNIT` — exact active business-unit ID or name.
+- `AITUSA_EMPLOYEE_BASE_URL` — HTTPS-only AIT USA employee base URL, with no
+  credentials, query string, or fragment (staging: the branch alias; production:
+  the canonical AIT USA URL).
 
 This dedicated server value is intentionally separate from
 `WEBSITE_LEADS_BUSINESS_UNIT_MAP`: when the map is a Vercel Sensitive value,
@@ -123,6 +126,11 @@ fallback, and fails closed when neither points to an active unit.
 The resolved active BU supplies the organization scope for authenticated AIT
 USA contact and placement-review events; do not configure or rely on a generic
 single-organization fallback in a multi-organization deployment.
+
+Before release, verify the configured employee base is HTTPS and that a task
+detail link resolves only to `/employee/placement-reviews?review=<opaque-id>`.
+Do not put a learner identifier, credential, token, or extra query parameter in
+the persisted employee path or base URL.
 
 `WEBSITE_LEADS_BUSINESS_UNIT_MAP` is a JSON object. Keys can be source/form/domain identifiers from the incoming payload, and values can be a business-unit id or exact business-unit name:
 

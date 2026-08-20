@@ -510,6 +510,18 @@ export default function TaskDetailPage() {
                   <span className={s.contextText}>{titleCase(context.workOrder.status)}</span>
                 </div>
               )}
+
+              {task.placementReviewLink && (
+                <div className={s.contextCard}>
+                  <div className={s.contextHeader}>
+                    <span className={s.contextTitle}>AIT USA placement review</span>
+                    <a className={s.contextLink} href={task.placementReviewLink} target="_blank" rel="noreferrer">
+                      Open AIT USA review <ExternalLink size={12} />
+                    </a>
+                  </div>
+                  <span className={s.contextText}>Opens the authorized AIT USA employee queue.</span>
+                </div>
+              )}
             </div>
           </section>
 

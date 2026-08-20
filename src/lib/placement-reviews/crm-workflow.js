@@ -13,8 +13,15 @@ const REVIEW_EVENT_ACTIONS = Object.freeze({
   placement_review_adjusted: 'complete',
   placement_review_additional_review_required: 'reopen',
 });
-const RECOVERABLE_DELIVERY_STATUSES = new Set(['failed', 'bounced', 'opted_out', 'suppressed']);
 const FINAL_REVIEW_STATES = new Set(['confirmed', 'adjusted']);
+const INFORMATIONAL_SUPPRESSION_REASONS = new Set([
+  'verified_account_email_required',
+  'advisor_email_consent_required',
+  'verified_mobile_required',
+  'service_sms_consent_required',
+  'provider_readiness_required',
+  'automated_whatsapp_disabled',
+]);
 
 function cleanText(value) {
   return String(value || '').trim();
@@ -49,7 +56,7 @@ export function planPlacementReviewDelivery({ placement = {}, consent = {} } = {
     outcomes.push({
       channel: 'sms',
       status: 'suppressed',
-      reason: consent.verifiedMobile !== true ? 'verified_mobile_required' : consent.serviceSms === true ? 'sms_provider_readiness_required' : 'service_sms_consent_required',
+      reason: consent.verifiedMobile !== true ? 'verified_mobile_required' : consent.serviceSms === true ? 'provider_readiness_required' : 'service_sms_consent_required',
       correlationId,
     });
   }
@@ -133,6 +140,7 @@ function taskMetadata({ event, reviewer, existing = null, plannedDelivery = null
       attemptId: placement.attemptId,
       revision: placement.revision,
       finalLevel: placement.finalLevel || null,
+      employeeUrl: event.source?.employeeUrl || null,
       correlationId: event.correlationId,
       reviewerTier: reviewer?.tier || prior.placementReview?.reviewerTier || null,
       deliveryMode: 'queued_disabled',
@@ -165,8 +173,10 @@ function isStickyDeliveryOutcome(outcome = {}) {
 }
 
 function isUnresolvedDeliveryOutcome(outcome = {}) {
-  return RECOVERABLE_DELIVERY_STATUSES.has(outcome.status)
-    || ['wrong_number', 'do_not_contact', 'dnc'].includes(cleanText(outcome.reason).toLowerCase());
+  const reason = cleanText(outcome.reason).toLowerCase();
+  if (['wrong_number', 'do_not_contact', 'dnc'].includes(reason)) return true;
+  if (['failed', 'bounced', 'opted_out'].includes(outcome.status)) return true;
+  return outcome.status === 'suppressed' && !INFORMATIONAL_SUPPRESSION_REASONS.has(reason);
 }
 
 function hasUnresolvedRecovery(existing = {}) {

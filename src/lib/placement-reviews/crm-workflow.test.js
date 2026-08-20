@@ -12,6 +12,7 @@ function event(overrides = {}) {
   return {
     eventType: 'placement_review_created',
     correlationId: 'placement-correlation-0001',
+    source: { employeeUrl: '/employee/placement-reviews?review=placement-review-opaque-0001' },
     consent: { communicationPreference: 'email', advisorContactEmail: true, serviceSms: false, marketingSms: false, phoneCall: false, whatsappContact: false, verifiedEmail: true, verifiedMobile: false },
     placement: {
       reviewId: 'placement-review-opaque-0001',
@@ -49,7 +50,7 @@ test('plans email as queued-only baseline and keeps SMS/WhatsApp provider dispat
   });
   assert.deepEqual(outcomes, [
     { channel: 'email', status: 'queued', reason: 'verified_account_email_baseline', correlationId: 'correlation-0001' },
-    { channel: 'sms', status: 'suppressed', reason: 'sms_provider_readiness_required', correlationId: 'correlation-0001' },
+    { channel: 'sms', status: 'suppressed', reason: 'provider_readiness_required', correlationId: 'correlation-0001' },
   ]);
   assert.equal(placementReviewHref('opaque-review-id'), '/employee/placement-reviews?review=opaque-review-id');
   const mobileMissing = planPlacementReviewDelivery({
@@ -162,7 +163,7 @@ test('every unresolved delivery outcome reopens or keeps the review task open', 
     { status: 'failed' },
     { status: 'bounced' },
     { status: 'opted_out' },
-    { status: 'suppressed' },
+    { status: 'suppressed', reason: 'carrier_rejected' },
     { status: 'failed', reason: 'dnc' },
     { status: 'failed', reason: 'wrong_number' },
   ];
@@ -180,6 +181,33 @@ test('every unresolved delivery outcome reopens or keeps the review task open', 
   }
 });
 
+test('planned policy suppressions keep a new task creation informational and allow final decisions to complete', async () => {
+  const noConsent = {
+    communicationPreference: 'sms', advisorContactEmail: false, serviceSms: false, marketingSms: false,
+    phoneCall: false, whatsappContact: false, verifiedEmail: false, verifiedMobile: false,
+  };
+  const createdDb = client();
+  const created = await syncPlacementReviewWorkflow(createdDb, {
+    organizationId: 'org-1', businessUnitId: 'aitusa-1', contactId: null, leadId: null,
+    event: event({ consent: noConsent }),
+  });
+  assert.equal(created.action, 'create');
+  assert.equal(created.taskStatus, 'open');
+  const createdEvent = createdDb.calls.find((call) => call.sql.startsWith('insert into task_events'));
+  assert.equal(createdEvent.values[10], 'Placement review task created.');
+
+  const finalDb = client();
+  const final = await syncPlacementReviewWorkflow(finalDb, {
+    organizationId: 'org-1', businessUnitId: 'aitusa-1', contactId: null, leadId: null,
+    event: event({
+      eventType: 'placement_review_confirmed', consent: noConsent,
+      placement: { ...event().placement, state: 'confirmed', finalLevel: 'level-3' },
+    }),
+  });
+  assert.equal(final.action, 'complete');
+  assert.equal(final.taskStatus, 'completed');
+});
+
 test('creates one dedicated, senior-assigned placement-review task and an opaque internal notification', async () => {
   const db = client();
   const result = await syncPlacementReviewWorkflow(db, {
@@ -189,6 +217,7 @@ test('creates one dedicated, senior-assigned placement-review task and an opaque
   const taskInsert = db.calls.find((call) => call.sql.startsWith('insert into tasks'));
   assert.equal(taskInsert.values[4], 'Review placement result');
   assert.equal(taskInsert.values[9], 'review:placement-review-opaque-0001');
+  assert.equal(JSON.parse(taskInsert.values.at(-1)).placementReview.employeeUrl, '/employee/placement-reviews?review=placement-review-opaque-0001');
   const reviewLock = db.calls.find((call) => call.sql.includes('pg_advisory_xact_lock'));
   assert.deepEqual(reviewLock.values, ['aitusa-placement-review:org-1:aitusa-1:placement-review-opaque-0001']);
   const notification = db.calls.find((call) => call.sql.startsWith('insert into notifications'));

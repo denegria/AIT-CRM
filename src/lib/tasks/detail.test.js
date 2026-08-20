@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import { canReadTaskDetail } from './detail-policy.js';
 
 function session(overrides = {}) {
@@ -80,4 +81,18 @@ test('task removal approval detail is restricted to active reviewer roles', () =
     canAccessAllBusinessUnits: true,
     businessUnitIds: [],
   }), approvalTask), true);
+});
+
+test('task-detail loader exposes only server-resolved placement review links to the UI', async () => {
+  const [loaderSource, pageSource] = await Promise.all([
+    readFile(new URL('./detail.js', import.meta.url), 'utf8'),
+    readFile(new URL('../../app/tasks/[id]/page.js', import.meta.url), 'utf8'),
+  ]);
+  assert.match(loaderSource, /resolveAitUsaEmployeeReviewUrl/);
+  assert.match(loaderSource, /employeeBaseUrl: env\.AITUSA_EMPLOYEE_BASE_URL/);
+  assert.match(loaderSource, /placementReviewLink: placementReviewTaskLink\(taskPayload\.metadataJson\)/);
+  assert.match(pageSource, /task\.placementReviewLink &&/);
+  assert.match(pageSource, /Open AIT USA review/);
+  assert.match(pageSource, /target="_blank" rel="noreferrer"/);
+  assert.doesNotMatch(pageSource, /AITUSA_EMPLOYEE_BASE_URL/);
 });

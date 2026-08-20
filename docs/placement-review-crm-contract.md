@@ -63,6 +63,13 @@ CRM creates or reuses exactly one task with source ID `review:<opaque-review-id>
   as a documented fallback. No eligible reviewer fails the acknowledgement so
   the AIT USA outbox can retry/dead-letter safely.
 
+CRM stores the validated relative employee path in `placementReview.employeeUrl`.
+Task detail resolves it only on the server with `AITUSA_EMPLOYEE_BASE_URL`,
+which must be an HTTPS base URL without credentials, query, or fragment. The
+loader accepts only `/employee/placement-reviews?review=<opaque-id>` and emits
+no link when the environment or path is invalid; the browser never receives the
+base environment value directly.
+
 `confirmed` and `adjusted` complete that exact task only in the same committed
 transaction that records CRM acknowledgement. Stale `created`/`started` events
 cannot regress a final task; only `additional_review_required` reopens it.
@@ -84,11 +91,18 @@ Existing task metadata and task events record privacy-safe delivery outcomes
 with correlation IDs. The transport-free
 `recordPlacementReviewDeliveryOutcome` is the transaction/advisory-lock-safe
 callback/retry boundary. `failed`, `bounced`, `opted_out`, and `suppressed`
-reopen or keep open CRM work. Failed, bounce, opt-out, suppression, DNC, and
-wrong-number outcomes are sticky and cannot be silently re-queued; they force
-the task open until explicit recovery. A later academic confirmation can update
+may be recorded with correlation IDs. Failed, bounce, opt-out, carrier
+suppression, DNC, and wrong-number outcomes are sticky and reopen or keep open
+CRM work until explicit recovery. A later academic confirmation can update
 review metadata but cannot erase or complete delivery recovery work. It never
 alters academic state or creates a second placement decision.
+
+Policy planning suppressions are informational, not recovery failures:
+`verified_account_email_required`, `advisor_email_consent_required`,
+`verified_mobile_required`, `service_sms_consent_required`,
+`provider_readiness_required`, and `automated_whatsapp_disabled`. They remain
+auditable but do not alter create/final task transitions. Carrier suppression
+and runtime failed/bounced/opt-out/DNC/wrong-number outcomes remain actionable.
 
 No provider credentials, recipient values, message bodies, raw review content,
 or tokens are stored in this workflow.
