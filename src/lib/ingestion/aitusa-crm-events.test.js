@@ -111,6 +111,23 @@ test('accepts only privacy-safe placement-review contract fields and requires a 
   }).error, 'placement_review_revision_invalid');
   assert.equal(validateAitUsaCrmEvent({
     ...accepted.event,
+    placement: { ...accepted.event.placement, revision: accepted.event.placement.revision + 1 },
+  }).error, 'placement_review_event_key_invalid');
+  assert.equal(validateAitUsaCrmEvent({
+    ...accepted.event,
+    eventType: 'placement_review_created',
+    placement: { ...accepted.event.placement, state: 'pending' },
+  }).error, 'placement_review_event_key_invalid');
+  assert.equal(validateAitUsaCrmEvent({
+    ...accepted.event,
+    placement: { ...accepted.event.placement, reviewId: '00000000-0000-4000-8000-000000000099' },
+  }).error, 'placement_review_event_key_invalid');
+  assert.equal(validateAitUsaCrmEvent({
+    ...accepted.event,
+    idempotencyKey: 'placement-review:00000000-0000-4000-8000-000000000001:revision:2:placement_review_created',
+  }).error, 'placement_review_event_key_invalid');
+  assert.equal(validateAitUsaCrmEvent({
+    ...accepted.event,
     consent: { ...accepted.event.consent, sourceUrl: 'https://aitusa.example/placement-test/' },
   }).error, 'placement_review_consent_source_url_invalid');
 });

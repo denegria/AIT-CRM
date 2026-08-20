@@ -44,6 +44,9 @@ test('canonical placement-review state map and final-level constraints stay comp
     const envelope = structuredClone(fixture);
     envelope.eventType = eventType;
     envelope.placement.state = state;
+    const expectedKey = `placement-review:${envelope.placement.reviewId}:revision:${envelope.placement.revision}:${eventType}`;
+    envelope.eventId = expectedKey;
+    envelope.idempotencyKey = expectedKey;
     if (state === 'confirmed' || state === 'adjusted') envelope.placement.finalLevel = fixture.placement.finalLevel;
     else delete envelope.placement.finalLevel;
     assert.equal(validateAitUsaCrmEvent(envelope).ok, true, eventType);

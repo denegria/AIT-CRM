@@ -93,6 +93,8 @@ function validatePlacementReviewEvent(body) {
   if (!isExactRecord(placement, ['reviewId', 'resultId', 'attemptId', 'revision', 'state', 'finalLevel'])) return invalid('placement_review_payload_invalid');
   if (!safeIdentifier(placement.reviewId) || !safeIdentifier(placement.resultId) || !safeIdentifier(placement.attemptId)) return invalid('placement_review_identifier_invalid');
   if (!Number.isInteger(placement.revision) || placement.revision < 1) return invalid('placement_review_revision_invalid');
+  const expectedKey = `placement-review:${placement.reviewId}:revision:${placement.revision}:${body.eventType}`;
+  if (body.eventId !== expectedKey || body.idempotencyKey !== expectedKey) return invalid('placement_review_event_key_invalid');
   if (placement.state !== AITUSA_PLACEMENT_REVIEW_EVENT_STATES[body.eventType]) return invalid('placement_review_state_invalid');
   if (!safeEmployeeReviewUrl(source.employeeUrl, placement.reviewId)) return invalid('placement_review_employee_url_invalid');
   const requiresFinalLevel = placement.state === 'confirmed' || placement.state === 'adjusted';
