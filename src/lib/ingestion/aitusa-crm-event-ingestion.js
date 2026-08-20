@@ -39,22 +39,27 @@ export async function ingestAitUsaCrmEvent(client, { organizationId, businessUni
     }
 
     if (isAitUsaPlacementReviewEvent(event)) {
+      const linkedScope = await resolvePlacementReviewCrmScope(client, {
+        organizationId,
+        businessUnitId,
+        correlationId: event.correlationId,
+      });
       const metadata = safeEventMetadata(event);
       await client.query(
         `insert into activity_events
          (organization_id, business_unit_id, contact_id, lead_id, event_type, message, metadata_json, occurred_at)
-         values ($1, $2, null, null, $3, $4, $5::jsonb, $6::timestamptz)`,
-        [organizationId, businessUnitId, `aitusa.${event.eventType}`, safeTimelineMessage(event), JSON.stringify(metadata), event.occurredAt],
+         values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::timestamptz)`,
+        [organizationId, businessUnitId, linkedScope.contactId, linkedScope.leadId, `aitusa.${event.eventType}`, safeTimelineMessage(event), JSON.stringify(metadata), event.occurredAt],
       );
       const placementReview = await syncPlacementReviewWorkflow(client, {
         organizationId,
         businessUnitId,
-        contactId: null,
-        leadId: null,
+        contactId: linkedScope.contactId,
+        leadId: linkedScope.leadId,
         event,
       });
       await client.query('commit');
-      return { acknowledged: true, duplicate: false, contactId: null, leadId: null, placementReview };
+      return { acknowledged: true, duplicate: false, ...linkedScope, placementReview };
     }
 
     const contact = event.contact || {};
@@ -171,6 +176,21 @@ export async function ingestAitUsaCrmEvent(client, { organizationId, businessUni
     await client.query('rollback').catch(() => {});
     throw error;
   }
+}
+
+async function resolvePlacementReviewCrmScope(client, { organizationId, businessUnitId, correlationId }) {
+  const linked = await client.query(
+    `select contact_id, lead_id from activity_events
+     where organization_id = $1 and business_unit_id = $2
+       and metadata_json->>'correlationId' = $3
+       and (contact_id is not null or lead_id is not null)
+     order by (lead_id is not null) desc, occurred_at desc limit 1`,
+    [organizationId, businessUnitId, correlationId],
+  );
+  return {
+    contactId: linked.rows[0]?.contact_id || null,
+    leadId: linked.rows[0]?.lead_id || null,
+  };
 }
 
 function priorIdentityReview(prior) {

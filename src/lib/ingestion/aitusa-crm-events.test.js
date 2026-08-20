@@ -513,6 +513,9 @@ test('placement-review ingestion is transactionally idempotent and creates one C
     async query(statement, values = []) {
       const sql = String(statement);
       calls.push({ sql, values });
+      if (sql.includes("metadata_json->>'correlationId' = $3")) {
+        return { rows: [{ contact_id: 'contact-1', lead_id: 'lead-1' }] };
+      }
       if (sql.includes('from activity_events')) {
         return { rows: recorded ? [{ contact_id: 'contact-1', lead_id: 'lead-1', metadata_json: {} }] : [] };
       }
@@ -538,7 +541,12 @@ test('placement-review ingestion is transactionally idempotent and creates one C
   assert.equal(calls.filter((call) => call.sql.includes('insert into notifications')).length, 1);
   assert.equal(calls.some((call) => call.sql.includes('from contacts')), false);
   assert.equal(calls.some((call) => call.sql.includes('from import_review_items')), false);
-  assert.equal(first.contactId, null);
+  assert.equal(first.contactId, 'contact-1');
+  assert.equal(first.leadId, 'lead-1');
+  const reviewTimeline = calls.find((call) => call.sql.includes('insert into activity_events'));
+  assert.deepEqual(reviewTimeline.values.slice(2, 4), ['contact-1', 'lead-1']);
+  const reviewTask = calls.find((call) => call.sql.includes('insert into tasks'));
+  assert.deepEqual(reviewTask.values.slice(2, 4), ['contact-1', 'lead-1']);
 });
 
 function createAmbiguousIdentityEventClient() {
