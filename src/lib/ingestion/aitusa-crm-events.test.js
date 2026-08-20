@@ -65,6 +65,36 @@ test('accepts only the fixed AIT USA CRM event whitelist', () => {
   assert.equal(Object.hasOwn(lead, 'rawAnswers'), false);
 });
 
+test('accepts an unverified phone as an advisor preference without treating it as login evidence', () => {
+  const candidate = event({
+    contact: { firstName: 'Ana', email: 'ana@example.com', phone: '+17323790593' },
+    placement: {
+      resultId: '00000000-0000-4000-8000-000000000002',
+      resultStatus: 'provisional',
+      communicationPreference: 'phone',
+      verifiedEmail: true,
+      verifiedMobile: false,
+    },
+  });
+  const result = validateAitUsaCrmEvent(candidate);
+  assert.equal(result.ok, true);
+  const lead = aitUsaEventToWebsiteLeadBody(result.event);
+  assert.equal(lead.communicationPreference, 'phone');
+  assert.equal(lead.phone, '+17323790593');
+});
+
+test('accepts an unverified SMS preference on placement-review events while delivery remains suppressible', () => {
+  const candidate = placementReviewEvent('placement_review_created');
+  candidate.consent = {
+    ...candidate.consent,
+    communicationPreference: 'sms',
+    advisorContactEmail: false,
+    serviceSms: true,
+    verifiedMobile: false,
+  };
+  assert.equal(validateAitUsaCrmEvent(candidate).ok, true);
+});
+
 test('rejects wrong-type, oversized, and forbidden nested values before persistence', () => {
   assert.equal(validateAitUsaCrmEvent({ ...event(), contact: { email: ['student@example.com'] } }).ok, false);
   assert.equal(validateAitUsaCrmEvent({ ...event(), placement: { recommendedLevelLabel: 'x'.repeat(121) } }).error, 'event_placement_recommendedLevelLabel_invalid');

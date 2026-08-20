@@ -109,7 +109,6 @@ function validatePlacementReviewEvent(body) {
   if (consent.sourceUrl !== undefined && consent.sourceUrl !== null && !safeRelativePath(consent.sourceUrl)) return invalid('placement_review_consent_source_url_invalid');
   if (consent.optInAction !== undefined && consent.optInAction !== null && consent.optInAction !== 'explicit_checkbox') return invalid('placement_review_consent_opt_in_action_invalid');
   if (consent.marketingSms && !consent.serviceSms) return invalid('placement_review_marketing_sms_invalid');
-  if (consent.communicationPreference === 'sms' && !consent.verifiedMobile) return invalid('placement_review_verified_mobile_required');
   if (findForbiddenKey(body)) return invalid('placement_review_field_forbidden');
   return { ok: true, event: structuredClone(body) };
 }
@@ -140,7 +139,8 @@ export function aitUsaEventToWebsiteLeadBody(event) {
       contact: consent.advisorContact === true,
       ...(typeof consent.sms === 'boolean' ? { sms: consent.sms } : {}),
     },
-    communicationPreference: isCallback ? (contact.phone ? 'phone' : 'email') : 'any',
+    communicationPreference: event.placement?.communicationPreference
+      || (isCallback ? (contact.phone ? 'phone' : 'email') : 'any'),
     placement: event.placement,
     status: 'New Lead',
     currentStage: 'New Lead',
@@ -186,7 +186,7 @@ function validateNestedValues(body) {
   if (body.placement !== undefined) {
     const p = body.placement;
     for (const key of ['reviewId', 'resultId', 'resultStatus', 'reviewStatus', 'recommendedLevelKey', 'recommendedLevelLabel', 'finalLevelKey', 'scoringContractVersion']) if (p[key] !== undefined && !safeText(p[key], key === 'recommendedLevelLabel' ? 120 : 80)) return `event_placement_${key}_invalid`;
-    if (p.communicationPreference !== undefined && !['email', 'sms', 'whatsapp', 'portal', 'any'].includes(p.communicationPreference)) return 'event_placement_communication_preference_invalid';
+    if (p.communicationPreference !== undefined && !['email', 'sms', 'whatsapp', 'phone', 'portal', 'any'].includes(p.communicationPreference)) return 'event_placement_communication_preference_invalid';
     for (const key of ['verifiedEmail', 'verifiedMobile']) if (p[key] !== undefined && typeof p[key] !== 'boolean') return `event_placement_${key}_invalid`;
     for (const key of ['answeredQuestionCount', 'skippedQuestionCount']) if (p[key] !== undefined && (!Number.isInteger(p[key]) || p[key] < 0 || p[key] > 1000)) return `event_placement_${key}_invalid`;
     if (p.advisorConfirmationRequired !== undefined && typeof p.advisorConfirmationRequired !== 'boolean') return 'event_placement_advisor_confirmation_required_invalid';
