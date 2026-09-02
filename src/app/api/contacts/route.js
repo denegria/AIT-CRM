@@ -22,7 +22,7 @@ import {
 } from '@/lib/crm/access.js';
 import {
   assertCanManageAitUsaAssignments,
-  isEligibleAitUsaCoordinatorRole,
+  isEligibleAitUsaAssigneeRole,
 } from '@/lib/crm/ait-usa-assignment-policy.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
 import { validateManualContactIdentity } from '@/lib/crm/contact-input.js';
@@ -213,8 +213,12 @@ async function resolveAssignableUserId(db, session, value, fieldName = 'assigned
         .from(businessUnitMemberships)
         .where(eq(businessUnitMemberships.userId, id)),
     ]);
-    if (!isEligibleAitUsaCoordinatorRole(roleRows.map((row) => row.key).filter(Boolean))) {
-      throw createCrmError('Selected AIT USA assignee must be a regular Coordinator.');
+    if (!isEligibleAitUsaAssigneeRole({
+      roleKeys: roleRows.map((row) => row.key).filter(Boolean),
+      assigneeUserId: id,
+      actorUserId: session.user.id,
+    })) {
+      throw createCrmError('Selected AIT USA assignee must be a regular Coordinator or the acting Senior Coordinator.');
     }
     if (!membershipRows.some((row) => row.businessUnitId === businessUnit.id)) {
       throw createCrmError('Selected assignee does not belong to the AIT USA business unit.');

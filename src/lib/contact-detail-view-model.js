@@ -189,10 +189,14 @@ function buildInstituteHighlights(contact = {}) {
   const completedCourse = completedAitUsaCourse(contact);
   const endedCourse = endedAitUsaCourse(contact);
   const courseOutcome = aitUsaCourseOutcome(contact);
+  const sourceChannel = firstPresent([source.channel, contact.inquirySource, contact.source]);
+  const sourceSummary = source.detail
+    ? [sourceChannel, source.detail].filter(Boolean).join(' · ')
+    : firstPresent([contact.sourceDetail, sourceChannel]);
   return compactArray([
     {
       label: 'Inquiry source',
-      value: firstPresent([contact.sourceDetail, source.channel, contact.inquirySource, contact.source]),
+      value: sourceSummary,
     },
     {
       label: 'Program',

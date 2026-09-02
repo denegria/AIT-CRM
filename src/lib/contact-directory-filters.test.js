@@ -289,17 +289,30 @@ test('contact source filter options use directory source labels', () => {
     { id: 'wordpress', source: 'WordPress Website Form' },
     { id: 'workbook', sourceCategory: 'Workbook Import', source: 'work_order' },
     { id: 'wordpress-2', source: 'WordPress Website Form' },
+    { id: 'facebook-lead', sourceCategory: 'Facebook Lead Ads', source: 'Facebook Ads' },
+    { id: 'facebook-message', sourceCategory: 'Facebook Messenger', source: 'Facebook Messenger' },
   ];
 
   assert.deepEqual(
     buildSourceFilterOptions(contacts).map((option) => [option.label, option.count]),
-    [['WordPress Website Form', 2], ['Workbook Import', 1]],
+    [
+      ['Facebook Lead Ads', 1],
+      ['Facebook Messenger', 1],
+      ['WordPress Website Form', 2],
+      ['Workbook Import', 1],
+    ],
   );
   assert.deepEqual(
     contacts
       .filter((contact) => contactMatchesSource(contact, { sourceFilter: 'WordPress Website Form' }))
       .map((contact) => contact.id),
     ['wordpress', 'wordpress-2'],
+  );
+  assert.deepEqual(
+    contacts
+      .filter((contact) => contactMatchesSource(contact, { sourceFilter: 'Facebook Lead Ads' }))
+      .map((contact) => contact.id),
+    ['facebook-lead'],
   );
 });
 

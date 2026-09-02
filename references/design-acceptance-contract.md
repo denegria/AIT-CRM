@@ -34,3 +34,33 @@
 - Changes to follow-up outcome logging or next-follow-up creation.
 - Changes to cancellation or removal-approval policy.
 - Recovery Queue v1.
+
+# AIT CRM Facebook + Assignment Hotfix Acceptance Contract
+
+## Workflow and permissions
+
+- A regular AIT USA Coordinator can edit records already assigned to them, but cannot assign, reassign, or unassign ownership from the UI, direct API calls, or bulk actions.
+- A Senior Coordinator or administrator can continue assigning AIT USA Opportunities to eligible regular Coordinators.
+- An active Senior Coordinator who belongs to AIT USA can additionally assign an AIT USA Opportunity to themself; that exception does not make other Senior Coordinators, administrators, or Sales Managers eligible assignees.
+- Existing ownership-change audit behavior remains intact.
+
+## Interaction and hierarchy
+
+- The current Senior Coordinator appears in AIT USA owner selects as `<Name> (You)`.
+- Existing eligible regular Coordinator options remain unchanged.
+- Existing legacy owners stay visible while editing their record so the form does not silently discard historical state.
+- Contacts and Pipeline filters present `Facebook Lead Ads` and `Facebook Messenger` as separate source choices.
+- AIT USA source details identify Facebook Lead Ads as a `Lead form ad`.
+
+## Responsive and accessibility acceptance
+
+- Desktop basis: 1440 x 900. Mobile basis: 390 x 844.
+- Existing native select behavior, labels, focus order, and error regions remain unchanged.
+- No new modal, warning banner, or horizontal overflow is introduced.
+
+## Non-goals
+
+- Meta token replacement or Meta application configuration changes.
+- Automated replay, repair, or deduplication of the 65 preserved failed submissions.
+- A new ingestion-degradation warning surface.
+- A broader assignment-policy redesign or changes to non-AIT-USA assignment rules.
