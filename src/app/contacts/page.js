@@ -534,7 +534,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const isAitUsaDirectory = activeWorkflow?.key === WORKFLOW_KEYS.AIT_USA;
   const effectiveLocationFilter = isAitUsaDirectory ? locationFilter : DEFAULT_CONTACT_LOCATION_FILTER;
   const ownerOptions = useMemo(() => {
-    return (employees || [])
+    const mapped = (employees || [])
       .filter((employee) => employee?.id)
       .map((employee) => ({
         id: employee.id,
@@ -545,7 +545,23 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         initials: ownerInitials(employee.name || employee.email || 'Unnamed User'),
         meta: ownerMeta(employee),
       }));
-  }, [employees]);
+    if (currentUser?.id && !mapped.some((employee) => employee.id === currentUser.id)) {
+      const label = currentUser.name || currentUser.email || 'Me';
+      return [
+        {
+          id: currentUser.id,
+          label,
+          email: currentUser.email || '',
+          roleKeys: [currentUser.primaryRoleKey, ...(currentUser.roleKeys || [])].filter(Boolean),
+          businessUnitIds: currentUser.businessUnitIds || [],
+          initials: ownerInitials(label),
+          meta: ownerMeta(currentUser),
+        },
+        ...mapped,
+      ];
+    }
+    return mapped;
+  }, [currentUser, employees]);
   const visibleOwnerOptions = useMemo(
     () => ownerOptions.filter((owner) => owner.id !== currentUser?.id && matchesOwnerSearch(owner, ownerSearch)),
     [currentUser?.id, ownerOptions, ownerSearch],
