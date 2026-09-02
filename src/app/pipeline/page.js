@@ -48,6 +48,10 @@ import {
 import { schoolLocationForContact } from '@/lib/school-locations';
 import { matchesSearchValues } from '@/lib/search/match.js';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
+import {
+  FACEBOOK_LEAD_ADS_SOURCE_LABEL,
+  FACEBOOK_MESSENGER_SOURCE_LABEL,
+} from '@/lib/crm/source-attribution.js';
 import TimeframeFilterPanel from '@/components/TimeframeFilterPanel';
 import s from './PipelinePage.module.css';
 
@@ -415,7 +419,11 @@ export default function PipelinePage() {
   const customPipelineCount = pipelineSummary?.timeframeCounts?.custom ?? legacyCustomPipelineCount;
 
   const sourceOptions = useMemo(() => {
-    const values = [...new Set(pipelineScopedRows.map(sourceValue).filter(Boolean))];
+    const values = [...new Set([
+      FACEBOOK_LEAD_ADS_SOURCE_LABEL,
+      FACEBOOK_MESSENGER_SOURCE_LABEL,
+      ...pipelineScopedRows.map(sourceValue).filter(Boolean),
+    ])];
     return values.sort((left, right) => left.localeCompare(right));
   }, [pipelineScopedRows]);
   const courseFilterOptions = useMemo(
