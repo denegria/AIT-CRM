@@ -7,6 +7,7 @@ import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
 import PageState, { PageStateAction } from '@/components/PageState';
 import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
+import { aitUsaAssigneeOptionLabel, isEligibleAitUsaAssignee } from '@/lib/crm/ait-usa-assignee.js';
 import { generateInvoicePDF, generateEstimatePDF, generateReceiptPDF, generateAitUsaReceiptPDF } from '@/lib/pdf';
 import s from './ContactDetail.module.css';
 import {
@@ -268,18 +269,6 @@ function snapshotDetail(items, category, linkedRecordCount = 0, emptyText = 'No 
   return `Latest ${dateLabel(latest)}`;
 }
 
-function isEligibleAitUsaOwner(owner, businessUnitId) {
-  const roleKeys = (owner?.roleKeys || []).map((key) => String(key).trim());
-  const elevated = roleKeys.some((key) => ['admin', 'senior_coordinator', 'sales_manager'].includes(key));
-  const regular = roleKeys.some((key) => ['account_coordinator', 'account_manager'].includes(key));
-  return Boolean(
-    regular &&
-    !elevated &&
-    businessUnitId &&
-    (owner?.businessUnitIds || []).includes(businessUnitId)
-  );
-}
-
 function canManageAitUsaAssignmentsForUser(user) {
   const roleKeys = [user?.primaryRoleKey, ...(user?.roleKeys || [])].filter(Boolean);
   return roleKeys.some((key) => ['admin', 'senior_coordinator'].includes(String(key).trim()));
@@ -484,7 +473,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       }));
     if (currentUser?.id && !mapped.some((employee) => employee.id === currentUser.id)) {
       return [
-        { id: currentUser.id, label: currentUser.name || currentUser.email || 'Me' },
+        {
+          id: currentUser.id,
+          label: currentUser.name || currentUser.email || 'Me',
+          roleKeys: [currentUser.primaryRoleKey, ...(currentUser.roleKeys || [])].filter(Boolean),
+          businessUnitIds: currentUser.businessUnitIds || [],
+        },
         ...mapped,
       ];
     }
@@ -621,7 +615,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     : coordinatorUiPolicy.canManageCoordinatorAssignments;
   const aitUsaOwnerOptions = isAitUsaContact
     ? ownerOptions.filter((owner) => (
-        isEligibleAitUsaOwner(owner, contactBusinessUnit?.id) ||
+        isEligibleAitUsaAssignee({ owner, businessUnitId: contactBusinessUnit?.id, actorUserId: currentUser?.id }) ||
         owner.id === contact?.assignedTo
       ))
     : ownerOptions;
@@ -3007,7 +3001,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                             onChange={(event) => setStartOpportunityForm((current) => ({ ...current, assignedTo: event.target.value }))}
                           >
                             <option value="">Unassigned</option>
-                            {aitUsaOwnerOptions.map((owner) => <option key={owner.id} value={owner.id}>{owner.label}</option>)}
+                            {aitUsaOwnerOptions.map((owner) => (
+                              <option key={owner.id} value={owner.id}>
+                                {isAitUsaContact ? aitUsaAssigneeOptionLabel(owner, currentUser?.id) : owner.label}
+                              </option>
+                            ))}
                           </select>
                         </div>
                       )}
@@ -3068,7 +3066,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <select id="profile-edit-owner" className="input select" value={editForm.assignedTo || ''} disabled={Boolean(isAitUsaContact && contact.opportunityConflict)} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
                       <option value="">Unassigned</option>
                       {aitUsaOwnerOptions.map((owner) => (
-                        <option key={owner.id} value={owner.id}>{owner.label}</option>
+                        <option key={owner.id} value={owner.id}>
+                          {isAitUsaContact ? aitUsaAssigneeOptionLabel(owner, currentUser?.id) : owner.label}
+                        </option>
                       ))}
                     </select>
                   </div>

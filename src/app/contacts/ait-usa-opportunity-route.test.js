@@ -522,6 +522,57 @@ test('elevated Start opportunity allows an active assignable member of the targe
   assert.equal(serviceInput.assignedUserId, ids.otherUser);
 });
 
+test('Senior Coordinator can assign a new AIT USA Opportunity to themself', async () => {
+  let serviceInput;
+  const response = await POST(
+    request({ businessUnitId: ids.businessUnit, status: 'New Lead', assignedTo: ids.user }),
+    { params: Promise.resolve({ id: ids.contact }) },
+    {
+      requirePermissionForRequest: async () => ({ error: null, session: elevatedSession }),
+      getDbForRequest: () => dbRows(
+        [contact],
+        [businessUnit],
+        [{ id: ids.user, name: 'Lili', email: 'lili@aitusa.org', isActive: true }],
+        [{ key: 'senior_coordinator' }],
+        [{ businessUnitId: ids.businessUnit }],
+      ),
+      startOpportunityForRequest: async (input) => {
+        serviceInput = input;
+        return {
+          status: 'created',
+          opportunity: {
+            id: ids.opportunity,
+            status: 'New Lead',
+            currentStage: 'New Lead',
+            assignedUserId: ids.user,
+          },
+        };
+      },
+    },
+  );
+  assert.equal(response.status, 201);
+  assert.equal(serviceInput.assignedUserId, ids.user);
+});
+
+test('Senior Coordinator cannot assign a new AIT USA Opportunity to another Senior Coordinator', async () => {
+  const response = await POST(
+    request({ businessUnitId: ids.businessUnit, status: 'New Lead', assignedTo: ids.otherUser }),
+    { params: Promise.resolve({ id: ids.contact }) },
+    {
+      requirePermissionForRequest: async () => ({ error: null, session: elevatedSession }),
+      getDbForRequest: () => dbRows(
+        [contact],
+        [businessUnit],
+        [{ id: ids.otherUser, name: 'Other Senior', email: 'senior@aitusa.org', isActive: true }],
+        [{ key: 'senior_coordinator' }],
+        [{ businessUnitId: ids.businessUnit }],
+      ),
+    },
+  );
+  assert.equal(response.status, 400);
+  assert.match((await response.json()).error, /acting Senior Coordinator/);
+});
+
 test('elevated Start opportunity permits null owner consistently with manual Contact create', async () => {
   let serviceInput;
   const response = await POST(

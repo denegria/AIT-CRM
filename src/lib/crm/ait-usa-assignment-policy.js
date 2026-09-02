@@ -1,10 +1,9 @@
 import { createCrmError } from './errors.js';
 import {
   ROLE_KEYS,
-  canonicalRoleKeys,
-  isRegularCoordinatorRoleKey,
   userHasRole,
 } from '../roles.js';
+import { isEligibleAitUsaAssigneeRole } from './ait-usa-assignee.js';
 
 export function canManageAitUsaAssignments(session) {
   return Boolean(
@@ -20,10 +19,7 @@ export function assertCanManageAitUsaAssignments(session) {
 }
 
 export function isEligibleAitUsaCoordinatorRole(roleKeys = []) {
-  const normalized = canonicalRoleKeys(roleKeys);
-  return normalized.some(isRegularCoordinatorRoleKey) && ![
-    ROLE_KEYS.ADMIN,
-    ROLE_KEYS.SENIOR_COORDINATOR,
-    ROLE_KEYS.SALES_MANAGER,
-  ].some((roleKey) => normalized.includes(roleKey));
+  return isEligibleAitUsaAssigneeRole({ roleKeys });
 }
+
+export { isEligibleAitUsaAssigneeRole } from './ait-usa-assignee.js';

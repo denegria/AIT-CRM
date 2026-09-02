@@ -5,6 +5,7 @@ import { useCRM } from '@/lib/store';
 import PageState from '@/components/PageState';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
 import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
+import { aitUsaAssigneeOptionLabel, isEligibleAitUsaAssignee } from '@/lib/crm/ait-usa-assignee.js';
 import { validateManualContactIdentity } from '@/lib/crm/contact-input';
 import { isClosedLifecycleStatus, WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
 import {
@@ -94,6 +95,8 @@ const CONTACT_FILTER_CHIP_LABELS = {
 };
 
 const REMOTE_SOURCE_FILTER_OPTIONS = [
+  'Facebook Lead Ads',
+  'Facebook Messenger',
   'Website Form Submission',
   'Workbook Import',
   'Manual / Unknown',
@@ -185,18 +188,6 @@ function matchesOwnerSearch(owner, query) {
   if (!query) return true;
   const haystack = [owner.label, owner.email, owner.meta].join(' ').toLowerCase();
   return haystack.includes(query.trim().toLowerCase());
-}
-
-function isEligibleAitUsaOwner(owner, businessUnitId) {
-  const roleKeys = (owner?.roleKeys || []).map((key) => String(key).trim());
-  const elevated = roleKeys.some((key) => ['admin', 'senior_coordinator', 'sales_manager'].includes(key));
-  const regular = roleKeys.some((key) => ['account_coordinator', 'account_manager'].includes(key));
-  return Boolean(
-    regular &&
-    !elevated &&
-    businessUnitId &&
-    (owner?.businessUnitIds || []).includes(businessUnitId)
-  );
 }
 
 function canManageAitUsaAssignmentsForUser(user) {
@@ -990,7 +981,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     : coordinatorUiPolicy.canManageCoordinatorAssignments;
   const formOwnerOptions = isAitUsaForm
     ? ownerOptions.filter((owner) => (
-        isEligibleAitUsaOwner(owner, formBusinessUnitId) ||
+        isEligibleAitUsaAssignee({ owner, businessUnitId: formBusinessUnitId, actorUserId: currentUser?.id }) ||
         (drawer !== 'new' && owner.id === form.assignedTo)
       ))
     : ownerOptions;
@@ -1543,7 +1534,9 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                   <select className="input select" value={form.assignedTo || ''} onChange={e => setForm(f => ({...f, assignedTo: e.target.value}))}>
                     <option value="">Unassigned</option>
                     {formOwnerOptions.map((owner) => (
-                      <option key={owner.id} value={owner.id}>{owner.label}</option>
+                      <option key={owner.id} value={owner.id}>
+                        {isAitUsaForm ? aitUsaAssigneeOptionLabel(owner, currentUser?.id) : owner.label}
+                      </option>
                     ))}
                   </select>
                 </div>

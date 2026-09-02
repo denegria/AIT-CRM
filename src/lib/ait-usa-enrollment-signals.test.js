@@ -183,3 +183,20 @@ test('buildAitUsaEnrollmentSignals marks missing channels as needs review', () =
     ['missing_phone', 'missing_email', 'no_contact_channel'].sort(),
   );
 });
+
+test('buildAitUsaEnrollmentSignals identifies Facebook Lead Ads as a lead form source', () => {
+  const signals = buildAitUsaEnrollmentSignals({
+    contact: { phone: '555-0100', email: 'student@example.com' },
+    lead: {
+      sourceType: 'facebook_lead_ads',
+      sourceName: 'Facebook Ads',
+      status: 'New Lead',
+      currentStage: 'New Lead',
+      originalNotes: 'source_key=facebook_webhook',
+    },
+    workflow: { workflowKey: 'ait_usa', status: 'New Lead', tags: [] },
+  });
+
+  assert.equal(signals.source.channel, 'Facebook Lead Ads');
+  assert.equal(signals.source.detail, 'Lead form ad');
+});

@@ -18,7 +18,7 @@ import {
 } from '@/lib/crm/access.js';
 import {
   assertCanManageAitUsaAssignments,
-  isEligibleAitUsaCoordinatorRole,
+  isEligibleAitUsaAssigneeRole,
 } from '@/lib/crm/ait-usa-assignment-policy.js';
 import {
   isClosedLifecycleStatus,
@@ -70,8 +70,12 @@ async function resolveStartOpportunityOwner(db, session, requestedOwnerId, busin
       .where(eq(businessUnitMemberships.userId, assignedUserId)),
   ]);
   const roleKeys = roleRows.map((row) => row.key).filter(Boolean);
-  if (!isEligibleAitUsaCoordinatorRole(roleKeys)) {
-    throw Object.assign(new Error('Selected AIT USA assignee must be a regular Coordinator.'), { status: 400 });
+  if (!isEligibleAitUsaAssigneeRole({
+    roleKeys,
+    assigneeUserId: assignedUserId,
+    actorUserId: session.user.id,
+  })) {
+    throw Object.assign(new Error('Selected AIT USA assignee must be a regular Coordinator or the acting Senior Coordinator.'), { status: 400 });
   }
   if (membershipRows.some((row) => row.businessUnitId === businessUnitId)) {
     return assignedUserId;

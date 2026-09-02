@@ -90,6 +90,23 @@ test('AIT USA contact detail uses enrollment grammar and hides empty Signs finan
   assert.ok(model.highlights.some((item) => item.label === 'Contactability' && item.value === 'Missing Email'));
 });
 
+test('AIT USA contact detail identifies Facebook Lead Ads as a lead form ad', () => {
+  const model = buildContactDetailViewModel({
+    contact: {
+      workflowKey: 'ait_usa',
+      sourceDetail: 'Facebook Ads',
+      enrollmentSignals: {
+        source: { channel: 'Facebook Lead Ads', detail: 'Lead form ad' },
+      },
+    },
+    businessUnit: { name: 'AIT USA Institute' },
+  });
+
+  assert.ok(model.highlights.some((item) => (
+    item.label === 'Inquiry source' && item.value === 'Facebook Lead Ads · Lead form ad'
+  )));
+});
+
 test('AIT USA contact detail keeps student and intended learning location separate', () => {
   const model = buildContactDetailViewModel({
     businessUnit: { name: 'AIT USA Institute' },

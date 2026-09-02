@@ -1,4 +1,5 @@
 import { WORKFLOW_KEYS } from './crm/lifecycle.js';
+import { canonicalLeadSourceChannel, leadSourceDetail } from './crm/source-attribution.js';
 import { canonicalAitUsaSchoolLocation } from './school-locations.js';
 
 function clean(value) {
@@ -121,16 +122,6 @@ export function aitUsaCourseOutcome(contact = {}) {
   return clean(aitUsaCourseMetadataForContact(contact).outcome);
 }
 
-function displaySourceChannel({ sourceName = '', sourceType = '', sourceKey = '' } = {}) {
-  const source = normalized(sourceName || sourceKey || sourceType);
-  if (source.includes('facebook') || source.includes('messenger')) return 'Facebook Messenger';
-  if (source.includes('wix historical') || source.includes('wix history')) return 'Wix Historical Import';
-  if (source.includes('wix')) return 'Wix Website Form';
-  if (source.includes('wordpress')) return 'WordPress Website Form';
-  if (source.includes('website')) return 'Website Form';
-  return clean(sourceName || sourceType || sourceKey);
-}
-
 function contactabilityForContact(contact = {}) {
   const hasPhone = Boolean(clean(contact.phone));
   const hasEmail = Boolean(clean(contact.email));
@@ -224,7 +215,7 @@ export function buildAitUsaEnrollmentSignals({ contact = {}, lead = null, workfl
     ...parseTags(fields.tags),
     ...(workflow.tags || []),
   ]);
-  const sourceChannel = displaySourceChannel({
+  const sourceChannel = canonicalLeadSourceChannel({
     sourceName: lead?.sourceName,
     sourceType: lead?.sourceType,
     sourceKey: fields.source_key,
@@ -254,6 +245,7 @@ export function buildAitUsaEnrollmentSignals({ contact = {}, lead = null, workfl
     workflowKey: WORKFLOW_KEYS.AIT_USA,
     source: compactObject({
       channel: sourceChannel,
+      detail: leadSourceDetail(sourceChannel),
       sourceType: clean(lead?.sourceType),
       sourceName: clean(lead?.sourceName),
       sourceKey: clean(fields.source_key),

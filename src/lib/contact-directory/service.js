@@ -264,8 +264,11 @@ function sourceCategorySql(latestLead, businessUnitRows = []) {
   const signsIds = businessUnitRows
     .filter((unit) => workflowKeyForBusinessUnit(unit) === WORKFLOW_KEYS.AIT_SIGNS)
     .map((unit) => unit.id);
-  const sourceText = sql`lower(concat_ws(' ', coalesce(${latestLead.sourceName}, ${latestLead.sourceType}), ${contacts.sourceLabel}))`;
+  const sourceText = sql`lower(concat_ws(' ', ${latestLead.sourceName}, ${latestLead.sourceType}, ${contacts.sourceLabel}))`;
   return sql`case
+    when ${sourceText} ~ '(facebook lead ads|facebook ads|facebook_lead_ads|leadgen)' then 'facebook lead ads'
+    when ${sourceText} ~ '(facebook messenger|facebook_messenger|messenger)' then 'facebook messenger'
+    when ${sourceText} ~ '(facebook_webhook|facebook webhook)' then 'facebook lead ads'
     when ${sourceText} ~ '(website|web form|wix|wordpress)' then 'website form submission'
     when ${businessUnitConditionSql(signsIds)}
       or ${sourceText} ~ '(workbook|xlsx|spreadsheet|archive|work_order|estimate|interesados|ait signs)'
@@ -278,8 +281,11 @@ function sourceCategorySql(latestLead, businessUnitRows = []) {
 function inquirySourceSql(latestLead) {
   const sourceKey = importedLeadFieldSql(latestLead.originalNotes, 'source_key');
   const source = nullableNormalizedSql(sql`coalesce(${latestLead.sourceName}, ${sourceKey}, ${latestLead.sourceType})`);
+  const sourceText = normalizedSql(sql`concat_ws(' ', ${latestLead.sourceName}, ${sourceKey}, ${latestLead.sourceType})`);
   return sql`case
-    when ${source} like '%facebook%' or ${source} like '%messenger%' then 'facebook messenger'
+    when ${sourceText} ~ '(facebook lead ads|facebook ads|facebook lead|leadgen)' then 'facebook lead ads'
+    when ${sourceText} ~ '(facebook messenger|messenger)' then 'facebook messenger'
+    when ${sourceText} like '%facebook webhook%' then 'facebook lead ads'
     when ${source} like '%wix historical%' or ${source} like '%wix history%' then 'wix historical import'
     when ${source} like '%wix%' then 'wix website form'
     when ${source} like '%wordpress%' then 'wordpress website form'
@@ -525,6 +531,15 @@ function sourceCondition(value, latestLead) {
   const source = clean(value).toLowerCase();
   if (!source || source === 'all') return undefined;
   const sourceText = sql`lower(concat_ws(' ', ${latestLead.sourceName}, ${latestLead.sourceType}, ${contacts.sourceLabel}))`;
+  if (source === 'facebook lead ads') {
+    return sql`(
+      ${sourceText} ~ '(facebook lead ads|facebook ads|facebook_lead_ads|leadgen)'
+      or (${sourceText} ~ '(facebook_webhook|facebook webhook)' and ${sourceText} !~ '(facebook messenger|facebook_messenger|messenger)')
+    )`;
+  }
+  if (source === 'facebook messenger') {
+    return sql`${sourceText} ~ '(facebook messenger|facebook_messenger|messenger)'`;
+  }
   if (source === 'website form submission') {
     return sql`${sourceText} ~ '(website|web form|wix|wordpress)'`;
   }
@@ -536,7 +551,7 @@ function sourceCondition(value, latestLead) {
   }
   if (source === 'other source') {
     return sql`trim(${sourceText}) <> ''
-      and ${sourceText} !~ '(website|web form|wix|wordpress|workbook|xlsx|spreadsheet|archive|work_order|estimate|interesados|ait signs)'`;
+      and ${sourceText} !~ '(facebook|messenger|leadgen|website|web form|wix|wordpress|workbook|xlsx|spreadsheet|archive|work_order|estimate|interesados|ait signs)'`;
   }
   return or(
     eq(normalizedSql(latestLead.sourceName), source),

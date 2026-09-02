@@ -47,6 +47,7 @@ import { selectAitUsaOpportunityForBootstrap } from './crm/ait-usa-opportunities
 import { courseRecordSummaryPayloadFromRow, deriveCourseSummary } from './crm/course-records.js';
 import { getServerAppVersion } from './app-version.js';
 import { canonicalRoleKeys } from './roles.js';
+import { canonicalLeadSourceChannel } from './crm/source-attribution.js';
 import {
   deferBootstrapContactDetails,
   deferBootstrapContactDirectory,
@@ -113,6 +114,8 @@ function latestStatusTransitionDate(rows = [], targetStatus = '') {
 
 function sourceCategoryForContact({ source = '', sourceLabel = '', workflowKey = '' } = {}) {
   const text = [source, sourceLabel].map(clean).join(' ').toLowerCase();
+  const canonicalChannel = canonicalLeadSourceChannel({ sourceName: source, sourceType: sourceLabel });
+  if (canonicalChannel.startsWith('Facebook ')) return canonicalChannel;
   if (text.includes('website') || text.includes('web form') || text.includes('wix') || text.includes('wordpress')) {
     return 'Website Form Submission';
   }
