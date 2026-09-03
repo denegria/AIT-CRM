@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  classifyFacebookLeadBroaderMatches,
   classifyFacebookLeadContactMatches,
   fetchMetaLeadDetailsWithHeader,
   reconcileFacebookLeadAdsFailures,
@@ -60,6 +61,56 @@ test('classifies conflicting email and phone matches for manual review', () => {
   assert.deepEqual(result.matchedContactIds.sort(), ['contact-email', 'contact-phone']);
 });
 
+test('classifies a unique exact-name match with identity corroboration as a strong manual candidate', () => {
+  const result = classifyFacebookLeadBroaderMatches(
+    {
+      name: 'José Example',
+      phone: '+1 (305) 555-0100',
+      company: 'Example & Sons',
+    },
+    [{
+      id: 'contact-1',
+      name_norm: 'jose example',
+      company_norm: 'example sons',
+      address_norm: '',
+      phone_norm: '3055550100',
+      phone_norms: ['3055550100'],
+      source_label: 'Cold Call',
+      created_at: '2026-08-21T12:00:00.000Z',
+      is_archived: false,
+      leads: [{ id: 'lead-existing', sourceType: 'manual' }],
+    }],
+    '2026-08-20T12:00:00.000Z',
+  );
+
+  assert.equal(result.broaderMatchType, 'strong_manual_candidate');
+  assert.equal(result.broaderCandidateCount, 1);
+  assert.equal(result.broaderCandidateHasNonFacebookSource, true);
+  assert.deepEqual(result.broaderContactCandidates[0].evidence, [
+    'exact_normalized_name',
+    'phone_last_7',
+    'exact_normalized_company',
+    'created_within_30_days',
+  ]);
+});
+
+test('keeps duplicate exact-name contacts in the ambiguous manual-review bucket', () => {
+  const contacts = ['contact-1', 'contact-2'].map((id) => ({
+    id,
+    name_norm: 'alex smith',
+    company_norm: '',
+    address_norm: '',
+    phone_norm: '',
+    phone_norms: [],
+    source_label: 'Manual entry',
+    leads: [],
+  }));
+  const result = classifyFacebookLeadBroaderMatches({ name: 'Alex Smith' }, contacts, null);
+
+  assert.equal(result.broaderMatchType, 'ambiguous_manual_candidates');
+  assert.equal(result.broaderCandidateCount, 2);
+});
+
 test('builds a PII-free dry-run manifest without database writes', async () => {
   const queries = [];
   const client = {
@@ -94,8 +145,14 @@ test('builds a PII-free dry-run manifest without database writes', async () => {
         return {
           rows: [{
             id: 'contact-1',
+            name: 'Existing Person',
+            company_name: null,
+            address: null,
+            created_at: '2026-08-19T12:00:00.000Z',
+            is_archived: false,
             email_norm: 'existing@example.com',
             phone_norm: '',
+            additional_phone_norms: [],
             source_label: 'Manual entry',
             leads: [],
           }],
@@ -105,8 +162,14 @@ test('builds a PII-free dry-run manifest without database writes', async () => {
     },
   };
   const leadPayloads = {
-    'leadgen-1': [{ name: 'email', values: ['existing@example.com'] }],
-    'leadgen-2': [{ name: 'phone_number', values: ['+1 305 555 0101'] }],
+    'leadgen-1': [
+      { name: 'full_name', values: ['Existing Person'] },
+      { name: 'email', values: ['existing@example.com'] },
+    ],
+    'leadgen-2': [
+      { name: 'full_name', values: ['Unmatched Person'] },
+      { name: 'phone_number', values: ['+1 305 555 0101'] },
+    ],
   };
 
   const manifest = await reconcileFacebookLeadAdsFailures(client, {
@@ -118,18 +181,28 @@ test('builds a PII-free dry-run manifest without database writes', async () => {
     fetchLeadDetails: async ({ leadgenId }) => ({
       ok: true,
       status: 200,
-      lead: { id: leadgenId, field_data: leadPayloads[leadgenId] },
+      lead: {
+        id: leadgenId,
+        created_time: '2026-08-20T12:00:00.000Z',
+        field_data: leadPayloads[leadgenId],
+      },
     }),
   });
 
   assert.equal(manifest.mode, 'dry_run_read_only');
+  assert.equal(manifest.recoveryWritesPerformed, 0);
+  assert.equal(manifest.matchingPolicy.contactPoolScanned, 1);
+  assert.equal(manifest.matchingPolicy.automaticAttachments, false);
+  assert.equal(manifest.matchingPolicy.automaticLeadCreation, false);
   assert.equal(manifest.totals.preservedFailureRows, 2);
   assert.equal(manifest.totals.graphFetched, 2);
-  assert.equal(manifest.totals.exactExistingContact, 1);
-  assert.equal(manifest.totals.createNewCandidate, 1);
-  assert.equal(manifest.records[0].recommendedAction, 'attach_existing_candidate');
-  assert.equal(manifest.records[1].recommendedAction, 'create_new_candidate');
+  assert.equal(manifest.totals.exactExistingContactCandidates, 1);
+  assert.equal(manifest.totals.unmatchedAfterManualScan, 1);
+  assert.equal(manifest.records[0].recommendedAction, 'exact_existing_contact_candidate');
+  assert.equal(manifest.records[1].recommendedAction, 'unmatched_after_manual_scan');
   assert.equal(JSON.stringify(manifest).includes('existing@example.com'), false);
   assert.equal(JSON.stringify(manifest).includes('13055550101'), false);
+  assert.equal(JSON.stringify(manifest).includes('Existing Person'), false);
+  assert.equal(JSON.stringify(manifest).includes('Unmatched Person'), false);
   assert.equal(queries.some((sql) => /\b(insert|update|delete)\b/.test(sql)), false);
 });
