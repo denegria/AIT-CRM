@@ -14,6 +14,13 @@ function normalizePhone(value) {
   return String(value || '').replace(/\D+/g, '');
 }
 
+function canonicalNanpPhone(value) {
+  const digits = normalizePhone(value);
+  if (digits.length === 10) return digits;
+  if (digits.length === 11 && digits.startsWith('1')) return digits.slice(1);
+  return '';
+}
+
 function normalizeIdentityText(value) {
   return String(value || '')
     .normalize('NFKD')
@@ -193,10 +200,17 @@ async function loadContactCandidatePool(client, { organizationId }) {
 export function classifyFacebookLeadContactMatches(details, contacts) {
   const email = normalizeEmail(details.email);
   const phone = normalizePhone(details.phone);
+  const canonicalPhone = canonicalNanpPhone(phone);
   const byEmail = email ? contacts.filter((contact) => contact.email_norm === email) : [];
-  const byPhone = phone ? contacts.filter((contact) => (
+  const exactByPhone = phone ? contacts.filter((contact) => (
     unique([contact.phone_norm, ...(contact.phone_norms || [])]).includes(phone)
   )) : [];
+  const canonicalByPhone = canonicalPhone ? contacts.filter((contact) => (
+    unique([contact.phone_norm, ...(contact.phone_norms || [])])
+      .some((candidate) => canonicalNanpPhone(candidate) === canonicalPhone)
+  )) : [];
+  const byPhone = unique([...exactByPhone, ...canonicalByPhone].map((contact) => contact.id))
+    .map((id) => contacts.find((contact) => contact.id === id));
   const matchedContactIds = unique([...byEmail, ...byPhone].map((contact) => contact.id));
   const common = byEmail.filter((contact) => byPhone.some((candidate) => candidate.id === contact.id));
 
@@ -204,7 +218,8 @@ export function classifyFacebookLeadContactMatches(details, contacts) {
   if (matchedContactIds.length > 1) matchType = 'ambiguous_or_conflicting';
   else if (matchedContactIds.length === 1 && common.length === 1) matchType = 'exact_email_and_phone';
   else if (matchedContactIds.length === 1 && byEmail.length === 1) matchType = 'exact_email';
-  else if (matchedContactIds.length === 1 && byPhone.length === 1) matchType = 'exact_phone';
+  else if (matchedContactIds.length === 1 && exactByPhone.length === 1) matchType = 'exact_phone';
+  else if (matchedContactIds.length === 1 && canonicalByPhone.length === 1) matchType = 'canonical_phone';
 
   const matched = contacts.filter((contact) => matchedContactIds.includes(contact.id));
   const matchedLeadIds = unique(matched.flatMap((contact) => (contact.leads || []).map((lead) => lead.id)));
@@ -218,6 +233,11 @@ export function classifyFacebookLeadContactMatches(details, contacts) {
     matchedLeadIds,
     matchedFacebookLeadIds,
     matchedContactHasNonFacebookSource: matched.some((contact) => contact.source_label !== 'Facebook Ads'),
+    matchedBy: {
+      email: Boolean(byEmail.length),
+      exactPhone: Boolean(exactByPhone.length),
+      canonicalNanpPhone: Boolean(canonicalByPhone.length && !exactByPhone.length),
+    },
   };
 }
 
@@ -343,6 +363,7 @@ export async function reconcileFacebookLeadAdsFailures(client, {
       matchedLeadIds: [],
       matchedFacebookLeadIds: [],
       matchedContactHasNonFacebookSource: false,
+      matchedBy: { email: false, exactPhone: false, canonicalNanpPhone: false },
     };
     const broaderMatches = graph.ok && matches.matchType === 'none'
       ? classifyFacebookLeadBroaderMatches(details, contacts, leadCreatedAt)
@@ -384,12 +405,20 @@ export async function reconcileFacebookLeadAdsFailures(client, {
     privacy: 'No names, email addresses, phone numbers, or credential values are included.',
     matchingPolicy: {
       contactPoolScanned: contacts.length,
-      exact: 'Normalized full email or phone number.',
+      exact: 'Normalized full email, full phone, or equivalent 10/11-digit NANP phone across primary and secondary numbers.',
       strongManualCandidate: 'One exact normalized-name candidate plus matching phone last 7, company, or address.',
       possibleManualCandidate: 'One exact normalized-name candidate without another identity signal.',
       ambiguousManualCandidates: 'More than one exact normalized-name candidate; manual review required.',
       automaticAttachments: false,
       automaticLeadCreation: false,
+    },
+    mergePolicy: {
+      employeeDataOverwrite: false,
+      existingContact: 'Reuse the existing Contact and fill only currently blank fields from Meta.',
+      existingHistory: 'Preserve notes, tasks, ownership, lifecycle status, and follow-up history in place.',
+      oneActiveOpportunity: 'Reuse it and fill only blank Facebook profile fields; append the form answers as sourced history.',
+      noActiveOpportunity: 'Create one Facebook Lead Ads Opportunity under the existing Contact after approval.',
+      multipleActiveOpportunities: 'Stop for manual review; never choose one automatically.',
     },
     totals: {
       preservedFailureRows: records.length,
