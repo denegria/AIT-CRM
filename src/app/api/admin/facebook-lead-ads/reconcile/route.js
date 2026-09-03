@@ -23,15 +23,15 @@ const APPROVED_COUNTS = Object.freeze({
   preservedFailureRows: 67,
   graphFetched: 67,
   graphFailed: 0,
-  exactExistingContactCandidates: 14,
+  exactExistingContactCandidates: 15,
   conflictingContactPointCandidates: 2,
   possibleManualCandidates: 1,
   ambiguousManualCandidates: 1,
-  unmatchedAfterManualScan: 49,
+  unmatchedAfterManualScan: 48,
 });
 const APPROVED_RESOLUTION_COUNTS = Object.freeze({
-  create_new_contact_and_opportunity: 49,
-  merge_existing_active_opportunity: 9,
+  create_new_contact_and_opportunity: 48,
+  merge_existing_active_opportunity: 10,
   enrich_enrolled_contact_history: 2,
   create_new_opportunity_on_existing_contact: 3,
 });
