@@ -536,11 +536,13 @@ function expectedCountsMatch(totals, expectedCounts = {}) {
   ));
 }
 
-function countRecoveryResolutions(records, rowsByRecordId) {
+function countRecoveryResolutions(records, rowsByRecordId, approvedDecisions = {}) {
   const counts = {};
   for (const record of records) {
     const row = rowsByRecordId.get(record.normalizedRecordId);
-    const resolution = row ? buildFacebookLeadRecoveryResolution(record, row) : null;
+    const resolution = row
+      ? buildFacebookLeadRecoveryResolution(record, row, approvedDecisions[record.leadgenId])
+      : null;
     if (!resolution) throw recoveryError('Approved recovery entry is no longer deterministic.');
     counts[resolution.kind] = (counts[resolution.kind] || 0) + 1;
   }
@@ -561,7 +563,51 @@ function activeAitUsaLeads(candidate, businessUnitId) {
   ));
 }
 
-export function buildFacebookLeadRecoveryResolution(record, row) {
+export function buildFacebookLeadRecoveryResolution(record, row, approvedDecision = null) {
+  if (approvedDecision?.kind === 'create_new_contact_and_opportunity') {
+    if (approvedDecision.forceNewContact !== true) {
+      throw recoveryError('An approved uncertain new-Contact decision must explicitly force a new Contact.');
+    }
+    return {
+      kind: approvedDecision.kind,
+      existingContactId: null,
+      existingLeadId: null,
+      suppressNotification: false,
+      suppressIntakeTask: false,
+      forceNewContact: true,
+    };
+  }
+  if (approvedDecision?.kind === 'merge_existing_active_opportunity') {
+    const candidate = record.matchedContactCandidates.find(
+      (item) => item.contactId === approvedDecision.existingContactId,
+    );
+    const lead = candidate?.leads.find((item) => item.id === approvedDecision.existingLeadId);
+    const leadIsActive = lead && String(lead.businessUnitId || '') === String(row.business_unit_id || '')
+      && !isClosedLifecycleStatus(lead.status || lead.currentStage, {
+        workflowKey: WORKFLOW_KEYS.AIT_USA,
+      });
+    if (
+      !candidate
+      || candidate.isArchived
+      || !candidate.exactNameMatch
+      || candidate.sourceCategory !== 'facebook_ads'
+      || !leadIsActive
+      || lead.sourceType !== 'facebook_lead_ads'
+    ) {
+      throw recoveryError('The explicitly approved uncertain merge target no longer has the required evidence.');
+    }
+    return {
+      kind: approvedDecision.kind,
+      existingContactId: candidate.contactId,
+      existingLeadId: lead.id,
+      suppressNotification: true,
+      suppressIntakeTask: true,
+      forceNewContact: false,
+    };
+  }
+  if (approvedDecision) {
+    throw recoveryError('The approved uncertain recovery decision is unsupported.');
+  }
   if (record.recommendedAction === 'unmatched_after_manual_scan') {
     return {
       kind: 'create_new_contact_and_opportunity',
@@ -569,6 +615,7 @@ export function buildFacebookLeadRecoveryResolution(record, row) {
       existingLeadId: null,
       suppressNotification: false,
       suppressIntakeTask: false,
+      forceNewContact: false,
     };
   }
   if (record.recommendedAction !== 'exact_existing_contact_candidate') return null;
@@ -592,6 +639,7 @@ export function buildFacebookLeadRecoveryResolution(record, row) {
       existingLeadId: activeLeads[0].id,
       suppressNotification: true,
       suppressIntakeTask: true,
+      forceNewContact: false,
     };
   }
   return {
@@ -600,6 +648,7 @@ export function buildFacebookLeadRecoveryResolution(record, row) {
     existingLeadId: null,
     suppressNotification: false,
     suppressIntakeTask: false,
+    forceNewContact: false,
   };
 }
 
@@ -656,6 +705,7 @@ export async function applyFacebookLeadAdsRecovery(client, options, {
   expectedApprovalManifestHash,
   expectedCounts,
   expectedResolutionCounts,
+  approvedDecisions = {},
   actorUserId,
 } = {}) {
   if (!expectedApprovalManifestHash || !actorUserId) {
@@ -673,14 +723,23 @@ export async function applyFacebookLeadAdsRecovery(client, options, {
     throw recoveryError('Every approved Meta record must refetch successfully before apply.');
   }
 
-  const selectedRecords = manifest.records.filter((record) => [
+  const automaticRecords = manifest.records.filter((record) => [
     'exact_existing_contact_candidate',
     'unmatched_after_manual_scan',
   ].includes(record.recommendedAction));
+  const decisionRecords = Object.keys(approvedDecisions).map((leadgenId) => {
+    const matches = manifest.records.filter((record) => record.leadgenId === leadgenId);
+    if (matches.length !== 1) {
+      throw recoveryError('An explicitly approved uncertain record is missing or duplicated.');
+    }
+    return matches[0];
+  });
+  const selectedRecords = unique([...automaticRecords, ...decisionRecords].map((record) => record.normalizedRecordId))
+    .map((recordId) => manifest.records.find((record) => record.normalizedRecordId === recordId));
   const entriesByRecordId = new Map(normalized.map((entry) => [entry.row.normalized_record_id, entry]));
   const rowsByRecordId = new Map(normalized.map((entry) => [entry.row.normalized_record_id, entry.row]));
   const recordIds = selectedRecords.map((record) => record.normalizedRecordId);
-  const plannedResolutionCounts = countRecoveryResolutions(selectedRecords, rowsByRecordId);
+  const plannedResolutionCounts = countRecoveryResolutions(selectedRecords, rowsByRecordId, approvedDecisions);
   if (!expectedResolutionCountsMatch(plannedResolutionCounts, expectedResolutionCounts)) {
     throw recoveryError(
       'The production recovery actions no longer match the approved plan.',
@@ -723,7 +782,11 @@ export async function applyFacebookLeadAdsRecovery(client, options, {
     if (freshSelectedRecords.some((record) => !record)) {
       throw recoveryError('An approved recovery entry disappeared after locking.');
     }
-    const freshResolutionCounts = countRecoveryResolutions(freshSelectedRecords, rowsByRecordId);
+    const freshResolutionCounts = countRecoveryResolutions(
+      freshSelectedRecords,
+      rowsByRecordId,
+      approvedDecisions,
+    );
     if (!expectedResolutionCountsMatch(freshResolutionCounts, expectedResolutionCounts)) {
       throw recoveryError(
         'The locked recovery actions no longer match the approved plan.',
@@ -734,7 +797,11 @@ export async function applyFacebookLeadAdsRecovery(client, options, {
       const record = freshById.get(approvedRecord.normalizedRecordId);
       const entry = entriesByRecordId.get(approvedRecord.normalizedRecordId);
       if (!record || !entry) throw recoveryError('Approved recovery entry is unavailable.');
-      const resolution = buildFacebookLeadRecoveryResolution(record, entry.row);
+      const resolution = buildFacebookLeadRecoveryResolution(
+        record,
+        entry.row,
+        approvedDecisions[record.leadgenId],
+      );
       if (!resolution) throw recoveryError('Approved recovery entry is no longer deterministic.');
       const proposal = proposalForRecoveryEntry(entry, options);
       const crmWrite = await recoverFacebookLeadProposalToCrm(client, options.organizationId, {
@@ -746,6 +813,7 @@ export async function applyFacebookLeadAdsRecovery(client, options, {
         existingLeadId: resolution.existingLeadId,
         suppressNotification: resolution.suppressNotification,
         suppressIntakeTask: resolution.suppressIntakeTask,
+        forceNewContact: resolution.forceNewContact,
       });
       if (!crmWrite.contactId || !crmWrite.leadId) {
         throw recoveryError(crmWrite.reason || 'CRM recovery returned no Contact or Opportunity.');
