@@ -1,11 +1,32 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  buildFacebookLeadRecoveryResolution,
   classifyFacebookLeadBroaderMatches,
   classifyFacebookLeadContactMatches,
   fetchMetaLeadDetailsWithHeader,
   reconcileFacebookLeadAdsFailures,
 } from './facebook-lead-reconciliation.js';
+
+const RECOVERY_ROW = { business_unit_id: 'business-unit-1' };
+
+function exactRecoveryRecord(status, overrides = {}) {
+  return {
+    recommendedAction: 'exact_existing_contact_candidate',
+    matchedContactIds: ['contact-1'],
+    matchedContactCandidates: [{
+      contactId: 'contact-1',
+      isArchived: false,
+      leads: status ? [{
+        id: 'lead-1',
+        businessUnitId: 'business-unit-1',
+        status,
+        currentStage: status,
+      }] : [],
+    }],
+    ...overrides,
+  };
+}
 
 test('fetches Meta lead details with an authorization header and no credential in the URL', async () => {
   const seen = {};
@@ -147,6 +168,49 @@ test('keeps duplicate exact-name contacts in the ambiguous manual-review bucket'
   assert.equal(result.broaderCandidateCount, 2);
 });
 
+test('builds the approved recovery action for each deterministic lifecycle bucket', () => {
+  assert.equal(
+    buildFacebookLeadRecoveryResolution({ recommendedAction: 'unmatched_after_manual_scan' }, RECOVERY_ROW).kind,
+    'create_new_contact_and_opportunity',
+  );
+  assert.equal(
+    buildFacebookLeadRecoveryResolution(exactRecoveryRecord('Follow Up'), RECOVERY_ROW).kind,
+    'merge_existing_active_opportunity',
+  );
+  assert.equal(
+    buildFacebookLeadRecoveryResolution(exactRecoveryRecord('Enrolled'), RECOVERY_ROW).kind,
+    'enrich_enrolled_contact_history',
+  );
+  assert.equal(
+    buildFacebookLeadRecoveryResolution(exactRecoveryRecord('Retargeting'), RECOVERY_ROW).kind,
+    'create_new_opportunity_on_existing_contact',
+  );
+});
+
+test('rejects an archived Contact or multiple active Opportunities from automatic recovery', () => {
+  assert.throws(
+    () => buildFacebookLeadRecoveryResolution(exactRecoveryRecord(null, {
+      matchedContactCandidates: [{ contactId: 'contact-1', isArchived: true, leads: [] }],
+    }), RECOVERY_ROW),
+    /archived/,
+  );
+  assert.throws(
+    () => buildFacebookLeadRecoveryResolution(exactRecoveryRecord(null, {
+      matchedContactCandidates: [{
+        contactId: 'contact-1',
+        isArchived: false,
+        leads: ['lead-1', 'lead-2'].map((id) => ({
+          id,
+          businessUnitId: 'business-unit-1',
+          status: 'Follow Up',
+          currentStage: 'Follow Up',
+        })),
+      }],
+    }), RECOVERY_ROW),
+    /multiple active/,
+  );
+});
+
 test('builds a PII-free dry-run manifest without database writes', async () => {
   const queries = [];
   const client = {
@@ -226,6 +290,7 @@ test('builds a PII-free dry-run manifest without database writes', async () => {
   });
 
   assert.equal(manifest.mode, 'dry_run_read_only');
+  assert.match(manifest.approvalManifestHash, /^[a-f0-9]{64}$/);
   assert.equal(manifest.recoveryWritesPerformed, 0);
   assert.equal(manifest.matchingPolicy.contactPoolScanned, 1);
   assert.equal(manifest.matchingPolicy.automaticAttachments, false);

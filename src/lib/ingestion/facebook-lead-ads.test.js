@@ -7,6 +7,7 @@ import {
   ingestFacebookLeadAdsEvents,
   parseFacebookLeadAdsFormBusinessUnitMap,
   promoteFacebookLeadProposalToCrm,
+  recoverFacebookLeadProposalToCrm,
 } from './facebook-lead-ads.js';
 import {
   createMetaProviderConfig,
@@ -114,6 +115,12 @@ function createServiceClient({
         ) {
           return { rows: [] };
         }
+        if (
+          normalized.startsWith('select id, primary_business_unit_id from contacts')
+          && normalized.includes('organization_id = $1 and id = $2')
+        ) {
+          return { rows: existingContact ? [existingContact] : [] };
+        }
         if (normalized.startsWith('select id from contacts where organization_id') && normalized.includes('lower(email)')) {
           return { rows: existingContact ? [{ id: existingContact.id }] : [] };
         }
@@ -131,6 +138,7 @@ function createServiceClient({
         }
         if (
           normalized.startsWith('select id, contact_id, assigned_user_id from leads')
+          || normalized.startsWith('select id, contact_id as linked_contact_id')
           || normalized.startsWith('select l.id, l.contact_id as linked_contact_id')
         ) {
           return { rows: existingLead ? [existingLead] : [] };
@@ -139,7 +147,7 @@ function createServiceClient({
           return { rows: activeOpportunities };
         }
         if (normalized.startsWith('update leads set')) {
-          const rows = leadRepairRows ?? [{ id: existingLead?.id || 'lead-existing' }];
+          const rows = leadRepairRows ?? [{ id: params[0] }];
           return { rows, rowCount: rows.length };
         }
         if (normalized.startsWith('insert into leads')) {
@@ -691,6 +699,50 @@ test('replaying an existing imported lead repairs side effects without inserting
   assert.equal(calls.some((call) => call.sql.includes("'facebook_lead_captured'")), true);
   assert.equal(calls.some((call) => call.sql.startsWith('insert into notifications')), true);
   assert.equal(calls.some((call) => call.sql.startsWith('with intake_lock as')), true);
+});
+
+test('approved recovery reuses an explicit Contact and Opportunity without duplicating employee work', async () => {
+  const { client, calls } = createServiceClient({
+    businessUnitId: 'bu-usa',
+    businessUnitName: 'AIT USA Institute',
+    existingContact: { id: 'contact-existing', primary_business_unit_id: 'bu-usa' },
+    existingLead: {
+      id: 'opportunity-existing',
+      linked_contact_id: 'contact-existing',
+      contact_id: 'contact-existing',
+      assigned_user_id: 'owner-existing',
+    },
+  });
+
+  const result = await recoverFacebookLeadProposalToCrm(client, 'org-1', {
+    proposedContact: {
+      name: 'Ada Lovelace',
+      phone: '+1 305 555 0100',
+      business_unit_id: 'bu-usa',
+    },
+    proposedLead: {
+      leadgen_id: 'leadgen-1',
+      form_id: 'form-1',
+      business_unit_id: 'bu-usa',
+      field_data: [{ name: 'education_level', values: ['Master degree'] }],
+    },
+    sourceRowId: 'source-row-5',
+    rowNumber: 12,
+    existingContactId: 'contact-existing',
+    existingLeadId: 'opportunity-existing',
+    suppressNotification: true,
+    suppressIntakeTask: true,
+  });
+
+  assert.equal(result.contactId, 'contact-existing');
+  assert.equal(result.leadId, 'opportunity-existing');
+  assert.equal(result.alreadyExists, true);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into contacts')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into leads')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into notifications')), false);
+  assert.equal(calls.some((call) => call.sql.startsWith('with intake_lock as')), false);
+  assert.equal(calls.some((call) => call.sql.includes("education_level = coalesce")), true);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into notes')), true);
 });
 
 test('replaying a reused AIT USA Opportunity creates the free-form answer note exactly once per source row', async () => {
