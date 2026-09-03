@@ -18,22 +18,39 @@ import {
 const PAGE_ID = '637956449579628';
 const FORM_ID = '2334348260704702';
 const SINCE = '2026-08-16T00:00:00.000Z';
-const APPLY_CONFIRMATION = 'APPLY_APPROVED_FACEBOOK_RECOVERY';
+const APPLY_CONFIRMATION = 'APPLY_APPROVED_FACEBOOK_RECOVERY_FINAL_FOUR';
 const APPROVED_COUNTS = Object.freeze({
-  preservedFailureRows: 67,
-  graphFetched: 67,
+  preservedFailureRows: 4,
+  graphFetched: 4,
   graphFailed: 0,
-  exactExistingContactCandidates: 15,
+  exactExistingContactCandidates: 0,
   conflictingContactPointCandidates: 2,
   possibleManualCandidates: 1,
   ambiguousManualCandidates: 1,
-  unmatchedAfterManualScan: 48,
+  unmatchedAfterManualScan: 0,
 });
 const APPROVED_RESOLUTION_COUNTS = Object.freeze({
-  create_new_contact_and_opportunity: 48,
-  merge_existing_active_opportunity: 10,
-  enrich_enrolled_contact_history: 2,
-  create_new_opportunity_on_existing_contact: 3,
+  create_new_contact_and_opportunity: 3,
+  merge_existing_active_opportunity: 1,
+});
+const APPROVED_DECISIONS = Object.freeze({
+  '1369232774807458': Object.freeze({
+    kind: 'create_new_contact_and_opportunity',
+    forceNewContact: true,
+  }),
+  '1438296515018091': Object.freeze({
+    kind: 'create_new_contact_and_opportunity',
+    forceNewContact: true,
+  }),
+  '1015237171482803': Object.freeze({
+    kind: 'merge_existing_active_opportunity',
+    existingContactId: 'a687b77f-22ae-4ee8-a878-779c8828cb9f',
+    existingLeadId: '210738c8-9170-4c92-ac25-80872dc71488',
+  }),
+  '2220773902045466': Object.freeze({
+    kind: 'create_new_contact_and_opportunity',
+    forceNewContact: true,
+  }),
 });
 
 function getMetaProviderConfig() {
@@ -99,6 +116,7 @@ export async function POST(request) {
       expectedApprovalManifestHash: body.approvalManifestHash,
       expectedCounts: APPROVED_COUNTS,
       expectedResolutionCounts: APPROVED_RESOLUTION_COUNTS,
+      approvedDecisions: APPROVED_DECISIONS,
       actorUserId: session.user.id,
     });
     return NextResponse.json({ ok: true, ...result });

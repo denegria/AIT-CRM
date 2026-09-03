@@ -379,13 +379,16 @@ async function upsertContactAndLead(
   }
 
   const isAitUsa = workflowKeyForBusinessUnit(businessUnit) === WORKFLOW_KEYS.AIT_USA;
-  const legacyExistingContact = !existingLead && !explicitContact && !isAitUsa
+  const forceNewContact = recoveryOptions.forceNewContact === true;
+  const legacyExistingContact = !existingLead && !explicitContact && !forceNewContact && !isAitUsa
     ? await findExistingContact(client, organizationId, details)
     : null;
   const identity = existingLead
     ? { status: 'exact', contactId: existingLead.contact_id }
     : explicitContact
       ? { status: 'exact', contactId: explicitContact.id }
+    : forceNewContact
+      ? { status: 'new', contactId: null }
     : isAitUsa
       ? await classifyContactIdentity(client, {
           organizationId,
@@ -688,6 +691,7 @@ export async function recoverFacebookLeadProposalToCrm(
     existingLeadId = null,
     suppressNotification = false,
     suppressIntakeTask = false,
+    forceNewContact = false,
   } = {},
 ) {
   const businessUnitId = proposedLead.business_unit_id || proposedContact.business_unit_id || null;
@@ -701,6 +705,7 @@ export async function recoverFacebookLeadProposalToCrm(
   };
   const event = {
     leadgenId: proposedLead.leadgen_id || '',
+    pageId: proposedLead.page_id || '',
     formId: proposedLead.form_id || '',
   };
 
@@ -718,6 +723,7 @@ export async function recoverFacebookLeadProposalToCrm(
       existingLeadId,
       suppressNotification,
       suppressIntakeTask,
+      forceNewContact,
     },
   );
 }

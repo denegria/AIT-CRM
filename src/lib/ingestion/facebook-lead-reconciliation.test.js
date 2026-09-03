@@ -211,6 +211,56 @@ test('rejects an archived Contact or multiple active Opportunities from automati
   );
 });
 
+test('applies an explicitly approved forced-new decision to an uncertain record', () => {
+  const resolution = buildFacebookLeadRecoveryResolution({
+    recommendedAction: 'manual_review_ambiguous_candidates',
+    matchedContactCandidates: [],
+  }, RECOVERY_ROW, {
+    kind: 'create_new_contact_and_opportunity',
+    forceNewContact: true,
+  });
+
+  assert.equal(resolution.kind, 'create_new_contact_and_opportunity');
+  assert.equal(resolution.forceNewContact, true);
+  assert.equal(resolution.existingContactId, null);
+});
+
+test('applies only the exact explicitly approved Facebook merge target', () => {
+  const record = {
+    recommendedAction: 'manual_review_conflicting_contact_points',
+    matchedContactCandidates: [{
+      contactId: 'contact-approved',
+      sourceCategory: 'facebook_ads',
+      isArchived: false,
+      exactNameMatch: true,
+      leads: [{
+        id: 'lead-approved',
+        sourceType: 'facebook_lead_ads',
+        businessUnitId: 'business-unit-1',
+        status: 'Follow Up',
+        currentStage: 'Follow Up',
+      }],
+    }],
+  };
+  const decision = {
+    kind: 'merge_existing_active_opportunity',
+    existingContactId: 'contact-approved',
+    existingLeadId: 'lead-approved',
+  };
+
+  const resolution = buildFacebookLeadRecoveryResolution(record, RECOVERY_ROW, decision);
+  assert.equal(resolution.existingContactId, 'contact-approved');
+  assert.equal(resolution.existingLeadId, 'lead-approved');
+  assert.equal(resolution.suppressIntakeTask, true);
+  assert.throws(
+    () => buildFacebookLeadRecoveryResolution(record, RECOVERY_ROW, {
+      ...decision,
+      existingContactId: 'contact-other',
+    }),
+    /required evidence/,
+  );
+});
+
 test('builds a PII-free dry-run manifest without database writes', async () => {
   const queries = [];
   const client = {
