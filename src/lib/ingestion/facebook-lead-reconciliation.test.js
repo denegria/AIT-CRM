@@ -61,6 +61,42 @@ test('classifies conflicting email and phone matches for manual review', () => {
   assert.deepEqual(result.matchedContactIds.sort(), ['contact-email', 'contact-phone']);
 });
 
+test('matches a nameless manual contact by an equivalent NANP phone across primary or secondary numbers', () => {
+  const result = classifyFacebookLeadContactMatches(
+    { phone: '+1 (305) 555-0100' },
+    [{
+      id: 'contact-1',
+      email_norm: '',
+      phone_norm: '',
+      phone_norms: ['3055550100'],
+      source_label: 'Cold Call',
+      leads: [{ id: 'lead-existing', sourceType: 'manual' }],
+    }],
+  );
+
+  assert.equal(result.matchType, 'canonical_phone');
+  assert.deepEqual(result.matchedContactIds, ['contact-1']);
+  assert.deepEqual(result.matchedBy, {
+    email: false,
+    exactPhone: false,
+    canonicalNanpPhone: true,
+  });
+  assert.equal(result.matchedContactHasNonFacebookSource, true);
+});
+
+test('keeps equivalent NANP phone ownership across multiple contacts ambiguous', () => {
+  const result = classifyFacebookLeadContactMatches(
+    { phone: '+1 305 555 0100' },
+    [
+      { id: 'contact-1', email_norm: '', phone_norm: '3055550100', source_label: '', leads: [] },
+      { id: 'contact-2', email_norm: '', phone_norm: '13055550100', source_label: '', leads: [] },
+    ],
+  );
+
+  assert.equal(result.matchType, 'ambiguous_or_conflicting');
+  assert.deepEqual(result.matchedContactIds.sort(), ['contact-1', 'contact-2']);
+});
+
 test('classifies a unique exact-name match with identity corroboration as a strong manual candidate', () => {
   const result = classifyFacebookLeadBroaderMatches(
     {
@@ -194,6 +230,7 @@ test('builds a PII-free dry-run manifest without database writes', async () => {
   assert.equal(manifest.matchingPolicy.contactPoolScanned, 1);
   assert.equal(manifest.matchingPolicy.automaticAttachments, false);
   assert.equal(manifest.matchingPolicy.automaticLeadCreation, false);
+  assert.equal(manifest.mergePolicy.employeeDataOverwrite, false);
   assert.equal(manifest.totals.preservedFailureRows, 2);
   assert.equal(manifest.totals.graphFetched, 2);
   assert.equal(manifest.totals.exactExistingContactCandidates, 1);
