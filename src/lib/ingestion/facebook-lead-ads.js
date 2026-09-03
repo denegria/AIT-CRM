@@ -279,6 +279,38 @@ async function findExistingContact(client, organizationId, details) {
   return null;
 }
 
+async function loadExplicitRecoveryContact(client, organizationId, contactId) {
+  if (!contactId) return null;
+  const result = await client.query(
+    `select id, primary_business_unit_id
+     from contacts
+     where organization_id = $1 and id = $2
+     limit 1`,
+    [organizationId, contactId],
+  );
+  return result.rows[0] || null;
+}
+
+async function loadExplicitRecoveryLead(client, {
+  organizationId,
+  businessUnitId,
+  contactId,
+  leadId,
+}) {
+  if (!leadId) return null;
+  const result = await client.query(
+    `select id, contact_id as linked_contact_id, contact_id, assigned_user_id
+     from leads
+     where organization_id = $1
+       and business_unit_id = $2
+       and contact_id = $3
+       and id = $4
+     limit 1`,
+    [organizationId, businessUnitId, contactId, leadId],
+  );
+  return result.rows[0] || null;
+}
+
 async function loadFacebookBusinessUnit(client, organizationId, businessUnitId) {
   const result = await client.query(
     `select id, name from business_units
@@ -289,12 +321,41 @@ async function loadFacebookBusinessUnit(client, organizationId, businessUnitId) 
   return result.rows[0] || null;
 }
 
-async function upsertContactAndLead(client, organizationId, businessUnitId, event, details, sourceRowId, rowNumber, preparedBusinessUnit = null) {
+async function upsertContactAndLead(
+  client,
+  organizationId,
+  businessUnitId,
+  event,
+  details,
+  sourceRowId,
+  rowNumber,
+  preparedBusinessUnit = null,
+  recoveryOptions = {},
+) {
   if (!businessUnitId) return { contactId: null, leadId: null, reason: 'No business unit found' };
   const businessUnit = preparedBusinessUnit || await loadFacebookBusinessUnit(client, organizationId, businessUnitId);
   if (!businessUnit) return { contactId: null, leadId: null, reason: 'Business unit not found' };
-  let existingLead = null;
-  if (sourceRowId) {
+  const explicitContact = await loadExplicitRecoveryContact(
+    client,
+    organizationId,
+    recoveryOptions.existingContactId || null,
+  );
+  if (recoveryOptions.existingContactId && !explicitContact) {
+    throw new Error('The approved recovery Contact is no longer available in this organization.');
+  }
+
+  let existingLead = recoveryOptions.existingLeadId
+    ? await loadExplicitRecoveryLead(client, {
+        organizationId,
+        businessUnitId,
+        contactId: explicitContact?.id,
+        leadId: recoveryOptions.existingLeadId,
+      })
+    : null;
+  if (recoveryOptions.existingLeadId && !existingLead) {
+    throw new Error('The approved recovery Opportunity no longer belongs to the expected Contact and division.');
+  }
+  if (!existingLead && sourceRowId) {
     const existingLeadResult = await client.query(
       `
         select
@@ -318,11 +379,13 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
   }
 
   const isAitUsa = workflowKeyForBusinessUnit(businessUnit) === WORKFLOW_KEYS.AIT_USA;
-  const legacyExistingContact = !existingLead && !isAitUsa
+  const legacyExistingContact = !existingLead && !explicitContact && !isAitUsa
     ? await findExistingContact(client, organizationId, details)
     : null;
   const identity = existingLead
     ? { status: 'exact', contactId: existingLead.contact_id }
+    : explicitContact
+      ? { status: 'exact', contactId: explicitContact.id }
     : isAitUsa
       ? await classifyContactIdentity(client, {
           organizationId,
@@ -463,6 +526,44 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
     }
   }
 
+  if (!createdOpportunity && leadId) {
+    const leadProfileUpdate = await client.query(
+      `
+        update leads
+        set
+          program_interest = coalesce(nullif(program_interest, ''), nullif($2, '')),
+          preferred_day = coalesce(nullif(preferred_day, ''), nullif($3, '')),
+          preferred_schedule = coalesce(nullif(preferred_schedule, ''), nullif($4, '')),
+          test_interest = coalesce(nullif(test_interest, ''), nullif($5, '')),
+          education_level = coalesce(nullif(education_level, ''), nullif($6, '')),
+          school_name = coalesce(nullif(school_name, ''), nullif($7, '')),
+          location_preference = coalesce(nullif(location_preference, ''), nullif($8, '')),
+          profile_details = coalesce(nullif(profile_details, ''), nullif($9, '')),
+          source_detail = coalesce(nullif(source_detail, ''), nullif($10, '')),
+          updated_at = now()
+        where id = $1 and organization_id = $11 and contact_id = $12
+        returning id
+      `,
+      [
+        leadId,
+        profileValues.program_interest || '',
+        profileValues.preferred_day || '',
+        profileValues.preferred_schedule || '',
+        profileValues.test_interest || '',
+        profileValues.education_level || '',
+        profileValues.school_name || '',
+        profileValues.location_preference || '',
+        profileValues.profile_details || '',
+        profileValues.source_detail || '',
+        organizationId,
+        contactId,
+      ],
+    );
+    if (leadProfileUpdate.rowCount !== 1 || leadProfileUpdate.rows[0]?.id !== leadId) {
+      throw new Error('Organization-scoped Facebook lead profile enrichment did not affect the expected Lead.');
+    }
+  }
+
   if (createdOpportunity) {
     await recordInboundLeadAssignmentActivity(client, {
       organizationId,
@@ -520,31 +621,35 @@ async function upsertContactAndLead(client, organizationId, businessUnitId, even
     sourceRowId,
   };
   const inboundLeadDetail = `Submitted Facebook form ${event.formId || 'unknown'}.`;
-  await createInboundLeadNotification(client, {
-    organizationId,
-    businessUnitId,
-    contactId,
-    leadId,
-    sourceType: NOTIFICATION_SOURCES.FACEBOOK_LEAD_ADS,
-    sourceName: 'Facebook Ads',
-    contactName: details.name,
-    detail: inboundLeadDetail,
-    idempotencyKey: inboundLeadIdempotencyKey,
-    metadata: inboundLeadMetadata,
-  });
-  await createInboundLeadIntakeTask(client, {
-    organizationId,
-    businessUnitId,
-    contactId,
-    leadId,
-    sourceType: NOTIFICATION_SOURCES.FACEBOOK_LEAD_ADS,
-    sourceName: 'Facebook Ads',
-    contactName: details.name,
-    detail: inboundLeadDetail,
-    idempotencyKey: inboundLeadIdempotencyKey,
-    ownerUserId: leadAssignedUserId,
-    metadata: inboundLeadMetadata,
-  });
+  if (!recoveryOptions.suppressNotification) {
+    await createInboundLeadNotification(client, {
+      organizationId,
+      businessUnitId,
+      contactId,
+      leadId,
+      sourceType: NOTIFICATION_SOURCES.FACEBOOK_LEAD_ADS,
+      sourceName: 'Facebook Ads',
+      contactName: details.name,
+      detail: inboundLeadDetail,
+      idempotencyKey: inboundLeadIdempotencyKey,
+      metadata: inboundLeadMetadata,
+    });
+  }
+  if (!recoveryOptions.suppressIntakeTask) {
+    await createInboundLeadIntakeTask(client, {
+      organizationId,
+      businessUnitId,
+      contactId,
+      leadId,
+      sourceType: NOTIFICATION_SOURCES.FACEBOOK_LEAD_ADS,
+      sourceName: 'Facebook Ads',
+      contactName: details.name,
+      detail: inboundLeadDetail,
+      idempotencyKey: inboundLeadIdempotencyKey,
+      ownerUserId: leadAssignedUserId,
+      metadata: inboundLeadMetadata,
+    });
+  }
   return { contactId, leadId, assignedUserId: leadAssignedUserId, reason: null, alreadyExists: !createdOpportunity };
 }
 
@@ -564,10 +669,57 @@ export async function promoteFacebookLeadProposalToCrm(
   };
   const event = {
     leadgenId: proposedLead.leadgen_id || '',
+    pageId: proposedLead.page_id || '',
     formId: proposedLead.form_id || '',
   };
 
   return upsertContactAndLead(client, organizationId, businessUnitId, event, details, sourceRowId, rowNumber);
+}
+
+export async function recoverFacebookLeadProposalToCrm(
+  client,
+  organizationId,
+  {
+    proposedContact = {},
+    proposedLead = {},
+    sourceRowId = null,
+    rowNumber = null,
+    existingContactId = null,
+    existingLeadId = null,
+    suppressNotification = false,
+    suppressIntakeTask = false,
+  } = {},
+) {
+  const businessUnitId = proposedLead.business_unit_id || proposedContact.business_unit_id || null;
+  const details = {
+    name: proposedContact.name || proposedLead.email || proposedLead.phone || 'Facebook Lead',
+    company: proposedContact.company_name || proposedContact.company || '',
+    phone: proposedContact.phone || '',
+    email: proposedContact.email || '',
+    address: proposedContact.address || '',
+    field_data: proposedLead.field_data || [],
+  };
+  const event = {
+    leadgenId: proposedLead.leadgen_id || '',
+    formId: proposedLead.form_id || '',
+  };
+
+  return upsertContactAndLead(
+    client,
+    organizationId,
+    businessUnitId,
+    event,
+    details,
+    sourceRowId,
+    rowNumber,
+    null,
+    {
+      existingContactId,
+      existingLeadId,
+      suppressNotification,
+      suppressIntakeTask,
+    },
+  );
 }
 
 function hasUsableContactMethod(details = {}) {
