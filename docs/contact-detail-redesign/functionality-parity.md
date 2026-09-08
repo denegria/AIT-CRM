@@ -1,0 +1,237 @@
+# Contact detail: functionality parity contract
+
+> Repository edition: published documentation only. Application implementation remains paused. This public edition preserves the specification, replaces machine-local source links with repository links, and references authenticated captures through the private evidence index. Historical audit statements below describe the audit pass, not this documentation publication.
+
+September 7, 2026. Companion to the [final design and staging handoff](verification-and-handoff.md).
+
+## Decision and scope
+
+The proposed detailed contact page must retain every capability inventoried below. The selected design remains Contact & linked records for reading, with focused section editing in a dialog. Moving a control, consolidating duplicate entry points, or placing secondary fields in a disclosure is acceptable; removing an operation, field, permission distinction, history detail, or supported workflow is not.
+
+This contract covers the individual contact route, its dialogs, and its entry points into related workflows. The first redesigned variant is AIT USA. Directory search/filter redesign and the full Tasks, Work Orders, Settings, or approval-review workspaces are outside this implementation; their contact-context links remain supported. The shared AIT Signs client variant must retain its current working screen and capabilities until a separately verified design covers it.
+
+**Status: 50 inventory rows mapped; implementation and runtime parity not yet verified.** P01–P49 preserve inspected behavior or its intended capability while addressing documented defects. P50 specifies continuity improvements, not a claim that the current page already meets them. There are no intentional capability removals. This is a source-grounded inventory, not an end-to-end certification of every role, dataset, or successful mutation.
+
+**Implementation is paused at the user's request.** Finish and review these artifacts; do not begin application edits, deployment, or staging writes without a subsequent instruction to resume.
+
+## Evidence and interpretation
+
+- **S** = source inspected against the staging-matching source tree. An existing handler, field, or policy was observed; successful operation is not thereby proven.
+- **B** = relevant existing screen or dialog was also observed in authenticated staging. It never means the action was submitted.
+- **T** = relevant existing fixture tests passed. Fixtures do not prove staging data or provider behavior.
+- The destination and acceptance columns are **proposed design requirements**. The consequence column is an **inferred operational risk if the capability is omitted**, not a measured incident.
+- Every row starts **Mapped / not implemented**. Add implementation references and results in the [tracking CSV](functionality-parity.csv); never mark a row verified merely because its component exists.
+
+Refreshed baseline: local HEAD/master `71821f03179aeb68cf787502998ce491effe03d0`; remote staging `c9df0a06a797a477b3daeeada073bb5f14454137`. No difference under `src/` between those commits in this check. The staging alias resolved through Vercel to READY deployment `dpl_CGLxsyyHHuEVuHJZiiFsfhH6U76g`, URL `ait-fpfgvd8n4-alvaros-projects-efb8ae58.vercel.app`, at that staging SHA. The exact Neon branch binding remains unverified.
+
+The final handoff contains earlier admin and desktop/mobile captures. This parity pass added Senior Coordinator observations, at 1440×1000, of the existing QA contact's archive dialog, all secondary profile fields, editable source, and receipt eligibility. No confirmation, save, send, or financial creation was submitted.
+
+- [25 — Archive confirmation and reason](README.md#private-evidence-archive)
+- [26 — Test, level, school, source detail, and profile notes](README.md#private-evidence-archive)
+- [27 — Editable source and distinct location fields](README.md#private-evidence-archive)
+- [28 — Receipt entry point and Enrolled eligibility message](README.md#private-evidence-archive)
+
+These archived screenshots are unchanged browser evidence, not proposed UI or production records. They are not included in this public repository edition; the linked archive index records their coverage.
+
+## Capability matrix
+
+“S1–S5” refer to the delivery slices in the final handoff. A later slice may replace a workflow's presentation only after it passes parity checks. Earlier slices must keep that workflow accessible through its existing component. “Retain” means preserve the existing Signs branch rather than applying the USA artwork to it.
+
+| ID | Observed existing capability / evidence | Proposed destination | Required parity check | Consequence if omitted — inference | Slice |
+|---|---|---|---|---|---|
+| P01 | Contact route, client route wrapper, return links and incoming follow-up context. S: A, J. B: QA contact entry. | Same routes; Back to Contacts/Clients; resolve task context before defaulting to Record. | Existing contact/client URLs and follow-up links resolve the same authorized entity; wrong division retains current redirect behavior. Preserve originating directory state per P50. | Broken queue links or operators returning to the wrong list. | S1 |
+| P02 | Name, division, workflow-specific identity, role-aware global navigation. S: A, B, J. B. | One header; existing global navigation and division context. | USA student labels never appear on Signs clients. Preserve company/contact-person distinctions, existing bottom navigation, and permission-aware destinations. | Work performed in the wrong division or navigation becoming unreachable. | S1 |
+| P03 | Name, email, primary phone; phone and email launch links; missing-channel states; identity editing. S: A. B. | Contact section; Edit contact. | Read and edit all identity fields, including clearing/normalization behavior. Keep tel/mailto destinations and restrictions visible; do not turn them into CRM provider-send actions. | Lost ways to reach or correct the person. | S1, S3 |
+| P04 | Historical nonprimary phones, wrong-number/DNC warnings, history-only labels, load/error handling. GET-only phone history endpoint. S: A, K. T. | Contact → Phone history disclosure, with restrictions adjacent to relevant numbers. | Display retained numbers and their warnings without promoting them to primary or offering unsupported add/remove actions. Failed history load is distinguishable from none. | Staff may dial a known bad number or assume history was deleted. | S1 |
+| P05 | Last contact/touch and last edited timestamps. S: A, B. B. | Clearly labeled metadata in Contact/Activity, each with one main display. | Preserve both meanings, available values, formatting and missing states. Do not substitute contact creation time for a missing event date. | Staff lose confidence about recency or repeat recent outreach. | S1 |
+| P06 | Workflow title, next-action guidance, chips/tags, contactability reasons, program/course/outcome highlights. S: A, B. B. | Facts move to Contact, Opportunity or Enrollments; task guidance moves to task band. | Every underlying fact remains accessible with its correct meaning. Distinguish inferred/legacy course text from actual enrollments. Do not retain redundant summary boxes solely to preserve their layout. | Important restrictions or relationship state disappear during decluttering. | S1, S2 |
+| P07 | Cleanup/merge provenance summary, retained aliases/phone context, source event details, restricted import-review context. S: A, B. | Contact provenance disclosure and Activity → Source details. | Preserve available provenance and existing access checks; keep source-event raw detail distinct from editable profile fields. Do not expose restricted cleanup summaries to new roles. | Staff cannot explain prior consolidation or may leak restricted audit context. | S1, S5 |
+| P08 | Editable Source selector; PATCH updates both selected lead source and contact fallback label. S: A, C. B: 27. | Opportunity editor → Source → Correct acquisition source, as a named save operation. | Preserve current options and an existing nonstandard value. Display the coupled save scope, use exact authorized opportunity context, and leave original submission events unchanged. Details below. | The prior read-only proposal would remove an existing attribution-correction capability. | S3; existing editor until then |
+| P09 | Student location and intended learning location are distinct editable values; Signs address has different semantics. S: A, C, D. B: 27. | Student location in Inquiry details; intended learning location in Edit contact. | Student location maps to lead locationPreference; USA learning location to contact address through existing helpers. Preserve options/current values and Signs address semantics. | Routing or location data could be overwritten or mislabeled. | S1, S3 |
+| P10 | Nine lead-profile fields, including less prominent Test, Level, School, Source Detail and Details. S: A, D. B: 26. | Inquiry details; sourceDetail in Source. Secondary qualifications use an explicit disclosure if needed. | Preserve all nine fields in the field ledger, free-text values and clearing. Editable Level is not replaced by read-only placement evidence. | Qualification and contextual information becomes impossible to maintain. | S3 |
+| P11 | Assign owner using eligible employee options and coordinator policy. S: A, C, H. B: senior editor. T: earlier assignment fixtures. | Opportunity → Ownership & status. | Retain authorized assignment choices and Unassigned semantics. Regular coordinator cannot reassign through UI or altered payload. Task owner remains distinct. | Incorrect handoffs or unintentional permission expansion. | S3 |
+| P12 | Lifecycle status edit, required terminal reason and explicit closed-status reopen reason. S: A, C, H. B: editor only. T: earlier lifecycle fixtures. | Opportunity → Ownership & status. | Reuse allowed statuses/transitions and both reason rules. Capture exact opportunity ID at open; conflict preserves draft and never retargets it. | Closed history can be erased or the wrong opportunity changed. | S3 |
+| P13 | Contextual Move to next status action with confirmation. S: A. | Opportunity section → Move to [status] / Change status. | Preserve the shortcut's result and required confirmation/reasons through the same authorized mutation path; no ambiguous contact-wide status action. | A routine progression requires unnecessary editor navigation or skips lifecycle safeguards. | S1, S3 |
+| P14 | Start opportunity flow with division, initial status, assignment and reason. S: A, H. T: earlier route fixtures. | No-active/closed opportunity state → Start opportunity when authorized. | Keep existing creation policy and fields; enforce duplicate-active protection. Do not make timeline inquiry events editable stand-ins for lead records. | Staff cannot reopen a relationship correctly after prior work ends. | S1, S3 |
+| P15 | After a successful change to Enrolled, absence of an active course triggers Add Enrollment prompt. S: A. | Successful opportunity save/advance → enrollment editor, with clear status-saved acknowledgement. | Prompt only under existing conditions; never auto-create a course. Canceling the course prompt keeps the already-saved status. Failed status save opens no prompt. | Staff may mark Enrolled but miss recording the actual course, or misunderstand cancellation. | S3 |
+| P16 | Authorized direct archive with reason, confirmation, busy guard and return after success. S: A, C, H. B: 25. T: archive fixtures. | Header More → Archive contact; centered confirmation separate from field editor. | Preserve archival/history behavior and policy. Keep reason semantics, current default for blank reason, errors and success navigation. Cancel performs no mutation. | Needed cleanup becomes inaccessible or archive is confused with deletion. | S3; existing editor until then |
+| P17 | Regular coordinator requests archive approval rather than archiving directly; duplicate request handling and approval task workflow. S: C, H. T. | Header More → Request archive approval. | Keep contact active when request is submitted; distinguish requested from archived. Preserve existing request reuse and Tasks approval/denial flow; no new inline approval authority. | Users think a record is archived when it is still awaiting review. | S3 |
+| P18 | Timeline categories, conditional division filters and per-filter counts; Source details excluded from All history. S: A, B. B. | Activity → one filter family. | Keep every applicable category, its empty state and count semantics. Consolidate duplicate snapshot-filter entry points without losing the filters. Event totals never become open-task counts. | Operators lose a way to find notes, outreach, receipts, or imported history. | S1, S5 |
+| P19 | Append-only internal note, required text, Ctrl/Cmd+Enter, in-flight protection and error retention. S: A, E. T. B: prior composer observation. | Activity → Add note; always reachable independently of long history. | Preserve note text, keyboard submit, author/time and append-only behavior. Empty/pending/unauthorized submits blocked; failure retains draft; success clears and refreshes. | Notes are lost, duplicated or slower to record. | S1, S5 |
+| P20 | Event author/time/body, category, related record title/meta/stages and Open link, Source details disclosure/raw text. S: A, B. | Activity entries with expandable event details. | Preserve all available event and linked-record information and exact links; technical provenance may be disclosed, never discarded. Distinguish system origin from human action. | Staff cannot reconstruct what happened or inspect the linked work. | S5 |
+| P21 | Record outreach dialog: nine outcomes, six logging channels, attempted address/number, note, and seven optional qualification updates. S: A, F. B: prior unsaved dialog. | Task band → Record outreach. | Keep full outcome/profile ledger below and existing validation/focus. No-task path completes no task. Preserve outcome effects on status/contactability, not just a timeline note. | Operational state fails to reflect wrong-number, DNC, enrollment or qualification outcomes. | S2 |
+| P22 | Exact follow-up completion and action/taskId/leadId deep-link context, including explicit no-lead context. S: A, F, H. T: earlier selection fixtures. | Task band → Complete follow-up; existing task links. | Bind selected task/contact/division/lead IDs. Missing, stale or mismatched task fails visibly; never silently complete another task. Close cleans action parameters without losing return context. | The wrong commitment may be closed. | S2 |
+| P23 | Optional next follow-up in the same outcome save, due-date shortcuts, eligible next owner and closing-outcome rules. S: A, F. | Existing outcome dialog's Next follow-up section. | Preserve date shortcuts and no-date/needs-follow-up semantics. Only permitted next-owner choices; close outcomes retain policy restrictions. Do not force a separate save that loses the combined workflow. | Future work goes unscheduled or assigned to the wrong person. | S2 |
+| P24 | Separate Schedule follow-up entry into Tasks, carrying contact/task-type context. S: A. B: prior navigation. | Task band → Schedule follow-up. | Preserve scheduling access; explicitly carry contact/division/opportunity context and eligible owner behavior. Do not choose an arbitrary employee. Full Tasks redesign is outside scope. | Staff lose the next commitment or schedule it against another context. | S2 |
+| P25 | Conversation history, direction/channel/provider, delivery status, timestamp, body fallback and message metadata. S: A, G. B: admin/senior empty states only. | Conversations tab → message details disclosure. | Keep every metadata field in the ledger, including errors and IDs. Senior retains readable history without composer. Empty, loading and failed reads remain distinct. | Staff cannot verify delivery or diagnose a failed message. | S1, S5 |
+| P26 | Admin manual send UI for Messenger and WhatsApp; eligible templates or custom text; request ID and pending safeguards. S: A, G. B: prior admin draft only. | Conversations composer, gated by existing capabilities. | Preserve both UI channels, template filtering, custom mode, preview/body rules and idempotency. Do not imply that six outreach logging channels are six send integrations. | A working send mode disappears or a duplicate outbound message is sent. | S1, S5 |
+| P27 | Server role, consent and provider/channel checks; blocked/error messages, including sent-but-audit-needs-review outcome. S: A, G. | Conversations readiness and send result states. | Retain server rechecks and distinguish not sent, failed, and sent with audit issue. A retry must not resend an already accepted operation. | Users may retry a successful send or attempt disallowed communication. | S5 |
+| P28 | Current courses, course history selection and inspector; plural active enrollments supported. S: A, I. B: empty state only. T: earlier course fixtures. | Record → Enrollments → Manage enrollments. | Preserve all actual records, selection and current/history/planned distinctions. Use endpoint IDs rather than bootstrap summaries or row positions. | One course can hide another or an edit can target the wrong enrollment. | S1, S4 |
+| P29 | Add Enrollment, default current/active workflow. S: A, I. | Enrollments → Add enrollment. | Keep full course field ledger, validation and POST path, with explicit authorized relationship context. | Staff cannot record a new course. | S4; existing editor until then |
+| P30 | Add Course History, default completed workflow. S: A, I. | Enrollments → Add history. | Preserve separate historical entry mode and relevant date/outcome fields; do not force history to masquerade as a current course. | Prior study history is lost or incorrectly counted as active. | S4; existing editor until then |
+| P31 | Edit selected course record through PATCH. S: A, I. | Enrollment inspector → Edit. | Read and save exact course ID; preserve all fields, server errors and refreshed selection. Existing values outside current options remain representable. | Corrections overwrite a different course or erase older values. | S4 |
+| P32 | Complete active course shortcut. S: A, I. | Active enrollment → Complete. | Preserve completed preselection and editable terminal details before save; no automatic completion on opening. | Completion history becomes harder to record or changes without confirmation. | S4 |
+| P33 | End active course shortcut with cancelled default and alternative terminal states. S: A, I. | Active enrollment → End enrollment. | Preserve cancelled/dropped/transferred/completed choices where policy permits, date/outcome behavior, and cancellation without mutation. | Drop/transfer/cancellation reasons become indistinguishable. | S4 |
+| P34 | Saved class section or manual course details; six statuses, start-date rule, adaptive terminal fields, duplicate-active validation. S: A, I. T: earlier fixtures. | Enrollment editor. | Preserve active/currently selected inactive sections, shared section fields, manual fallback, all statuses and multiple distinct active courses. Duplicate active same section stays rejected. | Students become linked to the wrong section or valid simultaneous courses are blocked. | S4 |
+| P35 | Receipt list with number/date/amount/status and Download PDF. S: A, L. B: empty list only. T: receipt format fixtures. | Record → Receipts → View receipts. | Retain every visible receipt and download by actual financial record. Downloading an existing document must not create another payment. | Staff cannot find or reproduce a saved receipt. | S1, S4 |
+| P36 | Generate Student Receipt, Enrolled lifecycle eligibility, complete payment form and Save & Download Receipt. S: A, L. B: 28, no submit. T. | Receipts → Generate student receipt. | Preserve financial permission, enrolled status rule, all five editable inputs and bound contact/division context. Save once, then generate PDF; a download failure offers retry of the saved receipt without another payment. | A core financial workflow is lost or creates duplicate payments. | S4; existing form until then |
+| P37 | Linked work-order list and exact Open links; conditional related work can appear for USA too. S: A, B. | USA Record → Related work when applicable; retain Signs Work Orders screen. | Do not assume USA has no work orders. Preserve title/number/due/status and exact record link under current visibility rules. | Existing related work becomes unreachable after removing tabs. | S1, S4 |
+| P38 | Create Work Order entry with contact context and work-order permission. S: A. | Related work → Create work order where currently authorized; retain Signs entry. | Preserve scoped route and permission; do not replace it with a decorative related-record heading. | Operators must restart work elsewhere and lose contact linkage. | S1, S4 |
+| P39 | Signs invoice generation from selected/row work order; create record then PDF. S: A, L. | Retain Signs Work Orders/Financials controls. | Keep actual work-order linkage, duplicate/existing-invoice behavior and permission. Distinguish financial creation from downloading an existing document. | Missing or duplicate invoices interrupt billing. | Retain; shared S4 regression gate |
+| P40 | Signs Record Invoice Payment with invoice selection and balance preview. S: A, L. | Retain Signs invoice/payment dialog. | Preserve all six editable inputs, including invoice/work-order selection, current and after-payment balances, validation and saved linkage. | Payments attach to the wrong invoice or balances become unclear. | Retain; shared S4 regression gate |
+| P41 | Signs financial record list covering existing document types, status/amount/date/number and PDF downloads. S: A, L. | Retain Signs Financials screen. | Preserve all visible types and document-specific generation/download functions; do not apply USA receipt-only filtering to Signs. | Estimates, invoices or payments disappear from client history. | Retain; shared S4 regression gate |
+| P42 | New Estimate with dates/status, editable line items, add/remove and calculated total. S: A, L. | Retain Signs estimate dialog. | Preserve estimate field ledger, at least one line, positive billable total, contact/division binding and existing save/PDF behavior. | Staff lose quoting capability or generate an incorrect amount. | Retain; shared S4 regression gate |
+| P43 | Signs linked people: name/role/primary marker/phone/email/notes and channel links. S: A, M. | Retain Signs linked Contacts screen. | Keep separate people and their exact links; do not flatten them into the account's primary identity. | Staff contact the wrong person at a client organization. | Retain; shared S1 regression gate |
+| P44 | Add linked person. S: A, M. | Retain Add linked person dialog. | Preserve all six fields and required name, current authorization and contact association. | New decision makers cannot be recorded. | Retain |
+| P45 | Edit linked person and designate primary contact. S: A, M. | Retain person Edit dialog. | PATCH exact person ID; primary selection follows existing server rule clearing other primaries. Account identity remains separate. | Several people appear primary or the wrong person is changed. | Retain |
+| P46 | Remove linked person with centered confirmation. S: A, M. | Retain selected person's Remove action/dialog. | Confirm the named person and remove only that linkage/record through current endpoint; never archive the main contact. | A minor contact cleanup could affect the whole client record. | Retain |
+| P47 | Per-resource loading, empty and failure states, role denials and pending controls exist with uneven consistency. S: A and route handlers. B: empty forms/views. | Every new or reused resource surface. | Preserve meaningful existing feedback and close documented gaps: failed reads are not empty success, failed saves retain draft, busy actions resist duplicate submission. | Users mistake unavailable data for absence or repeat writes. | All |
+| P48 | Non-Postgres fallback branches for local data and features requiring server context. S: A. | Preserve existing fixture/local behavior while refactoring. | Local fixtures remain fixtures; server-only workflow limitations stay explicit. Do not show a local fallback save as a successful staging mutation. | Development evidence is mistaken for live behavior or local previews break. | All |
+| P49 | CRM, financial, work-order, send and import-review capabilities are separate; division/assignment checks remain server-side. S: C, G, H and access helpers. B: admin/senior only. T: prior policy fixtures. | Permission-driven read/action model across the workspace. | Verify both affordances and API denials for each relevant role/division. Do not infer financial/send permission solely from ability to edit a contact. | Refactor hides valid work or exposes unauthorized operations. | All |
+| P50 | Audit found weak dirty-dismiss and return continuity; task URLs and drafts provide existing context to preserve. S/B: original F1/F10. | Shared editor host and URL-owned workspace state. | Add reliable unsaved-change protection, focus restoration and directory/resource return state. Switching sections preserves fields; invalid/stale context fails safely. This is an improvement, not proven current parity. | Drafts are lost and operators must repeatedly reconstruct their place. | S1–S5 |
+
+## Field-level ledger
+
+A board is not a field inventory. These fields must remain readable/editable through their stated workflows even when the artwork omits their less common states.
+
+### Profile editing — all 18 inputs
+
+| Existing input | Storage / write scope | Proposed editor |
+|---|---|---|
+| name | Contact identity | Edit contact |
+| email | Contact identity | Edit contact |
+| phone | Contact primary phone; preserve phone-history semantics | Edit contact |
+| address | USA intended learning location; Signs address | Edit contact, division-specific label |
+| status | Selected opportunity lifecycle | Ownership & status |
+| assignedTo | Selected opportunity owner | Ownership & status |
+| statusChangeReason | Conditional reopen reason: correction or new_course_follow_up | Ownership & status, when required |
+| terminalStatusReason | Conditional reason for entering closed status | Ownership & status, when required |
+| source | Coupled selected lead source plus contact fallback label | Correct acquisition source |
+| leadProfile.programInterest | Lead profile | Inquiry details |
+| leadProfile.locationPreference | Student residential location / lead profile | Inquiry details |
+| leadProfile.preferredDay | Lead profile | Inquiry details |
+| leadProfile.preferredSchedule | Lead profile | Inquiry details |
+| leadProfile.testInterest | Lead profile; existing free-text Test value | Inquiry details → Qualifications |
+| leadProfile.educationLevel | Lead profile; editable Level, distinct from placement evidence | Inquiry details → Qualifications |
+| leadProfile.schoolName | Lead profile; existing free-text School value | Inquiry details → Qualifications |
+| leadProfile.sourceDetail | Lead profile detail, distinct from acquisition source and raw event provenance | Source |
+| leadProfile.profileDetails | Lead profile contextual notes, distinct from append-only activity notes | Inquiry details → Details |
+
+Do not introduce a new company-name editor, phone-history management, or contact-wide owner/status as if they existed in this form. Preserve existing options and unknown/current values rather than hard-coding sample artwork values.
+
+### Source correction save contract
+
+The previous handoff's read-only acquisition-source restriction is withdrawn. It would have removed a working editor input.
+
+- Reading original submission/import provenance remains read-only. Correcting the current acquisition-source label remains available to users authorized by existing CRM and opportunity policies.
+- In Source, provide a named **Correct acquisition source** action. Use a separate save state in the same modal host, not a stacked dialog. Protect any unsaved opportunity draft before changing save scope.
+- Explain scope before submission: **“Updates this opportunity's source and the contact's source label. Original submission history stays unchanged.”**
+- Submit only ID, exact opportunity context, and changed source through the existing authorized contact PATCH contract. A routine opportunity save must not include an unchanged source field. Source Detail remains a distinct lead-profile field.
+- Preserve current source options and an existing custom/current value. Refresh both affected projections on success. Denial, stale opportunity or conflict retains the draft and does not retarget the operation.
+- This is an explicit existing coupled operation, an exception to the artwork's shorthand “one record per editor.” The governing rule is **one clearly explained save scope**. No storage migration or new permission restriction is needed to preserve the capability.
+
+### Follow-up and outreach
+
+Preserve outcome, channel, attempted contactMethod, required note, optional nextDueDate, conditional nextOwnerUserId, and captured contact/task/lead/division context. The next task remains optional in the same save.
+
+Outcomes: reached_interested, left_voicemail, no_answer, appointment_scheduled, needs_next_follow_up, reached_not_interested, wrong_number, do_not_contact, enrolled_or_won.
+
+Logging channels: phone, sms, whatsapp, email, in_person, other. These describe an attempt; the page's provider composer currently supports Messenger and WhatsApp only.
+
+Optional profile update fields: programInterest, locationPreference, preferredDay, preferredSchedule, testInterest, educationLevel, schoolName. Preserve tomorrow / two days / three days / no-date choices, outcome-dependent next-task visibility, validation focus, owner restrictions, and existing status/contactability reconciliation. Wrong-number and do-not-contact outcomes must still update the relevant normalized state.
+
+### Enrollment editor
+
+Nine editable values: classSectionId, courseName, teacher, courseLocation, status, startDate, endDate, outcomeReason, notes. Existing course record ID and authorized linkage remain explicit context.
+
+Statuses: planned, active (Current), completed, dropped, cancelled, transferred. Active requires a start date. Terminal state selection currently supplies an end-date default and shows outcome details; do not silently make every terminal end date newly mandatory. Class-section selection uses active sections plus the currently selected inactive section; section-owned course/teacher/location are locked while selected. Manual details remain available without a saved section. Preserve section label context: course, teacher, delivery location, schedule/modality/status where provided.
+
+Multiple distinct active courses are valid. Duplicate active records for the same saved section, or equivalent legacy course/location/teacher/start-date context, remain subject to existing validation. Preserve all four entry modes: new enrollment, add history, edit, and complete/end shortcuts.
+
+### Receipts, payments and estimates
+
+USA receipt inputs: amount, paidAt, paymentMethod, checkNumber/reference, note/memo; contact/division are bound context. Preserve all five editable inputs and the bound context. Amount must be positive. Method choices: Cash, Check, Card, Zelle, ACH, Other.
+
+Eligibility is the current **Enrolled lifecycle status/stage**, not the existence of a course record. Preserve that rule; proposing a different financial eligibility rule requires a separately reviewed behavior change. Save & Download creates a financial record before generating its PDF. If file generation fails after persistence, retry download against the saved record.
+
+Signs invoice payment adds workOrderId/invoice selection to those five inputs, with current-balance and balance-after-payment previews. Preserve exact invoice/contact/division linkage.
+
+Estimate inputs: client/context, status (Draft, Pending, Approved, Rejected), date, dueDate/valid-until, and line items containing description, quantity and rate. Add/remove line items, retain at least one, compute total, and enforce the existing positive-total validation. Invoice generation uses actual saved work-order context; it is not merely an export.
+
+### Linked people and message details
+
+Linked-person inputs: name, role, isPrimary, phone, email, notes; person/contact IDs bind edits. Name is required. Read mode retains primary marker and phone/email launch links. Primary designation remains server-enforced. Remove is separate from archiving the client.
+
+Conversation details retain direction, provider/channel, delivery status, timestamp, body/empty-body fallback, source/channel configuration, To/From, division, linked contact, lead status, conversation status, thread ID, external message ID and delivery/error text when present. These can live in a disclosure without remaining as always-visible boxes.
+
+## Role and division contract
+
+| Capability | Preserve |
+|---|---|
+| Read contact, history and resources | Existing CRM/resource access and division/assignment scope; no new access from a tab change. |
+| Edit identity/profile/status | Existing CRM write capability plus operation-specific policy. Read-only users have no write actions. |
+| Assign opportunity / next task | Existing eligible-assignee policies. Regular coordinator restrictions remain enforced in the API. |
+| Archive | Existing direct-archive policy for authorized users; regular coordinator approval-request path. Do not reduce the policy to two hard-coded role names. |
+| Financial actions | canWriteFinancials and backend financial authorization, independent of CRM editing. |
+| Work-order creation | canWriteWorkOrders and scoped destination checks. |
+| Outbound manual messages | Current admin/send capability and backend CRM/role/provider/consent checks. Senior history access survives without sending. |
+| Cleanup/import-review context | Existing canReadImportReview restrictions on the relevant provenance summaries. |
+| AIT Signs | Retain current client layout and business semantics; verify shared-component changes against a populated Signs fixture before release. |
+| AIT USA with related work | Keep conditional linked Work Orders and eligible create/open entry points. |
+
+Admin and senior browser observations support only those exercised views. Regular coordinator and read-only screens still need authenticated or explicitly isolated fixture verification; their source policies alone do not prove their rendered experience.
+
+## Release checks and delivery rule
+
+1. For each matrix row, record the implementation location, role/data fixture, desktop/mobile outcome, relevant handler/permission result and evidence link. Use **Verified**, **Blocked**, or **Not exercised** accurately; blank or Not exercised required rows are not acceptance.
+2. Compare supported fields and controls against the ledger, including hidden conditional states. Open each editor, exercise validation and draft transitions, and confirm all values survive a save/reload in mocks or separately authorized disposable staging QA.
+3. Test admin, senior, regular coordinator and read-only behavior; no-op and denied requests must not broaden permissions. Preserve Signs even though its redesign is outside this release.
+4. Include no lead, closed-only, older-active/newer-closed, multiple active conflict, no/multiple follow-ups, stale task, no/multiple courses, duplicate active section, nonstandard field values, DNC/wrong phone, populated history, and financial eligibility fixtures.
+5. Verify 1440×1000, 390×844, 320px width, 200% zoom, keyboard-only, focus return and mobile keyboard reachability on the implemented screen.
+6. Existing functionality stays accessible in every delivered slice. Reuse the current editor/resource view until its replacement is verified; do not hide source editing, archive, receipt generation, history, or course actions behind a later-slice promise.
+7. Exact staging database target confirmation and explicit disposable-record write authorization are prerequisites for live mutation QA. Never use production actions as tests. No outbound message is required for read-only design review.
+8. Implementation remains paused. This document is a reviewable specification, not deployment approval or proof that the redesigned page works.
+
+## Design gaps resolved by this contract
+
+| Gap in the earlier concept/handoff | Observed evidence | Inferred consequence | Resolution |
+|---|---|---|---|
+| Acquisition source was made read-only in the proposed first release | Current Source selector and coupled PATCH are present; screenshot 27 | Would remove an existing correction workflow | Restore named correction operation with explicit coupled scope. |
+| Secondary qualification fields were not enumerated in the board | Current form contains Test, Level, School, Source Detail and Details; screenshot 26 | An implementer could omit valid fields | Full 18-input profile ledger and P10 are mandatory. |
+| Archive and approval request were not explicitly placed | Current dialog, DELETE policy and approval fixtures; screenshot 25 | Cleanup may disappear or be mislabeled as direct archive | Distinct More-menu actions and correct success states. |
+| Enrolled-to-course prompt and full receipt workflow were underspecified | Current handlers and receipt eligibility screen; screenshot 28 | Missing enrollment entry or lost/duplicated financial action | P15 and P35–P36 preserve complete workflows. |
+| USA artwork did not show conditional related work or Signs-specific tools | Source conditionals and shared client wrapper | Applying the board globally could hide supported records | Conditional USA Related work; retain Signs variant and regression gate. |
+
+These are specification omissions caught before implementation, not evidence of regressions already deployed.
+
+## Source evidence index
+
+All paths were inspected locally against the source comparison recorded above.
+
+- **A — Page/controller:** [contact detail](<../../src/app/contacts/[id]/page.js#L995>). Profile/quick actions 995–1277 and 1756–1930; Activity 1935–2135; Courses 2136–2300; linked people 2303–2342; Conversations 2347–2482; work/financials 2483–2665; enrollment dialog 2670–2850; profile 2900–3220; payment/people dialogs 3298 onward.
+- **B — Read model and categories:** [contact detail view model](<../../src/lib/contact-detail-view-model.js#L113>).
+- **C — Contact writes and archive:** [contact route](<../../src/app/api/contacts/route.js#L353>); source writes near 392/555, DELETE near 680.
+- **D — Full lead-profile map:** [lead-profile fields](<../../src/lib/crm/lead-profile.js#L3>).
+- **E — Notes:** [note composer](<../../src/components/ContactTimelineNoteFields.js#L45>) and page handler near 1683.
+- **F — Outcome form:** [follow-up dialog](<../../src/components/FollowUpOutcomeDialog.js#L1>) and page follow-up selection/save near 1283/1373.
+- **G — Conversation policy:** [conversations route](<../../src/app/api/contacts/[id]/conversations/route.js#L91>); page send handler near 1710 and template loader near 972.
+- **H — Lifecycle, tasks and roles:** [opportunity policy](<../../src/lib/crm/ait-usa-opportunities.js#L70>), [coordinator policy](<../../src/lib/crm/coordinator-policy.js#L55>), [follow-up selection](<../../src/lib/tasks/follow-up-selection.js#L43>) and [archive approval fixtures](<../../src/lib/tasks/archive-approvals.test.js#L1>).
+- **I — Enrollments:** [courses endpoint](<../../src/app/api/contacts/[id]/courses/route.js#L25>) and [course identity/validation](<../../src/lib/crm/course-records.js#L99>).
+- **J — Shared client route:** [client wrapper](<../../src/app/clients/[id]/page.js#L1>).
+- **K — Phone history:** [phones GET endpoint](<../../src/app/api/contacts/[id]/phones/route.js#L11>) and [history fixtures](<../../src/lib/crm/contact-phone-history.test.js#L1>).
+- **L — Financial fields/linkage/documents:** [field helpers](<../../src/lib/financial-document-fields.js#L1>), [linkage](<../../src/lib/financial-linkage.js#L1>) and [USA receipt document](<../../src/lib/ait-usa-receipt-document.js#L1>); page handlers near 1426–1577.
+- **M — Linked people:** [people endpoint](<../../src/app/api/contacts/[id]/people/route.js#L1>).
+
+## Verification record and remaining gaps
+
+This parity pass ran six existing fixture suites:
+
+```text
+node --test --test-reporter=spec src/lib/crm/contact-phone-history.test.js src/lib/ait-usa-receipt-document.test.js src/lib/financial-document-fields.test.js src/lib/financial-linkage.test.js src/lib/tasks/archive-approvals.test.js src/components/ContactTimelineNoteFields.test.js
+```
+
+Result: **19 passed; 0 failed; 0 skipped**. These are baseline pure/mock checks. The earlier handoff records a separate 92-test run; those 92 were not rerun during this parity pass. No redesign tests exist yet, and no pass here certifies redesigned runtime parity.
+
+Still unverified live: regular/read-only role screens; populated Signs detail and financial/person workflows; populated conversation delivery; multiple/current/closed opportunity fixtures; populated courses; successful edits, source correction, status changes, archive/request, course writes, receipt/financial creation/download, task completion and sending. Source coverage and mock tests are explicitly distinct from these browser/write gaps.
+
+Files changed in this pass: this matrix, its CSV tracker, canonical handoff, original audit's final-design references/source recommendation, and four read-only QA screenshots. Application code and existing repository changes were untouched. No Linear issue, application worktree, commit, push, PR, merge or deployment was created. No direct database connection or CRM record write, outbound send, role change, or production action occurred. Application implementation is paused.
