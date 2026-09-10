@@ -1,29 +1,44 @@
 # Contact detail redesign: design and functionality handoff
 
-September 7, 2026. **Application implementation is paused.** This package publishes the approved audit/design documents to the staging branch; it does not implement the redesigned page.
+Revised September 10, 2026. **Application implementation is paused.** This package contains the selected visual direction, governing workflow contracts and a complete capability tracker; no redesigned application code is implemented by this publication.
+
+## Current issue and authority
+
+- Delivery issue: [MIS-408 — Detailed contact workspace redesign](https://linear.app/mission-control-v2/issue/MIS-408/ait-crm-detailed-contact-workspace-redesign-preserved-tabs-direct), Todo pending implementation instruction.
+- Related historical exploration: [MIS-242](https://linear.app/mission-control-v2/issue/MIS-242/ait-crm-ui-full-contact-detail-page-rework-exploration). Its old sidebar-preservation wording is not the selected design.
+- Alvaro approved the review recommendations and unknown-source fix, and requested updated documents/boards and a Linear issue. This publication changes documentation/artwork only. Application work, live mutation QA and production promotion remain separate steps.
 
 ## Read in this order
 
-1. [Final design, interaction model, acceptance criteria and delivery slices](verification-and-handoff.md).
-2. [Functionality parity contract and field ledgers](functionality-parity.md): 50 inventory rows; all 18 profile inputs; role, source-correction, archive, outreach, enrollment, receipt and related-record rules.
-3. [Per-capability verification tracker](functionality-parity.csv): every implementation result begins Not implemented / Not exercised.
-4. [Record board, desktop and mobile](01-contact-workspace.png) and [focused editor board, desktop and mobile](02-focused-editor.png).
+1. [Design, interaction, tab and acceptance contract](verification-and-handoff.md).
+2. [Functionality parity and source correction contract](functionality-parity.md): 56 rows, including all 50 original inventory/continuity rows and six explicit improvement checks; all original field ledgers preserved.
+3. [Per-capability tracker](functionality-parity.csv): every implementation result remains Not implemented / Not exercised.
+4. [Board specifications and state coverage](design-board-spec.md), then the revised boards below.
+5. [Current publication release packet](publication-2026-09-10.md) for actual validation/deployment status. September 7 audit results are historical baseline evidence, not a new runtime pass.
 
-The first redesigned variant is AIT USA contact detail. Existing AIT Signs client functionality must remain available and pass applicable shared-component regression checks. There are no intentional capability removals; the images are illustrative, and the text/field ledgers govern omitted conditional states and image inconsistencies. Mapping completion does not prove runtime parity.
+## Revised boards — one design, different states
 
-## Publication scope
+- [Record workspace, desktop](01-contact-workspace-v2.png): clean person/opportunity facts and retained operational tabs.
+- [Focused source editors](02-focused-editor-v2.png): separate opportunity and contact-only examples; no opportunity required for contact maintenance.
+- [Populated Enrollments tab](03-enrollments-workspace.png): actual records, direct actions and selected history details within the tab.
 
-- User authorization: push the functionality mapping and updated handoff to staging; application implementation remains paused.
-- Source branch: fresh origin/staging at c9df0a06a797a477b3daeeada073bb5f14454137. Documentation branch: codex/contact-detail-docs-20260907. The published Git commit identifies the exact candidate.
-- Linear issue: none assigned. This is a bounded documentation publication, not a newly started application delivery slice.
-- Included: mapping, CSV tracker, updated handoff, two fictional-data design boards and this index.
-- Repository source links are relative and portable. Baseline evidence remains dated September 7; do not treat those deployment or data observations as automatically current after later releases.
-- Database environment touched: none. Customer-impacting operations: none. No application source/configuration, role, provider, or CRM data changes are part of this package.
-- Git-driven staging deployment may follow the push. There is no manual deployment or production promotion in this request.
-- Documentation validation: local/repository links resolved; 50 unique matrix IDs; all tracker rows remain Not implemented; no machine-local paths, QA login addresses or QA contact identifier in the published text. The two design boards were visually reviewed as fictional data.
-- Full local validation was attempted as required by the staging contract: repository check passed; the standard suite reported 742 tests, 728 passed, 12 failed and 2 skipped. Eleven failures were Windows executable-spawn errors for npm/drizzle-kit; one was the existing placement-review fixture's byte hash after checkout line-ending conversion. The command stopped before later TSX, lint and build steps. Application source, test scripts and existing fixture content were unchanged in Git. GitHub's Linux candidate validation is the subsequent cross-platform check; its status is recorded in GitHub and the accompanying task handoff.
-- Existing fixture results inside the audit documents belong to the earlier audit, not this publication validation or a redesign implementation.
-- Resume application work only after a subsequent user instruction. Live mutation QA also requires its named database/disposable-record authorization.
+These are fictional-data design artwork, not screenshots of implemented software. Text and field ledgers govern omitted conditional states. The original [September 7 Record board](01-contact-workspace.png) and [editor board](02-focused-editor.png) remain **historical, superseded interaction references**. Preserve their light visual style, not their three-tab limit or coupled source assumption. The revised boards are not three competing design options.
+
+## September 10 changes that govern implementation
+
+- Keep every applicable production destination: Activity, Conversations, Enrollments, Receipts/Financials, Work Orders and Signs linked People, plus Record as the clean overview. Records and actions live directly inside their tabs; no gateway-only Manage/View replacement. Optional full-detail links use existing routes.
+- Remove repeated summary/context panels, duplicate creation CTAs and competing draft state, not useful operational navigation.
+- Separate contact-source and exact-opportunity-source corrections. Legacy contacts need no artificial opportunity; preserve actual evidence and never guess first-touch history.
+- Replace sample attribution fallback with Unknown/Not recorded. This is an approved read-path fix, not authorization for data repair/backfill.
+- Define next-task ordering, preserve combined follow-up/next-task saves, direct owner/status editing, receipt download retry safety, and directory/resource return continuity.
+- Desktop-first. Maintain basic responsiveness/accessibility without a new phone-first design workstream.
+- No intentional capability removals. Existing forms remain reachable in each slice until their replacements pass. AIT Signs semantics and conditional USA work remain protected.
+
+## Publication baseline
+
+Fresh base: staging documentation commit `74ef179524a3df435ac88fece68e2634239a88d3`. Its application source matches production-lane `71821f03179aeb68cf787502998ce491effe03d0` and pre-doc staging `c9df0a06a797a477b3daeeada073bb5f14454137` in the September 10 comparison. Source equality is not proof of deployed runtime or database equality.
+
+The previous September 7 publication reported a Windows validation failure (11 executable-spawn errors and one line-ending-sensitive fixture hash); those are not current Linux results. Consult the current release packet. Historical audit observations and private evidence remain below. Do not include customer records, QA credentials or authenticated screenshots in this public repository.
 
 ## Private evidence archive
 
@@ -55,7 +70,7 @@ The original broader Contacts audit, detailed-page addendum and discarded concep
 | F10 — Dirty drafts | Keep values across sections and failed saves; protect dismiss/navigation and restore focus. |
 | F13 — Repeated summaries | Give facts one primary home and consolidate equivalent navigation/actions. |
 | F14 — Contact/opportunity scope | Keep owner/status on the selected opportunity, with exact identity and correct closed/conflict states. |
-| F15 — Legacy field mappings | Preserve distinct location fields and explicitly explain coupled acquisition-source correction. |
+| F15 — Legacy field mappings | Preserve distinct locations; September 10 separates contact/opportunity source corrections rather than retaining coupled saves. |
 | F16 — Course/opportunity selection mismatch | Align changed enrollment linkage/access behavior with the active-opportunity policy and use actual course IDs. |
 
 The final handoff separates observed evidence from inferred consequences. The parity contract additionally identifies design omissions caught before implementation, including source editing, secondary fields, archive approvals, the Enrolled-to-course prompt, receipts and conditional related work.
