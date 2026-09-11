@@ -693,12 +693,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const selectedClassSection = useMemo(() => (
     currentClassSections.find((section) => section.id === courseForm.classSectionId) || null
   ), [courseForm.classSectionId, currentClassSections]);
-  const selectedCourseRecord = useMemo(() => (
-    currentCourseRecords.find((record) => record.id === selectedCourseRecordId) ||
-    activeCourseRecord ||
-    currentCourseRecords[0] ||
-    null
-  ), [activeCourseRecord, currentCourseRecords, selectedCourseRecordId]);
   const courseStartDateRequired = courseForm.status === 'active';
   const courseStatusIsTerminal = isTerminalCourseRecordStatus(courseForm.status);
   const courseStatusLabel = courseRecordStatusLabel(courseForm.status);
@@ -1942,6 +1936,38 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     </div>
   );
 
+  const renderCourseRecordDetails = (record) => (
+    <div className={s.courseInspector} role="region" aria-label={`${record.courseName} details`}>
+      <div className={s.courseInspectorHeader}>
+        <span className={`${s.coursePill} ${s[`coursePill_${record.status}`] || ''}`}>
+          {courseRecordStatusLabel(record.status)}
+        </span>
+        <strong>{record.courseName}</strong>
+      </div>
+      <div className={s.courseInspectorDetails}>
+        <div><span>Started</span><strong>{record.startDate || 'Not set'}</strong></div>
+        <div><span>Delivery location</span><strong>{record.courseLocation || 'Delivery location not set'}</strong></div>
+        <div><span>Teacher</span><strong>{record.teacher || 'Not assigned'}</strong></div>
+        <div><span>Ended</span><strong>{record.endDate || (record.status === 'active' ? 'Current' : 'Not set')}</strong></div>
+        <div className={s.courseInspectorWide}>
+          <span>Class section</span>
+          <strong>{record.classSection ? classSectionDisplayLabel(record.classSection) : 'Legacy or manually entered course record'}</strong>
+        </div>
+        <div className={s.courseInspectorWide}><span>Outcome / reason</span><strong>{record.outcomeReason || 'None recorded'}</strong></div>
+        <div className={s.courseInspectorWide}><span>Notes</span><strong>{record.notes || 'No notes'}</strong></div>
+      </div>
+      {access.canWriteCrm && (
+        <div className={s.courseInspectorActions}>
+          <button className="btn btn-sm" type="button" onClick={() => openCourseModal('edit', record)}><Edit3 size={14} /> Edit</button>
+          {record.status === 'active' && <>
+            <button className="btn btn-sm" type="button" onClick={() => openCourseModal('complete', record)}><CheckCircle2 size={14} /> Complete</button>
+            <button className="btn btn-sm" type="button" onClick={() => openCourseModal('end', record)}><AlertCircle size={14} /> End</button>
+          </>}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div className={s.detailPage + " fade-in"}>
       <div className="page-header">
@@ -2320,12 +2346,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                           <div className={s.courseTableHeader} aria-hidden="true">
                             <span>Course</span><span>Teacher</span><span>Location</span><span>Start date</span><span>Status</span><span>Actions</span>
                           </div>
-                          {activeCourseRecords.map((record) => (
-                            <div
-                              key={record.id}
-                              className={s.courseActiveItem}
-                            >
-                              <button className={s.courseActiveSelect} type="button" onClick={() => setSelectedCourseRecordId(record.id)}>
+                          {activeCourseRecords.map((record) => {
+                            const expanded = selectedCourseRecordId === record.id;
+                            return <div key={record.id} className={s.courseRecordGroup}>
+                            <div className={s.courseActiveItem}>
+                              <button className={s.courseActiveSelect} type="button" aria-expanded={expanded} aria-controls={`course-details-${record.id}`} onClick={() => setSelectedCourseRecordId(expanded ? '' : record.id)}>
                                 <strong>{record.courseName}</strong>
                               </button>
                               <span className={s.courseTableCell}>{record.teacher || 'Not assigned'}</span>
@@ -2338,7 +2363,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                                 <button className="btn btn-sm" type="button" onClick={() => openCourseModal('end', record)}>End</button>
                               </span>}
                             </div>
-                          ))}
+                            {expanded && <div id={`course-details-${record.id}`}>{renderCourseRecordDetails(record)}</div>}
+                          </div>;
+                          })}
                         </div>
                       )}
                     </div>
@@ -2366,12 +2393,16 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       <div className={s.courseTableHeader} aria-hidden="true">
                         <span>Course</span><span>Teacher</span><span>Location</span><span>Date range</span><span>Status</span><span>Actions</span>
                       </div>
-                      {historicalCourseRecords.map((record) => (
+                      {historicalCourseRecords.map((record) => {
+                        const expanded = selectedCourseRecordId === record.id;
+                        return <div key={record.id} className={s.courseRecordGroup}>
                         <button
                           key={record.id}
                           type="button"
-                          className={`${s.courseRecordRow} ${selectedCourseRecord?.id === record.id ? s.active : ''}`}
-                          onClick={() => setSelectedCourseRecordId(record.id)}
+                          className={`${s.courseRecordRow} ${expanded ? s.active : ''}`}
+                          aria-expanded={expanded}
+                          aria-controls={`course-details-${record.id}`}
+                          onClick={() => setSelectedCourseRecordId(expanded ? '' : record.id)}
                         >
                           <span className={`${s.courseStatusDot} ${s[`courseStatus_${record.status}`] || ''}`} />
                           <span className={s.courseRecordMain}>
@@ -2383,72 +2414,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                           <span className={s.courseRecordStatus}>{courseRecordStatusLabel(record.status)}</span>
                           <span className={s.courseHistoryAction}>View details</span>
                         </button>
-                      ))}
+                        {expanded && <div id={`course-details-${record.id}`}>{renderCourseRecordDetails(record)}</div>}
+                        </div>;
+                      })}
                     </div>
-
-                    <aside className={s.courseInspector}>
-                      {selectedCourseRecord ? (
-                        <>
-                          <div className={s.courseInspectorHeader}>
-                            <span className={`${s.coursePill} ${s[`coursePill_${selectedCourseRecord.status}`] || ''}`}>
-                              {courseRecordStatusLabel(selectedCourseRecord.status)}
-                            </span>
-                            <strong>{selectedCourseRecord.courseName}</strong>
-                          </div>
-                          <div className={s.courseInspectorDetails}>
-                            <div>
-                              <span>Started</span>
-                              <strong>{selectedCourseRecord.startDate || 'Not set'}</strong>
-                            </div>
-                            <div>
-                              <span>Delivery location</span>
-                              <strong>{selectedCourseRecord.courseLocation || 'Delivery location not set'}</strong>
-                            </div>
-                            <div>
-                              <span>Teacher</span>
-                              <strong>{selectedCourseRecord.teacher || 'Not assigned'}</strong>
-                            </div>
-                            <div>
-                              <span>Ended</span>
-                              <strong>{selectedCourseRecord.endDate || (selectedCourseRecord.status === 'active' ? 'Current' : 'Not set')}</strong>
-                            </div>
-                            <div className={s.courseInspectorWide}>
-                              <span>Class section</span>
-                              <strong>{selectedCourseRecord.classSection
-                                ? classSectionDisplayLabel(selectedCourseRecord.classSection)
-                                : 'Legacy or manually entered course record'}</strong>
-                            </div>
-                            <div className={s.courseInspectorWide}>
-                              <span>Outcome / reason</span>
-                              <strong>{selectedCourseRecord.outcomeReason || 'None recorded'}</strong>
-                            </div>
-                            <div className={s.courseInspectorWide}>
-                              <span>Notes</span>
-                              <strong>{selectedCourseRecord.notes || 'No notes'}</strong>
-                            </div>
-                          </div>
-                          {access.canWriteCrm && (
-                            <div className={s.courseInspectorActions}>
-                              <button className="btn btn-sm" type="button" onClick={() => openCourseModal('edit', selectedCourseRecord)}>
-                                <Edit3 size={14} /> Edit
-                              </button>
-                              {selectedCourseRecord.status === 'active' && (
-                                <>
-                                  <button className="btn btn-sm" type="button" onClick={() => openCourseModal('complete', selectedCourseRecord)}>
-                                    <CheckCircle2 size={14} /> Complete
-                                  </button>
-                                  <button className="btn btn-sm" type="button" onClick={() => openCourseModal('end', selectedCourseRecord)}>
-                                    <AlertCircle size={14} /> End
-                                  </button>
-                                </>
-                              )}
-                            </div>
-                          )}
-                        </>
-                      ) : (
-                        <div className={s.courseEmpty}>Select a course record.</div>
-                      )}
-                    </aside>
                   </div>
                 )}
               </div>
@@ -3331,7 +3300,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       <div className="profile-editor-readonly-block">
                         <strong>Original submission</strong>
                         <span>Recorded submission · {dateLabel({ date: contact.submittedAt })}</span>
-                        <small>See Activity for the source event and its immutable details.</small>
+                        <small>See Activity for original submission details.</small>
                       </div>
                     ) : <p className="profile-editor-muted">Original submission not recorded.</p>}
                   </>
