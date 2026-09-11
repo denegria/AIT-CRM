@@ -28,7 +28,7 @@ test('record uses actual inquiry resolution states without creating a substitute
   assert.match(source, /Start inquiry/);
   assert.match(source, /const openStartInquiry = \(\) => \{/);
   assert.match(source, /onClick=\{openStartInquiry\}/);
-  assert.match(source, /title=\{isAitUsaContact && activeProfileEditTab === 'enrollment' \? 'Edit inquiry'/);
+  assert.match(source, /title=\{isAitUsaContact \? 'Edit contact & inquiry'/);
   assert.match(source, /active inquiries need resolution before inquiry changes can be made/);
   assert.match(source, /const contactSource = cleanText\(contact\?\.sourceLabel\) \|\| 'Unknown';/);
   assert.match(source, /const inquirySource = cleanText\(contact\?\.inquirySource\) \|\| 'Unknown';/);

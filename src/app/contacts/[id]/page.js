@@ -1030,7 +1030,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     setIsEditModalOpen(true);
   };
 
-  const openInquiryEditor = (section = 'enrollment') => {
+  const openInquiryEditor = (section = 'general') => {
     openEditModal();
     setActiveProfileEditTab(section);
   };
@@ -2023,6 +2023,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <div><dt>Phone</dt><dd>{contact.phone ? <a href={phoneHref(contact.phone)}>{contact.phone}</a> : 'Unknown'}</dd></div>
                     <div><dt>Intended learning location</dt><dd>{schoolLocationForContact(contact) || 'Unknown'}</dd></div>
                     <div><dt>Contact source</dt><dd>{contactSource}</dd></div>
+                    {!hasResolvedCurrentInquiry && !hasClosedInquiry && <div><dt>Assigned coordinator</dt><dd>{assignedEmployee?.label || 'Unassigned'}</dd></div>}
+                    {!hasResolvedCurrentInquiry && !hasClosedInquiry && <div><dt>Student location</dt><dd>{studentLocationForContact(contact) || 'Unknown'}</dd></div>}
                     <div><dt>Last touch</dt><dd>{contact.lastTouch || contact.lastContact || 'None'}</dd></div>
                     <div><dt>Last edited</dt><dd>{contact.lastEdited || 'None'}</dd></div>
                   </dl>
@@ -2074,6 +2076,17 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     </div>
                   )}
                 </section>
+                {access.canReadImportReview && !!cleanupAudits.length && (
+                  <details className={s.recordSection}>
+                    <summary>Cleanup provenance</summary>
+                    {cleanupAudits.map((audit) => (
+                      <div key={audit.id} className={s.cleanupSummaryItem}>
+                        <strong>{audit.title}</strong>
+                        <span>{audit.detail}</span>
+                      </div>
+                    ))}
+                  </details>
+                )}
               </div>
             )}
 
@@ -3032,7 +3045,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         <Modal
           open={isEditModalOpen}
           onClose={() => setIsEditModalOpen(false)}
-          title={isAitUsaContact && activeProfileEditTab === 'enrollment' ? 'Edit inquiry' : isAitUsaContact ? 'Edit contact' : 'Edit Profile'}
+          title={isAitUsaContact ? 'Edit contact & inquiry' : 'Edit Profile'}
           variant="dialog"
           panelClassName="contact-profile-dialog-panel"
           footer={<><button className="btn" type="button" onClick={() => setIsEditModalOpen(false)}>Cancel</button><button className="btn btn-primary" type="button" onClick={handleEditSave}>Save Changes</button></>}

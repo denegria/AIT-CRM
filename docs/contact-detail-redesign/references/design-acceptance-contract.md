@@ -31,3 +31,5 @@ Primary viewport: 1440×1000 CSS px. Regression: compact desktop (1024×768), bo
 - The new Inquiry source display does not use the legacy loader's generic source fallback, which can contain a sample label. Removing that loader fallback globally remains the later source-fix slice.
 - The next-work fallback says No next action recorded; it does not assert there are no scheduled tasks without querying them.
 - Existing shared form sections and coupled source writes remain S1 limitations, not independent contact/inquiry mutation semantics. Scoped editors follow in S3.
+- Inquiry Edit opens General, where lifecycle and ownership live. The retained form is explicitly titled Edit contact & inquiry until S3 separates its saves.
+- Legacy/no-selected-inquiry and conflict records retain assigned coordinator and student location in Contact & preferences. Permission-gated cleanup provenance remains available as a collapsed Record disclosure.
