@@ -20,4 +20,14 @@ Existing IDs, route/query context, permissions, dirty/error state, archive flow,
 
 ## Viewports and evidence
 
-Primary viewport: 1440×1000 CSS px. Regression: compact desktop (1024×768), bounded narrow layout (768×900), and keyboard tab navigation. Required closeout evidence is focused static/render-contract coverage plus local browser QA where the environment permits; fixture evidence is distinct from authenticated staging evidence.
+Primary viewport: 1440×1000 CSS px. Regression: compact desktop (1024×768), bounded narrow layout (768×900), and keyboard tab navigation. Required closeout evidence includes focused rendering and real loader-payload selection coverage, plus authenticated staging browser QA. Local fixture evidence is useful but does not replace authenticated staging acceptance.
+
+## Director review corrections
+
+- `hasLeadStatus` means a selected record exists, not that it is active. Closed-only history is labeled Last inquiry (closed); conflict wins over all other states. Existing history editing remains reachable through the shared form.
+- Change owner observes the existing assignment policy; general CRM write access alone is insufficient.
+- Keep one header Edit contact action, not a duplicate in the contact section.
+- Read learning/student locations through the canonical helpers, including legacy address fallback for student location.
+- The new Inquiry source display does not use the legacy loader's generic source fallback, which can contain a sample label. Removing that loader fallback globally remains the later source-fix slice.
+- The next-work fallback says No next action recorded; it does not assert there are no scheduled tasks without querying them.
+- Existing shared form sections and coupled source writes remain S1 limitations, not independent contact/inquiry mutation semantics. Scoped editors follow in S3.

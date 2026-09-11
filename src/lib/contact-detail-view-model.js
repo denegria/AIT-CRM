@@ -1,4 +1,4 @@
-import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from './crm/lifecycle.js';
+import { WORKFLOW_KEYS, workflowKeyForBusinessUnit, isClosedLifecycleStatus } from './crm/lifecycle.js';
 import {
   aitUsaCourseOutcome,
   completedAitUsaCourse,
@@ -10,6 +10,15 @@ import { schoolLocationForContact, studentLocationForContact } from './school-lo
 
 function clean(value) {
   return String(value || '').trim();
+}
+
+// hasLeadStatus means a selected record exists, including closed history.
+export function contactInquiryState(contact = {}) {
+  if (contact.opportunityConflict) return 'conflict';
+  if (!contact.hasLeadStatus) return 'none';
+  return isClosedLifecycleStatus(contact.status || contact.currentStage, { workflowKey: WORKFLOW_KEYS.AIT_USA })
+    ? 'closed'
+    : 'current';
 }
 
 function titleLabel(value = '') {

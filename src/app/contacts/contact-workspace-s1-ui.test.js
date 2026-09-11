@@ -31,7 +31,7 @@ test('record uses actual inquiry resolution states without creating a substitute
   assert.match(source, /title=\{isAitUsaContact && activeProfileEditTab === 'enrollment' \? 'Edit inquiry'/);
   assert.match(source, /active inquiries need resolution before inquiry changes can be made/);
   assert.match(source, /const contactSource = cleanText\(contact\?\.sourceLabel\) \|\| 'Unknown';/);
-  assert.match(source, /const inquirySource = cleanText\(contact\?\.inquirySource \|\| contact\?\.source\) \|\| 'Unknown';/);
+  assert.match(source, /const inquirySource = cleanText\(contact\?\.inquirySource\) \|\| 'Unknown';/);
 });
 
 test('S1 keeps established action paths and supplies bounded responsive layout', () => {

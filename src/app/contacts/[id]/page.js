@@ -18,9 +18,9 @@ import {
   GraduationCap
 } from 'lucide-react';
 import { PIPELINE_STATUSES, isWorkflowStatusClosed, workflowForBusinessUnit } from '@/lib/sales-workflow';
-import { buildContactDetailViewModel } from '@/lib/contact-detail-view-model';
+import { buildContactDetailViewModel, contactInquiryState } from '@/lib/contact-detail-view-model';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
-import { schoolLocationForContact, schoolLocationOptions } from '@/lib/school-locations';
+import { schoolLocationForContact, schoolLocationOptions, studentLocationForContact } from '@/lib/school-locations';
 import {
   COURSE_RECORD_STATUS_OPTIONS,
   courseNameOptions,
@@ -610,10 +610,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const showLinkedPeoplePanel = isClientMode && detailView.workflowKey === WORKFLOW_KEYS.AIT_SIGNS;
   const showSchoolLocationField = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA;
   const isAitUsaContact = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA || /ait usa|institute/i.test(contactBusinessUnit?.name || '');
-  const hasResolvedCurrentInquiry = isAitUsaContact && Boolean(contact?.hasLeadStatus) && !contact?.opportunityConflict;
-  const hasClosedInquiry = isAitUsaContact && !contact?.hasLeadStatus && isWorkflowStatusClosed(contact?.status);
+  const inquiryState = contactInquiryState(contact || {});
+  const hasResolvedCurrentInquiry = isAitUsaContact && inquiryState === 'current';
+  const hasClosedInquiry = isAitUsaContact && inquiryState === 'closed';
   const contactSource = cleanText(contact?.sourceLabel) || 'Unknown';
-  const inquirySource = cleanText(contact?.inquirySource || contact?.source) || 'Unknown';
+  const inquirySource = cleanText(contact?.inquirySource) || 'Unknown';
   const canManageContactAssignments = isAitUsaContact
     ? canManageAitUsaAssignments
     : coordinatorUiPolicy.canManageCoordinatorAssignments;
@@ -1951,7 +1952,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               <section className={s.nextWorkBand} aria-label="Next work">
                 <div>
                   <span>Next work</span>
-                  <strong>{detailView.workflowNext || 'No follow-up is scheduled'}</strong>
+                  <strong>{detailView.workflowNext || 'No next action recorded'}</strong>
                   {detailView.workflowChips?.length > 0 && <small>{detailView.workflowChips.join(' · ')}</small>}
                 </div>
                 {access.canWriteCrm && (
@@ -2016,12 +2017,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       <span>Contact</span>
                       <h2 id="contact-preferences-title">Contact &amp; preferences</h2>
                     </div>
-                    {access.canWriteCrm && <button className="btn btn-sm" type="button" onClick={openEditModal}><Edit3 size={14} /> Edit contact</button>}
                   </div>
                   <dl className={s.propertyGrid}>
                     <div><dt>Email</dt><dd>{contact.email ? <a href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a> : 'Unknown'}</dd></div>
                     <div><dt>Phone</dt><dd>{contact.phone ? <a href={phoneHref(contact.phone)}>{contact.phone}</a> : 'Unknown'}</dd></div>
-                    <div><dt>Intended learning location</dt><dd>{contact.address || 'Unknown'}</dd></div>
+                    <div><dt>Intended learning location</dt><dd>{schoolLocationForContact(contact) || 'Unknown'}</dd></div>
                     <div><dt>Contact source</dt><dd>{contactSource}</dd></div>
                     <div><dt>Last touch</dt><dd>{contact.lastTouch || contact.lastContact || 'None'}</dd></div>
                     <div><dt>Last edited</dt><dd>{contact.lastEdited || 'None'}</dd></div>
@@ -2044,7 +2044,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       <span>{hasClosedInquiry ? 'Inquiry history' : 'Inquiry'}</span>
                       <h2 id="inquiry-title">{contact.opportunityConflict ? 'Inquiry needs resolution' : hasResolvedCurrentInquiry ? 'Current inquiry' : hasClosedInquiry ? 'Last inquiry (closed)' : 'No active inquiry'}</h2>
                     </div>
-                    {hasResolvedCurrentInquiry && access.canWriteCrm && <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor()}><Edit3 size={14} /> Edit</button>}
+                    {(hasResolvedCurrentInquiry || hasClosedInquiry) && access.canWriteCrm && <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor()}><Edit3 size={14} /> Edit</button>}
                   </div>
                   {contact.opportunityConflict ? (
                     <p className={s.recordWarning}><AlertCircle size={15} /> {contact.activeOpportunityCount || 'Multiple'} active inquiries need resolution before inquiry changes can be made.</p>
@@ -2057,12 +2057,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                         <div><dt>Inquiry source</dt><dd>{inquirySource}</dd></div>
                         <div><dt>Preferred days</dt><dd>{contact.preferredDay || 'Unknown'}</dd></div>
                         <div><dt>Preferred schedule</dt><dd>{contact.preferredSchedule || 'Unknown'}</dd></div>
-                        <div><dt>Student location</dt><dd>{contact.locationPreference || 'Unknown'}</dd></div>
+                        <div><dt>Student location</dt><dd>{studentLocationForContact(contact) || 'Unknown'}</dd></div>
                         <div><dt>Qualifications</dt><dd>{[contact.testInterest, contact.educationLevel, contact.schoolName].filter(Boolean).join(' · ') || 'Unknown'}</dd></div>
                       </dl>
                       {hasResolvedCurrentInquiry && access.canWriteCrm && (
                         <div className={s.inquiryActions}>
-                          <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor('general')}>Change owner</button>
+                          {canManageContactAssignments && <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor('general')}>Change owner</button>}
                           <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor('general')}>Change status</button>
                         </div>
                       )}

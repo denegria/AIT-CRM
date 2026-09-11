@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mapContacts } from './bootstrap-data.js';
+import { contactInquiryState } from './contact-detail-view-model.js';
 
 const contact = Object.freeze({
   id: 'contact-1',
@@ -28,6 +29,7 @@ test('bootstrap Contact payload binds active-older AIT USA Opportunity over clos
   assert.equal(payload.courseMetadata.currentCourse, 'HVAC');
   assert.equal(payload.opportunityConflict, false);
   assert.equal(payload.activeOpportunityCount, 1);
+  assert.equal(contactInquiryState(payload), 'current');
 });
 
 test('bootstrap Contact payload marks multiple active AIT USA Opportunities as a conflict', () => {
@@ -43,6 +45,22 @@ test('bootstrap Contact payload marks multiple active AIT USA Opportunities as a
   );
   assert.equal(payload.opportunityConflict, true);
   assert.equal(payload.activeOpportunityCount, 2);
+  assert.equal(contactInquiryState(payload), 'conflict');
+});
+
+test('workspace identifies closed-only inquiry history even though the payload hasLeadStatus is true', () => {
+  const [payload] = mapContacts([contact], [
+    { id: 'closed-only', contactId: contact.id, businessUnitId: aitUsa.id, status: 'Not Interested', createdAt: new Date('2026-08-15T12:00:00Z') },
+  ], [], [], [aitUsa]);
+  assert.equal(payload.hasLeadStatus, true);
+  assert.equal(payload.activeOpportunityCount, 0);
+  assert.equal(contactInquiryState(payload), 'closed');
+});
+
+test('workspace does not invent an inquiry from the legacy contact default status', () => {
+  const [payload] = mapContacts([contact], [], [], [], [aitUsa]);
+  assert.equal(payload.hasLeadStatus, false);
+  assert.equal(contactInquiryState(payload), 'none');
 });
 
 test('AIT Signs bootstrap preserves newest-Lead selection regardless of AIT USA lifecycle rules', () => {
