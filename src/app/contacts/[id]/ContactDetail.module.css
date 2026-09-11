@@ -25,9 +25,17 @@
 .usaWorkspace {
   grid-template-columns: minmax(0, 1fr);
   --text-xs: 13px;
-  --text-sm: 15px;
-  --text-md: 16px;
+  --text-sm: 16px;
+  --text-md: 18px;
 }
+:global(main):has(.usaWorkspace) { background: var(--bg-secondary); }
+.detailPage:has(.usaWorkspace) .btnBack { font-size: 15px; }
+.usaWorkspace .workspaceIdentity { gap: 24px; }
+.usaWorkspace .workspaceName { font-size: 30px; }
+.usaWorkspace .workspaceHeader .profileAvatarLarge { width: 80px; height: 80px; font-size: 30px; }
+.usaWorkspace .recordSection { padding-block: 28px; }
+.usaWorkspace .recordSectionHeader h2 { font-size: 24px; }
+.usaWorkspace .propertyGrid { row-gap: 16px; }
 .usaWorkspace .contentSection {
   grid-column: 1;
 }

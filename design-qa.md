@@ -1,32 +1,37 @@
 # MIS-409 design QA
 
-## Comparison target
+## Authorized delivery sequence
 
-- Source visual truth: `docs/contact-detail-redesign/01-contact-workspace-v3.png`, `02-focused-editor-v3.png`, and `03-enrollments-workspace.png`.
-- Source dimensions: 1200×833 pixels for each approved desktop board.
-- Required implementation state: authenticated AIT USA contact Record, scoped Contact/Inquiry editors, and populated Enrollments at 1440×1000 CSS pixels.
-- Implementation screenshot: unavailable. No local preview listener was present on port 3000, and the task explicitly prohibits restarting the application. The authenticated staging tab remains on the pre-change deployment and cannot be evidence for this unpushed candidate.
+On September 11 Alvaro clarified: automated validation (tests, lint, build) precedes staging Git push; authenticated visual QA runs against the resulting live staging deployment. A local-preview browser restriction is not a pre-push gate. Visual acceptance remains required before this issue is complete.
 
-## Comparison history
+## Comparison targets
 
-1. The approved boards and the private staging screenshot cited by the September 11 audit were opened and compared. The audit identified P1 failures: nested cards/property tiles, pill tabs, square identity, filled header action, tinted next-work panel, and tiled inquiry controls.
-2. This candidate changes Record to flat divider-separated sections, aligned label/value rows, underline tabs, round identity/avatar treatment, a quiet outlined edit action, and inline inquiry controls. It scopes the approved editor framing to AIT USA and preserves existing data/form behavior.
-3. A browser-rendered candidate image pair cannot be captured without a running candidate runtime. No P0/P1/P2 visual verdict is asserted from code or lint alone.
+- Record: `docs/contact-detail-redesign/01-contact-workspace-v3.png`, 1506×1045 pixels.
+- Editors composite: `docs/contact-detail-redesign/02-focused-editor-v3.png`, 1586×992 pixels.
+- Enrollments: `docs/contact-detail-redesign/03-enrollments-workspace.png`, 1505×1045 pixels.
+- Browser: authenticated senior AIT USA, Light, 1506×1045 CSS pixels. Reference and implementation opened together per state. Composite editor board is compared to the actual modal region, not its backdrop. Real missing values and permission-conditional navigation must remain truthful; fictional board values are not inserted into CRM.
 
-## Required fidelity surfaces
+## Deployed comparison at 253307c
 
-- Fonts and typography: code adjusted hierarchy and label/value sizing; browser evidence pending.
-- Spacing and layout rhythm: code adjusted dividers, section padding, and property-row grid; browser evidence pending.
-- Colors and tokens: code removes the tinted/shadowed Record shell in favor of existing white/divider tokens; browser evidence pending.
-- Image and asset fidelity: no assets were created or replaced; existing product identity remains in use.
-- Copy and content: fictional board content was not copied; real values, Unknown fallbacks, and empty/closed/conflict states remain authoritative.
+Exact browser appVersion matched 253307c5f24db3082e56896c595f568a7671f9d5. Git-triggered Vercel deployment and GitHub CI were Ready/passed. Private screenshots and detailed evidence live outside the public repository in the workspace artifact report `artifacts/ait-crm-design-fidelity-20260911/live/qa.md`.
 
-## Findings
+1. Flat sections and underline tabs now render, but P2 pill controls and shadows remain: CSS Module selectors mistakenly hash literal global button classes.
+2. P1 Contact editor remains wide with sidebar and two-column identity fields rather than the selected compact single-column editor. Intended literal editor selectors suffer the same scoping error.
+3. P2 Contact source is positioned in the right column and Date opened last, inconsistent with the selected Record board. Header/avatar, typography, spacing, and white surface also need the measured correction.
+4. P2 empty enrollment history duplicates the Add enrollment action with Start Course.
+5. Populated Enrollments is not verified: a bounded read-only check of 19 currently enrolled directory contacts found no course records, and the attendance class list was empty. This does not prove no populated contact exists anywhere.
 
-- [P1] Candidate rendered comparison unavailable.
-  Evidence: no local listener exists and staging does not contain this local candidate.
-  Fix: parent or an authorized local-runtime owner must expose the candidate without restarting the shared application, then capture equivalent Record, editor, and Enrollments states in the chosen browser and compare each against the approved board.
+A focused correction is in progress. Capture its exact deployed version and compare the same states again before passing.
+
+## Remaining acceptance
+
+- Post-fix Record and scoped Contact/Inquiry comparison.
+- Populated Enrollments and history/action comparison.
+- Regular-coordinator live role coverage and persisted source-save/reload coverage remain separately outstanding; read-only senior QA does not establish them.
+- Preserve AIT Signs styling and functional permissions.
 
 ## Final result
 
 final result: blocked
+
+This is an acceptance status, not a prohibition on the authorized staging deployment.
