@@ -632,7 +632,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     if (isAitUsaContact && editScope === 'contact') {
       return [
         { id: 'general', label: 'Contact', summary: 'Identity and contact details' },
-        { id: 'source', label: 'Source & routing', summary: 'Contact attribution and location' },
       ];
     }
     if (isAitUsaContact && editScope === 'inquiry') {
@@ -2286,6 +2285,19 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
             {renderedActiveTab === 'courses' && showCoursesTab && (
               <div className={`${s.coursesPanel} ${s.enrollmentsWorkspace}`} aria-label="Courses">
+                <div className={s.enrollmentsPageHeader}>
+                  <h2>Enrollments</h2>
+                  {access.canWriteCrm && (
+                    <div className={s.enrollmentsPageActions}>
+                      <button className="btn btn-primary btn-sm" type="button" onClick={() => openCourseModal('new')}>
+                        <Plus size={14} /> Add enrollment
+                      </button>
+                      <button className="btn btn-sm" type="button" onClick={() => openCourseModal('history')}>
+                        <Plus size={14} /> Add history
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <div className={s.courseHero}>
                   <div className={s.courseHeroMain}>
                     <div className={s.courseHeroIcon}><GraduationCap size={22} /></div>
@@ -2325,13 +2337,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       )}
                     </div>
                   </div>
-                  {access.canWriteCrm && (
-                    <div className={s.courseHeroActions}>
-                      <button className="btn btn-primary btn-sm" type="button" onClick={() => openCourseModal('new')}>
-                        <Plus size={14} /> Add enrollment
-                      </button>
-                    </div>
-                  )}
                 </div>
 
                 <div className={s.courseToolbar}>
@@ -2339,13 +2344,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <strong>Course history</strong>
                     <span>{courseRecordsState.loading ? 'Loading' : `${currentCourseRecords.length} records`}</span>
                   </div>
-                  {access.canWriteCrm && (
-                    <div className={s.courseToolbarActions}>
-                      <button className="btn btn-sm" type="button" onClick={() => openCourseModal('history')}>
-                        <Plus size={14} /> Add History
-                      </button>
-                    </div>
-                  )}
                 </div>
 
                 {courseRecordsState.error && <div className={s.courseError}>{courseRecordsState.error}</div>}
@@ -2353,11 +2351,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   <div className={s.courseEmpty}>
                     <div className="empty-state-title">No course history yet</div>
                     <p className="empty-state-copy">Add an active enrollment or backfill a completed course to start the timeline.</p>
-                    {access.canWriteCrm && (
-                      <button className="btn btn-primary" type="button" onClick={() => openCourseModal('new')}>
-                        <Plus size={16} /> Start Course
-                      </button>
-                    )}
                   </div>
                 )}
 
@@ -3063,7 +3056,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           title={isAitUsaContact ? (editScope === 'inquiry' ? 'Edit inquiry' : 'Edit contact') : 'Edit Profile'}
           variant="dialog"
           panelClassName={`contact-profile-dialog-panel ${isAitUsaContact ? 'ait-usa-focused-editor' : ''} ${isAitUsaContact && editScope === 'contact' ? 'ait-usa-contact-editor' : ''}`}
-          footer={<><button className="btn" type="button" onClick={() => setIsEditModalOpen(false)}>Cancel</button><button className="btn btn-primary" type="button" onClick={handleEditSave}>Save Changes</button></>}
+          footer={<><button className="btn" type="button" onClick={() => setIsEditModalOpen(false)}>Cancel</button><button className="btn btn-primary" type="button" onClick={handleEditSave}>Save {editScope === 'inquiry' ? 'inquiry' : editScope === 'contact' ? 'contact' : 'changes'}</button></>}
         >
           <div className="contact-profile-dialog-form">
             <div className="contact-dialog-intro">
@@ -3164,8 +3157,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                             ))}
                           </select>
                         </div>
-                      )}
-                    </div>
+                  )}
+                </div>
                     <div className="form-group">
                       <label className="form-label" htmlFor="start-opportunity-reason">Reason</label>
                       <textarea
@@ -3182,6 +3175,26 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       <button className="btn btn-primary" type="button" onClick={startOpportunity} disabled={startOpportunityBusy}>
                         {startOpportunityBusy ? 'Starting…' : 'Start inquiry'}
                       </button>
+                    </div>
+                  </div>
+                )}
+                {editScope === 'contact' && isAitUsaContact && (
+                  <div className="contact-editor-routing-fields">
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="profile-edit-school-location">Intended learning location</label>
+                      <select id="profile-edit-school-location" className="input select" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})}>
+                        <option value="">Not specified</option>
+                        {editSchoolLocationOptions.map((location) => (
+                          <option key={location} value={location}>{location}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="profile-edit-contact-source">Contact source</label>
+                      <select id="profile-edit-contact-source" className="input select" value={editForm.contactSource || ''} onChange={e => setEditForm({...editForm, contactSource: e.target.value})}>
+                        <option value="">Not recorded</option>
+                        {editSourceOptions.map(src => <option key={src} value={src}>{src}</option>)}
+                      </select>
                     </div>
                   </div>
                 )}
