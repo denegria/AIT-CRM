@@ -215,11 +215,14 @@ export function buildAitUsaEnrollmentSignals({ contact = {}, lead = null, workfl
     ...parseTags(fields.tags),
     ...(workflow.tags || []),
   ]);
-  const sourceChannel = canonicalLeadSourceChannel({
-    sourceName: lead?.sourceName,
-    sourceType: lead?.sourceType,
-    sourceKey: fields.source_key,
-  });
+  // A null sourceName means an old row never had an editable attribution, so
+  // retain its technical sourceType/sourceKey as the read-only legacy evidence.
+  // An empty sourceName is an explicit clear and must remain Unknown. A supplied
+  // sourceName always wins over technical provenance.
+  const hasEditableSource = lead && lead.sourceName !== null && lead.sourceName !== undefined;
+  const sourceChannel = hasEditableSource
+    ? canonicalLeadSourceChannel({ sourceName: lead.sourceName })
+    : canonicalLeadSourceChannel({ sourceType: lead?.sourceType, sourceKey: fields.source_key });
   const contactability = contactabilityForContact(contact);
   const disposition = qualityDisposition(contactability);
   const stage = clean(lead?.currentStage || fields.current_stage || lead?.status || workflow.status);

@@ -501,6 +501,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState(null);
+  const [editScope, setEditScope] = useState('combined');
   const [startOpportunityOpen, setStartOpportunityOpen] = useState(false);
   const [startOpportunityBusy, setStartOpportunityBusy] = useState(false);
   const [startOpportunityError, setStartOpportunityError] = useState('');
@@ -628,6 +629,19 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const hasWorkOrders = contactWorkOrders.length > 0;
   const hasInvoices = contactInvoices.length > 0;
   const profileEditTabs = useMemo(() => {
+    if (isAitUsaContact && editScope === 'contact') {
+      return [
+        { id: 'general', label: 'Contact', summary: 'Identity and contact details' },
+        { id: 'source', label: 'Source & routing', summary: 'Contact attribution and location' },
+      ];
+    }
+    if (isAitUsaContact && editScope === 'inquiry') {
+      return [
+        { id: 'general', label: 'Inquiry', summary: 'Status and ownership' },
+        { id: 'source', label: 'Source & routing', summary: 'Inquiry attribution and student location' },
+        { id: 'enrollment', label: 'Enrollment', summary: 'Program preferences and profile notes' },
+      ];
+    }
     const tabs = [
       { id: 'general', label: 'General', summary: 'Identity, status, and owner' },
       { id: 'source', label: 'Source & routing', summary: 'Attribution, student location, and learning location' },
@@ -636,7 +650,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       tabs.push({ id: 'enrollment', label: 'Enrollment', summary: 'Program preferences and profile notes' });
     }
     return tabs;
-  }, [isAitUsaContact]);
+  }, [editScope, isAitUsaContact]);
+  const editSourceField = editScope === 'contact' ? 'contactSource' : editScope === 'inquiry' ? 'inquirySource' : 'source';
   const selectedInvoiceWorkOrder = contactWorkOrders.find((workOrder) => workOrder.id === invoiceWorkOrderId) || null;
   const workOrdersHref = `/work-orders${contact?.id ? `?contactId=${encodeURIComponent(contact.id)}` : ''}`;
   const visibleFinancials = useMemo(() => (
@@ -649,7 +664,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   ), [contactFinancials, isAitUsaContact]);
   const editSourceOptions = [...new Set([
     ...(sources || []),
-    ...(editForm?.source ? [editForm.source] : []),
+    ...(editForm?.[editSourceField] ? [editForm[editSourceField]] : []),
   ])];
   const editSchoolLocationOptions = schoolLocationOptions(editForm?.address);
   const courseOptions = courseNameOptions(courseForm.courseName);
@@ -998,11 +1013,14 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     template.channel === manualSend.channel || template.channel === 'all'
   )), [messageTemplates, manualSend.channel]);
 
-  const openEditModal = () => {
+  const openEditModal = (scope = isAitUsaContact ? 'contact' : 'combined') => {
     if (!access.canWriteCrm) return;
+    setEditScope(scope);
     setActiveProfileEditTab('general');
     setEditForm({
       ...contact,
+      contactSource: contact?.contactSource || contact?.sourceLabel || '',
+      inquirySource: contact?.inquirySource || '',
       assignedTo: contact?.assignedTo || '',
       statusChangeReason: '',
       terminalStatusReason: '',
@@ -1031,12 +1049,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   };
 
   const openInquiryEditor = (section = 'general') => {
-    openEditModal();
+    openEditModal(isAitUsaContact ? 'inquiry' : 'combined');
     setActiveProfileEditTab(section);
   };
 
   const openStartInquiry = () => {
-    openEditModal();
+    openEditModal(isAitUsaContact ? 'inquiry' : 'combined');
     setActiveProfileEditTab('general');
     setStartOpportunityOpen(true);
   };
@@ -1250,6 +1268,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       editForm,
       contact,
       isAitUsa: isAitUsaContact,
+      editScope,
       lockedOwnerUserId: coordinatorUiPolicy.lockedOwnerUserId,
       canManageAssignments: canManageContactAssignments,
       isClosedStatusReopen,
@@ -3045,15 +3064,15 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         <Modal
           open={isEditModalOpen}
           onClose={() => setIsEditModalOpen(false)}
-          title={isAitUsaContact ? 'Edit contact & inquiry' : 'Edit Profile'}
+          title={isAitUsaContact ? (editScope === 'inquiry' ? 'Edit inquiry' : 'Edit contact') : 'Edit Profile'}
           variant="dialog"
           panelClassName="contact-profile-dialog-panel"
           footer={<><button className="btn" type="button" onClick={() => setIsEditModalOpen(false)}>Cancel</button><button className="btn btn-primary" type="button" onClick={handleEditSave}>Save Changes</button></>}
         >
           <div className="contact-profile-dialog-form">
             <div className="contact-dialog-intro">
-              <p>Update {contact?.name || singularLabel.toLowerCase()} without leaving the contact record.</p>
-              <span>Profile and routing details</span>
+              <p>Update {editScope === 'inquiry' ? 'the selected inquiry' : (contact?.name || singularLabel.toLowerCase())} without leaving the contact record.</p>
+              <span>{editScope === 'inquiry' ? 'Inquiry details and attribution' : 'Contact details and attribution'}</span>
             </div>
 
             <div className="profile-editor-tabs" role="tablist" aria-label="Profile edit sections">
@@ -3090,7 +3109,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <p>Update the fields employees reach for most: contact info, status, and ownership.</p>
                   </div>
                 </div>
-                <div className="grid-2">
+                {editScope !== 'inquiry' && <div className="grid-2">
                   <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-name">Full Name</label>
                     <input id="profile-edit-name" className="input" value={editForm.name} autoFocus onChange={e => setEditForm({...editForm, name: e.target.value})} />
@@ -3099,13 +3118,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <label className="form-label" htmlFor="profile-edit-email">Email</label>
                     <input id="profile-edit-email" className="input" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} />
                   </div>
-                </div>
+                </div>}
                 <div className="grid-2">
-                  <div className="form-group">
+                  {editScope !== 'inquiry' && <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-phone">Phone</label>
                     <input id="profile-edit-phone" className="input" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
-                  </div>
-                  <div className="form-group">
+                  </div>}
+                  {editScope !== 'contact' && <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-status">{isAitUsaContact ? 'Inquiry status' : 'Status'}</label>
                     <OpportunityLifecycleField
                       isAitUsa={isAitUsaContact}
@@ -3116,7 +3135,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       onStatusChange={e => setEditForm({...editForm, status: e.target.value, terminalStatusReason: ''})}
                       onStart={() => setStartOpportunityOpen(true)}
                     />
-                  </div>
+                  </div>}
                 </div>
                 {isAitUsaContact && !contact.hasLeadStatus && startOpportunityOpen && (
                   <div className="profile-editor-account-action" aria-label="Start inquiry">
@@ -3201,7 +3220,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     />
                   </div>
                 )}
-                {canManageContactAssignments ? (
+                {editScope !== 'contact' && (canManageContactAssignments ? (
                   <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-owner">Assigned To</label>
                     <select id="profile-edit-owner" className="input select" value={editForm.assignedTo || ''} disabled={Boolean(isAitUsaContact && contact.opportunityConflict)} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
@@ -3215,8 +3234,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   </div>
                 ) : (
                   <input type="hidden" value={editForm.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
-                )}
-                {access.canWriteCrm ? (
+                ))}
+                {editScope !== 'inquiry' && access.canWriteCrm ? (
                   <div className="profile-editor-account-action danger-action-panel">
                     <div className="danger-action-copy">
                       <span className="danger-action-eyebrow">
@@ -3259,12 +3278,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 </div>
                 <div className="grid-2">
                   <div className="form-group">
-                    <label className="form-label" htmlFor="profile-edit-source">Source</label>
-                    <select id="profile-edit-source" className="input select" value={editForm.source} onChange={e => setEditForm({...editForm, source: e.target.value})}>
+                    <label className="form-label" htmlFor="profile-edit-source">{editScope === 'inquiry' ? 'Inquiry source' : 'Contact source'}</label>
+                    <select id="profile-edit-source" className="input select" value={editForm[editSourceField] || ''} onChange={e => setEditForm({...editForm, [editSourceField]: e.target.value})}>
+                      <option value="">Not recorded</option>
                       {editSourceOptions.map(src => <option key={src} value={src}>{src}</option>)}
                     </select>
                   </div>
-                  {showSchoolLocationField ? (
+                  {showSchoolLocationField && editScope === 'inquiry' ? (
                     <div className="form-group">
                       <label className="form-label" htmlFor="profile-edit-student-location">Student Location</label>
                       <input id="profile-edit-student-location" className="input" value={editForm.leadProfile?.locationPreference || ''} placeholder="City, municipality, or address" onChange={e => updateEditLeadProfile('locationPreference', e.target.value)} />
@@ -3273,7 +3293,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   ) : null}
                 </div>
                 <div className="grid-2">
-                  {showSchoolLocationField ? (
+                  {showSchoolLocationField && editScope !== 'inquiry' ? (
                     <div className="form-group">
                       <label className="form-label" htmlFor="profile-edit-school-location">Intended Learning Location</label>
                       <select id="profile-edit-school-location" className="input select" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})}>
@@ -3284,12 +3304,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       </select>
                       <div className="profile-editor-helper">The approved campus or Online option the student intends to use.</div>
                     </div>
-                  ) : (
+                  ) : !isAitUsaContact ? (
                     <div className="form-group">
                       <label className="form-label" htmlFor="profile-edit-address">Address</label>
                       <input id="profile-edit-address" className="input" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})} />
                     </div>
-                  )}
+                  ) : null}
                 </div>
               </section>
             )}

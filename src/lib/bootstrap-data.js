@@ -285,7 +285,12 @@ export function mapContacts(
       leadStatusHistoryByContactId.get(contact.id) || [],
       businessUnitIds,
     );
-    const source = lead?.sourceName || lead?.sourceType || contact.sourceLabel || seedData.SOURCES[index % seedData.SOURCES.length];
+    // Missing attribution is a real state. Never substitute a fixture/sample source
+    // because that turns unknown provenance into false evidence (especially for
+    // legacy contacts and contacts with several inquiries).
+    const source = lead
+      ? (lead.sourceName !== null && lead.sourceName !== undefined ? lead.sourceName : lead.sourceType || '')
+      : contact.sourceLabel || '';
     const touchSummary = summarizeContactTouch({
       contact,
       businessUnit,
@@ -386,6 +391,7 @@ export function mapContacts(
       needsFirstOutreach: workflow.needsFirstOutreach,
       source,
       sourceLabel: contact.sourceLabel || '',
+      contactSource: contact.sourceLabel || '',
       sourceCategory: sourceCategoryForContact({
         source,
         sourceLabel: contact.sourceLabel,

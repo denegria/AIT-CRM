@@ -98,3 +98,29 @@ test('AIT USA bootstrap ignores newer and active Leads from another business uni
   assert.equal(payload.opportunityConflict, false);
   assert.equal(payload.activeOpportunityCount, 1);
 });
+
+test('bootstrap preserves independent sources and does not invent attribution when both are missing', () => {
+  const [payload] = mapContacts(
+    [{ ...contact, sourceLabel: '' }],
+    [{ id: 'usa-active', contactId: contact.id, businessUnitId: aitUsa.id, status: 'Follow Up', sourceType: 'manual', sourceName: '', createdAt: new Date('2026-08-14T12:00:00Z') }],
+    [],
+    [],
+    [aitUsa],
+  );
+  assert.equal(payload.contactSource, '');
+  assert.equal(payload.inquirySource, '');
+  assert.equal(payload.source, '');
+});
+
+test('bootstrap keeps contact source separate from a corrected inquiry source', () => {
+  const [payload] = mapContacts(
+    [{ ...contact, sourceLabel: 'Legacy Import' }],
+    [{ id: 'usa-active', contactId: contact.id, businessUnitId: aitUsa.id, status: 'Follow Up', sourceType: 'facebook_lead_ads', sourceName: 'Referral', createdAt: new Date('2026-08-14T12:00:00Z') }],
+    [],
+    [],
+    [aitUsa],
+  );
+  assert.equal(payload.contactSource, 'Legacy Import');
+  assert.equal(payload.inquirySource, 'Referral');
+  assert.equal(payload.source, 'Referral');
+});

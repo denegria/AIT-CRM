@@ -200,3 +200,26 @@ test('buildAitUsaEnrollmentSignals identifies Facebook Lead Ads as a lead form s
   assert.equal(signals.source.channel, 'Facebook Lead Ads');
   assert.equal(signals.source.detail, 'Lead form ad');
 });
+
+test('editable inquiry source overrides technical provenance and explicit clear stays unknown', () => {
+  const corrected = buildAitUsaEnrollmentSignals({
+    contact: {},
+    lead: { sourceType: 'facebook_lead_ads', sourceName: 'Referral', originalNotes: '' },
+    workflow: { workflowKey: 'ait_usa', status: 'New Lead', tags: [] },
+  });
+  assert.equal(corrected.source.channel, 'Referral');
+
+  const cleared = buildAitUsaEnrollmentSignals({
+    contact: {},
+    lead: { sourceType: 'facebook_lead_ads', sourceName: '', originalNotes: '' },
+    workflow: { workflowKey: 'ait_usa', status: 'New Lead', tags: [] },
+  });
+  assert.equal(cleared.source?.channel || '', '');
+
+  const legacy = buildAitUsaEnrollmentSignals({
+    contact: {},
+    lead: { sourceType: 'facebook_lead_ads', sourceName: null, originalNotes: '' },
+    workflow: { workflowKey: 'ait_usa', status: 'New Lead', tags: [] },
+  });
+  assert.equal(legacy.source.channel, 'Facebook Lead Ads');
+});

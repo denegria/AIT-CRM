@@ -50,7 +50,7 @@ All existing field ledgers, separate source effects and 56 parity rows remain re
 
 ## Ready-to-start implementation slice
 
-[MIS-409 — S1 readable record and retained tabs](https://linear.app/mission-control-v2/issue/MIS-409/ait-crm-contact-workspace-s1-readable-record-retained-tabs-and-inquiry) is prepared in Todo. Begin there when implementation is instructed; no new design exploration is needed.
+[MIS-409 — S1 readable record and retained tabs](https://linear.app/mission-control-v2/issue/MIS-409/ait-crm-contact-workspace-s1-readable-record-retained-tabs-and-inquiry) is the implementation issue. The source-scope extension is implemented in the current candidate; authenticated staging QA and deployment remain separate gates.
 
 ## Publication baseline
 

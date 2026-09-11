@@ -67,3 +67,33 @@ test('AIT Signs preserves its legacy lifecycle, owner, source, and business-unit
   assert.equal(patch.businessUnitId, 'bu-usa');
   assert.deepEqual(patch.leadProfile, { programInterest: 'HVAC' });
 });
+
+test('scoped source drafts serialize only the selected entity and preserve clears', () => {
+  const form = {
+    id: 'contact-1',
+    name: 'Updated name',
+    contactSource: '',
+    inquirySource: 'Referral',
+    status: 'Follow Up',
+    leadProfile: { programInterest: 'HVAC' },
+  };
+  const contactPatch = buildContactProfilePatch({ editForm: form, editScope: 'contact', isAitUsa: true });
+  assert.deepEqual(contactPatch, { id: 'contact-1', name: 'Updated name', contactSource: '' });
+  assert.equal(hasOpportunityMutationRequest(contactPatch), false);
+
+  const inquiryPatch = buildContactProfilePatch({ editForm: form, editScope: 'inquiry', isAitUsa: true });
+  assert.equal(inquiryPatch.inquirySource, 'Referral');
+  assert.equal(inquiryPatch.contactSource, undefined);
+  assert.equal(inquiryPatch.name, undefined);
+  assert.equal(hasOpportunityMutationRequest(inquiryPatch), true);
+});
+
+test('contact-only scope remains safe for legacy contacts without an opportunity', () => {
+  const patch = buildContactProfilePatch({
+    editForm: { id: 'contact-legacy', contactSource: '' },
+    editScope: 'contact',
+    isAitUsa: true,
+  });
+  assert.deepEqual(patch, { id: 'contact-legacy', contactSource: '' });
+  assert.equal(hasOpportunityMutationRequest(patch), false);
+});
