@@ -47,3 +47,9 @@ test('S1 keeps established action paths and supplies bounded responsive layout',
   assert.match(styles, /\.propertyGrid \{ grid-template-columns: minmax\(0, 1fr\); \}/);
   assert.match(pipeline, /isAitUsaPipeline \? 'Work next inquiry' : 'Work Next Lead'/);
 });
+
+test('enrollment presentation tolerates manual records without a class section', () => {
+  assert.match(source, /const safeSection = section \|\| \{\};/);
+  assert.match(source, /className=\{s\.courseTableHeader\}/);
+  assert.match(source, /classSectionScheduleLabel\(safeSection\)/);
+});

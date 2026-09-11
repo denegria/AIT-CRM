@@ -105,19 +105,21 @@ const COURSE_STATUS_HELP = {
 };
 
 function classSectionScheduleLabel(section = {}) {
-  const days = Array.isArray(section.scheduleDays) ? section.scheduleDays.join(', ') : '';
-  const time = [section.startTime, section.endTime].filter(Boolean).join('–');
+  const safeSection = section || {};
+  const days = Array.isArray(safeSection.scheduleDays) ? safeSection.scheduleDays.join(', ') : '';
+  const time = [safeSection.startTime, safeSection.endTime].filter(Boolean).join('–');
   return [days, time].filter(Boolean).join(' ');
 }
 
 function classSectionDisplayLabel(section = {}) {
+  const safeSection = section || {};
   return [
-    section.courseName,
-    section.teacher,
-    section.courseLocation,
-    classSectionScheduleLabel(section),
-    section.modality === 'online' ? 'Online' : '',
-    section.status !== 'active' ? 'Inactive' : '',
+    safeSection.courseName,
+    safeSection.teacher,
+    safeSection.courseLocation,
+    classSectionScheduleLabel(safeSection),
+    safeSection.modality === 'online' ? 'Online' : '',
+    safeSection.status !== 'active' ? 'Inactive' : '',
   ].filter(Boolean).join(' · ');
 }
 
@@ -636,9 +638,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     }
     if (isAitUsaContact && editScope === 'inquiry') {
       return [
-        { id: 'general', label: 'Inquiry', summary: 'Status and ownership' },
-        { id: 'source', label: 'Source & routing', summary: 'Inquiry attribution and student location' },
-        { id: 'enrollment', label: 'Enrollment', summary: 'Program preferences and profile notes' },
+        { id: 'enrollment', label: 'Inquiry details', summary: 'Program, schedule, and student details' },
+        { id: 'general', label: 'Ownership & status', summary: 'Status and ownership' },
+        { id: 'source', label: 'Source', summary: 'Inquiry attribution and submission details' },
       ];
     }
     const tabs = [
@@ -684,6 +686,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const courseSummary = useMemo(() => deriveCourseSummary(currentCourseRecords), [currentCourseRecords]);
   const activeCourseRecord = courseSummary.currentCourse;
   const activeCourseRecords = courseSummary.currentCourses;
+  const historicalCourseRecords = useMemo(
+    () => courseSummary.records.filter((record) => record.status !== 'active' && record.status !== 'planned'),
+    [courseSummary.records],
+  );
   const selectedClassSection = useMemo(() => (
     currentClassSections.find((section) => section.id === courseForm.classSectionId) || null
   ), [courseForm.classSectionId, currentClassSections]);
@@ -2311,21 +2317,21 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       </p>
                       {activeCourseRecords.length > 0 && (
                         <div className={s.courseActiveList}>
+                          <div className={s.courseTableHeader} aria-hidden="true">
+                            <span>Course</span><span>Teacher</span><span>Location</span><span>Start date</span><span>Status</span><span>Actions</span>
+                          </div>
                           {activeCourseRecords.map((record) => (
                             <div
                               key={record.id}
-                              type="button"
                               className={s.courseActiveItem}
                             >
                               <button className={s.courseActiveSelect} type="button" onClick={() => setSelectedCourseRecordId(record.id)}>
                                 <strong>{record.courseName}</strong>
-                                <span>{[
-                                  record.teacher ? `Teacher: ${record.teacher}` : '',
-                                  record.courseLocation,
-                                  classSectionScheduleLabel(record.classSection),
-                                  record.startDate || '',
-                                ].filter(Boolean).join(' · ') || 'Class details not set'}</span>
                               </button>
+                              <span className={s.courseTableCell}>{record.teacher || 'Not assigned'}</span>
+                              <span className={s.courseTableCell}>{record.courseLocation || 'Not set'}</span>
+                              <span className={s.courseTableCell}>{record.startDate || 'Not set'}</span>
+                              <span className={`${s.courseStatusBadge} ${s[`courseStatus_${record.status}`] || ''}`}>{courseRecordStatusLabel(record.status)}</span>
                               {access.canWriteCrm && <span className={s.courseRowActions}>
                                 <button className="btn btn-sm" type="button" onClick={() => openCourseModal('edit', record)}>Edit</button>
                                 <button className="btn btn-sm" type="button" onClick={() => openCourseModal('complete', record)}>Complete</button>
@@ -2354,10 +2360,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   </div>
                 )}
 
-                {currentCourseRecords.length > 0 && (
+                {historicalCourseRecords.length > 0 && (
                   <div className={s.courseHistoryGrid}>
                     <div className={s.courseRecordList}>
-                      {courseSummary.records.filter((record) => record.status !== 'active' && record.status !== 'planned').map((record) => (
+                      <div className={s.courseTableHeader} aria-hidden="true">
+                        <span>Course</span><span>Teacher</span><span>Location</span><span>Date range</span><span>Status</span><span>Actions</span>
+                      </div>
+                      {historicalCourseRecords.map((record) => (
                         <button
                           key={record.id}
                           type="button"
@@ -2367,16 +2376,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                           <span className={`${s.courseStatusDot} ${s[`courseStatus_${record.status}`] || ''}`} />
                           <span className={s.courseRecordMain}>
                             <strong>{record.courseName}</strong>
-                            <small>
-                              {courseRecordStatusLabel(record.status)}
-                              {` - ${record.courseLocation || 'Delivery location not set'}`}
-                              {` - ${record.teacher ? `Teacher: ${record.teacher}` : 'Teacher not assigned'}`}
-                              {record.classSection ? ` - ${classSectionScheduleLabel(record.classSection) || record.classSection.sectionKey}` : ''}
-                              {record.startDate ? ` - ${record.startDate}` : ''}
-                              {record.endDate ? ` to ${record.endDate}` : ''}
-                            </small>
                           </span>
+                          <span className={s.courseTableCell}>{record.teacher || 'Not assigned'}</span>
+                          <span className={s.courseTableCell}>{record.courseLocation || 'Not set'}</span>
+                          <span className={s.courseTableCell}>{record.startDate || 'Not set'}{record.endDate ? ` – ${record.endDate}` : ''}</span>
                           <span className={s.courseRecordStatus}>{courseRecordStatusLabel(record.status)}</span>
+                          <span className={s.courseHistoryAction}>View details</span>
                         </button>
                       ))}
                     </div>
@@ -3059,10 +3064,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           footer={<><button className="btn" type="button" onClick={() => setIsEditModalOpen(false)}>Cancel</button><button className="btn btn-primary" type="button" onClick={handleEditSave}>Save {editScope === 'inquiry' ? 'inquiry' : editScope === 'contact' ? 'contact' : 'changes'}</button></>}
         >
           <div className="contact-profile-dialog-form">
-            <div className="contact-dialog-intro">
-              <p>Update {editScope === 'inquiry' ? 'the selected inquiry' : (contact?.name || singularLabel.toLowerCase())} without leaving the contact record.</p>
-              <span>{editScope === 'inquiry' ? 'Inquiry details and attribution' : 'Contact details and attribution'}</span>
-            </div>
+            {!(isAitUsaContact && editScope === 'contact') && (
+              <div className="contact-dialog-intro">
+                <p>Update {editScope === 'inquiry' ? 'the selected inquiry' : (contact?.name || singularLabel.toLowerCase())} without leaving the contact record.</p>
+                <span>{editScope === 'inquiry' ? 'Inquiry details and attribution' : 'Contact details and attribution'}</span>
+              </div>
+            )}
 
             <div className="profile-editor-tabs" role="tablist" aria-label="Profile edit sections">
               {profileEditTabs.map((tab) => {
@@ -3092,12 +3099,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 id="profile-edit-panel-general"
                 aria-labelledby="profile-edit-tab-general"
               >
-                <div className="contact-dialog-section-header">
+                {!(isAitUsaContact && editScope === 'contact') && <div className="contact-dialog-section-header">
                   <div>
-                    <h2>General profile</h2>
+                    <h2>{editScope === 'inquiry' ? 'Ownership & status' : 'General profile'}</h2>
                     <p>Update the fields employees reach for most: contact info, status, and ownership.</p>
                   </div>
-                </div>
+                </div>}
                 {editScope !== 'inquiry' && <div className="grid-2">
                   <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-name">Full Name</label>
@@ -3245,7 +3252,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   <input type="hidden" value={editForm.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
                 ))}
                 {editScope !== 'inquiry' && access.canWriteCrm ? (
-                  <div className="profile-editor-account-action danger-action-panel">
+                  <div className={isAitUsaContact && editScope === 'contact' ? 'profile-editor-contact-more-actions' : ''}>
+                    {isAitUsaContact && editScope === 'contact' && <div className="profile-editor-scope-note">Updates these contact fields only. No inquiry is created or changed.</div>}
+                    {isAitUsaContact && editScope === 'contact' ? (
+                      <details className="profile-editor-more-actions">
+                        <summary>More actions</summary>
+                        <div className="profile-editor-account-action danger-action-panel">
                     <div className="danger-action-copy">
                       <span className="danger-action-eyebrow">
                         <Archive size={14} /> Separate account action
@@ -3267,6 +3279,20 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     >
                       {coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive ${singularLabel}` : 'Request Approval'}
                     </button>
+                        </div>
+                      </details>
+                    ) : (
+                      <div className="profile-editor-account-action danger-action-panel">
+                        <div className="danger-action-copy">
+                          <span className="danger-action-eyebrow"><Archive size={14} /> Separate account action</span>
+                          <strong>{coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive this ${singularLabel.toLowerCase()}` : 'Request archive approval'}</strong>
+                          <p>{coordinatorUiPolicy.canArchiveContactsDirectly ? `This is not saved with profile edits. It opens a separate confirmation before removing the ${singularLabel.toLowerCase()} from normal CRM lists. Notes, timeline, lead history, and linked records remain in the database for audit.` : `This is not saved with profile edits. It opens a separate confirmation and the contact stays active unless approved.`}</p>
+                        </div>
+                        <button className="btn btn-danger" type="button" onClick={() => { setArchiveReason(''); setArchiveConfirmOpen(true); }}>
+                          {coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive ${singularLabel}` : 'Request Approval'}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ) : null}
               </section>
@@ -3281,8 +3307,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               >
                 <div className="contact-dialog-section-header">
                   <div>
-                    <h2>Source and routing</h2>
-                    <p>Keep acquisition source, student location, and learning intent distinct.</p>
+                    <h2>Source</h2>
+                    <p>Keep this inquiry&apos;s attribution separate from the contact source.</p>
                   </div>
                 </div>
                 <div className="grid-2">
@@ -3293,14 +3319,23 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       {editSourceOptions.map(src => <option key={src} value={src}>{src}</option>)}
                     </select>
                   </div>
-                  {showSchoolLocationField && editScope === 'inquiry' ? (
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="profile-edit-student-location">Student Location</label>
-                      <input id="profile-edit-student-location" className="input" value={editForm.leadProfile?.locationPreference || ''} placeholder="City, municipality, or address" onChange={e => updateEditLeadProfile('locationPreference', e.target.value)} />
-                      <div className="profile-editor-helper">Where the student lives; free text from Wix or an employee.</div>
-                    </div>
-                  ) : null}
                 </div>
+                {editScope === 'inquiry' && (
+                  <>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="profile-edit-source-detail">Inquiry source detail</label>
+                      <textarea id="profile-edit-source-detail" className="textarea" rows={2} value={editForm.leadProfile?.sourceDetail || ''} onChange={e => updateEditLeadProfile('sourceDetail', e.target.value)} placeholder="Campaign, referral, or submission detail" />
+                      <div className="profile-editor-helper">Updates this inquiry only. Contact source stays unchanged.</div>
+                    </div>
+                    {contact?.submittedAt ? (
+                      <div className="profile-editor-readonly-block">
+                        <strong>Original submission</strong>
+                        <span>Recorded submission · {dateLabel({ date: contact.submittedAt })}</span>
+                        <small>See Activity for the source event and its immutable details.</small>
+                      </div>
+                    ) : <p className="profile-editor-muted">Original submission not recorded.</p>}
+                  </>
+                )}
                 <div className="grid-2">
                   {showSchoolLocationField && editScope !== 'inquiry' ? (
                     <div className="form-group">
@@ -3332,9 +3367,14 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               >
                 <div className="contact-dialog-section-header">
                   <div>
-                    <h2>Enrollment profile</h2>
+                    <h2>Inquiry details</h2>
                     <p>Capture program preferences and background details when they matter for follow-up.</p>
                   </div>
+                </div>
+                <div className="form-group">
+                  <label className="form-label" htmlFor="profile-edit-student-location">Student location</label>
+                  <input id="profile-edit-student-location" className="input" value={editForm.leadProfile?.locationPreference || ''} placeholder="City, municipality, or address" onChange={e => updateEditLeadProfile('locationPreference', e.target.value)} />
+                  <div className="profile-editor-helper">Where the student lives; free text from Wix or an employee.</div>
                 </div>
                 <div className="grid-2">
                   <div className="form-group">
@@ -3367,10 +3407,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <label className="form-label" htmlFor="profile-edit-school-name">School</label>
                     <input id="profile-edit-school-name" className="input" value={editForm.leadProfile?.schoolName || ''} onChange={e => updateEditLeadProfile('schoolName', e.target.value)} />
                   </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="profile-edit-source-detail">Source Detail</label>
-                    <input id="profile-edit-source-detail" className="input" value={editForm.leadProfile?.sourceDetail || ''} onChange={e => updateEditLeadProfile('sourceDetail', e.target.value)} />
-                  </div>
+                  <div className="form-group" aria-hidden="true" />
                 </div>
                 <div className="form-group">
                   <label className="form-label" htmlFor="profile-edit-profile-details">Profile Details</label>
