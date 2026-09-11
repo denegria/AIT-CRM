@@ -1,37 +1,37 @@
 # MIS-409 design QA
 
-## Authorized delivery sequence
-
-On September 11 Alvaro clarified: automated validation (tests, lint, build) precedes staging Git push; authenticated visual QA runs against the resulting live staging deployment. A local-preview browser restriction is not a pre-push gate. Visual acceptance remains required before this issue is complete.
-
-## Comparison targets
-
-- Record: `docs/contact-detail-redesign/01-contact-workspace-v3.png`, 1506×1045 pixels.
-- Editors composite: `docs/contact-detail-redesign/02-focused-editor-v3.png`, 1586×992 pixels.
-- Enrollments: `docs/contact-detail-redesign/03-enrollments-workspace.png`, 1505×1045 pixels.
-- Browser: authenticated senior AIT USA, Light, 1506×1045 CSS pixels. Reference and implementation opened together per state. Composite editor board is compared to the actual modal region, not its backdrop. Real missing values and permission-conditional navigation must remain truthful; fictional board values are not inserted into CRM.
-
-## Deployed comparison at 253307c
-
-Exact browser appVersion matched 253307c5f24db3082e56896c595f568a7671f9d5. Git-triggered Vercel deployment and GitHub CI were Ready/passed. Private screenshots and detailed evidence live outside the public repository in the workspace artifact report `artifacts/ait-crm-design-fidelity-20260911/live/qa.md`.
-
-1. Flat sections and underline tabs now render, but P2 pill controls and shadows remain: CSS Module selectors mistakenly hash literal global button classes.
-2. P1 Contact editor remains wide with sidebar and two-column identity fields rather than the selected compact single-column editor. Intended literal editor selectors suffer the same scoping error.
-3. P2 Contact source is positioned in the right column and Date opened last, inconsistent with the selected Record board. Header/avatar, typography, spacing, and white surface also need the measured correction.
-4. P2 empty enrollment history duplicates the Add enrollment action with Start Course.
-5. Populated Enrollments is not verified: a bounded read-only check of 19 currently enrolled directory contacts found no course records, and the attendance class list was empty. This does not prove no populated contact exists anywhere.
-
-A focused correction is in progress. Capture its exact deployed version and compare the same states again before passing.
-
-## Remaining acceptance
-
-- Post-fix Record and scoped Contact/Inquiry comparison.
-- Populated Enrollments and history/action comparison.
-- Regular-coordinator live role coverage and persisted source-save/reload coverage remain separately outstanding; read-only senior QA does not establish them.
-- Preserve AIT Signs styling and functional permissions.
-
 ## Final result
 
-final result: blocked
+final result: passed
 
-This is an acceptance status, not a prohibition on the authorized staging deployment.
+This passes the returned **visual correction** in the reviewed Record, Contact editor, Inquiry editor, and populated Enrollments/history states. It does not claim completed regular-account authentication or persisted database-save testing.
+
+## References and deployment
+
+- Record: docs/contact-detail-redesign/01-contact-workspace-v3.png,1506×1045.
+- Editors: docs/contact-detail-redesign/02-focused-editor-v3.png,1586×992 composite.
+- Enrollments: docs/contact-detail-redesign/03-enrollments-workspace.png,1505×1045.
+- Reviewed application commit:1e34fb9908c6e945c23ef85901da9ca2eb798b40.
+- Canonical live staging, authenticated AIT USA senior session, Light,1506×1045. Browser appVersion independently matched exact SHA.
+- Git-triggered Vercel dpl_2QVyjxCiBNRNsHXvknX3FZuXQbeA Ready; GitHub CI34606847944 passed.
+- Full validation:747 standard +74 focused =821 passing,2 skipped; repository contract, lint/build passed.
+- Reference and corresponding final browser image opened together for each state; editor comparison uses modal region rather than backdrop.
+- Private screenshots/report outside public repository: workspace artifacts/ait-crm-design-fidelity-20260911/live/1e34fb9-*.png and qa.md. No customer screenshots or credentials committed.
+
+## Verified corrections
+
+1. Record: flat white sections, aligned property rows, selected field order,80px avatar, underline tabs,44px header/task controls, quiet contextual Edit.
+2. Contact:590px single-column dialog, five46px inputs in selected order, readable labels, source scope note. Archive remains available through More actions and separate confirmation.
+3. Inquiry:870px dialog; Inquiry details, Ownership & status, Source; full-width source selector, scope helper directly below, source-detail textarea. Contact identity fields absent. Original submission derives only from actual submission evidence; reviewed record truthfully shows absent state.
+4. Enrollments: full-width1198px current/history tables; identical header tracks; direct Edit/Complete/End; single Add enrollment/Add history; history-only count; row-specific expand/collapse and compact outcome/notes/Edit history.
+5. Populated check used three fictional browser-memory-only GET-response fixtures:two active and one completed, including classSection=null. No DB fixtures or writes. Previous null scheduleDays crash reproduced before correction and did not recur.
+6. Actions opened correct course/status forms; history Edit selected the historical course rather than an active record. Cancel made no requests or changes; browser errors empty.
+7.390px smoke:document width390; tables scroll inside containers; Inquiry stays within viewport and Escape closes. Hard navigation removed fixture and restored real Record/zero-course state.
+
+## Scope boundaries and P3 follow-ups
+
+- Existing shared sidebar, permission-conditional tabs, real missing values, and empty next-work state remain truthful rather than copying fictional board content.
+- P3 only:existing Current versus Active wording, ISO date formatting, singular record-count copy, and small shared-font/token differences. No remaining P0/P1/P2 visual finding in reviewed states.
+- Regular-account live access and persisted source save/reload remain separately unverified. Server-route tests cover assignment ownership and isolated source update/clear behavior; browser fixture is not evidence of DB persistence.
+- AIT Signs styles remain outside USA-scoped edits. No production promotion, DB migration/write, or provider send. Full MIS-409 functional acceptance remains separately tracked.
+- Authorized sequence: automated checks → staging Git push → automatic deployment → live visual QA → repair/redeploy/recheck. Local-preview access is not a pre-push blocker.
