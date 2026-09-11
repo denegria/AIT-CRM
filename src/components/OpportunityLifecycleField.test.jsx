@@ -4,7 +4,7 @@ import test from 'node:test';
 import { renderToStaticMarkup } from 'react-dom/server';
 import OpportunityLifecycleField from './OpportunityLifecycleField.jsx';
 
-test('AIT USA no-Opportunity state explains the issue, offers Start opportunity, and hides the selector', () => {
+test('AIT USA no-inquiry state explains the issue, offers Start inquiry, and hides the selector', () => {
   const html = renderToStaticMarkup(
     <OpportunityLifecycleField
       isAitUsa
@@ -16,8 +16,8 @@ test('AIT USA no-Opportunity state explains the issue, offers Start opportunity,
     />,
   );
 
-  assert.match(html, /does not have an Opportunity yet/);
-  assert.match(html, /Start opportunity/);
+  assert.match(html, /does not have an active inquiry/);
+  assert.match(html, /Start inquiry/);
   assert.doesNotMatch(html, /opportunity-status-selector/);
 });
 
@@ -35,7 +35,7 @@ test('an AIT USA Contact with an Opportunity keeps the lifecycle selector', () =
 
   assert.match(html, /opportunity-status-selector/);
   assert.match(html, /Follow Up/);
-  assert.doesNotMatch(html, /Start opportunity/);
+  assert.doesNotMatch(html, /Start inquiry/);
 });
 
 test('AIT Signs keeps its existing lifecycle selector even without a Lead', () => {
@@ -50,7 +50,7 @@ test('AIT Signs keeps its existing lifecycle selector even without a Lead', () =
     />,
   );
   assert.match(html, /opportunity-status-selector/);
-  assert.doesNotMatch(html, /Start opportunity/);
+  assert.doesNotMatch(html, /Start inquiry/);
 });
 
 test('AIT USA multiple-active conflict is explicit and renders no lifecycle selector', () => {

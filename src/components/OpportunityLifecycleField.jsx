@@ -22,9 +22,9 @@ export default function OpportunityLifecycleField({
     return (
       <div className="profile-editor-opportunity-empty" data-testid="opportunity-empty-state">
         <div className="profile-editor-helper">
-          This Contact does not have an Opportunity yet. Start one before setting an enrollment lifecycle status.
+          This contact does not have an active inquiry. Start one before setting an enrollment lifecycle status.
         </div>
-        <button className="btn" type="button" onClick={onStart}>Start opportunity</button>
+        <button className="btn" type="button" onClick={onStart}>Start inquiry</button>
       </div>
     );
   }

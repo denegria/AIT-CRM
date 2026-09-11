@@ -22,6 +22,92 @@
   margin-top: 16px;
   min-width: 0;
 }
+.usaWorkspace {
+  grid-template-columns: minmax(0, 1fr);
+}
+.usaWorkspace .contentSection {
+  grid-column: 1;
+}
+.workspaceHeader,
+.nextWorkBand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(180deg, var(--bg-elevated), var(--bg-secondary));
+  box-shadow: var(--shadow-soft);
+}
+.workspaceIdentity,
+.workspaceNameRow,
+.nextWorkActions,
+.recordSectionHeader,
+.inquiryActions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.workspaceIdentity { flex: 1; }
+.workspaceNameRow { align-items: flex-start; }
+.workspaceName {
+  margin: 0;
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 22px;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
+}
+.workspaceIdentity .profileTitleBlock > span,
+.nextWorkBand span,
+.recordSectionHeader span {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .02em;
+  text-transform: uppercase;
+}
+.nextWorkBand {
+  padding-block: 12px;
+  background: linear-gradient(90deg, color-mix(in srgb, var(--warning-muted) 45%, var(--bg-secondary)), var(--bg-secondary));
+}
+.nextWorkBand > div:first-child { min-width: 0; }
+.nextWorkBand strong,
+.nextWorkBand small { display: block; overflow-wrap: anywhere; }
+.nextWorkBand strong { margin-top: 3px; color: var(--text-primary); font-size: var(--text-sm); }
+.nextWorkBand small { margin-top: 3px; color: var(--text-muted); font-size: var(--text-xs); }
+.nextWorkActions { flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
+.recordWorkspace { display: grid; gap: 16px; }
+.recordSection {
+  padding: 16px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--bg-tertiary) 42%, var(--bg-secondary));
+}
+.recordSectionHeader { justify-content: space-between; margin-bottom: 14px; }
+.recordSectionHeader h2 { margin: 3px 0 0; color: var(--text-primary); font-size: var(--text-md); }
+.propertyGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+.propertyGrid > div { min-width: 0; padding: 10px; border-radius: var(--radius-md); background: var(--bg-secondary); }
+.propertyGrid dt { color: var(--text-muted); font-size: 10px; font-weight: 800; text-transform: uppercase; }
+.propertyGrid dd { margin: 5px 0 0; color: var(--text-primary); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.propertyGrid a { color: var(--accent); text-decoration: none; }
+.recordWarning { display: flex; align-items: flex-start; gap: 7px; margin: 12px 0 0; color: var(--warning); font-size: var(--text-sm); line-height: 1.4; }
+.phoneHistoryDisclosure { margin-top: 12px; color: var(--text-secondary); font-size: var(--text-xs); }
+.phoneHistoryDisclosure summary { cursor: pointer; color: var(--accent); font-weight: 700; }
+.phoneHistoryDisclosure span { display: block; margin-top: 5px; }
+.quietInquiryState { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text-muted); font-size: var(--text-sm); }
+.quietInquiryState p { margin: 0; }
+.inquiryActions { margin-top: 14px; flex-wrap: wrap; }
 
 .profileCard {
   grid-column: 1;
@@ -1934,6 +2020,14 @@
 }
 
 @media (max-width: 900px) {
+  .workspaceHeader,
+  .nextWorkBand,
+  .quietInquiryState {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .nextWorkActions { justify-content: flex-start; }
+  .propertyGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .detailLayout {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2058,6 +2152,11 @@
 }
 
 @media (max-width: 560px) {
+  .workspaceHeader,
+  .nextWorkBand,
+  .recordSection { padding: 14px; }
+  .workspaceNameRow { flex-direction: column; }
+  .propertyGrid { grid-template-columns: minmax(0, 1fr); }
   .detailLayout {
     gap: 14px;
     margin-top: 12px;

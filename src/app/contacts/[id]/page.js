@@ -441,7 +441,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     businessUnits,
     replaceContactFromServer,
   } = useCRM();
-  const [activeTab, setActiveTab] = useState('timeline');
+  const [activeTab, setActiveTab] = useState('record');
   const [timelineFilter, setTimelineFilter] = useState('all');
   const [serverTimeline, setServerTimeline] = useState({ contactId: '', reloadKey: -1, items: null, error: false });
   const [timelineReloadKey, setTimelineReloadKey] = useState(0);
@@ -610,6 +610,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const showLinkedPeoplePanel = isClientMode && detailView.workflowKey === WORKFLOW_KEYS.AIT_SIGNS;
   const showSchoolLocationField = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA;
   const isAitUsaContact = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA || /ait usa|institute/i.test(contactBusinessUnit?.name || '');
+  const hasResolvedCurrentInquiry = isAitUsaContact && Boolean(contact?.hasLeadStatus) && !contact?.opportunityConflict;
+  const hasClosedInquiry = isAitUsaContact && !contact?.hasLeadStatus && isWorkflowStatusClosed(contact?.status);
+  const contactSource = cleanText(contact?.sourceLabel) || 'Unknown';
+  const inquirySource = cleanText(contact?.inquirySource || contact?.source) || 'Unknown';
   const canManageContactAssignments = isAitUsaContact
     ? canManageAitUsaAssignments
     : coordinatorUiPolicy.canManageCoordinatorAssignments;
@@ -692,6 +696,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             ? { tone: 'warning', text: 'Generate an invoice from a work order before recording a payment.' }
             : { tone: 'ready', text: 'Invoice is ready for payment recording.' }));
   const renderedActiveTab =
+    (!isAitUsaContact && activeTab === 'record') ||
     (!showLinkedPeoplePanel && activeTab === 'contacts') ||
     (!showWorkOrdersTab && activeTab === 'workorders') ||
     (!showFinancialsTab && activeTab === 'financials') ||
@@ -1022,6 +1027,17 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       reason: '',
     });
     setIsEditModalOpen(true);
+  };
+
+  const openInquiryEditor = (section = 'enrollment') => {
+    openEditModal();
+    setActiveProfileEditTab(section);
+  };
+
+  const openStartInquiry = () => {
+    openEditModal();
+    setActiveProfileEditTab('general');
+    setStartOpportunityOpen(true);
   };
 
   const startOpportunity = async () => {
@@ -1909,10 +1925,52 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         </button>
       </div>
 
-      <div className={s.detailLayout}>
+      <div className={`${s.detailLayout} ${isAitUsaContact ? s.usaWorkspace : ''}`}>
         {/* Main Section: Review content */}
         <div className={s.contentSection}>
-          <section className={s.reviewContext} aria-label={`${detailView.profileTitle} review context`}>
+          {isAitUsaContact && (
+            <>
+              <section className={s.workspaceHeader} aria-label="Contact identity">
+                <div className={s.workspaceIdentity}>
+                  <div className={s.profileAvatarLarge} aria-hidden="true">{contact.name.charAt(0)}</div>
+                  <div className={s.profileTitleBlock}>
+                    <div className={s.workspaceNameRow}>
+                      <h1 className={s.workspaceName}>{contact.name}</h1>
+                      {contact.status && <span className={`badge badge-${contact.status.toLowerCase().replace(' ', '')}`}>{contact.status}</span>}
+                    </div>
+                    <span>{contactBusinessUnit?.name || 'AIT USA'}</span>
+                  </div>
+                </div>
+                {access.canWriteCrm && (
+                  <button className="btn btn-primary btn-sm" type="button" onClick={openEditModal}>
+                    <Edit3 size={14} /> Edit contact
+                  </button>
+                )}
+              </section>
+
+              <section className={s.nextWorkBand} aria-label="Next work">
+                <div>
+                  <span>Next work</span>
+                  <strong>{detailView.workflowNext || 'No follow-up is scheduled'}</strong>
+                  {detailView.workflowChips?.length > 0 && <small>{detailView.workflowChips.join(' · ')}</small>}
+                </div>
+                {access.canWriteCrm && (
+                  <div className={s.nextWorkActions}>
+                    {nextStatus && hasResolvedCurrentInquiry && (
+                      <button className="btn btn-sm" type="button" onClick={moveToNextStatus} disabled={statusUpdating}>
+                        <ArrowRight size={14} /> {statusUpdating ? 'Updating…' : `Move to ${nextStatus}`}
+                      </button>
+                    )}
+                    <Link className="btn btn-primary btn-sm" href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}>
+                      <CheckSquare size={14} /> Create follow-up
+                    </Link>
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+
+          {!isAitUsaContact && <section className={s.reviewContext} aria-label={`${detailView.profileTitle} review context`}>
             <div className={s.reviewContextHeader}>
               <div>
                 <span>Review context</span>
@@ -1929,13 +1987,14 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 </div>
               ))}
             </div>
-          </section>
+          </section>}
 
           <div className={s.contentTabs}>
-            <button className={`${s.contentTab} ${renderedActiveTab === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')}>Timeline</button>
+            {isAitUsaContact && <button className={`${s.contentTab} ${renderedActiveTab === 'record' ? s.active : ''}`} onClick={() => setActiveTab('record')}>Record</button>}
+            <button className={`${s.contentTab} ${renderedActiveTab === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')}>{isAitUsaContact ? 'Activity' : 'Timeline'}</button>
             <button className={`${s.contentTab} ${renderedActiveTab === 'conversations' ? s.active : ''}`} onClick={() => setActiveTab('conversations')}>Conversations ({conversationMessages.length})</button>
             {showCoursesTab && (
-              <button className={`${s.contentTab} ${renderedActiveTab === 'courses' ? s.active : ''}`} onClick={() => setActiveTab('courses')}>Courses ({currentCourseRecords.length})</button>
+              <button className={`${s.contentTab} ${renderedActiveTab === 'courses' ? s.active : ''}`} onClick={() => setActiveTab('courses')}>{isAitUsaContact ? 'Enrollments' : 'Courses'} ({currentCourseRecords.length})</button>
             )}
             {showLinkedPeoplePanel && (
               <button className={`${s.contentTab} ${renderedActiveTab === 'contacts' ? s.active : ''}`} onClick={() => setActiveTab('contacts')}>Contacts ({currentLinkedPeople.items.length})</button>
@@ -1949,6 +2008,75 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           </div>
 
           <div className={s.tabContent}>
+            {isAitUsaContact && renderedActiveTab === 'record' && (
+              <div className={s.recordWorkspace}>
+                <section className={s.recordSection} aria-labelledby="contact-preferences-title">
+                  <div className={s.recordSectionHeader}>
+                    <div>
+                      <span>Contact</span>
+                      <h2 id="contact-preferences-title">Contact &amp; preferences</h2>
+                    </div>
+                    {access.canWriteCrm && <button className="btn btn-sm" type="button" onClick={openEditModal}><Edit3 size={14} /> Edit contact</button>}
+                  </div>
+                  <dl className={s.propertyGrid}>
+                    <div><dt>Email</dt><dd>{contact.email ? <a href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a> : 'Unknown'}</dd></div>
+                    <div><dt>Phone</dt><dd>{contact.phone ? <a href={phoneHref(contact.phone)}>{contact.phone}</a> : 'Unknown'}</dd></div>
+                    <div><dt>Intended learning location</dt><dd>{contact.address || 'Unknown'}</dd></div>
+                    <div><dt>Contact source</dt><dd>{contactSource}</dd></div>
+                    <div><dt>Last touch</dt><dd>{contact.lastTouch || contact.lastContact || 'None'}</dd></div>
+                    <div><dt>Last edited</dt><dd>{contact.lastEdited || 'None'}</dd></div>
+                  </dl>
+                  {detailView.contactability?.status && detailView.contactability.status !== 'reachable' && (
+                    <p className={s.recordWarning}><AlertCircle size={15} /> {detailView.contactability.reason || detailView.contactability.label}</p>
+                  )}
+                  {phoneHistoryState.contactId === contact.id && phoneHistoryState.items.some((phone) => !phone.isPrimary) && (
+                    <details className={s.phoneHistoryDisclosure}>
+                      <summary>Phone history</summary>
+                      {phoneHistoryState.items.filter((phone) => !phone.isPrimary).map((phone) => <span key={phone.id || phone.normalizedPhone}>{phone.phone}{phone.isWrongNumber ? ' · Wrong number' : phone.isDoNotCall ? ' · Do not call' : ' · Historical — do not use for outreach'}</span>)}
+                    </details>
+                  )}
+                  {phoneHistoryState.contactId === contact.id && phoneHistoryState.error && <p className={s.recordWarning}><AlertCircle size={15} /> {phoneHistoryState.error}</p>}
+                </section>
+
+                <section className={s.recordSection} aria-labelledby="inquiry-title">
+                  <div className={s.recordSectionHeader}>
+                    <div>
+                      <span>{hasClosedInquiry ? 'Inquiry history' : 'Inquiry'}</span>
+                      <h2 id="inquiry-title">{contact.opportunityConflict ? 'Inquiry needs resolution' : hasResolvedCurrentInquiry ? 'Current inquiry' : hasClosedInquiry ? 'Last inquiry (closed)' : 'No active inquiry'}</h2>
+                    </div>
+                    {hasResolvedCurrentInquiry && access.canWriteCrm && <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor()}><Edit3 size={14} /> Edit</button>}
+                  </div>
+                  {contact.opportunityConflict ? (
+                    <p className={s.recordWarning}><AlertCircle size={15} /> {contact.activeOpportunityCount || 'Multiple'} active inquiries need resolution before inquiry changes can be made.</p>
+                  ) : hasResolvedCurrentInquiry || hasClosedInquiry ? (
+                    <>
+                      <dl className={s.propertyGrid}>
+                        <div><dt>Status</dt><dd>{contact.status || 'Unknown'}</dd></div>
+                        <div><dt>Owner</dt><dd>{assignedEmployee?.label || 'Unassigned'}</dd></div>
+                        <div><dt>Program interest</dt><dd>{contact.programInterest || 'Unknown'}</dd></div>
+                        <div><dt>Inquiry source</dt><dd>{inquirySource}</dd></div>
+                        <div><dt>Preferred days</dt><dd>{contact.preferredDay || 'Unknown'}</dd></div>
+                        <div><dt>Preferred schedule</dt><dd>{contact.preferredSchedule || 'Unknown'}</dd></div>
+                        <div><dt>Student location</dt><dd>{contact.locationPreference || 'Unknown'}</dd></div>
+                        <div><dt>Qualifications</dt><dd>{[contact.testInterest, contact.educationLevel, contact.schoolName].filter(Boolean).join(' · ') || 'Unknown'}</dd></div>
+                      </dl>
+                      {hasResolvedCurrentInquiry && access.canWriteCrm && (
+                        <div className={s.inquiryActions}>
+                          <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor('general')}>Change owner</button>
+                          <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor('general')}>Change status</button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className={s.quietInquiryState}>
+                      <p>Contact updates, history, enrollments, and linked resources remain available without an inquiry.</p>
+                      {access.canWriteCrm && <button className="btn btn-sm" type="button" onClick={openStartInquiry}>Start inquiry</button>}
+                    </div>
+                  )}
+                </section>
+              </div>
+            )}
+
             {renderedActiveTab === 'timeline' && (
               <div className={s.timelineView}>
                 <div className={s.snapshotStrip} aria-label={`Current ${singularLabel.toLowerCase()} snapshot`}>
@@ -2664,7 +2792,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             )}
           </div>
         </div>
-        {profileSidebar}
+        {!isAitUsaContact && profileSidebar}
       </div>
 
       {courseModal && (
@@ -2904,7 +3032,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         <Modal
           open={isEditModalOpen}
           onClose={() => setIsEditModalOpen(false)}
-          title="Edit Profile"
+          title={isAitUsaContact && activeProfileEditTab === 'enrollment' ? 'Edit inquiry' : isAitUsaContact ? 'Edit contact' : 'Edit Profile'}
           variant="dialog"
           panelClassName="contact-profile-dialog-panel"
           footer={<><button className="btn" type="button" onClick={() => setIsEditModalOpen(false)}>Cancel</button><button className="btn btn-primary" type="button" onClick={handleEditSave}>Save Changes</button></>}
@@ -2965,7 +3093,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <input id="profile-edit-phone" className="input" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
                   </div>
                   <div className="form-group">
-                    <label className="form-label" htmlFor="profile-edit-status">Status</label>
+                    <label className="form-label" htmlFor="profile-edit-status">{isAitUsaContact ? 'Inquiry status' : 'Status'}</label>
                     <OpportunityLifecycleField
                       isAitUsa={isAitUsaContact}
                       hasLeadStatus={contact.hasLeadStatus}
@@ -2978,10 +3106,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   </div>
                 </div>
                 {isAitUsaContact && !contact.hasLeadStatus && startOpportunityOpen && (
-                  <div className="profile-editor-account-action" aria-label="Start Opportunity">
+                  <div className="profile-editor-account-action" aria-label="Start inquiry">
                     <div className="grid-2">
                       <div className="form-group">
-                        <label className="form-label" htmlFor="start-opportunity-status">Initial Opportunity status</label>
+                        <label className="form-label" htmlFor="start-opportunity-status">Initial inquiry status</label>
                         <select
                           id="start-opportunity-status"
                           className="input select"
@@ -3024,7 +3152,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     {startOpportunityError && <div className={s.courseError}>{startOpportunityError}</div>}
                     <div>
                       <button className="btn btn-primary" type="button" onClick={startOpportunity} disabled={startOpportunityBusy}>
-                        {startOpportunityBusy ? 'Starting…' : 'Start opportunity'}
+                        {startOpportunityBusy ? 'Starting…' : 'Start inquiry'}
                       </button>
                     </div>
                   </div>

@@ -1124,8 +1124,8 @@ export default function PipelinePage() {
             )}
           </div>
           <div className={s.pipelineActions}>
-            <button className="btn" onClick={() => nextLead ? router.push(`/contacts/${nextLead.id}`) : toast('No lead matches the current filters.', 'error')}>
-              <ArrowRight size={14} /> Work Next Lead
+            <button className="btn" onClick={() => nextLead ? router.push(`/contacts/${nextLead.id}`) : toast(`No ${isAitUsaPipeline ? 'inquiry' : 'lead'} matches the current filters.`, 'error')}>
+              <ArrowRight size={14} /> {isAitUsaPipeline ? 'Work next inquiry' : 'Work Next Lead'}
             </button>
             {canWrite && currentUser?.id && coordinatorUiPolicy.canManageCoordinatorAssignments && (
               <button className={`btn ${bulkAssignMode ? 'btn-primary' : ''}`} type="button" onClick={toggleBulkAssignMode}>
