@@ -3318,6 +3318,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       <option value="">Not recorded</option>
                       {editSourceOptions.map(src => <option key={src} value={src}>{src}</option>)}
                     </select>
+                    {editScope === 'inquiry' && <div className="profile-editor-helper">Updates this inquiry only. Contact source stays unchanged.</div>}
                   </div>
                 </div>
                 {editScope === 'inquiry' && (
@@ -3325,7 +3326,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <div className="form-group">
                       <label className="form-label" htmlFor="profile-edit-source-detail">Inquiry source detail</label>
                       <textarea id="profile-edit-source-detail" className="textarea" rows={2} value={editForm.leadProfile?.sourceDetail || ''} onChange={e => updateEditLeadProfile('sourceDetail', e.target.value)} placeholder="Campaign, referral, or submission detail" />
-                      <div className="profile-editor-helper">Updates this inquiry only. Contact source stays unchanged.</div>
                     </div>
                     {contact?.submittedAt ? (
                       <div className="profile-editor-readonly-block">

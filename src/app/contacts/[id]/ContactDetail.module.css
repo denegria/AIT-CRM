@@ -2114,8 +2114,8 @@
 .enrollmentsWorkspace .courseTableHeader,
 .enrollmentsWorkspace .courseActiveItem,
 .enrollmentsWorkspace .courseRecordRow {
-  min-width: 760px;
-  grid-template-columns: minmax(180px, 1.5fr) minmax(100px, 1fr) minmax(100px, 1fr) minmax(100px, 1fr) minmax(78px, .8fr) auto;
+  min-width: 940px;
+  grid-template-columns: minmax(180px, 1.5fr) minmax(100px, 1fr) minmax(100px, 1fr) minmax(100px, 1fr) minmax(78px, .8fr) minmax(190px, 190px);
 }
 .enrollmentsWorkspace .courseTableHeader {
   display: grid;
