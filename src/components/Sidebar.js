@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
@@ -77,9 +77,21 @@ function divisionBrandFor(unit) {
   };
 }
 
+function sidebarRailTransition(expanded, event) {
+  if (event.type === 'route-selection' || event.type === 'escape') return false;
+  if (event.type === 'toggle') return !expanded;
+  if (event.type === 'pointer-enter' && event.pointerType === 'mouse') return true;
+  if (event.type === 'pointer-leave' && event.pointerType === 'mouse' && !event.focusWithin) return false;
+  if (event.type === 'content-focus') return true;
+  return expanded;
+}
+
 export default function Sidebar() {
   const pathname = usePathname();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const toggleRef = useRef(null);
+  const ignoreNextToggleFocus = useRef(false);
   const {
     role,
     theme,
@@ -171,8 +183,13 @@ export default function Sidebar() {
     };
   }, [visibleNav]);
 
+  const closeAfterRouteSelection = () => {
+    setIsMoreOpen(false);
+    setIsExpanded((expanded) => sidebarRailTransition(expanded, { type: 'route-selection' }));
+  };
+
   const renderNavLink = ({ href, label, Icon }, className = s.navItem) => (
-    <Link key={href} href={href} className={`${className} ${isRouteActive(pathname, href) ? s.active : ''}`} aria-label={label} title={label} onClick={() => setIsMoreOpen(false)}>
+    <Link key={href} href={href} className={`${className} ${isRouteActive(pathname, href) ? s.active : ''}`} aria-label={label} title={label} onClick={closeAfterRouteSelection}>
       <Icon /><span>{label}</span>
     </Link>
   );
@@ -201,7 +218,50 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className={`${s.sidebar} ${hasBusinessUnitScope ? s.hasMobileScope : ''}`}>
+    <aside
+      className={`${s.sidebar} ${hasBusinessUnitScope ? s.hasMobileScope : ''}`}
+      data-expanded={isExpanded}
+      onPointerEnter={(event) => {
+        setIsExpanded((expanded) => sidebarRailTransition(expanded, { type: 'pointer-enter', pointerType: event.pointerType }));
+      }}
+      onPointerLeave={(event) => {
+        const pointerType = event.pointerType;
+        const focusWithin = event.currentTarget.contains(document.activeElement);
+        setIsExpanded((expanded) => sidebarRailTransition(expanded, {
+          type: 'pointer-leave',
+          pointerType,
+          focusWithin,
+        }));
+      }}
+      onFocusCapture={(event) => {
+        if (event.target === toggleRef.current && ignoreNextToggleFocus.current) {
+          ignoreNextToggleFocus.current = false;
+          return;
+        }
+        if (event.target !== toggleRef.current) setIsExpanded((expanded) => sidebarRailTransition(expanded, { type: 'content-focus' }));
+      }}
+      onBlurCapture={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setIsExpanded(false);
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') {
+          setIsExpanded((expanded) => sidebarRailTransition(expanded, { type: 'escape' }));
+          ignoreNextToggleFocus.current = true;
+          toggleRef.current?.focus();
+        }
+      }}
+    >
+      <button
+        ref={toggleRef}
+        type="button"
+        className={s.railToggle}
+        aria-label={isExpanded ? 'Collapse navigation' : 'Expand navigation'}
+        aria-expanded={isExpanded}
+        aria-controls="primary-navigation"
+        onClick={() => setIsExpanded((expanded) => sidebarRailTransition(expanded, { type: 'toggle' }))}
+      >
+        <MoreHorizontal size={20} />
+      </button>
       <div className={s.logo}>
         {divisionBrand.logoSrc ? (
           <Image src={divisionBrand.logoSrc} alt={divisionBrand.alt} width={40} height={40} className={s.logoImage} />
@@ -219,7 +279,7 @@ export default function Sidebar() {
           {renderScopeControl()}
         </div>
       )}
-      <nav className={s.navSection}>
+      <nav id="primary-navigation" className={s.navSection} aria-label="Primary navigation">
         {hasBusinessUnitScope && (
           <div className={s.scopePanel}>
             <div className={s.scopeTitle}>
@@ -250,7 +310,7 @@ export default function Sidebar() {
               {isMoreOpen && (
                 <div className={s.moreMenu} role="menu" aria-label="More navigation">
                   {mobileNav.overflow.map(({ href, label, Icon }) => (
-                    <Link key={href} href={href} className={s.moreMenuItem} role="menuitem" onClick={() => setIsMoreOpen(false)}>
+                    <Link key={href} href={href} className={s.moreMenuItem} role="menuitem" onClick={closeAfterRouteSelection}>
                       <Icon /><span>{label}</span>
                     </Link>
                   ))}
