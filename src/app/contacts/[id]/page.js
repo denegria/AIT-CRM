@@ -2344,8 +2344,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   <div className={s.courseHeroMain}>
                     <div className={s.courseHeroIcon}><GraduationCap size={22} /></div>
                     <div>
-                      <span className={s.courseEyebrow}>Active enrollments</span>
-                      <h2>{activeCourseRecords.length ? `${activeCourseRecords.length} active` : 'No active enrollments'}</h2>
+                      <h2>{activeCourseRecords.length ? `Active enrollments · ${activeCourseRecords.length}` : 'No active enrollments'}</h2>
                       <p>
                         {activeCourseRecords.length
                           ? 'A student can attend more than one class section at the same time.'
@@ -2385,7 +2384,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 <div className={s.courseToolbar}>
                   <div>
                     <strong>Course history</strong>
-                    <span>{courseRecordsState.loading ? 'Loading' : `${currentCourseRecords.length} records`}</span>
+                    <span>{courseRecordsState.loading ? 'Loading' : `${historicalCourseRecords.length} records`}</span>
                   </div>
                 </div>
 
@@ -3045,8 +3044,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           <div className="contact-profile-dialog-form">
             {!(isAitUsaContact && editScope === 'contact') && (
               <div className="contact-dialog-intro">
-                <p>Update {editScope === 'inquiry' ? 'the selected inquiry' : (contact?.name || singularLabel.toLowerCase())} without leaving the contact record.</p>
-                <span>{editScope === 'inquiry' ? 'Inquiry details and attribution' : 'Contact details and attribution'}</span>
+                <p>{editScope === 'inquiry' ? `${contact?.programInterest || 'Current inquiry'} · ${contact?.name || 'Contact'}` : `Update ${contact?.name || singularLabel.toLowerCase()} without leaving the contact record.`}</p>
+                {editScope !== 'inquiry' && <span>Contact details and attribution</span>}
               </div>
             )}
 
