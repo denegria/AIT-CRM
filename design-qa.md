@@ -1,8 +1,12 @@
 # MIS-409 design QA
 
-## Final result
+## Current revision — compact preview and navigation
 
-final result: passed
+**In progress; not yet accepted.** Alvaro’s September 11 14:52 review replaces the old top-down Record layout with a compact two-rail workspace. The governing [revision contract](docs/contact-detail-redesign/compact-preview-revision-2026-09-11.md) supersedes the prior visual target. New evidence will be added after deployment and live checks.
+
+## Previous revision result (historical)
+
+previous visual result: passed
 
 This passes the returned **visual correction** in the reviewed Record, Contact editor, Inquiry editor, and populated Enrollments/history states. It does not claim completed regular-account authentication or persisted database-save testing.
 

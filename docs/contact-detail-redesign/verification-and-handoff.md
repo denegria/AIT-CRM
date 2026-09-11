@@ -1,5 +1,8 @@
 # AIT CRM Contact workspace — final design and staging handoff
 
+> **Current governing amendment (September 11, 14:52 UTC):** [Compact preview and collapsible navigation](compact-preview-revision-2026-09-11.md) replaces the earlier top-down Record layout and large scale. Implementation is authorized and ongoing. Earlier paused/publication-only statements and Record-tab/sidebar prohibitions below are historical; preserved field, permission and source contracts still apply.
+
+
 > Repository edition: published documentation only. Application implementation remains paused. This public edition preserves the specification, replaces machine-local source links with repository links, and references authenticated captures through the private evidence index. Historical audit statements below describe the audit pass, not this documentation publication.
 
 Revised September 11, 2026 for [MIS-408](https://linear.app/mission-control-v2/issue/MIS-408/ait-crm-detailed-contact-workspace-redesign-preserved-tabs-direct). Keep the selected clean visual style and focused editors, but **retain every applicable production operational tab** with its records and actions rendered directly. This supersedes the September 7 three-tab consolidation, gateway-only resource navigation, coupled source-correction requirement, and mobile-led emphasis. It is a revision of the selected design, not a new option set. Alvaro approved the recommendations and unknown-source fix. The current implementation candidate also delivers the source-scope extension; staging QA remains a separate gate.

@@ -1,5 +1,8 @@
 # Contact detail: functionality parity contract
 
+> **Current governing amendment (September 11, 14:52 UTC):** [Compact preview and collapsible navigation](compact-preview-revision-2026-09-11.md) replaces the earlier top-down Record layout and large scale. Implementation is authorized and ongoing. Earlier paused/publication-only statements and Record-tab/sidebar prohibitions below are historical; preserved field, permission and source contracts still apply.
+
+
 > Repository edition: published documentation only. Application implementation remains paused. This public edition preserves the specification, replaces machine-local source links with repository links, and references authenticated captures through the private evidence index. Historical audit statements below describe the audit pass, not this documentation publication.
 
 Revised September 11, 2026 for [MIS-408](https://linear.app/mission-control-v2/issue/MIS-408/ait-crm-detailed-contact-workspace-redesign-preserved-tabs-direct). Companion to the [design and staging handoff](verification-and-handoff.md). Historical observations below remain dated September 7; current source review confirmed the original inventory and added explicit improvement contracts.

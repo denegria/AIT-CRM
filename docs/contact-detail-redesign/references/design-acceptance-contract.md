@@ -1,5 +1,8 @@
 # MIS-409 S1 design acceptance contract
 
+> **Current governing amendment (September 11, 14:52 UTC):** [Compact preview and collapsible navigation](../compact-preview-revision-2026-09-11.md) replaces the earlier top-down Record layout and large scale. Implementation is authorized and ongoing. Earlier paused/publication-only statements and Record-tab/sidebar prohibitions below are historical; preserved field, permission and source contracts still apply.
+
+
 ## Workflow and interaction model
 
 AIT USA coordinators need one readable contact workspace: identify the person once, see the next available work without a second profile summary, and maintain each operational resource directly in its tab. The selected model is a compact identity header, a next-work band, and random-access tabs. `Record` is the default overview; Activity, Conversations, Enrollments, Receipts, and conditionally applicable Work Orders retain their existing working surfaces and actions.

@@ -1,5 +1,8 @@
 # Revised board contract — September 11, 2026
 
+> **Current governing amendment (September 11, 14:52 UTC):** [Compact preview and collapsible navigation](compact-preview-revision-2026-09-11.md) replaces the earlier top-down Record layout and large scale. Implementation is authorized and ongoing. Earlier paused/publication-only statements and Record-tab/sidebar prohibitions below are historical; preserved field, permission and source contracts still apply.
+
+
 Issue: [MIS-408](https://linear.app/mission-control-v2/issue/MIS-408/ait-crm-detailed-contact-workspace-redesign-preserved-tabs-direct).
 
 ## September 11 refinement — one workspace, simpler language

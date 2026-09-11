@@ -1,8 +1,10 @@
 # Contact detail redesign: design and functionality handoff
 
-Revised September 11, 2026. **Application implementation is paused.** This package contains the selected visual direction, governing workflow contracts and a complete capability tracker; no redesigned application code is implemented by this publication.
+Revised September 11, 2026. **Implementation is active on staging.** The latest user-directed layout is the [compact contact preview with collapsible global navigation](compact-preview-revision-2026-09-11.md). This amendment supersedes the earlier top-down Record composition; the original capability and source contracts remain required. Earlier publication sections below are historical, not current deployment status.
 
 ## Current issue and authority
+
+- **Current delivery: MIS-409**, authorized for the compact two-rail revision. Prior v3 artwork is historical for composition/scale; do not rebuild its standalone Record tab. See the governing amendment above and `design-qa.md` for evidence.
 
 - Delivery issue: [MIS-408 — Detailed contact workspace redesign](https://linear.app/mission-control-v2/issue/MIS-408/ait-crm-detailed-contact-workspace-redesign-preserved-tabs-direct), Todo pending implementation instruction.
 - Related historical exploration: [MIS-242](https://linear.app/mission-control-v2/issue/MIS-242/ait-crm-ui-full-contact-detail-page-rework-exploration). Its old sidebar-preservation wording is not the selected design.
@@ -16,7 +18,7 @@ Revised September 11, 2026. **Application implementation is paused.** This packa
 4. [Board specifications and state coverage](design-board-spec.md), then the revised boards below.
 5. [Current publication release packet](publication-2026-09-11.md) for actual validation/deployment status. September 7 audit results are historical baseline evidence, not a new runtime pass.
 
-## Revised boards — one design, different states
+## Prior boards — historical top-down composition
 
 - [Record workspace, desktop](01-contact-workspace-v3.png): clean person/opportunity facts and retained operational tabs.
 - [Focused source editors](02-focused-editor-v3.png): separate opportunity and contact-only examples; no opportunity required for contact maintenance.
