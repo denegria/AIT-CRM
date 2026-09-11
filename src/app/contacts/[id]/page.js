@@ -899,7 +899,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           setSelectedCourseRecordId((current) => (
             current && items.some((item) => item.id === current)
               ? current
-              : items[0]?.id || ''
+              : ''
           ));
         }
       })
@@ -1938,6 +1938,15 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
   const renderCourseRecordDetails = (record) => (
     <div className={s.courseInspector} role="region" aria-label={`${record.courseName} details`}>
+      {isTerminalCourseRecordStatus(record.status) ? <>
+        <div className={s.courseInspectorHeader}><strong>{record.courseName}</strong></div>
+        <div className={s.courseHistorySummary}>
+          <div><span>Outcome</span><strong>{record.outcomeReason || 'None recorded'}</strong></div>
+          <div><span>Notes</span><strong>{record.notes || 'No notes'}</strong></div>
+          {access.canWriteCrm && <button className="btn btn-sm" type="button" onClick={() => openCourseModal('edit', record)}><Edit3 size={14} /> Edit history</button>}
+        </div>
+        {record.classSection && <details className={s.courseAdditionalDetails}><summary>Class details</summary><p>{classSectionDisplayLabel(record.classSection)}</p></details>}
+      </> : <>
       <div className={s.courseInspectorHeader}>
         <span className={`${s.coursePill} ${s[`coursePill_${record.status}`] || ''}`}>
           {courseRecordStatusLabel(record.status)}
@@ -1965,6 +1974,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           </>}
         </div>
       )}
+      </>}
     </div>
   );
 

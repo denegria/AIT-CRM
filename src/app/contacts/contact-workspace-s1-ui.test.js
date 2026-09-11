@@ -49,7 +49,10 @@ test('S1 keeps established action paths and supplies bounded responsive layout',
 });
 
 test('enrollment presentation tolerates manual records without a class section', () => {
-  assert.match(source, /const safeSection = section \|\| \{\};/);
-  assert.match(source, /className=\{s\.courseTableHeader\}/);
-  assert.match(source, /classSectionScheduleLabel\(safeSection\)/);
+  const helper = source.match(/function classSectionScheduleLabel\(section = \{\}\) \{([\s\S]*?)\n\}/);
+  assert.ok(helper, 'the rendered enrollment schedule helper is present');
+  const scheduleLabel = new Function('section', helper[1]);
+  assert.equal(scheduleLabel(null), '', 'manual enrollments have no linked class section');
+  assert.equal(scheduleLabel(undefined), '');
+  assert.equal(scheduleLabel({ scheduleDays: ['Mon', 'Wed'], startTime: '09:00', endTime: '10:30' }), 'Mon, Wed 09:00–10:30');
 });
