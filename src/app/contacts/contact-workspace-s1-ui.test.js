@@ -35,7 +35,8 @@ test('record uses actual inquiry resolution states without creating a substitute
 });
 
 test('S1 keeps established action paths and supplies bounded responsive layout', () => {
-  assert.match(source, /onClick=\{openEditModal\}/);
+  assert.match(source, /onClick=\{\(\) => openEditModal\(\)\}/);
+  assert.doesNotMatch(source, /onClick=\{openEditModal\}/, 'click events must not become editor scopes');
   assert.match(source, /onClick=\{\(\) => openInquiryEditor\(\)\}/);
   assert.match(source, /href=\{`\/tasks\?contactId=\$\{encodeURIComponent\(contact\.id\)\}&taskType=follow_up`\}/);
   assert.match(source, /openCourseModal\('new'\)/);

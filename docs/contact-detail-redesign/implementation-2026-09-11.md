@@ -14,3 +14,10 @@ This implementation extends the deployed contact workspace candidate with the ap
 ## Verification scope
 
 Focused tests cover contact-only and inquiry-only draft serialization, omission versus clear, no-inquiry legacy contacts, corrected-vs-technical source precedence, and multiple/closed inquiry bootstrap selection. The full repository validation remains the acceptance gate; authenticated staging QA and deployment are handled by the parent lane.
+
+## Independent acceptance corrections
+
+- Wrapped Contact edit click handlers so React click events cannot become an editor scope.
+- Save responses now refresh the legacy `sourceLabel` display alias alongside `contactSource`, including explicit clears; opening the editor preserves empty values rather than falling back to stale attribution.
+- Added four direct PATCH-route checks for isolated contact/inquiry corrections and clears; inquiry writes exercise the selected-opportunity locked writer and leave technical provenance unchanged.
+- Live staging browser access was restored by the owner's senior-coordinator login. Source changes require verification on the new deployment; regular-role live coverage and persisted live save/reload checks must not be inferred from read-only UI checks.

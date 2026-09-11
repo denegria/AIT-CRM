@@ -628,3 +628,47 @@ test('new AIT USA terminal status forwards the UI/API outcome reason into the au
   assert.equal(serviceInput.status, 'Not Interested');
   assert.equal(serviceInput.reason, 'Student selected another school.');
 });
+
+for (const scopeCase of [
+  { label: 'contact attribution only', body: { contactSource: 'Referral' }, expectedContact: 'Referral', expectedInquiry: undefined },
+  { label: 'inquiry attribution only', body: { inquirySource: 'Referral' }, expectedContact: undefined, expectedInquiry: 'Referral' },
+  { label: 'cleared contact attribution', body: { contactSource: '' }, expectedContact: null, expectedInquiry: undefined },
+  { label: 'cleared inquiry attribution', body: { inquirySource: '' }, expectedContact: undefined, expectedInquiry: '' },
+]) {
+  test(`source PATCH isolates ${scopeCase.label} and returns persisted source scopes`, async () => {
+    const selectedLead = {
+      id: ids.opportunity, organizationId: ids.organization, businessUnitId: ids.businessUnit,
+      contactId: ids.contact, status: 'Follow Up', currentStage: 'Follow Up',
+      assignedUserId: ids.user, sourceName: 'Campaign', sourceType: 'website',
+    };
+    const sourceContact = { ...contact, sourceLabel: 'Original' };
+    let writeInput;
+    const write = async (input) => {
+      writeInput = input;
+      return { contact: { ...sourceContact, ...input.contactPatch }, lead: { ...selectedLead, ...input.leadPatch }, noteRows: [], activityEventRows: [] };
+    };
+    const response = await PATCH(patchRequest({ id: ids.contact, opportunityId: ids.opportunity, ...scopeCase.body }), {}, {
+      requirePermissionForRequest: async () => ({ error: null, session: elevatedSession }),
+      getDbForRequest: () => dbRows([sourceContact]),
+      latestLeadForContactForRequest: async () => selectedLead,
+      loadBusinessUnitForRequest: async () => businessUnit,
+      resolveActiveOpportunityForRequest: async () => ({ status: 'exact', leadId: ids.opportunity, activeCount: 1 }),
+      loadScopedOpportunityForRequest: async () => selectedLead,
+      updateContactForRequest: write,
+      updateContactInTransactionForRequest: write,
+      withLockedMutationForRequest: async (input) => {
+        assert.equal(input.expectedOpportunityId, ids.opportunity);
+        return input.write({ tx: {}, opportunity: selectedLead, transition: null });
+      },
+    });
+    const payload = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(payload));
+    assert.equal(writeInput.contactPatch.sourceLabel, scopeCase.expectedContact);
+    assert.equal(writeInput.leadPatch?.sourceName, scopeCase.expectedInquiry);
+    assert.equal(writeInput.leadPatch?.sourceType, undefined);
+    const expectedContact = scopeCase.expectedContact === undefined ? 'Original' : scopeCase.expectedContact || '';
+    assert.equal(payload.contact.contactSource, expectedContact);
+    assert.equal(payload.contact.sourceLabel, expectedContact);
+    assert.equal(payload.contact.inquirySource, scopeCase.expectedInquiry === undefined ? 'Campaign' : scopeCase.expectedInquiry);
+  });
+}

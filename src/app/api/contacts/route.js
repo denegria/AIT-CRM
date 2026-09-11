@@ -142,6 +142,7 @@ export function toContactPayload(row, lead = null, noteRows = [], businessUnit =
       ? (lead.sourceName !== null && lead.sourceName !== undefined ? lead.sourceName : lead.sourceType || '')
       : row.sourceLabel || '',
     contactSource: row.sourceLabel || '',
+    sourceLabel: row.sourceLabel || '',
     inquirySource: enrollmentSignals?.source?.channel || '',
     leadProfile: leadProfileForPayload(lead),
     courseMetadata: courseMetadataForPayload(lead),

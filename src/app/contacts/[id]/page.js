@@ -1019,7 +1019,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     setActiveProfileEditTab('general');
     setEditForm({
       ...contact,
-      contactSource: contact?.contactSource || contact?.sourceLabel || '',
+      contactSource: contact?.contactSource ?? contact?.sourceLabel ?? '',
       inquirySource: contact?.inquirySource || '',
       assignedTo: contact?.assignedTo || '',
       statusChangeReason: '',
@@ -1929,7 +1929,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               <ClipboardList size={16} style={{marginRight: 8}} /> Create Work Order
             </Link>
           )}
-          <button className="btn btn-block" onClick={openEditModal}>
+          <button className="btn btn-block" onClick={() => openEditModal()}>
             <Edit3 size={16} style={{marginRight: 8}} /> Edit Profile
           </button>
         </div>
@@ -1962,7 +1962,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   </div>
                 </div>
                 {access.canWriteCrm && (
-                  <button className="btn btn-primary btn-sm" type="button" onClick={openEditModal}>
+                  <button className="btn btn-primary btn-sm" type="button" onClick={() => openEditModal()}>
                     <Edit3 size={14} /> Edit contact
                   </button>
                 )}
