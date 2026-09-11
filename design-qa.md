@@ -1,37 +1,32 @@
-# MIS-326 Design QA
+# MIS-409 design QA
 
-## Visual truth
+## Comparison target
 
-- Overview concept: `/root/.openclaw/giuseppe-workspace/media/inbound/openclaw-staged-7f250a51-be4e-48df-b36f-01c260b294b5/08588141-fdf0-464e-bf1b-09c994165625.jpg`
-- Lean Roster concept: `/root/.openclaw/giuseppe-workspace/media/inbound/openclaw-staged-03e38ec2-2d7f-424a-b050-45408932fa10/c1f35a79-80d1-4c7d-afac-6ddfe043dec8.jpg`
-- Quick Mark concept: `/root/.openclaw/giuseppe-workspace/media/inbound/openclaw-staged-c2013df1-6483-45f0-94f7-57255ea8c186/80c62a8c-dda0-414a-933c-41956a9d223e.jpg`
-- Approved refinements: only Overview, Roster, and Attendance tabs; no repeated Active badges; sessions oldest to newest; Overview contains Sessions, roster preview, and selected-session notes; regular coordinators see plain names; senior/admin users receive Contact links.
+- Source visual truth: `docs/contact-detail-redesign/01-contact-workspace-v3.png`, `02-focused-editor-v3.png`, and `03-enrollments-workspace.png`.
+- Source dimensions: 1200×833 pixels for each approved desktop board.
+- Required implementation state: authenticated AIT USA contact Record, scoped Contact/Inquiry editors, and populated Enrollments at 1440×1000 CSS pixels.
+- Implementation screenshot: unavailable. No local preview listener was present on port 3000, and the task explicitly prohibits restarting the application. The authenticated staging tab remains on the pre-change deployment and cannot be evidence for this unpushed candidate.
 
-## Implementation captures
+## Comparison history
 
-- Desktop Overview, 1440×900: `/tmp/mis-326-qa/regular-main-overview-desktop.png`
-- Desktop Roster, 1440×900: `/tmp/mis-326-qa/regular-roster-desktop.png`
-- Desktop Quick Mark, 1440×900: `/tmp/mis-326-qa/regular-attendance-desktop.png`
-- Submitted senior view, 1440×900: `/tmp/mis-326-qa/senior-attendance-submitted-desktop.png`
-- Mobile Overview, 390×844: `/tmp/mis-326-qa/senior-overview-mobile.png`
-- Mobile Quick Mark, 390×844: `/tmp/mis-326-qa/senior-attendance-mobile.png`
+1. The approved boards and the private staging screenshot cited by the September 11 audit were opened and compared. The audit identified P1 failures: nested cards/property tiles, pill tabs, square identity, filled header action, tinted next-work panel, and tiled inquiry controls.
+2. This candidate changes Record to flat divider-separated sections, aligned label/value rows, underline tabs, round identity/avatar treatment, a quiet outlined edit action, and inline inquiry controls. It scopes the approved editor framing to AIT USA and preserves existing data/form behavior.
+3. A browser-rendered candidate image pair cannot be captured without a running candidate runtime. No P0/P1/P2 visual verdict is asserted from code or lint alone.
 
-## Comparison and interaction checks
+## Required fidelity surfaces
 
-- Compared each approved concept and its rendered counterpart in the same visual inspection input.
-- Preserved the approved class-first hierarchy, compact class rail, tab treatment, information density, borders, spacing, and Quick Mark control pattern within the existing AIT CRM shell.
-- Confirmed sessions render oldest to newest and the current due session is the only one with a Take attendance action.
-- Confirmed session-note saves remain `Not started` and do not create attendance marks.
-- Confirmed incomplete attendance disables submission; marking all students enables it; submitted attendance becomes read-only.
-- Confirmed regular coordinators receive plain roster names and no reopen control.
-- Confirmed senior coordinators receive Contact links and an audited reopen dialog requiring a reason.
-- Confirmed responsive layouts at 390×844 without horizontal page overflow; existing mobile navigation remains usable.
-- Confirmed no browser runtime errors. Development-only React/HMR messages were the only console output.
+- Fonts and typography: code adjusted hierarchy and label/value sizing; browser evidence pending.
+- Spacing and layout rhythm: code adjusted dividers, section padding, and property-row grid; browser evidence pending.
+- Colors and tokens: code removes the tinted/shadowed Record shell in favor of existing white/divider tokens; browser evidence pending.
+- Image and asset fidelity: no assets were created or replaced; existing product identity remains in use.
+- Copy and content: fictional board content was not copied; real values, Unknown fallbacks, and empty/closed/conflict states remain authoritative.
 
-## Findings resolved
+## Findings
 
-- P1: class-rail attendance state remained stale after submit or reopen. Fixed by updating the selected class summary from every returned session mutation.
+- [P1] Candidate rendered comparison unavailable.
+  Evidence: no local listener exists and staging does not contain this local candidate.
+  Fix: parent or an authorized local-runtime owner must expose the candidate without restarting the shared application, then capture equivalent Record, editor, and Enrollments states in the chosen browser and compare each against the approved board.
 
-## Result
+## Final result
 
-final result: passed
+final result: blocked

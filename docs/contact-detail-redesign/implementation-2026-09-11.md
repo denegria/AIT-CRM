@@ -2,6 +2,10 @@
 
 This implementation extends the deployed contact workspace candidate with the approved source corrections.
 
+## Visual acceptance contract
+
+MIS-409 uses **faithful selected-board** mode: `01-contact-workspace-v3.png`, `02-focused-editor-v3.png`, and `03-enrollments-workspace.png` are implementation and comparison authority for their named states. Their composition, hierarchy, typography, spacing, flat divider-led sections, underline tabs, identity treatment, editor framing, and enrollment-table density must be retained; fictional board data must not replace truthful product data or supported states.
+
 ## Contract delivered
 
 - Missing bootstrap attribution no longer falls back to rotating fixture/sample source labels.

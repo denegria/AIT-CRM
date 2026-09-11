@@ -1956,23 +1956,25 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   <div className={s.profileTitleBlock}>
                     <div className={s.workspaceNameRow}>
                       <h1 className={s.workspaceName}>{contact.name}</h1>
-                      {contact.status && <span className={`badge badge-${contact.status.toLowerCase().replace(' ', '')}`}>{contact.status}</span>}
                     </div>
                     <span>{contactBusinessUnit?.name || 'AIT USA'}</span>
                   </div>
                 </div>
                 {access.canWriteCrm && (
-                  <button className="btn btn-primary btn-sm" type="button" onClick={() => openEditModal()}>
+                  <button className={`btn btn-sm ${s.workspaceEdit}`} type="button" onClick={() => openEditModal()}>
                     <Edit3 size={14} /> Edit contact
                   </button>
                 )}
               </section>
 
               <section className={s.nextWorkBand} aria-label="Next work">
-                <div>
+                <div className={s.nextWorkCopy}>
+                  <span className={s.nextWorkIcon} aria-hidden="true"><Calendar size={18} /></span>
+                  <div>
                   <span>Next work</span>
                   <strong>{detailView.workflowNext || 'No next action recorded'}</strong>
                   {detailView.workflowChips?.length > 0 && <small>{detailView.workflowChips.join(' · ')}</small>}
+                  </div>
                 </div>
                 {access.canWriteCrm && (
                   <div className={s.nextWorkActions}>
@@ -2032,20 +2034,17 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               <div className={s.recordWorkspace}>
                 <section className={s.recordSection} aria-labelledby="contact-preferences-title">
                   <div className={s.recordSectionHeader}>
-                    <div>
-                      <span>Contact</span>
-                      <h2 id="contact-preferences-title">Contact &amp; preferences</h2>
-                    </div>
+                    <h2 id="contact-preferences-title">Contact &amp; preferences</h2>
                   </div>
                   <dl className={s.propertyGrid}>
-                    <div><dt>Email</dt><dd>{contact.email ? <a href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a> : 'Unknown'}</dd></div>
-                    <div><dt>Phone</dt><dd>{contact.phone ? <a href={phoneHref(contact.phone)}>{contact.phone}</a> : 'Unknown'}</dd></div>
-                    <div><dt>Intended learning location</dt><dd>{schoolLocationForContact(contact) || 'Unknown'}</dd></div>
-                    <div><dt>Contact source</dt><dd>{contactSource}</dd></div>
-                    {!hasResolvedCurrentInquiry && !hasClosedInquiry && <div><dt>Assigned coordinator</dt><dd>{assignedEmployee?.label || 'Unassigned'}</dd></div>}
-                    {!hasResolvedCurrentInquiry && !hasClosedInquiry && <div><dt>Student location</dt><dd>{studentLocationForContact(contact) || 'Unknown'}</dd></div>}
-                    <div><dt>Last touch</dt><dd>{contact.lastTouch || contact.lastContact || 'None'}</dd></div>
-                    <div><dt>Last edited</dt><dd>{contact.lastEdited || 'None'}</dd></div>
+                    <div className={s.propertyRow}><dt>Email</dt><dd>{contact.email ? <a href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a> : 'Unknown'}</dd></div>
+                    <div className={s.propertyRow}><dt>Phone</dt><dd>{contact.phone ? <a href={phoneHref(contact.phone)}>{contact.phone}</a> : 'Unknown'}</dd></div>
+                    <div className={s.propertyRow}><dt>Intended learning location</dt><dd>{schoolLocationForContact(contact) || 'Unknown'}</dd></div>
+                    <div className={s.propertyRow}><dt>Contact source</dt><dd>{contactSource}</dd></div>
+                    {!hasResolvedCurrentInquiry && !hasClosedInquiry && <div className={s.propertyRow}><dt>Assigned coordinator</dt><dd>{assignedEmployee?.label || 'Unassigned'}</dd></div>}
+                    {!hasResolvedCurrentInquiry && !hasClosedInquiry && <div className={s.propertyRow}><dt>Student location</dt><dd>{studentLocationForContact(contact) || 'Unknown'}</dd></div>}
+                    <div className={s.propertyRow}><dt>Last touch</dt><dd>{contact.lastTouch || contact.lastContact || 'None'}</dd></div>
+                    <div className={s.propertyRow}><dt>Last edited</dt><dd>{contact.lastEdited || 'None'}</dd></div>
                   </dl>
                   {detailView.contactability?.status && detailView.contactability.status !== 'reachable' && (
                     <p className={s.recordWarning}><AlertCircle size={15} /> {detailView.contactability.reason || detailView.contactability.label}</p>
@@ -2061,10 +2060,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
                 <section className={s.recordSection} aria-labelledby="inquiry-title">
                   <div className={s.recordSectionHeader}>
-                    <div>
-                      <span>{hasClosedInquiry ? 'Inquiry history' : 'Inquiry'}</span>
-                      <h2 id="inquiry-title">{contact.opportunityConflict ? 'Inquiry needs resolution' : hasResolvedCurrentInquiry ? 'Current inquiry' : hasClosedInquiry ? 'Last inquiry (closed)' : 'No active inquiry'}</h2>
-                    </div>
+                    <h2 id="inquiry-title">{contact.opportunityConflict ? 'Inquiry needs resolution' : hasResolvedCurrentInquiry ? 'Current inquiry' : hasClosedInquiry ? 'Last inquiry (closed)' : 'No active inquiry'}</h2>
                     {(hasResolvedCurrentInquiry || hasClosedInquiry) && access.canWriteCrm && <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor()}><Edit3 size={14} /> Edit</button>}
                   </div>
                   {contact.opportunityConflict ? (
@@ -2072,21 +2068,15 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   ) : hasResolvedCurrentInquiry || hasClosedInquiry ? (
                     <>
                       <dl className={s.propertyGrid}>
-                        <div><dt>Status</dt><dd>{contact.status || 'Unknown'}</dd></div>
-                        <div><dt>Owner</dt><dd>{assignedEmployee?.label || 'Unassigned'}</dd></div>
-                        <div><dt>Program interest</dt><dd>{contact.programInterest || 'Unknown'}</dd></div>
-                        <div><dt>Inquiry source</dt><dd>{inquirySource}</dd></div>
-                        <div><dt>Preferred days</dt><dd>{contact.preferredDay || 'Unknown'}</dd></div>
-                        <div><dt>Preferred schedule</dt><dd>{contact.preferredSchedule || 'Unknown'}</dd></div>
-                        <div><dt>Student location</dt><dd>{studentLocationForContact(contact) || 'Unknown'}</dd></div>
-                        <div><dt>Qualifications</dt><dd>{[contact.testInterest, contact.educationLevel, contact.schoolName].filter(Boolean).join(' · ') || 'Unknown'}</dd></div>
+                        <div className={s.propertyRow}><dt>Status</dt><dd><span>{contact.status || 'Unknown'}</span>{hasResolvedCurrentInquiry && access.canWriteCrm && <button className={s.inlinePropertyAction} type="button" onClick={() => openInquiryEditor('general')}>Change status</button>}</dd></div>
+                        <div className={s.propertyRow}><dt>Owner</dt><dd><span>{assignedEmployee?.label || 'Unassigned'}</span>{hasResolvedCurrentInquiry && canManageContactAssignments && <button className={s.inlinePropertyAction} type="button" onClick={() => openInquiryEditor('general')}>Change owner</button>}</dd></div>
+                        <div className={s.propertyRow}><dt>Program interest</dt><dd>{contact.programInterest || 'Unknown'}</dd></div>
+                        <div className={s.propertyRow}><dt>Inquiry source</dt><dd>{inquirySource}</dd></div>
+                        <div className={s.propertyRow}><dt>Preferred days</dt><dd>{contact.preferredDay || 'Unknown'}</dd></div>
+                        <div className={s.propertyRow}><dt>Preferred schedule</dt><dd>{contact.preferredSchedule || 'Unknown'}</dd></div>
+                        <div className={s.propertyRow}><dt>Student location</dt><dd>{studentLocationForContact(contact) || 'Unknown'}</dd></div>
+                        <div className={s.propertyRow}><dt>Qualifications</dt><dd>{[contact.testInterest, contact.educationLevel, contact.schoolName].filter(Boolean).join(' · ') || 'Unknown'}</dd></div>
                       </dl>
-                      {hasResolvedCurrentInquiry && access.canWriteCrm && (
-                        <div className={s.inquiryActions}>
-                          {canManageContactAssignments && <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor('general')}>Change owner</button>}
-                          <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor('general')}>Change status</button>
-                        </div>
-                      )}
                     </>
                   ) : (
                     <div className={s.quietInquiryState}>
@@ -2293,7 +2283,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             )}
 
             {renderedActiveTab === 'courses' && showCoursesTab && (
-              <div className={s.coursesPanel} aria-label="Courses">
+              <div className={`${s.coursesPanel} ${s.enrollmentsWorkspace}`} aria-label="Courses">
                 <div className={s.courseHero}>
                   <div className={s.courseHeroMain}>
                     <div className={s.courseHeroIcon}><GraduationCap size={22} /></div>
@@ -3066,7 +3056,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           onClose={() => setIsEditModalOpen(false)}
           title={isAitUsaContact ? (editScope === 'inquiry' ? 'Edit inquiry' : 'Edit contact') : 'Edit Profile'}
           variant="dialog"
-          panelClassName="contact-profile-dialog-panel"
+          panelClassName={`contact-profile-dialog-panel ${isAitUsaContact ? 'ait-usa-focused-editor' : ''}`}
           footer={<><button className="btn" type="button" onClick={() => setIsEditModalOpen(false)}>Cancel</button><button className="btn btn-primary" type="button" onClick={handleEditSave}>Save Changes</button></>}
         >
           <div className="contact-profile-dialog-form">

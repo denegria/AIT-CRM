@@ -36,10 +36,11 @@
   gap: 16px;
   min-width: 0;
   padding: 14px 16px;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
-  border-radius: var(--radius-xl);
-  background: linear-gradient(180deg, var(--bg-elevated), var(--bg-secondary));
-  box-shadow: var(--shadow-soft);
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 .workspaceIdentity,
 .workspaceNameRow,
@@ -57,7 +58,7 @@
   margin: 0;
   min-width: 0;
   color: var(--text-primary);
-  font-size: 22px;
+  font-size: 26px;
   line-height: 1.15;
   overflow-wrap: anywhere;
 }
@@ -67,40 +68,50 @@
   display: block;
   margin-top: 3px;
   color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: .02em;
-  text-transform: uppercase;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
 }
+.workspaceEdit { color: var(--accent); background: transparent; border-color: color-mix(in srgb, var(--accent) 30%, var(--border-subtle)); box-shadow: none; }
+.workspaceEdit:hover:not(:disabled) { background: color-mix(in srgb, var(--accent-muted) 34%, transparent); }
 .nextWorkBand {
-  padding-block: 12px;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--warning-muted) 45%, var(--bg-secondary)), var(--bg-secondary));
+  padding-block: 16px;
+  border-top: 0;
+  background: transparent;
 }
 .nextWorkBand > div:first-child { min-width: 0; }
+.nextWorkCopy { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.nextWorkIcon { width: 40px; height: 40px; display: grid !important; place-items: center; margin: 0 !important; border: 1px solid var(--border-subtle); border-radius: 999px; color: var(--accent) !important; }
 .nextWorkBand strong,
 .nextWorkBand small { display: block; overflow-wrap: anywhere; }
-.nextWorkBand strong { margin-top: 3px; color: var(--text-primary); font-size: var(--text-sm); }
+.nextWorkBand strong { margin-top: 3px; color: var(--text-primary); font-size: var(--text-md); }
 .nextWorkBand small { margin-top: 3px; color: var(--text-muted); font-size: var(--text-xs); }
 .nextWorkActions { flex: 0 0 auto; flex-wrap: wrap; justify-content: flex-end; }
-.recordWorkspace { display: grid; gap: 16px; }
+.recordWorkspace { display: grid; gap: 0; }
 .recordSection {
-  padding: 16px;
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
-  border-radius: var(--radius-lg);
-  background: color-mix(in srgb, var(--bg-tertiary) 42%, var(--bg-secondary));
+  padding: 20px 6px;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: transparent;
 }
 .recordSectionHeader { justify-content: space-between; margin-bottom: 14px; }
-.recordSectionHeader h2 { margin: 3px 0 0; color: var(--text-primary); font-size: var(--text-md); }
+.recordSectionHeader h2 { margin: 0; color: var(--text-primary); font-size: 20px; }
 .propertyGrid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 54px;
+  row-gap: 12px;
   margin: 0;
 }
-.propertyGrid > div { min-width: 0; padding: 10px; border-radius: var(--radius-md); background: var(--bg-secondary); }
-.propertyGrid dt { color: var(--text-muted); font-size: 10px; font-weight: 800; text-transform: uppercase; }
-.propertyGrid dd { margin: 5px 0 0; color: var(--text-primary); font-size: var(--text-sm); overflow-wrap: anywhere; }
+.propertyGrid > div { min-width: 0; padding: 0; border-radius: 0; background: transparent; }
+.propertyRow { display: grid; grid-template-columns: minmax(132px, .9fr) minmax(0, 1.1fr); align-items: baseline; gap: 12px; }
+.propertyGrid dt { color: var(--text-primary); font-size: var(--text-sm); font-weight: 650; text-transform: none; }
+.propertyGrid dd { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); overflow-wrap: anywhere; }
 .propertyGrid a { color: var(--accent); text-decoration: none; }
+.propertyGrid dd > span { margin-right: 10px; }
+.inlinePropertyAction { margin: 0; padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; font-weight: 650; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .recordWarning { display: flex; align-items: flex-start; gap: 7px; margin: 12px 0 0; color: var(--warning); font-size: var(--text-sm); line-height: 1.4; }
 .phoneHistoryDisclosure { margin-top: 12px; color: var(--text-secondary); font-size: var(--text-xs); }
 .phoneHistoryDisclosure summary { cursor: pointer; color: var(--accent); font-weight: 700; }
@@ -147,6 +158,7 @@
   min-width: 0;
   flex: 1;
 }
+.workspaceHeader .profileAvatarLarge { border-radius: 999px; box-shadow: none; }
 .profileNameRow {
   display: flex;
   align-items: flex-start;
@@ -645,12 +657,11 @@
 }
 .contentTabs {
   display: flex;
-  gap: 8px;
-  border-bottom: none;
-  padding: 4px;
-  background: color-mix(in srgb, var(--bg-tertiary) 72%, var(--bg-secondary));
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
+  gap: 18px;
+  padding: 0 4px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
   max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
@@ -663,7 +674,7 @@
   flex: 0 0 auto;
   background: none;
   border: none;
-  padding: 9px 14px;
+  padding: 14px 12px 12px;
   font-size: var(--text-sm);
   font-weight: 600;
   color: var(--text-muted);
@@ -674,20 +685,26 @@
 }
 .contentTab.active {
   color: var(--accent);
-  background: var(--bg-secondary);
-  box-shadow: var(--shadow-sm);
+  background: transparent;
+  box-shadow: none;
 }
 .contentTab.active::after {
-  display: none;
+  display: block;
+  position: absolute;
+  right: 10px;
+  bottom: -1px;
+  left: 10px;
+  height: 3px;
+  background: var(--accent);
+  content: '';
 }
 
 .tabContent {
-  background: linear-gradient(180deg, var(--bg-elevated), var(--bg-secondary));
-  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
-  border-radius: var(--radius-xl);
+  background: transparent;
+  border: 0;
   min-height: 500px;
-  padding: 18px;
-  box-shadow: var(--shadow-soft);
+  padding: 0;
+  box-shadow: none;
   min-width: 0;
 }
 
@@ -2017,6 +2034,69 @@
 }
 .financialEmptyState {
   margin-top: 0;
+}
+
+.enrollmentsWorkspace {
+  padding: 22px 6px;
+  gap: 20px;
+}
+.enrollmentsWorkspace .courseHero {
+  padding: 0 0 16px;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: transparent;
+}
+.enrollmentsWorkspace .courseHeroIcon,
+.enrollmentsWorkspace .courseHero p { display: none; }
+.enrollmentsWorkspace .courseEyebrow {
+  color: var(--text-primary);
+  font-size: var(--text-md);
+  font-weight: 700;
+  text-transform: none;
+}
+.enrollmentsWorkspace .courseHero h2 { font-size: 22px; }
+.enrollmentsWorkspace .courseActiveList {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+.enrollmentsWorkspace .courseActiveItem {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(180px, .7fr);
+  gap: 14px;
+  padding: 13px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: transparent;
+}
+.enrollmentsWorkspace .courseActiveItem strong,
+.enrollmentsWorkspace .courseActiveItem span { font-size: var(--text-sm); }
+.enrollmentsWorkspace .courseToolbar { padding: 8px 0 0; }
+.enrollmentsWorkspace .courseHistoryGrid { gap: 0; border-top: 1px solid var(--border-subtle); }
+.enrollmentsWorkspace .courseRecordList { gap: 0; }
+.enrollmentsWorkspace .courseRecordRow {
+  padding: 13px 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-subtle);
+  border-radius: 0;
+  background: transparent;
+}
+.enrollmentsWorkspace .courseRecordRow.active,
+.enrollmentsWorkspace .courseRecordRow:hover {
+  box-shadow: none;
+  background: transparent;
+  border-color: var(--border-subtle);
+}
+.enrollmentsWorkspace .courseInspector {
+  margin-top: 16px;
+  padding: 16px;
+  border-radius: 4px;
+  box-shadow: none;
+  background: color-mix(in srgb, var(--accent-muted) 22%, var(--bg-secondary));
 }
 
 @media (max-width: 900px) {

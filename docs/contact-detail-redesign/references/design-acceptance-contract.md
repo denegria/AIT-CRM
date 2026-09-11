@@ -6,7 +6,7 @@ AIT USA coordinators need one readable contact workspace: identify the person on
 
 ## Direction and invariants
 
-Reference mode is **inspiration**. The fictional v3 boards govern the white/navy/blue visual language, restrained dividers, compact desktop density, one identity header, one local tab row, and direct in-tab operations. Production data, authorization, route state, and existing forms remain authoritative.
+Reference mode is **faithful selected-board**. `01-contact-workspace-v3.png`, `02-focused-editor-v3.png`, and `03-enrollments-workspace.png` are the visual acceptance authority for their named states: composition, editorial hierarchy, typography character, spacing rhythm, flat white/divider treatment, underline tabs, round identity avatar, quiet outlined edit action, and contextual property-row controls must be reproduced. Fictional board values are never copied into production; truthful data, authorization, route state, empty/closed/conflict states, and existing form behavior remain authoritative. Permitted deviations are limited to real-content expansion, accessibility, permissions, and responsive behavior.
 
 - Header has one identity and one `Edit contact` action.
 - Record has `Contact & preferences` and one resolved inquiry state: Current inquiry, Last inquiry (closed), quiet no-active inquiry, or explicit conflict.
