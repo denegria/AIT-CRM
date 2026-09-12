@@ -709,9 +709,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     (!showCoursesTab && activeTab === 'courses')
       ? 'timeline'
       : activeTab;
-  const inquiryHistoryReady = Boolean(
-    inquiriesState.contactId === contact?.id && !inquiriesState.loading && !inquiriesState.error,
+  const inquiryHistoryLoading = Boolean(
+    inquiriesState.contactId !== contact?.id || inquiriesState.loading,
   );
+  const inquiryHistoryError = inquiriesState.contactId === contact?.id
+    ? inquiriesState.error
+    : '';
+  const inquiryHistoryReady = Boolean(!inquiryHistoryLoading && !inquiryHistoryError);
   const inquiryItems = inquiriesState.contactId === contact?.id ? inquiriesState.items : [];
   const selectedInquiry = inquiryItems.find((item) => item.id === selectedInquiryId) || null;
   const selectedInquiryIsActive = Boolean(selectedInquiry?.isActive);
@@ -1892,7 +1896,17 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       {isAitUsaContact && (
         <section className={s.inquiryPreview} aria-label="Contact preview and current inquiry summary">
           <div className={s.inquiryPreviewHeader}>
-            <span>{contact.opportunityConflict ? 'Inquiry needs resolution' : selectedInquiryIsActive ? 'Current inquiry' : selectedInquiry ? 'Last inquiry (closed)' : 'No active inquiry'}</span>
+            <span>{contact.opportunityConflict
+              ? 'Inquiry needs resolution'
+              : inquiryHistoryLoading
+                ? 'Loading inquiry history'
+                : inquiryHistoryError
+                  ? 'Inquiry history unavailable'
+                  : selectedInquiryIsActive
+                    ? 'Current inquiry'
+                    : selectedInquiry
+                      ? 'Last inquiry (closed)'
+                      : 'No active inquiry'}</span>
             {inquiryItems.length > 1 && <select className={s.inquirySelector} aria-label="Selected inquiry" value={selectedInquiryId} onChange={(event) => selectInquiry(event.target.value)}>
               {inquiryItems.map((inquiry) => <option key={inquiry.id} value={inquiry.id}>{inquiry.program || 'Program not recorded'} · {inquiry.status}</option>)}
             </select>}
@@ -1902,6 +1916,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           </div>
           {contact.opportunityConflict ? (
             <p className={s.previewWarning}><AlertCircle size={14} /> {contact.activeOpportunityCount || 'Multiple'} active inquiries need resolution.</p>
+          ) : inquiryHistoryLoading ? (
+            <p className={s.previewMuted}>Loading the permitted inquiry history…</p>
+          ) : inquiryHistoryError ? (
+            <p className={s.previewWarning}><AlertCircle size={14} /> Inquiry history could not load. Refresh before acting.</p>
           ) : selectedInquiry ? (
             <dl className={s.previewFacts}>
               <div><dt>Status</dt><dd>{selectedInquiry.status || 'Unknown'}{canEditSelectedInquiry && <button className={s.previewLink} type="button" aria-label="Change inquiry status" onClick={() => openInquiryEditor('general')}>Change</button>}</dd></div>

@@ -43,7 +43,8 @@ test('record uses actual inquiry resolution states without creating a substitute
   assert.match(source, /aria-label="Change inquiry status"/);
   assert.match(source, /aria-label="Change inquiry owner"/);
   assert.match(source, /const hasActiveInquiry = inquiryItems\.some\(\(item\) => item\.isActive\);/);
-  assert.match(source, /inquiriesState\.contactId === contact\?\.id && !inquiriesState\.loading && !inquiriesState\.error/);
+  assert.match(source, /const inquiryHistoryLoading = Boolean\(/);
+  assert.match(source, /const inquiryHistoryReady = Boolean\(!inquiryHistoryLoading && !inquiryHistoryError\);/);
   assert.match(source, /!contact\?\.opportunityConflict && !hasActiveInquiry/);
   assert.match(source, /\(selectedInquiryIsActive \|\| !hasActiveInquiry\)/);
 });
@@ -73,6 +74,10 @@ test('AIT USA preview and mutations bind to the exact selected inquiry', () => {
   assert.match(source, /setInquiryReloadKey\(\(key\) => key \+ 1\)/);
   assert.match(source, /setIsEditModalOpen\(false\);\s+setTimelineReloadKey\(\(key\) => key \+ 1\);\s+setInquiryReloadKey\(\(key\) => key \+ 1\);\s+toast\('Inquiry started'\)/);
   assert.match(source, /\{canStartInquiry && <button className="btn btn-sm" type="button" onClick=\{openStartInquiry\}>Start inquiry<\/button>\}/);
+  assert.match(source, /'Loading inquiry history'/);
+  assert.match(source, /'Inquiry history unavailable'/);
+  assert.match(source, /Loading the permitted inquiry history…/);
+  assert.match(source, /Inquiry history could not load\. Refresh before acting\./);
   assert.doesNotMatch(source, /\{access\.canWriteCrm && <button className="btn btn-sm" type="button" onClick=\{\(\) => openInquiryEditor\('general'\)\}/);
 });
 
