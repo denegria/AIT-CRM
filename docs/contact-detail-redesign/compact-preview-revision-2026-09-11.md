@@ -66,9 +66,10 @@ The new tab is a read-first list/detail workspace, not a second pipeline:
 
 - list every exact inquiry ID available to the role with program, lifecycle status, owner, opened date, source and last activity;
 - default to the active inquiry, otherwise the latest closed inquiry;
-- selecting a row changes the detail without changing the persistent Contact identity;
+- keep one explicit selected inquiry ID synchronized between the preview selector and list/detail surface; selecting a row changes the detail without changing the persistent Contact identity;
 - show Overview, Placement and Source/History as compact sections in one selected-inquiry detail; do not add nested sub-tabs in this pass;
 - provide permission-gated Edit inquiry and the existing exact status/owner actions against the selected inquiry ID;
+- bind an open editor to the inquiry ID it opened with. A dirty editor blocks selection changes until the user explicitly discards changes; saving never retargets the draft to a newly selected inquiry. Recheck authorization and stale-record state when saving;
 - show multiple-active conflicts explicitly and block ambiguous inquiry writes; never synthesize inquiry records from Activity events;
 - Activity continues to show inquiry and placement events chronologically.
 
@@ -94,6 +95,8 @@ Create a new inquiry only for demonstrated new intent:
 
 Do not create a new inquiry for normal English-level progression, an ordinary continuation/resumption, a retargeting send without engagement, or a profile correction. Level progression remains multiple Enrollment records under the Contact and may retain the originating inquiry relationship. Reopening is not a primary action; it remains a permissioned correction to the exact closed inquiry with the existing reason and conflict guards.
 
+When a new form, placement event or staff action belongs to the existing sole active admissions cycle, attach it to that exact inquiry instead of creating another one. Genuinely new intent must still satisfy the existing active-inquiry policy. If the system cannot safely create a new cycle while another remains active, return an explicit conflict/review result; never silently create a second active inquiry or close/reopen the existing one.
+
 ## Manual entry semantics
 
 AIT USA employees create an inquiry; the system creates or reuses the underlying Contact.
@@ -102,7 +105,8 @@ AIT USA employees create an inquiry; the system creates or reuses the underlying
 - Contacts-directory entry label: **Add prospective student**.
 - Both open one combined Identity + Inquiry form and submit once.
 - Preserve the current transactional Contact + initial Opportunity creation path.
-- Before inserting a new Contact, safely detect exact existing identity. An exact permitted match offers/uses **Add inquiry to existing contact**. Ambiguous matches stop for review. Do not auto-merge.
+- Before inserting a new Contact, safely detect exact existing identity. Revalidate identity inside the transaction using the same locking convention as inbound ingestion so concurrent manual/manual or manual/inbound requests cannot create duplicate Contacts. Define an idempotent replay result for double-submit and uncertain-response retries.
+- An exact permitted match offers/uses **Add inquiry to existing contact**. Recheck Contact and inquiry-write authorization at confirmation time. An ambiguous match, or an exact match the employee is not permitted to inspect, returns a generic review-required result with no identity details and creates neither Contact nor Inquiry. Do not auto-merge.
 - Do not expose ordinary **Create contact** or **Add contact only** actions in the AIT USA employee flow. Contact-only records remain an import/migration/administrative concern and may remain valid for other business units.
 
 ## Preserved workflows and boundaries
@@ -129,6 +133,10 @@ One authoritative writer owns the implementation. Avoid parallel edits to the sh
 - Inquiries count/list/detail use exact permitted records and stable IDs. Active/latest selection, role restrictions, stale selection and multiple-active conflict behavior are covered.
 - Placement evidence and employee-review links appear only for exact authorized associations. No raw or forbidden academic data reaches the CRM response.
 - `Add inquiry`/`Add prospective student` remains one save. New identity creates Contact + Opportunity transactionally; exact existing identity creates only the new inquiry after confirmation; ambiguous identity creates neither and stops for review.
+- Exercise concurrent manual/manual and manual/inbound identity races, double-submit, and replay after an uncertain response. Assert one Contact, the intended inquiry result and no partial records.
+- Exercise an exact inaccessible identity match. Assert only a generic review-required response, no leaked identity fields and no inserted records; authorization is rechecked at confirmation.
+- Verify subsequent form/placement events reuse the exact sole active inquiry when they belong to the same cycle. Genuinely new intent obeys the active-inquiry policy and yields an explicit conflict/review result when a second active record is unsafe.
+- Verify the preview and detail share one selected inquiry ID. Test opening inquiry A, attempting to select B with dirty edits, explicit discard, exact-ID save, stale response and permission loss.
 - Verify normal English progression does not create another inquiry. Verify engaged retargeting/new program intent can create one, while a send alone cannot.
 - Preserve Activity notes/filters, Conversations, Enrollment/history actions, Receipts, conditional Work Orders, task actions, archive/request approval, deep links and source isolation.
 - Run `npm run validate`, focused inquiry/identity/RBAC tests and render-path tests. Then push only to staging, verify exact GitHub CI and Vercel Ready deployment, and perform authenticated live QA. Keep real regular-role and persisted-save results distinct from fixture evidence.

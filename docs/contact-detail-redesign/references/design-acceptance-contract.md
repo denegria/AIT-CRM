@@ -27,9 +27,10 @@ Locked visual invariants:
 - Inquiry owns lifecycle, owner, program/preferences, inquiry source and exact placement association.
 - Enrollment owns actual course/level participation. Normal course progression does not create inquiries.
 - The preview shows the active inquiry, otherwise latest closed; a selector appears only when multiple inquiries exist.
-- Inquiries list exact permitted lead records and target exact IDs. Multiple-active conflicts block ambiguous writes.
+- The preview selector and Inquiries detail share one selected inquiry ID. Editors remain bound to the ID they opened with; dirty edits require explicit discard before selection changes, and saving rechecks authorization and stale state.
+- Inquiries list exact permitted lead records and target exact IDs. Multiple-active conflicts block ambiguous writes. Subsequent events in the same sole active cycle reuse that inquiry; genuinely new intent follows the existing active-inquiry policy and never silently creates another active record.
 - Placement is a compact inquiry section. AIT USA remains authoritative; CRM exposes only privacy-safe state/level/update and an authorized employee-review link.
-- Pipeline **Add inquiry** and Contacts **Add prospective student** share one combined form. Preserve atomic Contact + Opportunity creation; exact existing identity attaches a new inquiry after confirmation, while ambiguity stops for review.
+- Pipeline **Add inquiry** and Contacts **Add prospective student** share one combined form. Preserve atomic Contact + Opportunity creation and perform identity revalidation under the shared ingestion locking convention. Exact permitted identity attaches a new inquiry after confirmation; ambiguous or inaccessible matches return a generic review result without identity disclosure or insertion. Double-submit and uncertain-response replay are idempotent.
 - Reopen remains a permissioned correction with a reason, not a primary creation action.
 - Contact and inquiry source saves remain independent. Activity/provenance is not rewritten.
 - Follow-up/outreach, Conversations, Enrollment/history, Receipts, conditional Work Orders, archive/request approval, permissions, loading/error states and deep-link return behavior remain reachable.
@@ -43,4 +44,4 @@ No Record tab revival, nested inquiry sub-tabs, top-level Placement tab, schema 
 
 Primary: 1440×1000 CSS px at 100% zoom. Regression: 1280×900, 1024×768, 768×900 and 390px navigation/overflow smoke. Use fixtures for one/no/multiple/closed/conflicting inquiries, long names/sources, several placement events and multiple enrollment rows. The common one-inquiry state must not gain an extra required click.
 
-Closeout requires render-path tests, focused inquiry/identity/RBAC tests, full validation, independent visual review, matching-viewport staging screenshots, exact deployment/CI identity, authenticated role coverage, residual differences and explicit production untouched status.
+Closeout requires render-path tests; focused inquiry/identity/RBAC tests including concurrent identity races, replay, inaccessible exact matches, same-cycle active-inquiry reuse and stale selected-inquiry writes; full validation; independent visual review; matching-viewport staging screenshots; exact deployment/CI identity; authenticated role coverage; residual differences; and explicit production untouched status.
