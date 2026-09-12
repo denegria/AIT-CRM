@@ -26,6 +26,7 @@ function opportunityRow(row = {}) {
     sourceType: row.sourceType || row.source_type || null,
     sourceName: row.sourceName || row.source_name || null,
     createdAt: row.createdAt || row.created_at || null,
+    updatedAt: row.updatedAt || row.updated_at || null,
   };
 }
 
@@ -47,7 +48,7 @@ async function loadOpportunityRows(client, { organizationId, businessUnitId, con
   if (typeof client.query === 'function') {
     const result = await client.query(
       `select id, organization_id, business_unit_id, contact_id, status, current_stage,
-              assigned_user_id, source_type, source_name, created_at
+              assigned_user_id, source_type, source_name, created_at, updated_at
        from leads
        where organization_id = $1 and business_unit_id = $2 and contact_id = $3
        order by created_at desc, id desc`,
@@ -114,7 +115,7 @@ export async function loadScopedOpportunityById(client, {
   if (typeof client.query === 'function') {
     const result = await client.query(
       `select id, organization_id, business_unit_id, contact_id, status, current_stage,
-              assigned_user_id, source_type, source_name, created_at
+              assigned_user_id, source_type, source_name, created_at, updated_at
        from leads
        where id = $1 and organization_id = $2 and business_unit_id = $3 and contact_id = $4
        limit 1`,
@@ -222,6 +223,7 @@ export async function withLockedAitUsaOpportunityMutation({
   businessUnit,
   contact,
   expectedOpportunityId,
+  expectedUpdatedAt = null,
   toStatus,
   reopenReason = '',
   terminalReason = '',
@@ -256,6 +258,14 @@ export async function withLockedAitUsaOpportunityMutation({
     });
     if (!opportunity) {
       throw createCrmError('The selected Opportunity is no longer available. Refresh before saving.', 409);
+    }
+    if (expectedUpdatedAt) {
+      const actualUpdatedAt = opportunity.updatedAt instanceof Date
+        ? opportunity.updatedAt.toISOString()
+        : String(opportunity.updatedAt || '');
+      if (!actualUpdatedAt || actualUpdatedAt !== String(expectedUpdatedAt)) {
+        throw createCrmError('The selected Opportunity changed while this Contact was open. Refresh before saving.', 409);
+      }
     }
 
     const opportunityIsActive = isActiveAitUsaOpportunity(opportunity);

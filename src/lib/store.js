@@ -479,7 +479,10 @@ export function CRMProvider({ children, initialData }) {
     if (!isPostgres) return null;
     const response = await fetch('/api/contacts', {
       method,
-      headers: { 'content-type': 'application/json' },
+      headers: {
+        'content-type': 'application/json',
+        ...(method === 'POST' && body?.idempotencyKey ? { 'idempotency-key': body.idempotencyKey } : {}),
+      },
       body: JSON.stringify(body),
     });
     const payload = await response.json().catch(() => ({}));

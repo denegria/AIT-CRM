@@ -310,6 +310,26 @@ test('non-status AIT USA Opportunity mutation also uses the shared lock and expe
   assert.match(calls[0], /pg_advisory_xact_lock/);
 });
 
+test('two-session stale save rejects the older updatedAt version before invoking its writer', async () => {
+  const tx = {
+    async query(text) {
+      const normalized = String(text).replace(/\s+/g, ' ').trim();
+      if (normalized.includes('order by created_at')) return { rows: [{ id: 'active-a', status: 'Follow Up', updated_at: '2026-09-12T10:01:00.000Z' }] };
+      if (normalized.includes('where id = $1 and organization_id = $2')) return { rows: [{ id: 'active-a', status: 'Follow Up', updated_at: '2026-09-12T10:01:00.000Z' }] };
+      return { rows: [] };
+    },
+  };
+  let wrote = false;
+  await assert.rejects(
+    withLockedAitUsaOpportunityMutation({
+      db: { transaction: (handler) => handler(tx) }, organizationId: 'org-1', businessUnit: scope.businessUnit, contact: scope.contact,
+      expectedOpportunityId: 'active-a', expectedUpdatedAt: '2026-09-12T10:00:00.000Z', write: () => { wrote = true; },
+    }),
+    (error) => error.status === 409 && /changed while this Contact was open/.test(error.message),
+  );
+  assert.equal(wrote, false);
+});
+
 test('locked mutation reauthorizes the reloaded Opportunity before any writer side effect', async () => {
   const reassigned = { id: 'active-a', status: 'Follow Up', assigned_user_id: 'other-owner' };
   const tx = {

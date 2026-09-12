@@ -607,7 +607,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       primaryBusinessUnitId: defaultBusinessUnitId,
       assignedTo: defaultIsAitUsa ? '' : coordinatorUiPolicy.lockedOwnerUserId || empty.assignedTo,
       idempotencyKey: defaultIsAitUsa && typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : '',
-      confirmExistingIdentity: false,
+      confirmationProof: '',
     });
     setFormError('');
     setDrawer('new');
@@ -629,7 +629,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         primaryBusinessUnitId: defaultBusinessUnitId,
         assignedTo: '',
         idempotencyKey: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : '',
-        confirmExistingIdentity: false,
+        confirmationProof: '',
       });
       setFormError('');
       setDrawer('new');
@@ -682,6 +682,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     const payload = { ...form };
     delete payload.notes;
     delete payload.timeline;
+    delete payload.existingIdentityName;
     if (drawer === 'new') {
       payload.appendNote = String(payload.appendNote || '').trim();
       if (!payload.appendNote) delete payload.appendNote;
@@ -706,7 +707,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           if (error?.code === 'existing_identity_confirmation_required') {
             setForm((current) => ({
               ...current,
-              confirmExistingIdentity: true,
+              confirmationProof: error.details?.confirmationProof || '',
               existingIdentityName: error.details?.existingContact?.name || 'this existing contact',
             }));
             setFormError('An accessible existing contact matches this identity. Confirm to add the inquiry to that contact.');
@@ -1502,7 +1503,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         panelClassName="contact-dialog-panel"
         footer={<>
           <button className="btn" type="button" onClick={close}>Cancel</button>
-          <button className="btn btn-primary" type="submit" form="contact-dialog-form">{drawer === 'new' && isAitUsaForm && form.confirmExistingIdentity ? 'Add inquiry to existing contact' : 'Save'}</button>
+          <button className="btn btn-primary" type="submit" form="contact-dialog-form">{drawer === 'new' && isAitUsaForm && form.confirmationProof ? 'Add inquiry to existing contact' : 'Save'}</button>
         </>}>
         <form
           id="contact-dialog-form"
@@ -1516,7 +1517,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           <div className="contact-dialog-intro">
             <p>{drawer === 'new' ? (isAitUsaForm ? 'Add identity and inquiry details in one save.' : 'Start with identity, then set the current routing and context.') : 'Update this contact’s identity, routing, and current context.'}</p>
             {drawer === 'new' && <span>Name and one contact method are required.</span>}
-            {drawer === 'new' && isAitUsaForm && form.confirmExistingIdentity && <span>Ready to add this inquiry to {form.existingIdentityName || 'the existing contact'}.</span>}
+            {drawer === 'new' && isAitUsaForm && form.confirmationProof && <span>Ready to add this inquiry to {form.existingIdentityName || 'the existing contact'}.</span>}
           </div>
 
           {formError && <div className="contact-dialog-error" role="alert">{formError}</div>}
@@ -1531,16 +1532,16 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
             </div>
             <div className="form-group">
               <label className="form-label">Name</label>
-              <input className="input" value={form.name} required autoFocus onChange={e => setForm(f => ({...f, name: e.target.value}))} />
+              <input className="input" value={form.name} required autoFocus onChange={e => setForm(f => ({...f, name: e.target.value, confirmationProof: '', existingIdentityName: ''}))} />
             </div>
             <div className="grid-2">
               <div className="form-group">
                 <label className="form-label">Email</label>
-                <input className="input" type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value}))} />
+                <input className="input" type="email" value={form.email} onChange={e => setForm(f => ({...f, email: e.target.value, confirmationProof: '', existingIdentityName: ''}))} />
               </div>
               <div className="form-group">
                 <label className="form-label">Phone</label>
-                <input className="input" type="tel" value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value}))} />
+                <input className="input" type="tel" value={form.phone} onChange={e => setForm(f => ({...f, phone: e.target.value, confirmationProof: '', existingIdentityName: ''}))} />
               </div>
             </div>
           </section>
@@ -1616,6 +1617,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
                       ...f,
                       businessUnitId: nextBusinessUnitId,
                       primaryBusinessUnitId: nextBusinessUnitId,
+                      confirmationProof: '',
+                      existingIdentityName: '',
                       status: nextStatuses.includes(f.status) ? f.status : nextStatuses[0] || f.status,
                     }));
                   }}

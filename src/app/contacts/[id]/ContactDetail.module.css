@@ -2294,6 +2294,19 @@
 }
 
 @media (max-width: 900px) {
+  .usaWorkspace { grid-template-columns: minmax(0, 1fr); }
+  .usaWorkspace .profileCard {
+    grid-column: 1;
+    grid-row: 1;
+    order: 1;
+    position: static;
+    max-height: none;
+  }
+  .usaWorkspace .contentSection {
+    grid-column: 1;
+    grid-row: 2;
+    order: 2;
+  }
   .workspaceHeader,
   .nextWorkBand,
   .quietInquiryState {

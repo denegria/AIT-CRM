@@ -1,31 +1,39 @@
 import { NextResponse } from 'next/server';
 import { and, desc, eq, inArray } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
-import { contacts, leads, tasks, users } from '@/db/schema.js';
+import { activityEvents, contacts, leads, tasks, users } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import { canAccessContactLead, resolveContactById } from '@/lib/crm/access.js';
 import { crmErrorResponse } from '@/lib/crm/errors.js';
 import { isActiveAitUsaOpportunity } from '@/lib/crm/ait-usa-opportunities.js';
 import { inquiryWorkspaceItem } from '@/lib/crm/inquiry-workspace.js';
-import { PLACEMENT_REVIEW_TASK_SOURCE_TYPE, placementReviewHref } from '@/lib/placement-reviews/crm-workflow.js';
+import { PLACEMENT_REVIEW_TASK_SOURCE_TYPE } from '@/lib/placement-reviews/crm-workflow.js';
+import { placementReviewTaskLink } from '@/lib/tasks/detail.js';
+import { canReadTaskDetail } from '@/lib/tasks/detail-policy.js';
 
-function taskPlacement(task, mayOpenEmployeeReview) {
+export function taskPlacement(task, session) {
   if (!task) return null;
-  const reviewId = String(task.sourceId || '').replace(/^review:/, '').trim();
+  const placement = task.metadataJson?.placementReview || {};
   return {
-    state: task.status === 'completed' ? 'Review acknowledged' : 'Review pending',
+    state: String(placement.state || (task.status === 'completed' ? 'Review acknowledged' : 'Review pending')),
+    finalLevel: String(placement.finalLevel || ''),
+    finalStatus: String(placement.state === 'confirmed' || placement.state === 'adjusted' ? placement.state : ''),
     updatedAt: task.updatedAt || task.createdAt || null,
-    reviewPath: mayOpenEmployeeReview && reviewId ? placementReviewHref(reviewId) : '',
+    reviewPath: canReadTaskDetail(session, task) ? (placementReviewTaskLink(task.metadataJson) || '') : '',
   };
 }
 
-export async function GET(request, { params }) {
-  const { error, session } = await requirePermission(request, PERMISSIONS.CRM_READ);
+export async function GET(request, { params }, {
+  requirePermissionForRequest = requirePermission,
+  getDbForRequest = getDb,
+  resolveContactForRequest = resolveContactById,
+} = {}) {
+  const { error, session } = await requirePermissionForRequest(request, PERMISSIONS.CRM_READ);
   if (error) return error;
   const { id } = await params;
-  const db = getDb();
+  const db = getDbForRequest();
   try {
-    const contact = await resolveContactById({ db, session, contactsTable: contacts, contactId: id });
+    const contact = await resolveContactForRequest({ db, session, contactsTable: contacts, contactId: id });
     const rows = await db.select().from(leads).where(and(
       eq(leads.organizationId, session.user.organizationId),
       eq(leads.contactId, contact.id),
@@ -38,17 +46,33 @@ export async function GET(request, { params }) {
       : [];
     const owners = new Map(ownerRows.map((owner) => [owner.id, owner]));
     const leadIds = permitted.map((lead) => lead.id);
-    const placementRows = leadIds.length
-      ? await db.select({ leadId: tasks.leadId, status: tasks.status, sourceId: tasks.sourceId, createdAt: tasks.createdAt, updatedAt: tasks.updatedAt })
+    const [placementRows, activityRows] = leadIds.length
+      ? await Promise.all([
+        db.select({ leadId: tasks.leadId, status: tasks.status, sourceId: tasks.sourceId, contactId: tasks.contactId, businessUnitId: tasks.businessUnitId, ownerUserId: tasks.ownerUserId, taskType: tasks.taskType, metadataJson: tasks.metadataJson, createdAt: tasks.createdAt, updatedAt: tasks.updatedAt })
         .from(tasks)
-        .where(and(eq(tasks.organizationId, session.user.organizationId), inArray(tasks.leadId, leadIds), eq(tasks.sourceType, PLACEMENT_REVIEW_TASK_SOURCE_TYPE)))
-      : [];
-    const placements = new Map(placementRows.map((task) => [task.leadId, task]));
+        .where(and(
+          eq(tasks.organizationId, session.user.organizationId),
+          eq(tasks.businessUnitId, contact.primaryBusinessUnitId),
+          eq(tasks.contactId, contact.id),
+          inArray(tasks.leadId, leadIds),
+          eq(tasks.sourceType, PLACEMENT_REVIEW_TASK_SOURCE_TYPE),
+        )).orderBy(desc(tasks.createdAt), desc(tasks.id)),
+        db.select({ leadId: activityEvents.leadId, occurredAt: activityEvents.occurredAt, createdAt: activityEvents.createdAt })
+          .from(activityEvents)
+          .where(and(eq(activityEvents.organizationId, session.user.organizationId), eq(activityEvents.contactId, contact.id), inArray(activityEvents.leadId, leadIds)))
+          .orderBy(desc(activityEvents.occurredAt), desc(activityEvents.createdAt)),
+      ])
+      : [[], []];
+    const placements = new Map();
+    for (const task of placementRows) if (!placements.has(task.leadId)) placements.set(task.leadId, task);
+    const lastActivity = new Map();
+    for (const activity of activityRows) if (!lastActivity.has(activity.leadId)) lastActivity.set(activity.leadId, activity.occurredAt || activity.createdAt);
     return NextResponse.json({
       inquiries: permitted.map((lead) => inquiryWorkspaceItem({
         lead: { ...lead, isActive: isActiveAitUsaOpportunity(lead) },
         owner: owners.get(lead.assignedUserId) || null,
-        placement: taskPlacement(placements.get(lead.id), session.user.canAccessAllBusinessUnits),
+        placement: taskPlacement(placements.get(lead.id), session),
+        lastActivityAt: lastActivity.get(lead.id) || null,
       })),
     });
   } catch (err) {

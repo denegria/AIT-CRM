@@ -47,7 +47,7 @@ export function buildContactProfilePatch({
   if (editScope === 'inquiry') {
     patch = Object.fromEntries(
       [
-        'id', 'opportunityId', 'status', 'assignedTo', 'businessUnitId', 'primaryBusinessUnitId',
+        'id', 'opportunityId', 'updatedAt', 'status', 'assignedTo', 'businessUnitId', 'primaryBusinessUnitId',
         'inquirySource', 'leadProfile', 'courseMetadata', 'programInterest', 'preferredDay',
         'preferredSchedule', 'testInterest', 'educationLevel', 'schoolName', 'locationPreference',
         'profileDetails', 'sourceDetail', 'currentCourse', 'completedCourse', 'endedCourse',

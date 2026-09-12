@@ -52,6 +52,7 @@ import {
   updateContactWithLeadAndNotesInTransaction,
 } from '@/lib/crm/write-helpers.js';
 import { submitManualAitUsaInquiry } from '@/lib/crm/manual-ait-usa-inquiry.js';
+import { issueManualAitUsaConfirmation } from '@/lib/crm/manual-ait-usa-confirmation.js';
 import {
   loadScopedOpportunityById,
   resolveAitUsaActiveOpportunity,
@@ -370,7 +371,7 @@ export async function POST(
         initialLeadStatusReason: initialTerminalReason || null,
         initialNote,
         idempotencyKey: String(request.headers.get('idempotency-key') || body.idempotencyKey || '').trim(),
-        confirmedExistingIdentity: body.confirmExistingIdentity === true,
+        confirmationProof: String(body.confirmationProof || '').trim(),
         authorizeExistingContact: async ({ contact, activeLeads }) => {
           if (!canAccessContact(session, contact)) return false;
           try {
@@ -386,9 +387,16 @@ export async function POST(
           error: 'Confirm that you want to add an inquiry to this existing contact.',
           code: 'existing_identity_confirmation_required',
           existingContact: result.existingContact,
+          confirmationProof: issueManualAitUsaConfirmation({
+            organizationId: session.user.organizationId,
+            actorUserId: session.user.id,
+            businessUnitId,
+            contactId: result.existingContact.id,
+            contactValues,
+          }),
         }, { status: 409 });
       }
-      if (result.outcome === 'review_required' || result.outcome === 'active_conflict') {
+      if (result.outcome === 'review_required' || result.outcome === 'active_conflict' || result.outcome === 'idempotency_conflict') {
         return NextResponse.json({ error: result.error, code: result.outcome }, { status: 409 });
       }
       return NextResponse.json(
@@ -703,6 +711,7 @@ export async function PATCH(request, _context = {}, overrides = {}) {
         businessUnit: statusBusinessUnit,
         contact: existing,
         expectedOpportunityId: lead.id,
+        expectedUpdatedAt: body.updatedAt || null,
         toStatus: 'status' in body ? body.status : undefined,
         reopenReason: body.statusChangeReason || body.reopenClosedStatusReason || '',
         terminalReason: body.terminalStatusReason || '',

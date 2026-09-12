@@ -42,7 +42,7 @@ test('record uses actual inquiry resolution states without creating a substitute
   assert.match(source, /Change<\/button>/);
   assert.match(source, /aria-label="Change inquiry status"/);
   assert.match(source, /aria-label="Change inquiry owner"/);
-  assert.match(source, /!contact\.opportunityConflict && !hasResolvedCurrentInquiry && !hasClosedInquiry/);
+  assert.match(source, /!contact\.opportunityConflict && !selectedInquiry/);
 });
 
 test('S1 keeps established action paths and supplies bounded responsive layout', () => {
@@ -57,6 +57,18 @@ test('S1 keeps established action paths and supplies bounded responsive layout',
   assert.match(source, /!isAitUsaContact && <div className=\{s\.snapshotStrip\}/);
   assert.match(styles, /\.previewDetails/);
   assert.match(pipeline, /isAitUsaPipeline \? 'Work next inquiry' : 'Work Next Lead'/);
+  assert.match(styles, /@media \(max-width: 900px\) \{\s+\.usaWorkspace \{ grid-template-columns: minmax\(0, 1fr\); \}\s+\.usaWorkspace \.profileCard \{\s+grid-column: 1;\s+grid-row: 1;/);
+  assert.match(styles, /\.usaWorkspace \.contentSection \{\s+grid-column: 1;\s+grid-row: 2;/);
+});
+
+test('AIT USA preview and mutations bind to the exact selected inquiry', () => {
+  assert.match(source, /const selectedInquiryIsActive = Boolean\(selectedInquiry\?\.isActive\);/);
+  assert.match(source, /updatedAt: selectedInquiry\.updatedAt \|\| ''/);
+  assert.match(source, /opportunityId: selectedInquiry\.id, updatedAt: selectedInquiry\.updatedAt, status: statusTo/);
+  assert.match(source, /\{canEditSelectedInquiry && \(/);
+  assert.match(source, /\{selectedInquiry\.status \|\| 'Unknown'/);
+  assert.match(source, /setInquiryReloadKey\(\(key\) => key \+ 1\)/);
+  assert.doesNotMatch(source, /\{access\.canWriteCrm && <button className="btn btn-sm" type="button" onClick=\{\(\) => openInquiryEditor\('general'\)\}/);
 });
 
 test('enrollment presentation tolerates manual records without a class section', () => {

@@ -21,6 +21,7 @@ export function inquiryWorkspaceItem({ lead = {}, owner = null, placement = null
     status: text(lead.status || lead.currentStage) || 'Unknown',
     owner: owner ? { id: text(owner.id), label: text(owner.name) || text(owner.email) || 'Unassigned' } : null,
     openedAt: timestamp(lead.createdAt),
+    updatedAt: timestamp(lead.updatedAt),
     source: text(lead.sourceName),
     lastActivityAt: timestamp(lastActivityAt),
     isActive: Boolean(lead.isActive),
@@ -36,6 +37,8 @@ export function inquiryWorkspaceItem({ lead = {}, owner = null, placement = null
     },
     placement: placement ? {
       state: text(placement.state) || 'Pending review',
+      finalLevel: text(placement.finalLevel),
+      finalStatus: text(placement.finalStatus),
       updatedAt: timestamp(placement.updatedAt),
       reviewPath: text(placement.reviewPath),
     } : null,

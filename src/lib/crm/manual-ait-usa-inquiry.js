@@ -1,8 +1,11 @@
 import { contactIdentityLockKeys, classifyContactIdentity } from './contact-identity.js';
 import { isActiveAitUsaOpportunity } from './ait-usa-opportunities.js';
+import { verifyManualAitUsaConfirmation } from './manual-ait-usa-confirmation.js';
+import { createHash } from 'node:crypto';
 
 const GENERIC_REVIEW = 'This inquiry needs review before it can be added.';
 const ACTIVE_CONFLICT = 'An active inquiry already exists for this contact. Review it before adding another inquiry.';
+const IDEMPOTENCY_KEY = /^[A-Za-z0-9._:-]{16,128}$/;
 
 function camelContact(row = {}) {
   return {
@@ -61,16 +64,33 @@ async function activeLeads(client, { organizationId, businessUnitId, contactId }
   return result.rows.map(camelLead).filter(isActiveAitUsaOpportunity);
 }
 
-async function replay(client, { organizationId, idempotencyKey }) {
-  if (!idempotencyKey) return null;
+function canonical(value) {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])]));
+  return value ?? null;
+}
+
+export function manualAitUsaRequestFingerprint({ organizationId, businessUnitId, actorUserId, contactValues, leadValues, initialLeadStatusReason, initialNote }) {
+  return createHash('sha256').update(JSON.stringify(canonical({
+    organizationId, businessUnitId, actorUserId,
+    contact: { ...contactValues, email: String(contactValues.email || '').trim().toLowerCase(), phone: String(contactValues.phone || '').replace(/[^0-9+]/g, '') },
+    inquiry: leadValues,
+    initialLeadStatusReason: initialLeadStatusReason || null,
+    initialNote: initialNote?.body || null,
+  }))).digest('hex');
+}
+
+async function replay(client, { organizationId, idempotencyKey, fingerprint }) {
   const result = await client.query(
-    `select contact_id, lead_id from activity_events
+    `select contact_id, lead_id, metadata_json from activity_events
      where organization_id = $1 and metadata_json->>'manual_ait_usa_inquiry_idempotency_key' = $2
      order by occurred_at desc, id desc limit 1`,
     [organizationId, idempotencyKey],
   );
   const row = result.rows[0];
   if (!row?.contact_id || !row?.lead_id) return null;
+  const metadata = typeof row.metadata_json === 'string' ? JSON.parse(row.metadata_json) : (row.metadata_json || {});
+  if (metadata.manual_ait_usa_inquiry_fingerprint !== fingerprint) return { changedPayload: true };
   const [contact, leadResult] = await Promise.all([
     loadContact(client, organizationId, row.contact_id),
     client.query('select * from leads where id = $1 and organization_id = $2 limit 1', [row.lead_id, organizationId]),
@@ -116,12 +136,11 @@ async function insertContact(client, { organizationId, contactValues }) {
   return camelContact(result.rows[0]);
 }
 
-async function recordReplay(client, { organizationId, businessUnitId, actorUserId, contactId, leadId, idempotencyKey }) {
-  if (!idempotencyKey) return;
+async function recordReplay(client, { organizationId, businessUnitId, actorUserId, contactId, leadId, idempotencyKey, fingerprint }) {
   await client.query(
     `insert into activity_events (organization_id, business_unit_id, contact_id, lead_id, event_type, message, actor_user_id, metadata_json, occurred_at)
      values ($1, $2, $3, $4, 'manual_inquiry_created', 'Manual inquiry created.', $5, $6::jsonb, now())`,
-    [organizationId, businessUnitId, contactId, leadId, actorUserId, JSON.stringify({ manual_ait_usa_inquiry_idempotency_key: idempotencyKey })],
+    [organizationId, businessUnitId, contactId, leadId, actorUserId, JSON.stringify({ manual_ait_usa_inquiry_idempotency_key: idempotencyKey, manual_ait_usa_inquiry_fingerprint: fingerprint })],
   );
 }
 
@@ -159,18 +178,25 @@ export async function submitManualAitUsaInquiry({
   initialLeadStatusReason = null,
   initialNote = null,
   idempotencyKey = '',
-  confirmedExistingIdentity = false,
+  confirmationProof = '',
+  confirmationEnv = process.env,
   authorizeExistingContact,
 }) {
+  if (!IDEMPOTENCY_KEY.test(idempotencyKey)) throw Object.assign(new Error('A bounded idempotency key is required.'), { status: 400 });
+  const fingerprint = manualAitUsaRequestFingerprint({ organizationId, businessUnitId, actorUserId, contactValues, leadValues, initialLeadStatusReason, initialNote });
   const client = await pool.connect();
   try {
     await client.query('begin');
-    await lock(client, `manual-ait-usa-inquiry:${organizationId}:${idempotencyKey || 'no-replay-key'}`);
+    await lock(client, `manual-ait-usa-inquiry:${organizationId}:${idempotencyKey}`);
     for (const identityKey of contactIdentityLockKeys(contactValues)) {
       await lock(client, `aitusa-crm-contact:${organizationId}:${identityKey}`);
     }
 
-    const prior = await replay(client, { organizationId, idempotencyKey });
+    const prior = await replay(client, { organizationId, idempotencyKey, fingerprint });
+    if (prior?.changedPayload) {
+      await client.query('commit');
+      return { outcome: 'idempotency_conflict', error: 'This idempotency key was already used for a different inquiry.' };
+    }
     if (prior) {
       if (!await authorizeExistingContact({ contact: prior.contact, activeLeads: [prior.lead] })) {
         await client.query('commit');
@@ -190,12 +216,15 @@ export async function submitManualAitUsaInquiry({
     let createdContact = false;
     if (identity.status === 'exact') {
       contact = await loadContact(client, organizationId, identity.contactId);
+      if (contact) await lock(client, `ait-usa-opportunity:${organizationId}:${businessUnitId}:${contact.id}`);
       const existingActiveLeads = contact ? await activeLeads(client, { organizationId, businessUnitId, contactId: contact.id }) : [];
       if (!contact || !await authorizeExistingContact({ contact, activeLeads: existingActiveLeads })) {
         await client.query('commit');
         return { outcome: 'review_required', error: GENERIC_REVIEW };
       }
-      if (!confirmedExistingIdentity) {
+      if (!verifyManualAitUsaConfirmation(confirmationProof, {
+        organizationId, actorUserId, businessUnitId, contactId: contact.id, contactValues,
+      }, confirmationEnv)) {
         await client.query('commit');
         return { outcome: 'confirmation_required', existingContact: { id: contact.id, name: contact.name } };
       }
@@ -210,13 +239,18 @@ export async function submitManualAitUsaInquiry({
     } else {
       contact = await insertContact(client, { organizationId, contactValues });
       createdContact = true;
+      await lock(client, `ait-usa-opportunity:${organizationId}:${businessUnitId}:${contact.id}`);
+      if ((await activeLeads(client, { organizationId, businessUnitId, contactId: contact.id })).length) {
+        await client.query('commit');
+        return { outcome: 'active_conflict', error: ACTIVE_CONFLICT };
+      }
     }
 
     const lead = await insertLead(client, { organizationId, businessUnitId, contactId: contact.id, leadValues });
     await recordInitialContext(client, {
       organizationId, businessUnitId, actorUserId, contactId: contact.id, lead, initialLeadStatusReason, initialNote,
     });
-    await recordReplay(client, { organizationId, businessUnitId, actorUserId, contactId: contact.id, leadId: lead.id, idempotencyKey });
+    await recordReplay(client, { organizationId, businessUnitId, actorUserId, contactId: contact.id, leadId: lead.id, idempotencyKey, fingerprint });
     await client.query('commit');
     return { outcome: 'created', contact, lead, createdContact };
   } catch (error) {

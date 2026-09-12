@@ -99,7 +99,7 @@ test('manual AIT USA identity confirmation is privacy-safe and defers writes to 
   assert.equal(response.status, 409);
   assert.equal(payload.code, 'existing_identity_confirmation_required');
   assert.deepEqual(payload.existingContact, { id: ids.contact, name: 'Ana Existing' });
-  assert.equal(serviceInput.confirmedExistingIdentity, false);
+  assert.equal(serviceInput.confirmationProof, '');
   assert.equal(serviceInput.idempotencyKey, 'retry-1');
   assert.equal(serviceInput.leadValues.sourceType, 'manual');
   assert.equal(JSON.stringify(payload).includes('matchingContactIds'), false);
@@ -353,6 +353,30 @@ test('direct AIT USA PATCH reports post-write active Opportunity counts', async 
     assert.equal(response.status, 200, `${scenario.from} -> ${scenario.to}`);
     assert.equal((await response.json()).contact.activeOpportunityCount, scenario.expected);
   }
+});
+
+test('direct AIT USA PATCH forwards the selected inquiry version into the locked stale-write guard', async () => {
+  const selected = { id: ids.opportunity, organizationId: ids.organization, businessUnitId: ids.businessUnit, contactId: ids.contact, status: 'Follow Up', updatedAt: '2026-09-12T10:00:00.000Z' };
+  let writerCalled = false;
+  const response = await PATCH(
+    patchRequest({ id: ids.contact, opportunityId: ids.opportunity, updatedAt: selected.updatedAt, status: 'Follow Up' }),
+    {},
+    {
+      requirePermissionForRequest: async () => ({ error: null, session: elevatedSession }),
+      getDbForRequest: () => dbRows([contact]),
+      latestLeadForContactForRequest: async () => selected,
+      loadBusinessUnitForRequest: async () => businessUnit,
+      resolveActiveOpportunityForRequest: async () => ({ status: 'exact', leadId: ids.opportunity, opportunity: selected, activeCount: 1 }),
+      loadScopedOpportunityForRequest: async () => selected,
+      withLockedMutationForRequest: async (input) => {
+        assert.equal(input.expectedUpdatedAt, selected.updatedAt);
+        throw Object.assign(new Error('The selected Opportunity changed while this Contact was open.'), { status: 409 });
+      },
+      updateContactInTransactionForRequest: async () => { writerCalled = true; },
+    },
+  );
+  assert.equal(response.status, 409);
+  assert.equal(writerCalled, false);
 });
 
 test('direct AIT USA PATCH rechecks regular Coordinator ownership under the lock', async () => {
