@@ -87,6 +87,7 @@ test('AIT USA manual inquiry creation preserves unknown attribution', () => {
   assert.match(directory, /source: defaultIsAitUsa \? '' : empty\.source/);
   assert.match(directory, /source: '',\s+assignedTo: '',\s+idempotencyKey:/);
   assert.match(directory, /\{isAitUsaForm && <option value="">Not recorded<\/option>\}/);
+  assert.match(source, /!startOpportunityOpen && editScope === 'contact' && isAitUsaContact/);
 });
 
 test('enrollment presentation tolerates manual records without a class section', () => {

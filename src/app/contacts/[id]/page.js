@@ -3244,7 +3244,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     </div>
                   </div>
                 )}
-                {editScope === 'contact' && isAitUsaContact && (
+                {!startOpportunityOpen && editScope === 'contact' && isAitUsaContact && (
                   <div className="contact-editor-routing-fields">
                     <div className="form-group">
                       <label className="form-label" htmlFor="profile-edit-school-location">Intended learning location</label>
