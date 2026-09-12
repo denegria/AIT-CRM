@@ -605,6 +605,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       currentStage: defaultStatuses[0] || empty.status,
       businessUnitId: defaultBusinessUnitId,
       primaryBusinessUnitId: defaultBusinessUnitId,
+      source: defaultIsAitUsa ? '' : empty.source,
       assignedTo: defaultIsAitUsa ? '' : coordinatorUiPolicy.lockedOwnerUserId || empty.assignedTo,
       idempotencyKey: defaultIsAitUsa && typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : '',
       confirmationProof: '',
@@ -627,6 +628,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         currentStage: defaultStatuses[0] || empty.status,
         businessUnitId: defaultBusinessUnitId,
         primaryBusinessUnitId: defaultBusinessUnitId,
+        source: '',
         assignedTo: '',
         idempotencyKey: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : '',
         confirmationProof: '',
@@ -1578,6 +1580,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
               <div className="form-group">
                 <label className="form-label">Source</label>
                 <select className="input select" value={form.source} onChange={e => setForm(f => ({...f, source: e.target.value}))}>
+                  {isAitUsaForm && <option value="">Not recorded</option>}
                   {[...new Set([...(sources || []), ...(form.source ? [form.source] : [])])].map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
               </div>

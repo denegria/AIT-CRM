@@ -34,7 +34,7 @@ test('record uses actual inquiry resolution states without creating a substitute
   assert.match(source, /Start inquiry/);
   assert.match(source, /const openStartInquiry = \(\) => \{/);
   assert.match(source, /onClick=\{openStartInquiry\}/);
-  assert.match(source, /title=\{isAitUsaContact \? \(editScope === 'inquiry' \? 'Edit inquiry' : 'Edit contact'\)/);
+  assert.match(source, /title=\{isAitUsaContact \? \(startOpportunityOpen \? 'Start inquiry' : editScope === 'inquiry' \? 'Edit inquiry' : 'Edit contact'\)/);
   assert.match(source, /active inquiries need resolution/);
   assert.match(source, /const contactSource = cleanText\(contact\?\.sourceLabel\) \|\| 'Unknown';/);
   assert.match(source, /const inquirySource = cleanText\(contact\?\.inquirySource\) \|\| 'Unknown';/);
@@ -42,7 +42,10 @@ test('record uses actual inquiry resolution states without creating a substitute
   assert.match(source, /Change<\/button>/);
   assert.match(source, /aria-label="Change inquiry status"/);
   assert.match(source, /aria-label="Change inquiry owner"/);
-  assert.match(source, /!contact\.opportunityConflict && !selectedInquiry/);
+  assert.match(source, /const hasActiveInquiry = inquiryItems\.some\(\(item\) => item\.isActive\);/);
+  assert.match(source, /inquiriesState\.contactId === contact\?\.id && !inquiriesState\.loading && !inquiriesState\.error/);
+  assert.match(source, /!contact\?\.opportunityConflict && !hasActiveInquiry/);
+  assert.match(source, /\(selectedInquiryIsActive \|\| !hasActiveInquiry\)/);
 });
 
 test('S1 keeps established action paths and supplies bounded responsive layout', () => {
@@ -68,7 +71,16 @@ test('AIT USA preview and mutations bind to the exact selected inquiry', () => {
   assert.match(source, /\{canEditSelectedInquiry && \(/);
   assert.match(source, /\{selectedInquiry\.status \|\| 'Unknown'/);
   assert.match(source, /setInquiryReloadKey\(\(key\) => key \+ 1\)/);
+  assert.match(source, /setIsEditModalOpen\(false\);\s+setTimelineReloadKey\(\(key\) => key \+ 1\);\s+setInquiryReloadKey\(\(key\) => key \+ 1\);\s+toast\('Inquiry started'\)/);
+  assert.match(source, /\{canStartInquiry && <button className="btn btn-sm" type="button" onClick=\{openStartInquiry\}>Start inquiry<\/button>\}/);
   assert.doesNotMatch(source, /\{access\.canWriteCrm && <button className="btn btn-sm" type="button" onClick=\{\(\) => openInquiryEditor\('general'\)\}/);
+});
+
+test('AIT USA manual inquiry creation preserves unknown attribution', () => {
+  const directory = fs.readFileSync(new URL('./page.js', import.meta.url), 'utf8');
+  assert.match(directory, /source: defaultIsAitUsa \? '' : empty\.source/);
+  assert.match(directory, /source: '',\s+assignedTo: '',\s+idempotencyKey:/);
+  assert.match(directory, /\{isAitUsaForm && <option value="">Not recorded<\/option>\}/);
 });
 
 test('enrollment presentation tolerates manual records without a class section', () => {

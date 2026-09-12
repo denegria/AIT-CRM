@@ -709,10 +709,21 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     (!showCoursesTab && activeTab === 'courses')
       ? 'timeline'
       : activeTab;
+  const inquiryHistoryReady = Boolean(
+    inquiriesState.contactId === contact?.id && !inquiriesState.loading && !inquiriesState.error,
+  );
   const inquiryItems = inquiriesState.contactId === contact?.id ? inquiriesState.items : [];
   const selectedInquiry = inquiryItems.find((item) => item.id === selectedInquiryId) || null;
   const selectedInquiryIsActive = Boolean(selectedInquiry?.isActive);
-  const canEditSelectedInquiry = Boolean(access.canWriteCrm && selectedInquiryIsActive);
+  const hasActiveInquiry = inquiryItems.some((item) => item.isActive);
+  const canStartInquiry = Boolean(
+    access.canWriteCrm && isAitUsaContact && inquiryHistoryReady &&
+    !contact?.opportunityConflict && !hasActiveInquiry,
+  );
+  const canEditSelectedInquiry = Boolean(
+    access.canWriteCrm && selectedInquiry && !contact?.opportunityConflict &&
+    (selectedInquiryIsActive || !hasActiveInquiry),
+  );
   const selectedInquiryNextStatus = selectedInquiryIsActive
     ? nextWorkflowStatus(selectedInquiry.status, contactStatusOptions)
     : null;
@@ -1120,7 +1131,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   };
 
   const openStartInquiry = () => {
-    openEditModal(isAitUsaContact ? 'inquiry' : 'combined');
+    if (!canStartInquiry) return;
+    openEditModal(isAitUsaContact ? 'contact' : 'combined');
     setActiveProfileEditTab('general');
     setStartOpportunityOpen(true);
   };
@@ -1147,8 +1159,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       replaceContactFromServer(payload.contact);
       setEditForm((current) => ({ ...current, ...payload.contact, terminalStatusReason: '', statusChangeReason: '' }));
       setStartOpportunityOpen(false);
+      setIsEditModalOpen(false);
       setTimelineReloadKey((key) => key + 1);
-      toast('Opportunity started');
+      setInquiryReloadKey((key) => key + 1);
+      toast('Inquiry started');
     } catch (error) {
       setStartOpportunityError(error.message || 'Opportunity could not be started.');
     } finally {
@@ -1908,7 +1922,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             <div className={s.previewActions}>
               {selectedInquiryNextStatus && canEditSelectedInquiry && <button className="btn btn-sm" type="button" onClick={moveToNextStatus} disabled={statusUpdating}><ArrowRight size={14} /> {statusUpdating ? 'Updating…' : `Move to ${selectedInquiryNextStatus}`}</button>}
               <Link className="btn btn-sm" href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}><CheckSquare size={14} /> Create follow-up</Link>
-              {!contact.opportunityConflict && !selectedInquiry && <button className="btn btn-sm" type="button" onClick={openStartInquiry}>Start inquiry</button>}
+              {canStartInquiry && <button className="btn btn-sm" type="button" onClick={openStartInquiry}>Start inquiry</button>}
             </div>
           )}
         </section>
@@ -3085,20 +3099,20 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         <Modal
           open={isEditModalOpen}
           onClose={() => setIsEditModalOpen(false)}
-          title={isAitUsaContact ? (editScope === 'inquiry' ? 'Edit inquiry' : 'Edit contact') : 'Edit Profile'}
+          title={isAitUsaContact ? (startOpportunityOpen ? 'Start inquiry' : editScope === 'inquiry' ? 'Edit inquiry' : 'Edit contact') : 'Edit Profile'}
           variant="dialog"
           panelClassName={`contact-profile-dialog-panel ${isAitUsaContact ? 'ait-usa-focused-editor' : ''} ${isAitUsaContact && editScope === 'contact' ? 'ait-usa-contact-editor' : ''}`}
-          footer={<><button className="btn" type="button" onClick={() => setIsEditModalOpen(false)}>Cancel</button><button className="btn btn-primary" type="button" onClick={handleEditSave}>Save {editScope === 'inquiry' ? 'inquiry' : editScope === 'contact' ? 'contact' : 'changes'}</button></>}
+          footer={<><button className="btn" type="button" onClick={() => setIsEditModalOpen(false)}>Cancel</button>{!startOpportunityOpen && <button className="btn btn-primary" type="button" onClick={handleEditSave}>Save {editScope === 'inquiry' ? 'inquiry' : editScope === 'contact' ? 'contact' : 'changes'}</button>}</>}
         >
           <div className="contact-profile-dialog-form">
-            {!(isAitUsaContact && editScope === 'contact') && (
+            {!startOpportunityOpen && !(isAitUsaContact && editScope === 'contact') && (
               <div className="contact-dialog-intro">
                 <p>{editScope === 'inquiry' ? `${contact?.programInterest || 'Current inquiry'} · ${contact?.name || 'Contact'}` : `Update ${contact?.name || singularLabel.toLowerCase()} without leaving the contact record.`}</p>
                 {editScope !== 'inquiry' && <span>Contact details and attribution</span>}
               </div>
             )}
 
-            <div className="profile-editor-tabs" role="tablist" aria-label="Profile edit sections">
+            {!startOpportunityOpen && <div className="profile-editor-tabs" role="tablist" aria-label="Profile edit sections">
               {profileEditTabs.map((tab) => {
                 const selected = activeProfileEditTab === tab.id;
                 return (
@@ -3117,7 +3131,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   </button>
                 );
               })}
-            </div>
+            </div>}
 
             {activeProfileEditTab === 'general' && (
               <section
@@ -3132,7 +3146,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <p>Update the fields employees reach for most: contact info, status, and ownership.</p>
                   </div>
                 </div>}
-                {editScope !== 'inquiry' && <div className="grid-2">
+                {!startOpportunityOpen && editScope !== 'inquiry' && <div className="grid-2">
                   <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-name">Full Name</label>
                     <input id="profile-edit-name" className="input" value={editForm.name} autoFocus onChange={e => setEditForm({...editForm, name: e.target.value})} />
@@ -3142,7 +3156,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <input id="profile-edit-email" className="input" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} />
                   </div>
                 </div>}
-                <div className="grid-2">
+                {!startOpportunityOpen && <div className="grid-2">
                   {editScope !== 'inquiry' && <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-phone">Phone</label>
                     <input id="profile-edit-phone" className="input" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
@@ -3159,8 +3173,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       onStart={() => setStartOpportunityOpen(true)}
                     />
                   </div>}
-                </div>
-                {isAitUsaContact && !contact.hasLeadStatus && startOpportunityOpen && (
+                </div>}
+                {isAitUsaContact && canStartInquiry && startOpportunityOpen && (
                   <div className="profile-editor-account-action" aria-label="Start inquiry">
                     <div className="grid-2">
                       <div className="form-group">
@@ -3263,7 +3277,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     />
                   </div>
                 )}
-                {editScope !== 'contact' && (canManageContactAssignments ? (
+                {!startOpportunityOpen && editScope !== 'contact' && (canManageContactAssignments ? (
                   <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-owner">Assigned To</label>
                     <select id="profile-edit-owner" className="input select" value={editForm.assignedTo || ''} disabled={Boolean(isAitUsaContact && contact.opportunityConflict)} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
@@ -3278,7 +3292,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 ) : (
                   <input type="hidden" value={editForm.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
                 ))}
-                {editScope !== 'inquiry' && access.canWriteCrm ? (
+                {!startOpportunityOpen && editScope !== 'inquiry' && access.canWriteCrm ? (
                   <div className={isAitUsaContact && editScope === 'contact' ? 'profile-editor-contact-more-actions' : ''}>
                     {isAitUsaContact && editScope === 'contact' && <div className="profile-editor-scope-note">Updates these contact fields only. No inquiry is created or changed.</div>}
                     {isAitUsaContact && editScope === 'contact' ? (
