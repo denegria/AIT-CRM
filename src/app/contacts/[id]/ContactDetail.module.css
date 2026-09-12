@@ -2264,13 +2264,7 @@
 .enrollmentsWorkspace .courseAdditionalDetails { margin-top: 12px; font-size: var(--text-sm); }
 .enrollmentsWorkspace .courseAdditionalDetails summary { cursor: pointer; color: var(--accent); }
 @media (max-width: 720px) { .enrollmentsWorkspace .courseHistorySummary { grid-template-columns: minmax(0, 1fr); gap: 12px; } }
-.usaWorkspace :global(.btn), :global(.ait-usa-focused-editor) :global(.btn) { border-radius: 4px; box-shadow: none; }
-:global(.ait-usa-contact-editor) { --modal-dialog-width: 590px; }
-:global(.ait-usa-contact-editor) :global(.profile-editor-tabs) { display: none; }
-:global(.ait-usa-contact-editor) :global(.contact-profile-dialog-form) { grid-template-columns: minmax(0, 1fr); }
-:global(.ait-usa-contact-editor) :global(.contact-profile-dialog-section) { grid-column: 1 / -1; grid-row: 2; min-height: 0; padding-left: 0; border-left: 0; }
-:global(.ait-usa-contact-editor) :global(.grid-2),
-:global(.ait-usa-contact-editor) :global(.contact-editor-routing-fields) { grid-template-columns: minmax(0, 1fr); }
+.usaWorkspace :global(.btn) { border-radius: 4px; box-shadow: none; }
 
 /* The flat treatment is selected only for the AIT USA workspace. AIT Signs
    keeps its established tab shell and panel treatment. */

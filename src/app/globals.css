@@ -1706,6 +1706,7 @@ a { color: inherit; text-decoration: none; }
 .ait-usa-focused-editor .form-label { font-size: 15px; font-weight: 600; color: var(--text-primary); text-transform: none; margin-bottom: 8px; }
 .ait-usa-focused-editor .input { min-height: 46px; font-size: 16px; background: var(--bg-secondary); }
 .ait-usa-focused-editor .textarea { font-size: 16px; background: var(--bg-secondary); }
+.ait-usa-focused-editor .btn { border-radius: 4px; box-shadow: none; }
 .ait-usa-focused-editor > div:first-child > div { font-size: 22px; }
 .ait-usa-focused-editor > div:last-child .btn { min-height: 46px; padding: 10px 20px; font-size: 16px; }
 .ait-usa-focused-editor .contact-dialog-section-header h2 { font-size: 20px; }

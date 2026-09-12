@@ -607,6 +607,12 @@ export async function PATCH(request, _context = {}, overrides = {}) {
   const hasLeadPatch = 'status' in body || hasInquirySourcePatch ||
     (!isAitUsaWorkflow && hasLegacySourcePatch) || 'assignedTo' in body ||
     hasBusinessUnitPatch || hasLeadProfilePatch || hasCourseMetadataPatch;
+  if (isAitUsaWorkflow && lead && hasLeadPatch && !String(body.updatedAt || '').trim()) {
+    return NextResponse.json(
+      { error: 'The selected Opportunity version is missing. Refresh before saving.' },
+      { status: 409 },
+    );
+  }
   let leadPatch = null;
   let leadStatusChange = null;
   if (lead && hasLeadPatch) {
