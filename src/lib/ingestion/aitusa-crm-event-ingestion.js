@@ -1,6 +1,6 @@
 import { createInboundLeadNotification } from '../notifications/service.js';
 import { createInboundLeadIntakeTask } from '../tasks/intake.js';
-import { classifyContactIdentity } from '../crm/contact-identity.js';
+import { classifyContactIdentity, contactIdentityLockKeys } from '../crm/contact-identity.js';
 import { resolveAitUsaActiveOpportunity } from '../crm/ait-usa-opportunities.js';
 import { isAitUsaPlacementReviewEvent } from './aitusa-crm-events.js';
 import { syncPlacementReviewWorkflow } from '../placement-reviews/crm-workflow.js';
@@ -198,15 +198,6 @@ function priorIdentityReview(prior) {
     ? JSON.parse(prior.metadata_json)
     : prior.metadata_json;
   return Boolean(metadata?.contactIdentity?.reason);
-}
-
-function contactIdentityLockKeys(contact) {
-  const email = typeof contact.email === 'string' ? contact.email.trim().toLowerCase() : '';
-  const phone = typeof contact.phone === 'string' ? contact.phone.replace(/[^0-9+]/g, '') : '';
-  return [
-    email ? `email:${email}` : null,
-    phone ? `phone:${phone}` : null,
-  ].filter(Boolean).sort();
 }
 
 function contactIdentityReviewReason(identity) {

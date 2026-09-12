@@ -29,7 +29,7 @@ function opportunityRow(row = {}) {
   };
 }
 
-function isActiveAitUsaOpportunity(row) {
+export function isActiveAitUsaOpportunity(row) {
   return !isClosedLifecycleStatus(row.status || row.currentStage, {
     workflowKey: WORKFLOW_KEYS.AIT_USA,
   });

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { POST } from '../api/contacts/[id]/opportunities/route.js';
-import { PATCH } from '../api/contacts/route.js';
+import { PATCH, POST as createContact } from '../api/contacts/route.js';
 import {
   buildContactProfilePatch,
   hasOpportunityMutationRequest,
@@ -77,6 +77,33 @@ const contact = Object.freeze({
   email: 'ana@example.com',
 });
 const businessUnit = Object.freeze({ id: ids.businessUnit, name: 'AIT USA Institute', label: 'Division' });
+
+test('manual AIT USA identity confirmation is privacy-safe and defers writes to the transactional service', async () => {
+  let serviceInput = null;
+  const response = await createContact(new Request('http://localhost/api/contacts', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Ana Student', email: 'ana@example.com', businessUnitId: ids.businessUnit, status: 'New Lead', idempotencyKey: 'retry-1',
+    }),
+  }), {
+    requirePermissionForRequest: async () => ({ error: null, session: elevatedSession }),
+    getDbForRequest: () => dbRows([businessUnit], [businessUnit]),
+    getPoolForRequest: () => ({ connect() { throw new Error('Service mock should not connect.'); } }),
+    submitManualInquiryForRequest: async (input) => {
+      serviceInput = input;
+      return { outcome: 'confirmation_required', existingContact: { id: ids.contact, name: 'Ana Existing' } };
+    },
+  });
+  const payload = await response.json();
+  assert.equal(response.status, 409);
+  assert.equal(payload.code, 'existing_identity_confirmation_required');
+  assert.deepEqual(payload.existingContact, { id: ids.contact, name: 'Ana Existing' });
+  assert.equal(serviceInput.confirmedExistingIdentity, false);
+  assert.equal(serviceInput.idempotencyKey, 'retry-1');
+  assert.equal(serviceInput.leadValues.sourceType, 'manual');
+  assert.equal(JSON.stringify(payload).includes('matchingContactIds'), false);
+});
 
 function fullBootstrapContactPayload(overrides = {}) {
   return {

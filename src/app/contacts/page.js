@@ -606,10 +606,36 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       businessUnitId: defaultBusinessUnitId,
       primaryBusinessUnitId: defaultBusinessUnitId,
       assignedTo: defaultIsAitUsa ? '' : coordinatorUiPolicy.lockedOwnerUserId || empty.assignedTo,
+      idempotencyKey: defaultIsAitUsa && typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : '',
+      confirmExistingIdentity: false,
     });
     setFormError('');
     setDrawer('new');
   };
+  useEffect(() => {
+    if (searchParams.get('create') !== 'inquiry' || drawer || !canWrite) return;
+    const defaultBusinessUnit = businessUnitById.get(defaultBusinessUnitId) || null;
+    if (workflowForBusinessUnit(defaultBusinessUnit).key !== WORKFLOW_KEYS.AIT_USA) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete('create');
+    const destination = params.toString() ? `${routeBase}?${params}` : routeBase;
+    queueMicrotask(() => {
+      const defaultStatuses = statusOptionsForBusinessUnitId(defaultBusinessUnitId);
+      setForm({
+        ...empty,
+        status: defaultStatuses[0] || empty.status,
+        currentStage: defaultStatuses[0] || empty.status,
+        businessUnitId: defaultBusinessUnitId,
+        primaryBusinessUnitId: defaultBusinessUnitId,
+        assignedTo: '',
+        idempotencyKey: typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : '',
+        confirmExistingIdentity: false,
+      });
+      setFormError('');
+      setDrawer('new');
+      router.replace(destination, { scroll: false });
+    });
+  }, [businessUnitById, canWrite, defaultBusinessUnitId, drawer, routeBase, router, searchParams, statusOptionsForBusinessUnitId]);
   const openEdit = (row) => {
     if (!canWrite) return;
     setForm({ ...row });
@@ -676,7 +702,18 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           close();
           refreshDirectory();
         })
-        .catch((error) => toast(error?.message || `${singularLabel} create failed.`, 'error'));
+        .catch((error) => {
+          if (error?.code === 'existing_identity_confirmation_required') {
+            setForm((current) => ({
+              ...current,
+              confirmExistingIdentity: true,
+              existingIdentityName: error.details?.existingContact?.name || 'this existing contact',
+            }));
+            setFormError('An accessible existing contact matches this identity. Confirm to add the inquiry to that contact.');
+            return;
+          }
+          toast(error?.message || `${singularLabel} create failed.`, 'error');
+        });
     } else {
       updateContact(drawer.id, payload)
         .then(() => {
@@ -1412,7 +1449,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
             </div>
           )}
           toolbarExtra={canWrite ? (
-            <button className="btn btn-primary contacts-table-add-button" onClick={openNew}>+ Add {singularLabel}</button>
+            <button className="btn btn-primary contacts-table-add-button" onClick={openNew}>+ {isAitUsaForm ? 'Add prospective student' : `Add ${singularLabel}`}</button>
           ) : null}
           onEdit={canWrite ? (id, u) => {
             updateContact(id, u)
@@ -1460,12 +1497,12 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       <Modal
         open={!!drawer}
         onClose={close}
-        title={drawer === 'new' ? `New ${singularLabel}` : `Edit ${singularLabel}`}
+        title={drawer === 'new' ? (isAitUsaForm ? 'Add prospective student' : `New ${singularLabel}`) : `Edit ${singularLabel}`}
         variant="dialog"
         panelClassName="contact-dialog-panel"
         footer={<>
           <button className="btn" type="button" onClick={close}>Cancel</button>
-          <button className="btn btn-primary" type="submit" form="contact-dialog-form">Save</button>
+          <button className="btn btn-primary" type="submit" form="contact-dialog-form">{drawer === 'new' && isAitUsaForm && form.confirmExistingIdentity ? 'Add inquiry to existing contact' : 'Save'}</button>
         </>}>
         <form
           id="contact-dialog-form"
@@ -1477,8 +1514,9 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           }}
         >
           <div className="contact-dialog-intro">
-            <p>{drawer === 'new' ? 'Start with identity, then set the current routing and context.' : 'Update this contact’s identity, routing, and current context.'}</p>
+            <p>{drawer === 'new' ? (isAitUsaForm ? 'Add identity and inquiry details in one save.' : 'Start with identity, then set the current routing and context.') : 'Update this contact’s identity, routing, and current context.'}</p>
             {drawer === 'new' && <span>Name and one contact method are required.</span>}
+            {drawer === 'new' && isAitUsaForm && form.confirmExistingIdentity && <span>Ready to add this inquiry to {form.existingIdentityName || 'the existing contact'}.</span>}
           </div>
 
           {formError && <div className="contact-dialog-error" role="alert">{formError}</div>}

@@ -17,7 +17,11 @@ test('AIT USA defaults to Activity with direct retained tabs and no standalone R
   assert.match(source, /detailView\.tabs\.financialLabel/);
   assert.match(source, /detailView\.tabs\.workOrdersLabel/);
   assert.match(source, /\{profileSidebar\}/);
-  assert.match(styles, /grid-template-columns: minmax\(280px, 292px\) minmax\(0, 1fr\)/);
+  assert.match(styles, /grid-template-columns: minmax\(292px, 304px\) minmax\(0, 1fr\)/);
+  assert.match(source, /Inquiries \(\{inquiryItems\.length\}\)/);
+  assert.match(source, /aria-label="Selected inquiry"/);
+  assert.match(source, /Discard the open inquiry edits before selecting another inquiry/);
+  assert.match(fs.readFileSync(new URL('../pipeline/page.js', import.meta.url), 'utf8'), /\/contacts\?create=inquiry/);
 });
 
 test('record uses actual inquiry resolution states without creating a substitute inquiry', () => {

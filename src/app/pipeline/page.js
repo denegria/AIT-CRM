@@ -1133,8 +1133,8 @@ export default function PipelinePage() {
               </button>
             )}
             {canWrite && (
-              <button className="btn btn-primary" onClick={() => router.push('/contacts')}>
-                <UserPlus size={14} /> Add Contact
+              <button className="btn btn-primary" onClick={() => router.push(isAitUsaPipeline ? '/contacts?create=inquiry' : '/contacts')}>
+                <UserPlus size={14} /> {isAitUsaPipeline ? 'Add inquiry' : 'Add Contact'}
               </button>
             )}
           </div>

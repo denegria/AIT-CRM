@@ -34,6 +34,7 @@ import { InternalNoteComposer } from '@/components/ContactTimelineNoteFields';
 import FollowUpOutcomeDialog from '@/components/FollowUpOutcomeDialog';
 import OpportunityLifecycleField from '@/components/OpportunityLifecycleField';
 import { buildContactProfilePatch } from '@/lib/crm/contact-profile-patch.js';
+import { defaultInquiryId } from '@/lib/crm/inquiry-workspace.js';
 import {
   buildContactFollowUpLookup,
   followUpSubmissionTaskId,
@@ -524,6 +525,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [courseError, setCourseError] = useState('');
   const [selectedCourseRecordId, setSelectedCourseRecordId] = useState('');
   const [phoneHistoryState, setPhoneHistoryState] = useState({ contactId: '', items: [], loading: false, error: '' });
+  const [inquiriesState, setInquiriesState] = useState({ contactId: '', items: [], loading: false, error: '' });
+  const [selectedInquiryId, setSelectedInquiryId] = useState('');
+  const [inquiryDraftInitial, setInquiryDraftInitial] = useState(null);
 
   const scopedContact = useMemo(() => contacts.find(c => c.id === params.id), [contacts, params.id]);
   const allAccessibleContacts = allContacts?.length ? allContacts : contacts;
@@ -590,21 +594,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const contactWorkflow = workflowForBusinessUnit(contactBusinessUnit);
   const contactStatusOptions = contactWorkflow.statuses;
   const nextStatus = nextWorkflowStatus(contact?.status, contactStatusOptions);
-  const isClosedStatusReopen = Boolean(
-    editForm &&
-    editForm.status &&
-    contact?.status &&
-    editForm.status !== contact.status &&
-    isWorkflowStatusClosed(contact.status, contactBusinessUnit) &&
-    !isWorkflowStatusClosed(editForm.status, contactBusinessUnit),
-  );
-  const isEnteringClosedStatus = Boolean(
-    editForm &&
-    contact?.hasLeadStatus &&
-    editForm.status &&
-    editForm.status !== contact.status &&
-    isWorkflowStatusClosed(editForm.status, contactBusinessUnit),
-  );
   const detailView = buildContactDetailViewModel({
     contact,
     businessUnit: contactBusinessUnit,
@@ -712,12 +701,53 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             : { tone: 'ready', text: 'Invoice is ready for payment recording.' }));
   const renderedActiveTab =
     (activeTab === 'record') ||
+    (!isAitUsaContact && activeTab === 'inquiries') ||
     (!showLinkedPeoplePanel && activeTab === 'contacts') ||
     (!showWorkOrdersTab && activeTab === 'workorders') ||
     (!showFinancialsTab && activeTab === 'financials') ||
     (!showCoursesTab && activeTab === 'courses')
       ? 'timeline'
       : activeTab;
+  const inquiryItems = inquiriesState.contactId === contact?.id ? inquiriesState.items : [];
+  const selectedInquiry = inquiryItems.find((item) => item.id === selectedInquiryId) || null;
+  const editedInquiry = inquiryItems.find((item) => item.id === editForm?.opportunityId) || null;
+  const editedInquiryStatus = editScope === 'inquiry'
+    ? editedInquiry?.status || editForm?.status
+    : contact?.status;
+  const isClosedStatusReopen = Boolean(
+    editForm?.status && editedInquiryStatus && editForm.status !== editedInquiryStatus &&
+    isWorkflowStatusClosed(editedInquiryStatus, contactBusinessUnit) &&
+    !isWorkflowStatusClosed(editForm.status, contactBusinessUnit),
+  );
+  const isEnteringClosedStatus = Boolean(
+    editForm?.status && editedInquiryStatus && editForm.status !== editedInquiryStatus &&
+    isWorkflowStatusClosed(editForm.status, contactBusinessUnit),
+  );
+  const inquiryDraftDirty = editScope === 'inquiry' && isEditModalOpen && inquiryDraftInitial &&
+    JSON.stringify(editForm) !== JSON.stringify(inquiryDraftInitial);
+
+  useEffect(() => {
+    if (!isAitUsaContact || !contact?.id || dataSource !== 'postgres') return undefined;
+    let cancelled = false;
+    const contactId = contact.id;
+    queueMicrotask(() => {
+      if (!cancelled) setInquiriesState((current) => ({ ...current, contactId, loading: true, error: '' }));
+    });
+    fetch(`/api/contacts/${contactId}/inquiries`, { cache: 'no-store' })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Inquiry history could not load.');
+        const items = Array.isArray(payload.inquiries) ? payload.inquiries : [];
+        if (!cancelled) {
+          setInquiriesState({ contactId, items, loading: false, error: '' });
+          setSelectedInquiryId((current) => items.some((item) => item.id === current) ? current : defaultInquiryId(items));
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) setInquiriesState({ contactId, items: [], loading: false, error: error.message || 'Inquiry history could not load.' });
+      });
+    return () => { cancelled = true; };
+  }, [contact?.id, dataSource, isAitUsaContact]);
   const fallbackTimeline = useMemo(() => {
     if (!contact) return [];
     if (Array.isArray(contact.timeline) && contact.timeline.length) return contact.timeline;
@@ -1049,7 +1079,37 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
   const openInquiryEditor = (section = 'general') => {
     openEditModal(isAitUsaContact ? 'inquiry' : 'combined');
+    if (selectedInquiry) {
+      const editable = selectedInquiry.editable || {};
+      const draft = {
+        ...contact,
+        opportunityId: selectedInquiry.id,
+        status: editable.status || selectedInquiry.status,
+        assignedTo: editable.assignedTo || '',
+        inquirySource: editable.sourceName || selectedInquiry.source || '',
+        leadProfile: {
+          programInterest: editable.programInterest || selectedInquiry.program || '',
+          preferredDay: editable.preferredDay || '',
+          preferredSchedule: editable.preferredSchedule || '',
+          locationPreference: editable.locationPreference || '',
+          sourceDetail: editable.sourceDetail || '',
+        },
+        statusChangeReason: '',
+        terminalStatusReason: '',
+      };
+      setEditForm(draft);
+      setInquiryDraftInitial(draft);
+    }
     setActiveProfileEditTab(section);
+  };
+
+  const selectInquiry = (id) => {
+    if (!id || id === selectedInquiryId) return;
+    if (inquiryDraftDirty) {
+      toast('Discard the open inquiry edits before selecting another inquiry.', 'error');
+      return;
+    }
+    setSelectedInquiryId(id);
   };
 
   const openStartInquiry = () => {
@@ -1806,6 +1866,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         <section className={s.inquiryPreview} aria-label="Contact preview and current inquiry summary">
           <div className={s.inquiryPreviewHeader}>
             <span>{contact.opportunityConflict ? 'Inquiry needs resolution' : hasResolvedCurrentInquiry ? 'Current inquiry' : hasClosedInquiry ? 'Last inquiry (closed)' : 'No active inquiry'}</span>
+            {inquiryItems.length > 1 && <select className={s.inquirySelector} aria-label="Selected inquiry" value={selectedInquiryId} onChange={(event) => selectInquiry(event.target.value)}>
+              {inquiryItems.map((inquiry) => <option key={inquiry.id} value={inquiry.id}>{inquiry.program || 'Program not recorded'} · {inquiry.status}</option>)}
+            </select>}
             {(hasResolvedCurrentInquiry || hasClosedInquiry) && access.canWriteCrm && (
               <button className={s.previewLink} type="button" onClick={() => openInquiryEditor('general')}><Edit3 size={13} /> Edit inquiry</button>
             )}
@@ -2076,6 +2139,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
           <div className={s.contentTabs}>
             <button className={`${s.contentTab} ${renderedActiveTab === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')}>{isAitUsaContact ? 'Activity' : 'Timeline'}</button>
+            {isAitUsaContact && <button className={`${s.contentTab} ${renderedActiveTab === 'inquiries' ? s.active : ''}`} onClick={() => setActiveTab('inquiries')}>Inquiries ({inquiryItems.length})</button>}
             <button className={`${s.contentTab} ${renderedActiveTab === 'conversations' ? s.active : ''}`} onClick={() => setActiveTab('conversations')}>Conversations ({conversationMessages.length})</button>
             {showCoursesTab && (
               <button className={`${s.contentTab} ${renderedActiveTab === 'courses' ? s.active : ''}`} onClick={() => setActiveTab('courses')}>{isAitUsaContact ? 'Enrollments' : 'Courses'} ({currentCourseRecords.length})</button>
@@ -2092,6 +2156,28 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           </div>
 
           <div className={s.tabContent}>
+            {renderedActiveTab === 'inquiries' && isAitUsaContact && (
+              <section className={s.inquiriesWorkspace} aria-label="Inquiries workspace">
+                {inquiriesState.loading && <PageState tone="loading" size="compact" title="Loading inquiries" copy="Fetching permitted inquiry history." />}
+                {inquiriesState.error && <PageState tone="error" size="compact" title="Inquiries unavailable" copy={inquiriesState.error} />}
+                {!inquiriesState.loading && !inquiriesState.error && !inquiryItems.length && <PageState tone="empty" size="compact" title="No inquiries" copy="This contact has no inquiry history." />}
+                {!inquiriesState.loading && !inquiriesState.error && inquiryItems.length > 0 && (
+                  <div className={s.inquiriesSplit}>
+                    <div className={s.inquiryList} aria-label="Permitted inquiries">
+                      {inquiryItems.map((inquiry) => <button key={inquiry.id} type="button" className={`${s.inquiryRow} ${selectedInquiryId === inquiry.id ? s.active : ''}`} onClick={() => selectInquiry(inquiry.id)} aria-pressed={selectedInquiryId === inquiry.id}>
+                        <strong>{inquiry.program || 'Program not recorded'}</strong><span>{inquiry.status}</span><small>{inquiry.owner?.label || 'Unassigned'} · {inquiry.openedAt ? dateLabel({ date: inquiry.openedAt }) : 'Date not recorded'}</small>
+                      </button>)}
+                    </div>
+                    {selectedInquiry && <article className={s.inquiryDetail} aria-live="polite">
+                      <div className={s.inquiryDetailHeader}><div><span>Selected inquiry</span><h2>{selectedInquiry.program || 'Program not recorded'}</h2></div>{access.canWriteCrm && <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor('general')}><Edit3 size={14} /> Edit inquiry</button>}</div>
+                      <dl><div><dt>Status</dt><dd>{selectedInquiry.status}</dd></div><div><dt>Owner</dt><dd>{selectedInquiry.owner?.label || 'Unassigned'}</dd></div><div><dt>Opened</dt><dd>{selectedInquiry.openedAt ? dateLabel({ date: selectedInquiry.openedAt }) : 'Not recorded'}</dd></div><div><dt>Inquiry source</dt><dd>{selectedInquiry.source || 'Not recorded'}</dd></div></dl>
+                      <section><h3>Placement</h3>{selectedInquiry.placement ? <><p>{selectedInquiry.placement.state}</p>{selectedInquiry.placement.reviewPath && <Link className="btn btn-sm" href={selectedInquiry.placement.reviewPath}>Open placement review</Link>}</> : <p>Placement review not recorded.</p>}</section>
+                      <section><h3>Source &amp; history</h3><p>Original evidence remains in Activity. Editing this inquiry does not rewrite contact source or prior events.</p></section>
+                    </article>}
+                  </div>
+                )}
+              </section>
+            )}
             {renderedActiveTab === 'timeline' && (
               <div className={s.timelineView}>
                 {!isAitUsaContact && <div className={s.snapshotStrip} aria-label={`Current ${singularLabel.toLowerCase()} snapshot`}>

@@ -26,7 +26,7 @@ import {
 } from '../communication-consent/sms-consent.js';
 import { normalizeWorkflowTags } from '../sales-workflow.js';
 import { createInboundLeadIntakeTask } from '../tasks/intake.js';
-import { classifyContactIdentity } from '../crm/contact-identity.js';
+import { classifyContactIdentity, contactIdentityLockKeys } from '../crm/contact-identity.js';
 
 export const WEBSITE_LEAD_SECRET_HEADER = 'x-ait-webhook-secret';
 export const WEBSITE_LEAD_SOURCE_TYPE = 'website_form';
@@ -1345,6 +1345,7 @@ function websiteLeadLockKeys({ organizationId, businessUnitId, lead }) {
     lead.externalId ? `website-lead-external:${organizationId}:${lead.externalId}` : null,
     lead.email ? `website-lead-contact:${organizationId}:email:${lead.email}` : null,
     lead.phone ? `website-lead-contact:${organizationId}:phone:${lead.phone}` : null,
+    ...contactIdentityLockKeys(lead).map((identity) => `aitusa-crm-contact:${organizationId}:${identity}`),
   ].filter(Boolean);
   return [...new Set(keys)].sort();
 }

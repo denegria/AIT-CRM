@@ -6,6 +6,20 @@ function normalizedPhone(value) {
   return typeof value === 'string' ? value.replace(/[^0-9+]/g, '') : '';
 }
 
+export function normalizedContactIdentity({ email, phone } = {}) {
+  return { email: normalizedEmail(email), phone: normalizedPhone(phone) };
+}
+
+// Keep this namespace stable across manual and inbound intake. Callers acquire
+// these keys in lexical order before classifying identity inside a transaction.
+export function contactIdentityLockKeys({ email, phone } = {}) {
+  const identity = normalizedContactIdentity({ email, phone });
+  return [
+    identity.email ? `email:${identity.email}` : null,
+    identity.phone ? `phone:${identity.phone}` : null,
+  ].filter(Boolean).sort();
+}
+
 function contactIds(rows = []) {
   return [...new Set(rows.map((row) => row.id).filter(Boolean))].sort();
 }
@@ -16,10 +30,7 @@ function contactIds(rows = []) {
  * place the submission in review.
  */
 export async function classifyContactIdentity(client, { organizationId, email, phone }) {
-  const evidence = {
-    email: normalizedEmail(email),
-    phone: normalizedPhone(phone),
-  };
+  const evidence = normalizedContactIdentity({ email, phone });
   const [emailResult, phoneResult] = await Promise.all([
     evidence.email
       ? client.query(

@@ -483,7 +483,12 @@ export function CRMProvider({ children, initialData }) {
       body: JSON.stringify(body),
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.error || 'Contact save failed.');
+    if (!response.ok) {
+      const error = new Error(payload.error || 'Contact save failed.');
+      error.code = payload.code || '';
+      error.details = payload;
+      throw error;
+    }
     return payload.contact || null;
   }, [isPostgres]);
 

@@ -1,5 +1,5 @@
 .detailPage {
-  max-width: 1280px;
+  max-width: 1600px;
   margin: 0 auto;
 }
 .btnBack {
@@ -23,8 +23,8 @@
   min-width: 0;
 }
 .usaWorkspace {
-  grid-template-columns: minmax(280px, 292px) minmax(0, 1fr);
-  gap: 24px;
+  grid-template-columns: minmax(292px, 304px) minmax(0, 1fr);
+  gap: 28px;
   --text-xs: 12px;
   --text-sm: 14px;
   --text-md: 16px;
@@ -46,11 +46,12 @@
 }
 .usaWorkspace .profileHeader { align-items: center; margin-bottom: 14px; }
 .usaWorkspace .profileAvatarLarge { width: 40px; height: 40px; border-radius: 999px; font-size: 17px; box-shadow: none; }
-.usaWorkspace .profileName { font-size: 20px; }
+.usaWorkspace .profileName { font-size: 22px; }
 .usaWorkspace .profileRole { margin-top: 3px; font-size: 11px; }
 .usaWorkspace .profileSource { margin-top: 3px; }
 .inquiryPreview { padding: 12px 0; border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); }
 .inquiryPreviewHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-primary); font-size: 14px; font-weight: 750; }
+.inquirySelector { min-width: 0; max-width: 150px; min-height: 32px; border: 1px solid var(--border-subtle); border-radius: 4px; background: var(--bg-secondary); color: var(--text-primary); font: inherit; font-size: 13px; }
 .previewLink { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .previewLink:hover { text-decoration: underline; text-underline-offset: 2px; }
 .previewWarning { display: flex; gap: 6px; margin: 9px 0 0; color: var(--warning); font-size: 13px; line-height: 1.35; }
@@ -79,7 +80,23 @@
 .usaWorkspace .actionPanel { margin-top: 12px; padding-top: 12px; }
 .usaWorkspace .actionPanel :global(.btn-block) { min-height: 34px; padding: 7px 10px; font-size: 13px; }
 .usaWorkspace .contentTabs { padding: 0; gap: 14px; }
-.usaWorkspace .contentTab { padding: 10px 6px 9px; font-size: 14px; }
+.usaWorkspace .contentTab { padding: 11px 7px 10px; font-size: 15px; }
+.inquiriesWorkspace { padding: 18px 6px; }
+.inquiriesSplit { display: grid; grid-template-columns: minmax(220px, .7fr) minmax(0, 1.3fr); gap: 18px; }
+.inquiryList { display: grid; align-content: start; gap: 6px; }
+.inquiryRow { display: grid; gap: 4px; width: 100%; padding: 11px; border: 1px solid var(--border-subtle); border-radius: 5px; background: transparent; color: var(--text-secondary); text-align: left; cursor: pointer; }
+.inquiryRow:hover, .inquiryRow.active { border-color: color-mix(in srgb, var(--accent) 55%, var(--border-subtle)); background: color-mix(in srgb, var(--accent-muted) 24%, transparent); }
+.inquiryRow strong, .inquiryDetail h2 { color: var(--text-primary); font-size: 15px; }
+.inquiryRow small, .inquiryDetail dt, .inquiryDetailHeader span { color: var(--text-muted); font-size: 13px; }
+.inquiryDetail { display: grid; gap: 16px; padding: 16px; border: 1px solid var(--border-subtle); border-radius: 6px; }
+.inquiryDetailHeader { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.inquiryDetailHeader h2, .inquiryDetail h3 { margin: 3px 0 0; }
+.inquiryDetail h3 { font-size: 15px; }
+.inquiryDetail dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.inquiryDetail dl div { display: grid; gap: 3px; }
+.inquiryDetail dd { margin: 0; overflow-wrap: anywhere; }
+.inquiryDetail section { padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+.inquiryDetail p { margin: 6px 0 0; color: var(--text-secondary); font-size: 14px; line-height: 1.45; }
 .usaWorkspace .tabContent { min-height: 0; }
 .usaWorkspace .timelineToolbar { margin-top: 2px; }
 .usaWorkspace .enrollmentsPageHeader h2 { font-size: 22px; }
@@ -90,6 +107,9 @@
   .usaWorkspace { grid-template-columns: minmax(0, 1fr); }
   .usaWorkspace .profileCard { grid-column: 1; grid-row: 1; position: static; max-height: none; }
   .usaWorkspace .contentSection { grid-column: 1; grid-row: 2; }
+}
+@media (max-width: 720px) {
+  .inquiriesSplit, .inquiryDetail dl { grid-template-columns: minmax(0, 1fr); }
 }
 .workspaceHeader,
 .nextWorkBand {
