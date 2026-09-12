@@ -83,6 +83,7 @@ test('AIT USA preview and mutations bind to the exact selected inquiry', () => {
 
 test('AIT USA manual inquiry creation preserves unknown attribution', () => {
   const directory = fs.readFileSync(new URL('./page.js', import.meta.url), 'utf8');
+  assert.match(directory, /isAitUsaDirectory \? 'Add prospective student' : `Add \$\{singularLabel\}`/);
   assert.match(directory, /source: defaultIsAitUsa \? '' : empty\.source/);
   assert.match(directory, /source: '',\s+assignedTo: '',\s+idempotencyKey:/);
   assert.match(directory, /\{isAitUsaForm && <option value="">Not recorded<\/option>\}/);

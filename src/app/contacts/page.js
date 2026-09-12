@@ -1452,7 +1452,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
             </div>
           )}
           toolbarExtra={canWrite ? (
-            <button className="btn btn-primary contacts-table-add-button" onClick={openNew}>+ {isAitUsaForm ? 'Add prospective student' : `Add ${singularLabel}`}</button>
+            <button className="btn btn-primary contacts-table-add-button" onClick={openNew}>+ {isAitUsaDirectory ? 'Add prospective student' : `Add ${singularLabel}`}</button>
           ) : null}
           onEdit={canWrite ? (id, u) => {
             updateContact(id, u)
