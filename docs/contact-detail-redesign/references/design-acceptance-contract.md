@@ -1,37 +1,46 @@
-# MIS-409 S1 design acceptance contract
+# MIS-409 design acceptance contract — September 12 continuation
 
-> **Current governing amendment (September 11, 14:52 UTC):** [Compact preview and collapsible navigation](../compact-preview-revision-2026-09-11.md) replaces the earlier top-down Record layout and large scale. Implementation is authorized and ongoing. Earlier paused/publication-only statements and Record-tab/sidebar prohibitions below are historical; preserved field, permission and source contracts still apply.
+## Workflow and problem
 
+AIT USA employees need to manage a person across repeated admissions interest and actual course history without a large Record page or a second manual creation step. The common single-inquiry case must remain immediate; returning students need exact inquiry history without overwriting earlier source, owner, status or placement context.
 
-## Workflow and interaction model
+## Chosen interaction model
 
-AIT USA coordinators need one readable contact workspace: identify the person once, see the next available work without a second profile summary, and maintain each operational resource directly in its tab. The selected model is a compact identity header, a next-work band, and random-access tabs. `Record` is the default overview; Activity, Conversations, Enrollments, Receipts, and conditionally applicable Work Orders retain their existing working surfaces and actions.
+Keep the deployed compact two-rail structure: collapsible global icon rail, persistent Contact/current-or-latest-inquiry preview and a wide random-access operational workspace. Activity stays the default. Add one top-level Inquiries list/detail destination; selected inquiry details use compact sections, not nested sub-tabs. AIT USA manual entry remains one combined Contact + Inquiry save.
 
-## Direction and invariants
+## Reference classification and visual direction
 
-Reference mode is **faithful selected-board**. `01-contact-workspace-v3.png`, `02-focused-editor-v3.png`, and `03-enrollments-workspace.png` are the visual acceptance authority for their named states: composition, editorial hierarchy, typography character, spacing rhythm, flat white/divider treatment, underline tabs, round identity avatar, quiet outlined edit action, and contextual property-row controls must be reproduced. Fictional board values are never copied into production; truthful data, authorization, route state, empty/closed/conflict states, and existing form behavior remain authoritative. Permitted deviations are limited to real-content expansion, accessibility, permissions, and responsive behavior.
+Reference mode is **inspiration**. The deployed compact staging workspace at `28e02a9` and the owner's September 12 screenshots establish the accepted structure and density direction. The implementation must intentionally increase the current rendering approximately 10–15% and use the available right-side width. Earlier v3 Record artwork is superseded and is not fidelity authority.
 
-- Header has one identity and one `Edit contact` action.
-- Record has `Contact & preferences` and one resolved inquiry state: Current inquiry, Last inquiry (closed), quiet no-active inquiry, or explicit conflict.
-- Contact and inquiry source values are displayed and saved through explicit entity scopes. Contact source uses `contacts.sourceLabel`; inquiry source uses the selected lead's editable `sourceName`. Technical `sourceType` remains provenance and is only a legacy read fallback when `sourceName` was never specified.
-- No repeated profile sidebar, review grid, gateway-only resource links, fabricated student badge/history, or forced inquiry creation.
-- AIT Signs keeps its current people, financial, and work-order vocabulary and surfaces.
+Locked visual invariants:
 
-## Locked behavior and non-goals
+- 64px global icon rail; approximately 232px overlay menu without content reflow;
+- approximately 292–304px persistent Contact preview on primary desktop;
+- flat, compact surfaces with restrained dividers and no oversized Record composition;
+- generally 14–15px body text, meaningful muted labels at least 13px, 22–24px principal headings, approximately 15px tabs and 36–40px common controls;
+- Activity, Inquiries, Conversations, Enrollments, Receipts and conditional Work Orders remain one readable tab row when space permits;
+- no large unused right gutter at 1440px and above; no CSS zoom/transform or document-wide overflow.
 
-Existing IDs, route/query context, permissions, dirty/error state, archive flow, lifecycle reasons, and current forms remain unchanged. The source-scope extension adds named request fields without a schema migration or data backfill; all other scoped editor replacements remain later work.
+## Locked behavior and data ownership
 
-## Viewports and evidence
+- Contact owns identity, channels/restrictions, contact source and durable person-level fields.
+- Inquiry owns lifecycle, owner, program/preferences, inquiry source and exact placement association.
+- Enrollment owns actual course/level participation. Normal course progression does not create inquiries.
+- The preview shows the active inquiry, otherwise latest closed; a selector appears only when multiple inquiries exist.
+- Inquiries list exact permitted lead records and target exact IDs. Multiple-active conflicts block ambiguous writes.
+- Placement is a compact inquiry section. AIT USA remains authoritative; CRM exposes only privacy-safe state/level/update and an authorized employee-review link.
+- Pipeline **Add inquiry** and Contacts **Add prospective student** share one combined form. Preserve atomic Contact + Opportunity creation; exact existing identity attaches a new inquiry after confirmation, while ambiguity stops for review.
+- Reopen remains a permissioned correction with a reason, not a primary creation action.
+- Contact and inquiry source saves remain independent. Activity/provenance is not rewritten.
+- Follow-up/outreach, Conversations, Enrollment/history, Receipts, conditional Work Orders, archive/request approval, permissions, loading/error states and deep-link return behavior remain reachable.
+- AIT Signs is regression-only and retains its existing vocabulary and operational surfaces.
 
-Primary viewport: 1440×1000 CSS px. Regression: compact desktop (1024×768), bounded narrow layout (768×900), and keyboard tab navigation. Required closeout evidence includes focused rendering and real loader-payload selection coverage, plus authenticated staging browser QA. Local fixture evidence is useful but does not replace authenticated staging acceptance.
+## Non-goals
 
-## Director review corrections
+No Record tab revival, nested inquiry sub-tabs, top-level Placement tab, schema migration, data backfill, provider send, permission expansion, automatic identity merge, production data write, production promotion, AIT Signs redesign or new inquiry for every course level.
 
-- `hasLeadStatus` means a selected record exists, not that it is active. Closed-only history is labeled Last inquiry (closed); conflict wins over all other states. Existing history editing remains reachable through the shared form.
-- Change owner observes the existing assignment policy; general CRM write access alone is insufficient.
-- Keep one header Edit contact action, not a duplicate in the contact section.
-- Read learning/student locations through the canonical helpers, including legacy address fallback for student location.
-- Missing attribution is not replaced with a sample label. An explicitly cleared editable source remains unknown; legacy rows with no editable `sourceName` may still display their stored technical source provenance.
-- The next-work fallback says No next action recorded; it does not assert there are no scheduled tasks without querying them.
-- Contact and inquiry source saves are independently scoped in S1. Contact-only saves cannot mutate inquiry fields; inquiry-only saves cannot mutate contact source. Inquiry Edit opens the inquiry-scoped form, where lifecycle, ownership and inquiry source live.
-- Legacy/no-selected-inquiry and conflict records retain assigned coordinator and student location in Contact & preferences. Permission-gated cleanup provenance remains available as a collapsed Record disclosure.
+## Viewports, content growth and evidence
+
+Primary: 1440×1000 CSS px at 100% zoom. Regression: 1280×900, 1024×768, 768×900 and 390px navigation/overflow smoke. Use fixtures for one/no/multiple/closed/conflicting inquiries, long names/sources, several placement events and multiple enrollment rows. The common one-inquiry state must not gain an extra required click.
+
+Closeout requires render-path tests, focused inquiry/identity/RBAC tests, full validation, independent visual review, matching-viewport staging screenshots, exact deployment/CI identity, authenticated role coverage, residual differences and explicit production untouched status.

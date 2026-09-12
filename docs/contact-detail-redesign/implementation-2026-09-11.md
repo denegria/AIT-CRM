@@ -2,9 +2,9 @@
 
 This implementation extends the deployed contact workspace candidate with the approved source corrections.
 
-## Visual acceptance contract
+## Visual acceptance contract at delivery
 
-MIS-409 uses **faithful selected-board** mode: `01-contact-workspace-v3.png`, `02-focused-editor-v3.png`, and `03-enrollments-workspace.png` are implementation and comparison authority for their named states. Their composition, hierarchy, typography, spacing, flat divider-led sections, underline tabs, identity treatment, editor framing, and enrollment-table density must be retained; fictional board data must not replace truthful product data or supported states.
+This source-scope slice originally used the selected v3 boards for the named editor and enrollment states. That visual authority was superseded on September 11 by the deployed compact two-rail revision and on September 12 by the continuation contract in `references/design-acceptance-contract.md`. The old Record composition must not be reintroduced.
 
 ## Contract delivered
 
@@ -25,3 +25,17 @@ Focused tests cover contact-only and inquiry-only draft serialization, omission 
 - Save responses now refresh the legacy `sourceLabel` display alias alongside `contactSource`, including explicit clears; opening the editor preserves empty values rather than falling back to stale attribution.
 - Added four direct PATCH-route checks for isolated contact/inquiry corrections and clears; inquiry writes exercise the selected-opportunity locked writer and leave technical provenance unchanged.
 - Live staging browser access was restored by the owner's senior-coordinator login. Source changes require verification on the new deployment; regular-role live coverage and persisted live save/reload checks must not be inferred from read-only UI checks.
+
+## September 12 continuation status
+
+The source-scope corrections above and compact workspace revision are present on staging head `28e02a9` (compact implementation `d303e58`). GitHub CI and the Vercel deployment completed successfully. Authenticated acceptance and the correction loop were interrupted before closeout, so MIS-409 remains In Progress and production remains untouched.
+
+Alvaro subsequently approved the governing continuation in `compact-preview-revision-2026-09-11.md`:
+
+1. increase the compact workspace scale and usable width;
+2. add the exact role-scoped Inquiries list/detail surface and inquiry-owned placement summary;
+3. specialize AIT USA manual entry as one **Add inquiry** / **Add prospective student** save with safe exact-identity reuse and ambiguous-match review;
+4. preserve every existing operational workflow and treat AIT Signs only as a shared-component regression gate;
+5. validate, independently review, deploy to staging and complete authenticated browser QA before requesting any production promotion.
+
+This continuation was specified but not implemented at the time of this documentation sync. It authorizes no schema migration, CRM data write, provider send or production deployment.
