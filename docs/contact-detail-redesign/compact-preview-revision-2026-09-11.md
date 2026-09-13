@@ -1,12 +1,21 @@
 # MIS-409 — compact contact workspace continuation
 
+> **September 13 visual continuation:**
+> `visual-polish-revision-2026-09-13.md` is the governing authority for the
+> production-language paint, typography, profile-header and Activity visual
+> correction approved after staging review. The interaction, RBAC, data and
+> inquiry contracts below remain locked.
+
 ## Authority and current status
 
 Alvaro approved this continuation on September 12, 2026 after reviewing deployed staging commit `28e02a9`. The compact two-rail structure is retained, but the rendered workspace is approximately 10–15% under-scaled. The earlier top-to-bottom Record boards remain historical and are not implementation authority.
 
 This document is the governing implementation brief for [MIS-409](https://linear.app/mission-control-v2/issue/MIS-409), within [MIS-408](https://linear.app/mission-control-v2/issue/MIS-408). Staging implementation and in-scope correction are authorized. Production promotion, production data writes, provider sends and schema migration are not authorized.
 
-Reference classification is **inspiration mode**. The deployed compact staging workspace and the owner-supplied September 12 screenshots establish the accepted two-rail structure and density direction; this brief names the intentional sizing and workflow changes. Superseded v3 Record artwork is not a faithful target.
+The September 13 supplement classifies the current production and staging
+captures as scoped faithful references and names their exact authority and
+permitted deviations. Superseded v3 Record artwork is not an implementation
+target.
 
 ## Dispatch contract
 
