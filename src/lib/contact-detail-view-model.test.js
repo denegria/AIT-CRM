@@ -79,7 +79,7 @@ test('AIT USA contact detail uses enrollment grammar and hides empty Signs finan
     },
   });
 
-  assert.equal(model.profileTitle, 'Enrollment Profile');
+  assert.equal(model.profileTitle, 'Student Profile');
   assert.equal(model.sourceEyebrow, 'Wix Website Form');
   assert.deepEqual(model.snapshotItems.map((item) => item.key), ['lead', 'follow_up', 'message', 'task']);
   assert.deepEqual(model.timelineFilters.map((filter) => filter.value), ['all', 'lead', 'follow_up', 'message', 'task', 'note', 'import']);

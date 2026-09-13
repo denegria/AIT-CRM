@@ -285,7 +285,7 @@ export function buildContactDetailViewModel({
     ]);
     return {
       workflowKey,
-      profileTitle: 'Enrollment Profile',
+      profileTitle: 'Student Profile',
       sourceEyebrow: firstPresent([source.channel, contact.inquirySource, contact.source, 'AIT USA Institute']),
       workflowTitle: firstPresent([process.stage, contact.currentStage, contact.status, 'New Lead']),
       workflowNext: firstPresent([

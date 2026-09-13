@@ -1882,31 +1882,47 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const profileSidebar = (
     <div className={s.profileCard}>
       <div className={s.profileHeader}>
-        <div className={s.profileAvatarLarge}>{contact.name.charAt(0)}</div>
-        <div className={s.profileTitleBlock}>
-          <div className={s.profileNameRow}>
+        {isAitUsaContact ? (
+          <>
+            <div className={s.profileIdentityMark}>
+              <div className={s.profileAvatarLarge}>{contact.name.charAt(0)}</div>
+              <div className={s.profileRole}>{detailView.profileTitle}</div>
+            </div>
             <h1 className={s.profileName}>{contact.name}</h1>
-            {!isAitUsaContact && <span className={`badge badge-${contact.status.toLowerCase().replace(' ', '')}`}>{contact.status}</span>}
-          </div>
-          <div className={s.profileRole}>{detailView.profileTitle}</div>
-          {detailView.sourceEyebrow && <div className={s.profileSource}>{detailView.sourceEyebrow}</div>}
-        </div>
+            {detailView.sourceEyebrow && <div className={s.profileSource}>{detailView.sourceEyebrow}</div>}
+          </>
+        ) : (
+          <>
+            <div className={s.profileAvatarLarge}>{contact.name.charAt(0)}</div>
+            <div className={s.profileTitleBlock}>
+              <div className={s.profileNameRow}>
+                <h1 className={s.profileName}>{contact.name}</h1>
+                <span className={`badge badge-${contact.status.toLowerCase().replace(' ', '')}`}>{contact.status}</span>
+              </div>
+              <div className={s.profileRole}>{detailView.profileTitle}</div>
+              {detailView.sourceEyebrow && <div className={s.profileSource}>{detailView.sourceEyebrow}</div>}
+            </div>
+          </>
+        )}
       </div>
 
       {isAitUsaContact && (
         <section className={s.inquiryPreview} aria-label="Contact preview and current inquiry summary">
           <div className={s.inquiryPreviewHeader}>
-            <span>{contact.opportunityConflict
-              ? 'Inquiry needs resolution'
-              : inquiryHistoryLoading
-                ? 'Loading inquiry history'
-                : inquiryHistoryError
-                  ? 'Inquiry history unavailable'
-                  : selectedInquiryIsActive
-                    ? 'Current inquiry'
-                    : selectedInquiry
-                      ? 'Last inquiry (closed)'
-                      : 'No active inquiry'}</span>
+            <div className={s.inquiryPreviewTitle}>
+              <GraduationCap size={15} />
+              <span>{contact.opportunityConflict
+                ? 'Inquiry needs resolution'
+                : inquiryHistoryLoading
+                  ? 'Loading inquiry history'
+                  : inquiryHistoryError
+                    ? 'Inquiry history unavailable'
+                    : selectedInquiryIsActive
+                      ? 'Current inquiry'
+                      : selectedInquiry
+                        ? 'Last inquiry (closed)'
+                        : 'No active inquiry'}</span>
+            </div>
             {inquiryItems.length > 1 && <select className={s.inquirySelector} aria-label="Selected inquiry" value={selectedInquiryId} onChange={(event) => selectInquiry(event.target.value)}>
               {inquiryItems.map((inquiry) => <option key={inquiry.id} value={inquiry.id}>{inquiry.program || 'Program not recorded'} · {inquiry.status}</option>)}
             </select>}
@@ -1924,7 +1940,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             <dl className={s.previewFacts}>
               <div><dt>Status</dt><dd>{selectedInquiry.status || 'Unknown'}{canEditSelectedInquiry && <button className={s.previewLink} type="button" aria-label="Change inquiry status" onClick={() => openInquiryEditor('general')}>Change</button>}</dd></div>
               <div><dt>Owner</dt><dd>{selectedInquiry.owner?.label || 'Unassigned'}{canEditSelectedInquiry && canManageContactAssignments && <button className={s.previewLink} type="button" aria-label="Change inquiry owner" onClick={() => openInquiryEditor('general')}>Change</button>}</dd></div>
-              <div><dt>Program</dt><dd>{selectedInquiry.program || 'Unknown'}</dd></div>
+              <div><dt>Program</dt><dd>{selectedInquiry.program || 'No program selected'}</dd></div>
             </dl>
           ) : (
             <>
@@ -1984,7 +2000,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           {cleanText(contact.email) ? (
             <a className={s.infoLink} href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a>
           ) : (
-            <span className={s.missingInfo}>Missing email</span>
+            <span className={s.missingInfo}>No email on file</span>
           )}
         </div>
         <div className={s.infoItem}>

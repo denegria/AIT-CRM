@@ -17,7 +17,7 @@ test('AIT USA defaults to Activity with direct retained tabs and no standalone R
   assert.match(source, /detailView\.tabs\.financialLabel/);
   assert.match(source, /detailView\.tabs\.workOrdersLabel/);
   assert.match(source, /\{profileSidebar\}/);
-  assert.match(styles, /grid-template-columns: minmax\(292px, 304px\) minmax\(0, 1fr\)/);
+  assert.match(styles, /grid-template-columns: minmax\(320px, 340px\) minmax\(0, 1fr\)/);
   assert.match(source, /Inquiries \(\{inquiryItems\.length\}\)/);
   assert.match(source, /aria-label="Selected inquiry"/);
   assert.match(source, /Discard the open inquiry edits before selecting another inquiry/);
@@ -47,6 +47,25 @@ test('record uses actual inquiry resolution states without creating a substitute
   assert.match(source, /const inquiryHistoryReady = Boolean\(!inquiryHistoryLoading && !inquiryHistoryError\);/);
   assert.match(source, /!contact\?\.opportunityConflict && !hasActiveInquiry/);
   assert.match(source, /\(selectedInquiryIsActive \|\| !hasActiveInquiry\)/);
+});
+
+test('AIT USA render path keeps the production-language hierarchy without changing AIT Signs', () => {
+  const viewModel = fs.readFileSync(new URL('../../lib/contact-detail-view-model.js', import.meta.url), 'utf8');
+  assert.match(viewModel, /profileTitle: 'Student Profile'/);
+  assert.doesNotMatch(viewModel, /profileTitle: 'Enrollment Profile'/);
+  assert.match(source, /<div className=\{s\.profileIdentityMark\}>/);
+  assert.match(source, /<h1 className=\{s\.profileName\}>\{contact\.name\}<\/h1>/);
+  assert.match(source, /selectedInquiry\.program \|\| 'No program selected'/);
+  assert.match(source, /No email on file/);
+  assert.match(source, /<GraduationCap size=\{15\} \/>/);
+  assert.match(source, /<details className=\{s\.timelineProvenance\}>/);
+  assert.match(source, /<summary>Source details<\/summary>/);
+  assert.match(source, /!isAitUsaContact && <section className=\{s\.reviewContext\}/);
+  assert.match(styles, /\.usaWorkspace \.contentSection \{[\s\S]*?box-shadow: var\(--shadow-soft\);/);
+  assert.match(styles, /\.usaWorkspace \.profileCard \{[\s\S]*?background: linear-gradient/);
+  assert.match(styles, /\.usaWorkspace \.contentTab\.active \{[\s\S]*?background: var\(--accent-muted\);/);
+  assert.match(viewModel, /profileTitle: isSigns \? 'Customer Account' : 'Contact Profile'/);
+  assert.match(styles, /\.contentSection:not\(.usaContent\) \.contentTabs/);
 });
 
 test('S1 keeps established action paths and supplies bounded responsive layout', () => {

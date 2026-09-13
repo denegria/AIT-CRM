@@ -23,7 +23,7 @@
   min-width: 0;
 }
 .usaWorkspace {
-  grid-template-columns: minmax(292px, 304px) minmax(0, 1fr);
+  grid-template-columns: minmax(320px, 340px) minmax(0, 1fr);
   gap: 28px;
   --text-xs: 12px;
   --text-sm: 14px;
@@ -31,7 +31,16 @@
 }
 :global(main):has(.usaWorkspace) { background: var(--bg-secondary); }
 .detailPage:has(.usaWorkspace) .btnBack { font-size: 14px; }
-.usaWorkspace .contentSection { grid-column: 2; grid-row: 1; gap: 10px; }
+.usaWorkspace .contentSection {
+  grid-column: 2;
+  grid-row: 1;
+  gap: 0;
+  padding: 8px;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
+  border-radius: var(--radius-xl);
+  background: linear-gradient(180deg, var(--bg-elevated), var(--bg-secondary));
+  box-shadow: var(--shadow-soft);
+}
 .usaWorkspace .profileCard {
   grid-column: 1;
   grid-row: 1;
@@ -39,18 +48,22 @@
   top: 0;
   max-height: calc(100dvh - 56px);
   overflow-y: auto;
-  padding: 16px;
-  border-radius: 6px;
-  box-shadow: none;
-  background: var(--bg-secondary);
+  padding: 20px;
+  border-radius: var(--radius-xl);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 82%, transparent);
+  box-shadow: var(--shadow-soft);
+  background: linear-gradient(180deg, var(--bg-elevated), var(--bg-secondary));
 }
-.usaWorkspace .profileHeader { align-items: center; margin-bottom: 14px; }
-.usaWorkspace .profileAvatarLarge { width: 40px; height: 40px; border-radius: 999px; font-size: 17px; box-shadow: none; }
-.usaWorkspace .profileName { font-size: 22px; }
-.usaWorkspace .profileRole { margin-top: 3px; font-size: 11px; }
-.usaWorkspace .profileSource { margin-top: 3px; }
-.inquiryPreview { padding: 12px 0; border-top: 1px solid var(--border-subtle); border-bottom: 1px solid var(--border-subtle); }
-.inquiryPreviewHeader { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-primary); font-size: 14px; font-weight: 750; }
+.usaWorkspace .profileHeader { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-bottom: 18px; }
+.profileIdentityMark { display: flex; align-items: center; gap: 10px; }
+.usaWorkspace .profileAvatarLarge { width: 48px; height: 48px; border-radius: var(--radius-xl); font-size: 20px; box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255,255,255,0.22); }
+.usaWorkspace .profileName { font-size: 20px; font-weight: 650; line-height: 1.25; }
+.usaWorkspace .profileRole { margin: 0; font-size: 10px; letter-spacing: .04em; }
+.usaWorkspace .profileSource { margin-top: 0; font-size: 12px; font-weight: 650; }
+.inquiryPreview { padding: 14px; border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--border-subtle)); border-radius: var(--radius-lg); background: linear-gradient(180deg, color-mix(in srgb, var(--accent-muted) 44%, var(--bg-elevated)), var(--bg-secondary)); box-shadow: inset 3px 0 0 var(--accent); }
+.inquiryPreviewHeader { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; color: var(--text-primary); font-size: 14px; font-weight: 750; }
+.inquiryPreviewTitle { display: inline-flex; align-items: center; min-width: 0; gap: 7px; }
+.inquiryPreviewTitle svg { flex: 0 0 auto; color: var(--accent); }
 .inquirySelector { min-width: 0; max-width: 150px; min-height: 32px; border: 1px solid var(--border-subtle); border-radius: 4px; background: var(--bg-secondary); color: var(--text-primary); font: inherit; font-size: 13px; }
 .previewLink { display: inline-flex; align-items: center; gap: 4px; margin-left: 6px; padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
 .previewLink:hover { text-decoration: underline; text-underline-offset: 2px; }
@@ -60,12 +73,12 @@
 .previewFacts > div { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 8px; }
 .previewFacts dt { color: var(--text-muted); font-size: 12px; font-weight: 650; }
 .previewFacts dd { min-width: 0; margin: 0; color: var(--text-primary); font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
-.previewNext { margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--border-subtle); }
+.previewNext { margin-top: 11px; padding-top: 10px; border-top: 1px solid color-mix(in srgb, var(--accent) 16%, var(--border-subtle)); }
 .previewNext span { display: block; color: var(--text-muted); font-size: 12px; font-weight: 650; }
 .previewNext strong { display: block; margin-top: 3px; color: var(--text-primary); font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
 .previewActions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
 .usaWorkspace .previewActions :global(.btn) { min-height: 34px; padding: 7px 9px; font-size: 13px; }
-.usaWorkspace .profileInfo { gap: 8px; margin-bottom: 12px; padding: 12px 0; }
+.usaWorkspace .profileInfo { gap: 9px; margin-bottom: 14px; padding: 16px 0; }
 .usaWorkspace .infoItem { gap: 8px; font-size: 13px; }
 .contactabilityWarning { color: var(--warning); font-weight: 650; }
 .previewDetails { margin: 0 -2px; color: var(--text-secondary); }
@@ -79,8 +92,10 @@
 .previewPhoneHistory strong, .previewProvenance strong { color: var(--text-primary); font-size: 13px; }
 .usaWorkspace .actionPanel { margin-top: 12px; padding-top: 12px; }
 .usaWorkspace .actionPanel :global(.btn-block) { min-height: 34px; padding: 7px 10px; font-size: 13px; }
-.usaWorkspace .contentTabs { padding: 0; gap: 14px; }
-.usaWorkspace .contentTab { padding: 11px 7px 10px; font-size: 15px; }
+.usaWorkspace .contentTabs { margin: 0; padding: 8px; gap: 6px; border: 0; border-bottom: 1px solid var(--border-subtle); background: color-mix(in srgb, var(--bg-tertiary) 48%, var(--bg-secondary)); border-radius: calc(var(--radius-xl) - 4px) calc(var(--radius-xl) - 4px) 0 0; }
+.usaWorkspace .contentTab { padding: 9px 12px; font-size: 15px; font-weight: 650; border-radius: var(--radius-md); }
+.usaWorkspace .contentTab.active { color: var(--accent); background: var(--accent-muted); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 20%, transparent); }
+.usaWorkspace .contentTab.active::after { display: none; }
 .inquiriesWorkspace { padding: 18px 6px; }
 .inquiriesSplit { display: grid; grid-template-columns: minmax(220px, .7fr) minmax(0, 1.3fr); gap: 18px; }
 .inquiryList { display: grid; align-content: start; gap: 6px; }
@@ -97,7 +112,7 @@
 .inquiryDetail dd { margin: 0; overflow-wrap: anywhere; }
 .inquiryDetail section { padding-top: 12px; border-top: 1px solid var(--border-subtle); }
 .inquiryDetail p { margin: 6px 0 0; color: var(--text-secondary); font-size: 14px; line-height: 1.45; }
-.usaWorkspace .tabContent { min-height: 0; }
+.usaWorkspace .tabContent { min-height: 500px; padding: 18px; background: var(--bg-elevated); border: 0; border-radius: 0 0 calc(var(--radius-xl) - 4px) calc(var(--radius-xl) - 4px); box-shadow: none; }
 .usaWorkspace .timelineToolbar { margin-top: 2px; }
 .usaWorkspace .enrollmentsPageHeader h2 { font-size: 22px; }
 .usaWorkspace .enrollmentsPageActions :global(.btn) { min-height: 36px; padding: 7px 10px; font-size: 14px; }
