@@ -195,6 +195,14 @@ function isSourceDetailTimelineItem(item) {
   return ['Cleanup audit', 'Imported workbook note'].includes(sourceKind);
 }
 
+function timelineRawProvenanceText(item = {}) {
+  const explicitRawText = String(item.presentation?.provenance?.rawText || '').trim();
+  if (explicitRawText) return explicitRawText;
+  const text = String(item.text || '').trim();
+  const looksLikeRawImportMetadata = /\b(?:[a-z0-9_]*_)?import_key=|\bworkbook_sha256=|\bsource_(?:sheet|rows?|row_id)=|\bexternal_id=|\bdate_range=/i.test(text);
+  return item.presentation?.isImported && looksLikeRawImportMetadata ? text : '';
+}
+
 function timelineFilterCategory(item) {
   return isSourceDetailTimelineItem(item) ? 'import' : timelineCategory(item);
 }
@@ -2304,7 +2312,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   {timeline.map((item) => {
                     const dateParts = timelineDateParts(item);
                     const provenance = item.presentation?.provenance;
-                    const timelineText = String(item.text || '').trim() === String(provenance?.rawText || '').trim()
+                    const rawProvenanceText = timelineRawProvenanceText(item);
+                    const timelineText = String(item.text || '').trim() === rawProvenanceText
                       ? ''
                       : item.text;
                     const record = item.record;
@@ -2380,19 +2389,19 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                             </div>
                           )}
                           {timelineText && <div className={`${s.timelineText} ${record ? s.timelineTextSecondary : ''}`}>{timelineText}</div>}
-                          {(visibleDetails.length > 0 || provenance) && (
+                          {(visibleDetails.length > 0 || provenance || rawProvenanceText) && (
                             <div className={s.timelineDetails}>
                               {visibleDetails.map((detail) => <span key={`${item.id}-${detail}`}>{detail}</span>)}
-                              {provenance && (
+                              {(provenance || rawProvenanceText) && (
                                 <details className={s.timelineProvenance}>
                                   <summary>Source details</summary>
                                   <div>
-                                    {provenance.sourceKind && <span>{provenance.sourceKind}</span>}
-                                    {provenance.sourceLabel && (
+                                    {provenance?.sourceKind && <span>{provenance.sourceKind}</span>}
+                                    {provenance?.sourceLabel && (
                                       <span>{provenance.sourceLabel}{provenance.sourceRow ? ` row ${provenance.sourceRow}` : ''}</span>
                                     )}
-                                    {provenance.eventType && <span>{provenance.eventType}</span>}
-                                    {provenance.rawText && <pre className={s.timelineRawText}>{provenance.rawText}</pre>}
+                                    {provenance?.eventType && <span>{provenance.eventType}</span>}
+                                    {rawProvenanceText && <pre className={s.timelineRawText}>{rawProvenanceText}</pre>}
                                   </div>
                                 </details>
                               )}
