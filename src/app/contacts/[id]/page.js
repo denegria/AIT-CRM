@@ -2304,6 +2304,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   {timeline.map((item) => {
                     const dateParts = timelineDateParts(item);
                     const provenance = item.presentation?.provenance;
+                    const timelineText = String(item.text || '').trim() === String(provenance?.rawText || '').trim()
+                      ? ''
+                      : item.text;
                     const record = item.record;
                     const noteAuthor = timelineNoteAuthor(item);
                     const visibleDetails = [
@@ -2376,7 +2379,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                               )}
                             </div>
                           )}
-                          {item.text && <div className={`${s.timelineText} ${record ? s.timelineTextSecondary : ''}`}>{item.text}</div>}
+                          {timelineText && <div className={`${s.timelineText} ${record ? s.timelineTextSecondary : ''}`}>{timelineText}</div>}
                           {(visibleDetails.length > 0 || provenance) && (
                             <div className={s.timelineDetails}>
                               {visibleDetails.map((detail) => <span key={`${item.id}-${detail}`}>{detail}</span>)}

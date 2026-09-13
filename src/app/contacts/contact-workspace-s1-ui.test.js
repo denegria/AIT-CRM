@@ -60,6 +60,8 @@ test('AIT USA render path keeps the production-language hierarchy without changi
   assert.match(source, /<GraduationCap size=\{15\} \/>/);
   assert.match(source, /<details className=\{s\.timelineProvenance\}>/);
   assert.match(source, /<summary>Source details<\/summary>/);
+  assert.match(source, /String\(item\.text \|\| ''\)\.trim\(\) === String\(provenance\?\.rawText \|\| ''\)\.trim\(\)/);
+  assert.match(source, /\{timelineText && <div className=\{`\$\{s\.timelineText\}/);
   assert.match(source, /!isAitUsaContact && <section className=\{s\.reviewContext\}/);
   assert.match(styles, /\.usaWorkspace \.contentSection \{[\s\S]*?box-shadow: var\(--shadow-soft\);/);
   assert.match(styles, /\.usaWorkspace \.profileCard \{[\s\S]*?background: linear-gradient/);
