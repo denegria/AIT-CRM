@@ -145,3 +145,7 @@ test('AIT USA contact-wide restrictions suppress direct outreach actions', () =>
   assert.match(source, /Outreach is disabled for this contact\./);
   assert.match(source, /disabled=\{aitUsaOutreachBlocked \|\| manualSend\.sending/);
 });
+
+test('AIT USA follow-up commitments retain the scheduled time', () => {
+  assert.match(source, /function taskDateLabel\(value\) \{[\s\S]*?hour: 'numeric',[\s\S]*?minute: '2-digit'/);
+});
