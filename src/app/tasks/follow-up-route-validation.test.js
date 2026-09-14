@@ -126,45 +126,6 @@ test('generic task edits require and forward the caller loaded task version', as
   assert.equal(serviceInput.expectedUpdatedAt.toISOString(), expectedUpdatedAt);
 });
 
-test('snooze response retains the task due date that existed before snoozing', async () => {
-  const expectedUpdatedAt = '2026-08-16T05:00:00.123Z';
-  const originalDueAt = new Date('2026-08-18T14:00:00.000Z');
-  const snoozedUntil = new Date('2026-08-20T15:30:00.000Z');
-  const genericTask = {
-    ...selectedTask,
-    taskType: 'manual_reminder',
-    dueAt: originalDueAt,
-    updatedAt: new Date(expectedUpdatedAt),
-  };
-  const calls = { reads: 0, transactions: 0, inserts: 0, updates: 0 };
-  const response = await patchTask(
-    jsonRequest('http://localhost/api/tasks', {
-      id: ids.task,
-      action: 'snooze',
-      snoozedUntil: snoozedUntil.toISOString(),
-      expectedUpdatedAt,
-    }, 'PATCH'),
-    {
-      requirePermissionForRequest: permission,
-      getDbForRequest: () => taskReadDb(calls, { selected: genericTask }),
-      updateTaskForRequest: async () => ({
-        task: {
-          ...genericTask,
-          status: 'snoozed',
-          dueAt: snoozedUntil,
-          snoozedUntil,
-        },
-      }),
-    },
-  );
-
-  assert.equal(response.status, 200);
-  const payload = await response.json();
-  assert.equal(payload.task.dueAt, snoozedUntil.toISOString());
-  assert.equal(payload.task.snoozedUntil, snoozedUntil.toISOString());
-  assert.equal(payload.task.originalDueAt, originalDueAt.toISOString());
-});
-
 function sequentialReadDb(...rows) {
   let index = 0;
   return {

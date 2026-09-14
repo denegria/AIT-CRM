@@ -18,10 +18,9 @@ import {
   GraduationCap
 } from 'lucide-react';
 import { PIPELINE_STATUSES, isWorkflowStatusClosed, workflowForBusinessUnit } from '@/lib/sales-workflow';
-import { buildContactDetailViewModel } from '@/lib/contact-detail-view-model';
-import { buildFollowUpSummary, scopedFollowUpTasksFromPayload } from '@/lib/contact-follow-up-summary';
+import { buildContactDetailViewModel, contactInquiryState } from '@/lib/contact-detail-view-model';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
-import { schoolLocationForContact, schoolLocationOptions } from '@/lib/school-locations';
+import { schoolLocationForContact, schoolLocationOptions, studentLocationForContact } from '@/lib/school-locations';
 import {
   COURSE_RECORD_STATUS_OPTIONS,
   courseNameOptions,
@@ -35,11 +34,9 @@ import { InternalNoteComposer } from '@/components/ContactTimelineNoteFields';
 import FollowUpOutcomeDialog from '@/components/FollowUpOutcomeDialog';
 import OpportunityLifecycleField from '@/components/OpportunityLifecycleField';
 import { buildContactProfilePatch } from '@/lib/crm/contact-profile-patch.js';
-import { defaultInquiryId } from '@/lib/crm/inquiry-workspace.js';
 import {
   buildContactFollowUpLookup,
   followUpSubmissionTaskId,
-  followUpTaskEntryHref,
 } from '@/lib/tasks/follow-up-selection.js';
 import { initialFollowUpDraftFields } from '@/lib/tasks/follow-up-draft.js';
 
@@ -108,21 +105,19 @@ const COURSE_STATUS_HELP = {
 };
 
 function classSectionScheduleLabel(section = {}) {
-  const safeSection = section || {};
-  const days = Array.isArray(safeSection.scheduleDays) ? safeSection.scheduleDays.join(', ') : '';
-  const time = [safeSection.startTime, safeSection.endTime].filter(Boolean).join('–');
+  const days = Array.isArray(section.scheduleDays) ? section.scheduleDays.join(', ') : '';
+  const time = [section.startTime, section.endTime].filter(Boolean).join('–');
   return [days, time].filter(Boolean).join(' ');
 }
 
 function classSectionDisplayLabel(section = {}) {
-  const safeSection = section || {};
   return [
-    safeSection.courseName,
-    safeSection.teacher,
-    safeSection.courseLocation,
-    classSectionScheduleLabel(safeSection),
-    safeSection.modality === 'online' ? 'Online' : '',
-    safeSection.status !== 'active' ? 'Inactive' : '',
+    section.courseName,
+    section.teacher,
+    section.courseLocation,
+    classSectionScheduleLabel(section),
+    section.modality === 'online' ? 'Online' : '',
+    section.status !== 'active' ? 'Inactive' : '',
   ].filter(Boolean).join(' · ');
 }
 
@@ -195,14 +190,6 @@ function isSourceDetailTimelineItem(item) {
   const sourceKind = item.presentation?.provenance?.sourceKind || '';
   if (category === 'import') return true;
   return ['Cleanup audit', 'Imported workbook note'].includes(sourceKind);
-}
-
-function timelineRawProvenanceText(item = {}) {
-  const explicitRawText = String(item.presentation?.provenance?.rawText || '').trim();
-  if (explicitRawText) return explicitRawText;
-  const text = String(item.text || '').trim();
-  const looksLikeRawImportMetadata = /\b(?:[a-z0-9_]*_)?import_key=|\bworkbook_sha256=|\bsource_(?:sheet|rows?|row_id)=|\bexternal_id=|\bdate_range=/i.test(text);
-  return item.presentation?.isImported && looksLikeRawImportMetadata ? text : '';
 }
 
 function timelineFilterCategory(item) {
@@ -396,8 +383,6 @@ function taskDateLabel(value) {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
   }).format(date);
 }
 
@@ -456,15 +441,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     businessUnits,
     replaceContactFromServer,
   } = useCRM();
-  const [activeTab, setActiveTab] = useState('timeline');
+  const [activeTab, setActiveTab] = useState('record');
   const [timelineFilter, setTimelineFilter] = useState('all');
-  const [isTimelineFilterOpen, setIsTimelineFilterOpen] = useState(false);
-  const timelineFilterMenuRef = useRef(null);
-  const timelineFilterTriggerRef = useRef(null);
   const [serverTimeline, setServerTimeline] = useState({ contactId: '', reloadKey: -1, items: null, error: false });
   const [timelineReloadKey, setTimelineReloadKey] = useState(0);
-  const [taskProjection, setTaskProjection] = useState({ key: '', items: [], loading: false, error: '' });
-  const [taskProjectionReloadKey, setTaskProjectionReloadKey] = useState(0);
   const [serverConversations, setServerConversations] = useState({ contactId: '', reloadKey: -1, items: null, error: false });
   const [conversationReloadKey, setConversationReloadKey] = useState(0);
   const [messageTemplates, setMessageTemplates] = useState([]);
@@ -541,12 +521,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [courseBusy, setCourseBusy] = useState(false);
   const [courseError, setCourseError] = useState('');
   const [selectedCourseRecordId, setSelectedCourseRecordId] = useState('');
-  const [phoneHistoryState, setPhoneHistoryState] = useState({ contactId: '', reloadKey: -1, items: [], loading: false, error: '' });
-  const [phoneHistoryReloadKey, setPhoneHistoryReloadKey] = useState(0);
-  const [inquiriesState, setInquiriesState] = useState({ contactId: '', items: [], loading: false, error: '' });
-  const [selectedInquiryId, setSelectedInquiryId] = useState('');
-  const [inquiryDraftInitial, setInquiryDraftInitial] = useState(null);
-  const [inquiryReloadKey, setInquiryReloadKey] = useState(0);
+  const [phoneHistoryState, setPhoneHistoryState] = useState({ contactId: '', items: [], loading: false, error: '' });
 
   const scopedContact = useMemo(() => contacts.find(c => c.id === params.id), [contacts, params.id]);
   const allAccessibleContacts = allContacts?.length ? allContacts : contacts;
@@ -613,6 +588,21 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const contactWorkflow = workflowForBusinessUnit(contactBusinessUnit);
   const contactStatusOptions = contactWorkflow.statuses;
   const nextStatus = nextWorkflowStatus(contact?.status, contactStatusOptions);
+  const isClosedStatusReopen = Boolean(
+    editForm &&
+    editForm.status &&
+    contact?.status &&
+    editForm.status !== contact.status &&
+    isWorkflowStatusClosed(contact.status, contactBusinessUnit) &&
+    !isWorkflowStatusClosed(editForm.status, contactBusinessUnit),
+  );
+  const isEnteringClosedStatus = Boolean(
+    editForm &&
+    contact?.hasLeadStatus &&
+    editForm.status &&
+    editForm.status !== contact.status &&
+    isWorkflowStatusClosed(editForm.status, contactBusinessUnit),
+  );
   const detailView = buildContactDetailViewModel({
     contact,
     businessUnit: contactBusinessUnit,
@@ -621,9 +611,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const showLinkedPeoplePanel = isClientMode && detailView.workflowKey === WORKFLOW_KEYS.AIT_SIGNS;
   const showSchoolLocationField = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA;
   const isAitUsaContact = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA || /ait usa|institute/i.test(contactBusinessUnit?.name || '');
-  const aitUsaOutreachBlocked = isAitUsaContact && detailView.contactability?.canFollowUp === false;
-  const primaryPhoneDirectActionAllowed = !aitUsaOutreachBlocked && !contact?.isWrongNumber && !contact?.isDoNotCall;
+  const inquiryState = contactInquiryState(contact || {});
+  const hasResolvedCurrentInquiry = isAitUsaContact && inquiryState === 'current';
+  const hasClosedInquiry = isAitUsaContact && inquiryState === 'closed';
   const contactSource = cleanText(contact?.sourceLabel) || 'Unknown';
+  const inquirySource = cleanText(contact?.inquirySource) || 'Unknown';
   const canManageContactAssignments = isAitUsaContact
     ? canManageAitUsaAssignments
     : coordinatorUiPolicy.canManageCoordinatorAssignments;
@@ -640,13 +632,14 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     if (isAitUsaContact && editScope === 'contact') {
       return [
         { id: 'general', label: 'Contact', summary: 'Identity and contact details' },
+        { id: 'source', label: 'Source & routing', summary: 'Contact attribution and location' },
       ];
     }
     if (isAitUsaContact && editScope === 'inquiry') {
       return [
-        { id: 'enrollment', label: 'Inquiry details', summary: 'Program, schedule, and student details' },
-        { id: 'general', label: 'Ownership & status', summary: 'Status and ownership' },
-        { id: 'source', label: 'Source', summary: 'Inquiry attribution and submission details' },
+        { id: 'general', label: 'Inquiry', summary: 'Status and ownership' },
+        { id: 'source', label: 'Source & routing', summary: 'Inquiry attribution and student location' },
+        { id: 'enrollment', label: 'Enrollment', summary: 'Program preferences and profile notes' },
       ];
     }
     const tabs = [
@@ -692,13 +685,15 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const courseSummary = useMemo(() => deriveCourseSummary(currentCourseRecords), [currentCourseRecords]);
   const activeCourseRecord = courseSummary.currentCourse;
   const activeCourseRecords = courseSummary.currentCourses;
-  const historicalCourseRecords = useMemo(
-    () => courseSummary.records.filter((record) => record.status !== 'active' && record.status !== 'planned'),
-    [courseSummary.records],
-  );
   const selectedClassSection = useMemo(() => (
     currentClassSections.find((section) => section.id === courseForm.classSectionId) || null
   ), [courseForm.classSectionId, currentClassSections]);
+  const selectedCourseRecord = useMemo(() => (
+    currentCourseRecords.find((record) => record.id === selectedCourseRecordId) ||
+    activeCourseRecord ||
+    currentCourseRecords[0] ||
+    null
+  ), [activeCourseRecord, currentCourseRecords, selectedCourseRecordId]);
   const courseStartDateRequired = courseForm.status === 'active';
   const courseStatusIsTerminal = isTerminalCourseRecordStatus(courseForm.status);
   const courseStatusLabel = courseRecordStatusLabel(courseForm.status);
@@ -717,74 +712,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             ? { tone: 'warning', text: 'Generate an invoice from a work order before recording a payment.' }
             : { tone: 'ready', text: 'Invoice is ready for payment recording.' }));
   const renderedActiveTab =
-    (activeTab === 'record') ||
-    (!isAitUsaContact && activeTab === 'inquiries') ||
+    (!isAitUsaContact && activeTab === 'record') ||
     (!showLinkedPeoplePanel && activeTab === 'contacts') ||
     (!showWorkOrdersTab && activeTab === 'workorders') ||
     (!showFinancialsTab && activeTab === 'financials') ||
     (!showCoursesTab && activeTab === 'courses')
       ? 'timeline'
       : activeTab;
-  const inquiryHistoryLoading = Boolean(
-    inquiriesState.contactId !== contact?.id || inquiriesState.loading,
-  );
-  const inquiryHistoryError = inquiriesState.contactId === contact?.id
-    ? inquiriesState.error
-    : '';
-  const inquiryHistoryReady = Boolean(!inquiryHistoryLoading && !inquiryHistoryError);
-  const inquiryItems = inquiriesState.contactId === contact?.id ? inquiriesState.items : [];
-  const selectedInquiry = inquiryItems.find((item) => item.id === selectedInquiryId) || null;
-  const selectedInquiryIsActive = Boolean(selectedInquiry?.isActive);
-  const hasActiveInquiry = inquiryItems.some((item) => item.isActive);
-  const canStartInquiry = Boolean(
-    access.canWriteCrm && isAitUsaContact && inquiryHistoryReady &&
-    !contact?.opportunityConflict && !hasActiveInquiry,
-  );
-  const canEditSelectedInquiry = Boolean(
-    access.canWriteCrm && selectedInquiry && !contact?.opportunityConflict &&
-    (selectedInquiryIsActive || !hasActiveInquiry),
-  );
-  const selectedInquiryNextStatus = selectedInquiryIsActive
-    ? nextWorkflowStatus(selectedInquiry.status, contactStatusOptions)
-    : null;
-  const editedInquiry = inquiryItems.find((item) => item.id === editForm?.opportunityId) || null;
-  const editedInquiryStatus = editScope === 'inquiry'
-    ? editedInquiry?.status || editForm?.status
-    : contact?.status;
-  const isClosedStatusReopen = Boolean(
-    editForm?.status && editedInquiryStatus && editForm.status !== editedInquiryStatus &&
-    isWorkflowStatusClosed(editedInquiryStatus, contactBusinessUnit) &&
-    !isWorkflowStatusClosed(editForm.status, contactBusinessUnit),
-  );
-  const isEnteringClosedStatus = Boolean(
-    editForm?.status && editedInquiryStatus && editForm.status !== editedInquiryStatus &&
-    isWorkflowStatusClosed(editForm.status, contactBusinessUnit),
-  );
-  const inquiryDraftDirty = editScope === 'inquiry' && isEditModalOpen && inquiryDraftInitial &&
-    JSON.stringify(editForm) !== JSON.stringify(inquiryDraftInitial);
-
-  useEffect(() => {
-    if (!isAitUsaContact || !contact?.id || dataSource !== 'postgres') return undefined;
-    let cancelled = false;
-    const contactId = contact.id;
-    queueMicrotask(() => {
-      if (!cancelled) setInquiriesState((current) => ({ ...current, contactId, loading: true, error: '' }));
-    });
-    fetch(`/api/contacts/${contactId}/inquiries`, { cache: 'no-store' })
-      .then(async (response) => {
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.error || 'Inquiry history could not load.');
-        const items = Array.isArray(payload.inquiries) ? payload.inquiries : [];
-        if (!cancelled) {
-          setInquiriesState({ contactId, items, loading: false, error: '' });
-          setSelectedInquiryId((current) => items.some((item) => item.id === current) ? current : defaultInquiryId(items));
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) setInquiriesState({ contactId, items: [], loading: false, error: error.message || 'Inquiry history could not load.' });
-      });
-    return () => { cancelled = true; };
-  }, [contact?.id, dataSource, inquiryReloadKey, isAitUsaContact]);
   const fallbackTimeline = useMemo(() => {
     if (!contact) return [];
     if (Array.isArray(contact.timeline) && contact.timeline.length) return contact.timeline;
@@ -808,7 +742,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     counts[category] = (counts[category] || 0) + 1;
     return counts;
   }, { all: 0 }), [timelineSource]);
-  const renderedTimelineFilter = timelineFilter !== 'import' && detailView.timelineFilters.some((filter) => filter.value === timelineFilter) ? timelineFilter : 'all';
+  const renderedTimelineFilter = detailView.timelineFilters.some((filter) => filter.value === timelineFilter) ? timelineFilter : 'all';
   const timeline = useMemo(() => {
     if (renderedTimelineFilter === 'all') return timelineSource.filter((item) => !isSourceDetailTimelineItem(item));
     return timelineSource.filter((item) => timelineFilterCategory(item) === renderedTimelineFilter);
@@ -816,31 +750,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const latestReviewActivity = useMemo(() => (
     timelineSource.find((item) => !isSourceDetailTimelineItem(item)) || null
   ), [timelineSource]);
-  const isPrivilegedFollowUpScope = canManageAitUsaAssignmentsForUser(currentUser);
-  const taskProjectionKey = [contact?.id, contactBusinessUnit?.id, currentUser?.id, isPrivilegedFollowUpScope ? 'privileged' : 'regular', taskProjectionReloadKey].join(':');
-  const currentTaskProjection = taskProjection.key === taskProjectionKey ? taskProjection : { key: taskProjectionKey, items: [], loading: dataSource === 'postgres', error: '' };
-  const hasMatchingPhoneHistory = phoneHistoryState.contactId === contact?.id && phoneHistoryState.reloadKey === phoneHistoryReloadKey;
-  const contactabilityRefreshStatus = dataSource === 'postgres' && contact?.id && !hasMatchingPhoneHistory
-    ? 'loading'
-    : hasMatchingPhoneHistory && phoneHistoryState.loading
-      ? 'loading'
-    : hasMatchingPhoneHistory && phoneHistoryState.error
-      ? 'error'
-      : 'idle';
-  const followUpProjectionLoading = currentTaskProjection.loading || timelineStatus === 'loading' || contactabilityRefreshStatus === 'loading';
-  const followUpProjectionError = currentTaskProjection.error ||
-    (timelineStatus === 'error' ? 'Activity refresh failed.' : '') ||
-    (contactabilityRefreshStatus === 'error' ? 'Contactability refresh failed.' : '');
-  const followUpSummary = buildFollowUpSummary({
-    events: timelineSource,
-    tasks: currentTaskProjection.items,
-    ownerOptions,
-    contactability: detailView.contactability,
-    isPrivileged: isPrivilegedFollowUpScope,
-  });
-  const timelineFilterOptions = detailView.timelineFilters.filter((filter) => (
-    filter.value !== 'import' && (filter.value === 'all' || filter.value === renderedTimelineFilter || (timelineCounts[filter.value] || 0) > 0)
-  ));
   const hasMatchingServerConversations = serverConversations.contactId === contact?.id && serverConversations.reloadKey === conversationReloadKey;
   const conversationMessages = hasMatchingServerConversations && serverConversations.items ? serverConversations.items : [];
   const linkedSnapshotCounts = {
@@ -901,56 +810,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const currentLinkedPeople = linkedPeople.contactId === contact?.id
     ? linkedPeople
     : { contactId: contact?.id || '', items: [], loading: showLinkedPeoplePanel && dataSource === 'postgres', error: '' };
-
-  useEffect(() => {
-    if (!isTimelineFilterOpen) return undefined;
-    const closeIfOutside = (event) => {
-      if (!timelineFilterMenuRef.current?.contains(event.target)) setIsTimelineFilterOpen(false);
-    };
-    const closeOnEscape = (event) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      setIsTimelineFilterOpen(false);
-      timelineFilterTriggerRef.current?.focus();
-    };
-    document.addEventListener('pointerdown', closeIfOutside);
-    document.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.removeEventListener('pointerdown', closeIfOutside);
-      document.removeEventListener('keydown', closeOnEscape);
-    };
-  }, [isTimelineFilterOpen]);
-
-  useEffect(() => {
-    if (!isAitUsaContact || !contact?.id || !contactBusinessUnit?.id || dataSource !== 'postgres') return undefined;
-    let cancelled = false;
-    const requestKey = taskProjectionKey;
-    const query = new URLSearchParams({
-      contactId: contact.id,
-      businessUnitId: contactBusinessUnit.id,
-      taskType: 'follow_up',
-    });
-    fetch(`/api/tasks?${query.toString()}`, { cache: 'no-store' })
-      .then(async (response) => {
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(payload.error || 'Follow-up task projection could not load.');
-        if (!cancelled) setTaskProjection({
-          key: requestKey,
-          items: scopedFollowUpTasksFromPayload(payload),
-          loading: false,
-          error: '',
-        });
-      })
-      .catch((error) => {
-        if (!cancelled) setTaskProjection({
-          key: requestKey,
-          items: [],
-          loading: false,
-          error: error.message || 'Follow-up task projection could not load.',
-        });
-      });
-    return () => { cancelled = true; };
-  }, [contact?.id, contactBusinessUnit?.id, dataSource, isAitUsaContact, taskProjectionKey]);
 
   useEffect(() => {
     if (!contact?.id || dataSource !== 'postgres') return undefined;
@@ -1041,7 +900,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           setSelectedCourseRecordId((current) => (
             current && items.some((item) => item.id === current)
               ? current
-              : ''
+              : items[0]?.id || ''
           ));
         }
       })
@@ -1067,27 +926,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     if (!contact?.id || dataSource !== 'postgres') return undefined;
     let cancelled = false;
     const requestContactId = contact.id;
-    const requestReloadKey = phoneHistoryReloadKey;
-    queueMicrotask(() => {
-      if (!cancelled) {
-        setPhoneHistoryState((current) => ({
-          ...current,
-          contactId: requestContactId,
-          reloadKey: requestReloadKey,
-          loading: true,
-          error: '',
-        }));
-      }
-    });
     fetch(`/api/contacts/${contact.id}/phones`, { cache: 'no-store' })
       .then(async (response) => {
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload.error || 'Phone history load failed.');
         if (!cancelled) {
-          if (payload.contact?.id === requestContactId) replaceContactFromServer(payload.contact);
           setPhoneHistoryState({
             contactId: requestContactId,
-            reloadKey: requestReloadKey,
             items: Array.isArray(payload.phones) ? payload.phones : [],
             loading: false,
             error: '',
@@ -1099,7 +944,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         if (!cancelled) {
           setPhoneHistoryState({
             contactId: requestContactId,
-            reloadKey: requestReloadKey,
             items: [],
             loading: false,
             error: error.message || 'Phone history load failed.',
@@ -1109,7 +953,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [contact?.id, dataSource, phoneHistoryReloadKey, replaceContactFromServer]);
+  }, [contact?.id, dataSource]);
 
   useEffect(() => {
     if (!contact?.id || dataSource !== 'postgres') return undefined;
@@ -1206,43 +1050,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
   const openInquiryEditor = (section = 'general') => {
     openEditModal(isAitUsaContact ? 'inquiry' : 'combined');
-    if (selectedInquiry) {
-      const editable = selectedInquiry.editable || {};
-      const draft = {
-        ...contact,
-        opportunityId: selectedInquiry.id,
-        updatedAt: selectedInquiry.updatedAt || '',
-        status: editable.status || selectedInquiry.status,
-        assignedTo: editable.assignedTo || '',
-        inquirySource: editable.sourceName || selectedInquiry.source || '',
-        leadProfile: {
-          programInterest: editable.programInterest || selectedInquiry.program || '',
-          preferredDay: editable.preferredDay || '',
-          preferredSchedule: editable.preferredSchedule || '',
-          locationPreference: editable.locationPreference || '',
-          sourceDetail: editable.sourceDetail || '',
-        },
-        statusChangeReason: '',
-        terminalStatusReason: '',
-      };
-      setEditForm(draft);
-      setInquiryDraftInitial(draft);
-    }
     setActiveProfileEditTab(section);
   };
 
-  const selectInquiry = (id) => {
-    if (!id || id === selectedInquiryId) return;
-    if (inquiryDraftDirty) {
-      toast('Discard the open inquiry edits before selecting another inquiry.', 'error');
-      return;
-    }
-    setSelectedInquiryId(id);
-  };
-
   const openStartInquiry = () => {
-    if (!canStartInquiry) return;
-    openEditModal(isAitUsaContact ? 'contact' : 'combined');
+    openEditModal(isAitUsaContact ? 'inquiry' : 'combined');
     setActiveProfileEditTab('general');
     setStartOpportunityOpen(true);
   };
@@ -1269,10 +1081,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       replaceContactFromServer(payload.contact);
       setEditForm((current) => ({ ...current, ...payload.contact, terminalStatusReason: '', statusChangeReason: '' }));
       setStartOpportunityOpen(false);
-      setIsEditModalOpen(false);
       setTimelineReloadKey((key) => key + 1);
-      setInquiryReloadKey((key) => key + 1);
-      toast('Inquiry started');
+      toast('Opportunity started');
     } catch (error) {
       setStartOpportunityError(error.message || 'Opportunity could not be started.');
     } finally {
@@ -1451,7 +1261,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       return;
     }
     const shouldPromptForCourse = isAitUsaContact &&
-      editForm.status !== (editedInquiry?.status || contact.status) &&
+      editForm.status !== contact.status &&
       isEnrolledWorkflowStatus(editForm.status) &&
       !activeCourseRecord;
     const profilePatch = buildContactProfilePatch({
@@ -1468,7 +1278,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       .then(() => {
         toast('Profile updated');
         setTimelineReloadKey((key) => key + 1);
-        if (editScope === 'inquiry') setInquiryReloadKey((key) => key + 1);
         setIsEditModalOpen(false);
         if (shouldPromptForCourse) {
           openEnrollmentCoursePrompt();
@@ -1636,8 +1445,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       }
       setTimelineFilter('all');
       setTimelineReloadKey((key) => key + 1);
-      setTaskProjectionReloadKey((key) => key + 1);
-      setPhoneHistoryReloadKey((key) => key + 1);
       const resultLabel = payload.taskMatched ? 'Follow-up task completed' : 'Follow-up logged';
       toast(payload.nextTask
         ? `${resultLabel} · next task scheduled`
@@ -1871,20 +1678,15 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   };
 
   const moveToNextStatus = () => {
-    const statusFrom = isAitUsaContact ? selectedInquiry?.status : contact?.status;
-    const statusTo = isAitUsaContact ? selectedInquiryNextStatus : nextStatus;
-    if (!contact?.id || !statusTo || (isAitUsaContact && !canEditSelectedInquiry) || statusUpdating || !access.canWriteCrm) return;
-    const confirmed = window.confirm(`Move ${contact.name} from ${statusFrom} to ${statusTo}?`);
+    if (!contact?.id || !nextStatus || statusUpdating || !access.canWriteCrm) return;
+    const confirmed = window.confirm(`Move ${contact.name} from ${contact.status} to ${nextStatus}?`);
     if (!confirmed) return;
-    const shouldPromptForCourse = isAitUsaContact && isEnrolledWorkflowStatus(statusTo) && !activeCourseRecord;
+    const shouldPromptForCourse = isAitUsaContact && isEnrolledWorkflowStatus(nextStatus) && !activeCourseRecord;
     setStatusUpdating(true);
-    updateContact(contact.id, isAitUsaContact
-      ? { opportunityId: selectedInquiry.id, updatedAt: selectedInquiry.updatedAt, status: statusTo }
-      : { status: statusTo })
+    updateContact(contact.id, { status: nextStatus })
       .then(() => {
-        toast(`Status moved to ${statusTo}`);
+        toast(`Status moved to ${nextStatus}`);
         setTimelineReloadKey((key) => key + 1);
-        if (isAitUsaContact) setInquiryReloadKey((key) => key + 1);
         if (shouldPromptForCourse) {
           openEnrollmentCoursePrompt();
         }
@@ -1941,7 +1743,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   };
 
   const submitManualSend = () => {
-    if (!access.canSendOutboundMessages || !contact?.id || manualSend.sending || aitUsaOutreachBlocked) return;
+    if (!access.canSendOutboundMessages || !contact?.id || manualSend.sending) return;
     const requestId = manualSend.requestId || newManualSendRequestId();
     setManualSend((current) => ({ ...current, sending: true, blockedReasons: [], error: '' }));
     fetch(`/api/contacts/${contact.id}/conversations`, {
@@ -1990,28 +1792,18 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const profileSidebar = (
     <div className={s.profileCard}>
       <div className={s.profileHeader}>
-        {isAitUsaContact ? (
-          <>
-            <div className={s.profileRole}>{detailView.profileTitle}</div>
+        <div className={s.profileAvatarLarge}>{contact.name.charAt(0)}</div>
+        <div className={s.profileTitleBlock}>
+          <div className={s.profileNameRow}>
             <h1 className={s.profileName}>{contact.name}</h1>
-            {detailView.sourceEyebrow && <div className={s.profileSource}>{detailView.sourceEyebrow}</div>}
-          </>
-        ) : (
-          <>
-            <div className={s.profileAvatarLarge}>{contact.name.charAt(0)}</div>
-            <div className={s.profileTitleBlock}>
-              <div className={s.profileNameRow}>
-                <h1 className={s.profileName}>{contact.name}</h1>
-                <span className={`badge badge-${contact.status.toLowerCase().replace(' ', '')}`}>{contact.status}</span>
-              </div>
-              <div className={s.profileRole}>{detailView.profileTitle}</div>
-              {detailView.sourceEyebrow && <div className={s.profileSource}>{detailView.sourceEyebrow}</div>}
-            </div>
-          </>
-        )}
+            <span className={`badge badge-${contact.status.toLowerCase().replace(' ', '')}`}>{contact.status}</span>
+          </div>
+          <div className={s.profileRole}>{detailView.profileTitle}</div>
+          {detailView.sourceEyebrow && <div className={s.profileSource}>{detailView.sourceEyebrow}</div>}
+        </div>
       </div>
 
-      {!isAitUsaContact && (detailView.workflowTitle || detailView.workflowNext || detailView.workflowChips?.length) && (
+      {(detailView.workflowTitle || detailView.workflowNext || detailView.workflowChips?.length) && (
         <div className={s.workflowCard}>
           <div className={s.workflowHeader}>
             <AlertCircle size={15} />
@@ -2044,81 +1836,54 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       )}
 
       <div className={s.profileInfo}>
-        {isAitUsaContact ? <>
-          <div className={s.infoItem}>
-            <Mail size={16} />
-            {cleanText(contact.email) ? (aitUsaOutreachBlocked ? <span className={s.infoLink}>{contact.email}</span> : <a className={s.infoLink} href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a>) : <span className={s.missingInfo}>No email on file</span>}
-          </div>
-          <div className={s.infoItem}>
-            <Phone size={16} />
-            <div className={s.phonePrimary}>
-              {cleanText(contact.phone) ? (primaryPhoneDirectActionAllowed ? <a className={s.infoLink} href={phoneHref(contact.phone)}>{contact.phone}</a> : <span className={s.infoLink}>{contact.phone}</span>) : <span className={s.missingInfo}>Missing phone</span>}
-              {contact.isWrongNumber && <span className={s.phoneRestriction}>Wrong number</span>}
-            </div>
-          </div>
-          {detailView.contactability?.canFollowUp === false && (
-            <div className={`${s.infoItem} ${s.contactabilityWarning}`}>
-              <AlertCircle size={16} />
-              <span><strong>{detailView.contactability.status === 'do_not_contact' ? 'Do not contact' : detailView.contactability.label}</strong>{detailView.contactability.reason ? ` — ${detailView.contactability.reason}` : ''}</span>
-            </div>
+        <div className={s.infoItem}>
+          <Mail size={16} />
+          {cleanText(contact.email) ? (
+            <a className={s.infoLink} href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a>
+          ) : (
+            <span className={s.missingInfo}>Missing email</span>
           )}
-          {hasMatchingPhoneHistory && !phoneHistoryState.loading && phoneHistoryState.items.some((phone) => !phone.isPrimary) && (
-            <details className={s.otherPhones}>
-              <summary>Other phone numbers ({phoneHistoryState.items.filter((phone) => !phone.isPrimary).length})</summary>
+        </div>
+        <div className={s.infoItem}>
+          <Phone size={16} />
+          {cleanText(contact.phone) ? (
+            <a className={s.infoLink} href={phoneHref(contact.phone)}>{contact.phone}</a>
+          ) : (
+            <span className={s.missingInfo}>Missing phone</span>
+          )}
+        </div>
+        {phoneHistoryState.contactId === contact.id && phoneHistoryState.items.some((phone) => !phone.isPrimary) && (
+          <div className={s.infoItem}>
+            <Archive size={16} />
+            <div className={s.phoneHistory}>
+              <strong>Previous phone numbers</strong>
               {phoneHistoryState.items.filter((phone) => !phone.isPrimary).map((phone) => (
-                <div key={phone.id || phone.normalizedPhone} className={s.otherPhoneRow}>
-                  <strong>{phone.phone || 'Number unavailable'}</strong>
-                  <span>{phone.isWrongNumber ? 'Wrong number' : phone.isDoNotCall ? 'Do not call' : 'Not primary'}</span>
-                  {(phone.sourceLabel || phone.createdAt || phone.retiredAt) && <small>{[phone.sourceLabel, phone.retiredAt ? `Retired ${dateLabel({ date: phone.retiredAt })}` : phone.createdAt ? `Added ${dateLabel({ date: phone.createdAt })}` : ''].filter(Boolean).join(' · ')}</small>}
-                </div>
+                <span key={phone.id || phone.normalizedPhone}>
+                  {phone.phone}
+                  {phone.isWrongNumber ? ' · Wrong number' : phone.isDoNotCall ? ' · Do not call' : ' · Historical — do not use for outreach'}
+                </span>
               ))}
-            </details>
-          )}
-          {hasMatchingPhoneHistory && phoneHistoryState.error && <div className={s.infoItem}><AlertCircle size={16} /><span className={s.missingInfo}>{phoneHistoryState.error}</span></div>}
-          {contact.address && <div className={s.infoItem}><MapPin size={16} /> <span>{contact.address}</span></div>}
-          <div className={s.profileFact}><span>Contact source</span><strong>{contactSource}</strong></div>
-          <div className={s.freshnessBlock} aria-label="Record freshness"><div><span>Last interaction</span><strong>{contact.lastTouch || contact.lastContact || 'None'}</strong></div><div><span>Profile updated</span><strong>{contact.lastEdited || contact.updatedAt || contact.createdAt || 'None'}</strong></div></div>
-        </> : <>
-          <div className={s.infoItem}>
-            <Mail size={16} />
-            {cleanText(contact.email) ? <a className={s.infoLink} href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a> : <span className={s.missingInfo}>No email on file</span>}
+            </div>
           </div>
+        )}
+        {phoneHistoryState.contactId === contact.id && phoneHistoryState.error && (
           <div className={s.infoItem}>
-            <Phone size={16} />
-            {cleanText(contact.phone) ? <a className={s.infoLink} href={phoneHref(contact.phone)}>{contact.phone}</a> : <span className={s.missingInfo}>Missing phone</span>}
+            <AlertCircle size={16} />
+            <span className={s.missingInfo}>{phoneHistoryState.error}</span>
           </div>
-          {contact.address && <div className={s.infoItem}><MapPin size={16} /> <span>{contact.address}</span></div>}
-          <div className={s.infoItem}><Calendar size={16} /> <span>Last touch: {contact.lastTouch || contact.lastContact || 'None'}</span></div>
-          <div className={s.infoItem}><Edit3 size={16} /> <span>Last edited: {contact.lastEdited || 'None'}</span></div>
-        </>}
+        )}
+        {contact.address && <div className={s.infoItem}><MapPin size={16} /> <span>{contact.address}</span></div>}
+        <div className={s.infoItem}><Calendar size={16} /> <span>Last touch: {contact.lastTouch || contact.lastContact || 'None'}</span></div>
+        <div className={s.infoItem}><Edit3 size={16} /> <span>Last edited: {contact.lastEdited || 'None'}</span></div>
+        {detailView.contactability?.status && detailView.contactability.status !== 'reachable' && (
+          <div className={s.infoItem}>
+            <AlertCircle size={16} />
+            <span>{detailView.contactability.reason || detailView.contactability.label}</span>
+          </div>
+        )}
       </div>
 
-      {isAitUsaContact && (
-        <section className={s.followUpSummary} aria-label="Follow-up summary">
-          <div className={s.followUpSummaryHeader}><AlertCircle size={15} /><span>Follow-up</span></div>
-          <div className={s.followUpRow}>
-            <span>What happened last?</span>
-            <strong>{followUpSummary.latest?.label || 'No structured follow-up recorded'}</strong>
-            {followUpSummary.latest?.occurredAt && <small>{dateLabel({ timestamp: followUpSummary.latest.occurredAt })}</small>}
-          </div>
-          {followUpProjectionLoading ? <p className={s.followUpHint}>Refreshing contactability, Activity, and permitted follow-up work…</p> : followUpProjectionError ? (
-            <div className={s.followUpError}><span>{followUpProjectionError}</span><button type="button" className={s.previewLink} onClick={() => { setTimelineReloadKey((key) => key + 1); setTaskProjectionReloadKey((key) => key + 1); setPhoneHistoryReloadKey((key) => key + 1); }}>Try again</button></div>
-          ) : (
-            <div className={`${s.followUpRow} ${followUpSummary.commitment?.isOverdue ? s.followUpOverdue : ''}`}>
-              <span>What happens next?</span>
-              <strong>{followUpSummary.commitment?.label}</strong>
-              {followUpSummary.commitment?.task && <small>{followUpSummary.commitment.task.title || 'Follow-up'} · {followUpSummary.commitment.dueAt ? taskDateLabel(followUpSummary.commitment.dueAt) : 'No due date'} · {followUpSummary.commitment.ownerLabel}</small>}
-              {followUpSummary.commitment?.originalDueAt && <small>Original due {taskDateLabel(followUpSummary.commitment.originalDueAt)}</small>}
-              {followUpSummary.commitment?.detail && <small>{followUpSummary.commitment.detail}</small>}
-              {followUpSummary.commitment?.kind === 'multiple' && <Link className={s.previewLink} href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}>Review follow-ups</Link>}
-              {followUpSummary.commitment?.kind === 'exact' && access.canWriteCrm && <Link className={s.previewLink} href={followUpTaskEntryHref(followUpSummary.commitment.task)}>Log outcome</Link>}
-              {followUpSummary.commitment?.kind === 'blocked' && <Link className={s.previewLink} href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}>Review task</Link>}
-            </div>
-          )}
-        </section>
-      )}
-
-      {!isAitUsaContact && !!detailView.highlights?.length && (
+      {!!detailView.highlights?.length && (
         <div className={s.highlightGrid} aria-label={`${detailView.profileTitle} summary`}>
           {detailView.highlights.map((item) => (
             <div key={`${item.label}-${item.value}`} className={`${s.highlightItem} ${item.tone ? s[`highlight_${item.tone}`] || '' : ''}`}>
@@ -2129,18 +1894,18 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         </div>
       )}
 
-      {!isAitUsaContact && <div className={s.profileAssignment}>
+      <div className={s.profileAssignment}>
         <div className={s.assignmentLabel}>Assigned To</div>
         <div className={s.assignmentUser}>
           <div className={s.userAvatarSmall}>{(assignedEmployee?.label || 'U').charAt(0)}</div>
           <span>{assignedEmployee?.label || 'Unassigned'}</span>
         </div>
-      </div>}
+      </div>
 
       {access.canWriteCrm && (
         <div className={s.actionPanel} aria-label={`${detailView.profileTitle} actions`}>
-          <div className={s.actionPanelHeader}>{isAitUsaContact ? 'Contact' : 'Actions'}</div>
-          {!isAitUsaContact && nextStatus && (
+          <div className={s.actionPanelHeader}>Actions</div>
+          {nextStatus && (!isAitUsaContact || contact.hasLeadStatus) && (
             <button
               className={`${s.statusStepButton} btn btn-block`}
               type="button"
@@ -2150,12 +1915,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               <ArrowRight size={16} style={{marginRight: 8}} /> {statusUpdating ? 'Updating...' : `Move to ${nextStatus}`}
             </button>
           )}
-          {!isAitUsaContact && <Link
+          <Link
             className="btn btn-block btn-primary"
             href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}
           >
             <CheckSquare size={16} style={{marginRight: 8}} /> Create Follow-up
-          </Link>}
+          </Link>
           {showWorkOrdersTab && access.canWriteWorkOrders && (
             <Link
               className="btn btn-block"
@@ -2165,59 +1930,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             </Link>
           )}
           <button className="btn btn-block" onClick={() => openEditModal()}>
-            <Edit3 size={16} style={{marginRight: 8}} /> {isAitUsaContact ? 'Edit contact' : 'Edit Profile'}
+            <Edit3 size={16} style={{marginRight: 8}} /> Edit Profile
           </button>
         </div>
       )}
-      {isAitUsaContact && (
-        <section className={s.inquiryFooter} aria-label="Current inquiry summary">
-          <div><span>{contact.opportunityConflict ? 'Inquiry needs resolution' : inquiryHistoryLoading ? 'Loading inquiry history' : inquiryHistoryError ? 'Inquiry history unavailable' : selectedInquiryIsActive ? 'Current inquiry' : selectedInquiry ? 'Last inquiry' : 'No inquiry recorded'}</span></div>
-          {contact.opportunityConflict ? <p className={s.previewWarning}><AlertCircle size={14} /> {contact.activeOpportunityCount || 'Multiple'} active inquiries need resolution.</p> : inquiryHistoryLoading ? <p className={s.previewMuted}>Loading the permitted inquiry history…</p> : inquiryHistoryError ? <p className={s.previewWarning}><AlertCircle size={14} /> Inquiry history could not load.</p> : selectedInquiry ? <p><strong>{selectedInquiry.program || 'Program not recorded'}</strong><span>{selectedInquiry.status || 'Unknown'} · {selectedInquiry.owner?.label || 'Unassigned'}</span></p> : <p className={s.previewMuted}>History and enrollments remain available without an inquiry.</p>}
-          <button className={s.previewLink} type="button" onClick={() => setActiveTab('inquiries')}>View inquiry</button>
-        </section>
-      )}
-    </div>
-  );
-
-  const renderCourseRecordDetails = (record) => (
-    <div className={s.courseInspector} role="region" aria-label={`${record.courseName} details`}>
-      {isTerminalCourseRecordStatus(record.status) ? <>
-        <div className={s.courseInspectorHeader}><strong>{record.courseName}</strong></div>
-        <div className={s.courseHistorySummary}>
-          <div><span>Outcome</span><strong>{record.outcomeReason || 'None recorded'}</strong></div>
-          <div><span>Notes</span><strong>{record.notes || 'No notes'}</strong></div>
-          {access.canWriteCrm && <button className="btn btn-sm" type="button" onClick={() => openCourseModal('edit', record)}><Edit3 size={14} /> Edit history</button>}
-        </div>
-        {record.classSection && <details className={s.courseAdditionalDetails}><summary>Class details</summary><p>{classSectionDisplayLabel(record.classSection)}</p></details>}
-      </> : <>
-      <div className={s.courseInspectorHeader}>
-        <span className={`${s.coursePill} ${s[`coursePill_${record.status}`] || ''}`}>
-          {courseRecordStatusLabel(record.status)}
-        </span>
-        <strong>{record.courseName}</strong>
-      </div>
-      <div className={s.courseInspectorDetails}>
-        <div><span>Started</span><strong>{record.startDate || 'Not set'}</strong></div>
-        <div><span>Delivery location</span><strong>{record.courseLocation || 'Delivery location not set'}</strong></div>
-        <div><span>Teacher</span><strong>{record.teacher || 'Not assigned'}</strong></div>
-        <div><span>Ended</span><strong>{record.endDate || (record.status === 'active' ? 'Current' : 'Not set')}</strong></div>
-        <div className={s.courseInspectorWide}>
-          <span>Class section</span>
-          <strong>{record.classSection ? classSectionDisplayLabel(record.classSection) : 'Legacy or manually entered course record'}</strong>
-        </div>
-        <div className={s.courseInspectorWide}><span>Outcome / reason</span><strong>{record.outcomeReason || 'None recorded'}</strong></div>
-        <div className={s.courseInspectorWide}><span>Notes</span><strong>{record.notes || 'No notes'}</strong></div>
-      </div>
-      {access.canWriteCrm && (
-        <div className={s.courseInspectorActions}>
-          <button className="btn btn-sm" type="button" onClick={() => openCourseModal('edit', record)}><Edit3 size={14} /> Edit</button>
-          {record.status === 'active' && <>
-            <button className="btn btn-sm" type="button" onClick={() => openCourseModal('complete', record)}><CheckCircle2 size={14} /> Complete</button>
-            <button className="btn btn-sm" type="button" onClick={() => openCourseModal('end', record)}><AlertCircle size={14} /> End</button>
-          </>}
-        </div>
-      )}
-      </>}
     </div>
   );
 
@@ -2230,9 +1946,50 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       </div>
 
       <div className={`${s.detailLayout} ${isAitUsaContact ? s.usaWorkspace : ''}`}>
-        {isAitUsaContact && profileSidebar}
         {/* Main Section: Review content */}
-        <div className={`${s.contentSection} ${isAitUsaContact ? s.usaContent : ''}`}>
+        <div className={s.contentSection}>
+          {isAitUsaContact && (
+            <>
+              <section className={s.workspaceHeader} aria-label="Contact identity">
+                <div className={s.workspaceIdentity}>
+                  <div className={s.profileAvatarLarge} aria-hidden="true">{contact.name.charAt(0)}</div>
+                  <div className={s.profileTitleBlock}>
+                    <div className={s.workspaceNameRow}>
+                      <h1 className={s.workspaceName}>{contact.name}</h1>
+                      {contact.status && <span className={`badge badge-${contact.status.toLowerCase().replace(' ', '')}`}>{contact.status}</span>}
+                    </div>
+                    <span>{contactBusinessUnit?.name || 'AIT USA'}</span>
+                  </div>
+                </div>
+                {access.canWriteCrm && (
+                  <button className="btn btn-primary btn-sm" type="button" onClick={() => openEditModal()}>
+                    <Edit3 size={14} /> Edit contact
+                  </button>
+                )}
+              </section>
+
+              <section className={s.nextWorkBand} aria-label="Next work">
+                <div>
+                  <span>Next work</span>
+                  <strong>{detailView.workflowNext || 'No next action recorded'}</strong>
+                  {detailView.workflowChips?.length > 0 && <small>{detailView.workflowChips.join(' · ')}</small>}
+                </div>
+                {access.canWriteCrm && (
+                  <div className={s.nextWorkActions}>
+                    {nextStatus && hasResolvedCurrentInquiry && (
+                      <button className="btn btn-sm" type="button" onClick={moveToNextStatus} disabled={statusUpdating}>
+                        <ArrowRight size={14} /> {statusUpdating ? 'Updating…' : `Move to ${nextStatus}`}
+                      </button>
+                    )}
+                    <Link className="btn btn-primary btn-sm" href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}>
+                      <CheckSquare size={14} /> Create follow-up
+                    </Link>
+                  </div>
+                )}
+              </section>
+            </>
+          )}
+
           {!isAitUsaContact && <section className={s.reviewContext} aria-label={`${detailView.profileTitle} review context`}>
             <div className={s.reviewContextHeader}>
               <div>
@@ -2253,8 +2010,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           </section>}
 
           <div className={s.contentTabs}>
+            {isAitUsaContact && <button className={`${s.contentTab} ${renderedActiveTab === 'record' ? s.active : ''}`} onClick={() => setActiveTab('record')}>Record</button>}
             <button className={`${s.contentTab} ${renderedActiveTab === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')}>{isAitUsaContact ? 'Activity' : 'Timeline'}</button>
-            {isAitUsaContact && <button className={`${s.contentTab} ${renderedActiveTab === 'inquiries' ? s.active : ''}`} onClick={() => setActiveTab('inquiries')}>Inquiries ({inquiryItems.length})</button>}
             <button className={`${s.contentTab} ${renderedActiveTab === 'conversations' ? s.active : ''}`} onClick={() => setActiveTab('conversations')}>Conversations ({conversationMessages.length})</button>
             {showCoursesTab && (
               <button className={`${s.contentTab} ${renderedActiveTab === 'courses' ? s.active : ''}`} onClick={() => setActiveTab('courses')}>{isAitUsaContact ? 'Enrollments' : 'Courses'} ({currentCourseRecords.length})</button>
@@ -2271,31 +2028,90 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           </div>
 
           <div className={s.tabContent}>
-            {renderedActiveTab === 'inquiries' && isAitUsaContact && (
-              <section className={s.inquiriesWorkspace} aria-label="Inquiries workspace">
-                {inquiriesState.loading && <PageState tone="loading" size="compact" title="Loading inquiries" copy="Fetching permitted inquiry history." />}
-                {inquiriesState.error && <PageState tone="error" size="compact" title="Inquiries unavailable" copy={inquiriesState.error} />}
-                {!inquiriesState.loading && !inquiriesState.error && !inquiryItems.length && <PageState tone="empty" size="compact" title="No inquiries" copy="This contact has no inquiry history." />}
-                {!inquiriesState.loading && !inquiriesState.error && inquiryItems.length > 0 && (
-                  <div className={s.inquiriesSplit}>
-                    <div className={s.inquiryList} aria-label="Permitted inquiries">
-                      {inquiryItems.map((inquiry) => <button key={inquiry.id} type="button" className={`${s.inquiryRow} ${selectedInquiryId === inquiry.id ? s.active : ''}`} onClick={() => selectInquiry(inquiry.id)} aria-pressed={selectedInquiryId === inquiry.id}>
-                        <strong>{inquiry.program || 'Program not recorded'}</strong><span>{inquiry.status}</span><small>{inquiry.owner?.label || 'Unassigned'} · Opened {inquiry.openedAt ? dateLabel({ date: inquiry.openedAt }) : 'not recorded'} · Activity {inquiry.lastActivityAt ? dateLabel({ date: inquiry.lastActivityAt }) : 'not recorded'}</small>{inquiry.placement?.finalLevel && <small>Placement: {inquiry.placement.finalLevel}{inquiry.placement.finalStatus ? ` · ${inquiry.placement.finalStatus}` : ''}</small>}
-                      </button>)}
+            {isAitUsaContact && renderedActiveTab === 'record' && (
+              <div className={s.recordWorkspace}>
+                <section className={s.recordSection} aria-labelledby="contact-preferences-title">
+                  <div className={s.recordSectionHeader}>
+                    <div>
+                      <span>Contact</span>
+                      <h2 id="contact-preferences-title">Contact &amp; preferences</h2>
                     </div>
-                    {selectedInquiry && <article className={s.inquiryDetail} aria-live="polite">
-                      <div className={s.inquiryDetailHeader}><div><span>Selected inquiry</span><h2>{selectedInquiry.program || 'Program not recorded'}</h2></div>{canEditSelectedInquiry && <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor('general')}><Edit3 size={14} /> Edit inquiry</button>}</div>
-                      <dl><div><dt>Status</dt><dd>{selectedInquiry.status}</dd></div><div><dt>Owner</dt><dd>{selectedInquiry.owner?.label || 'Unassigned'}</dd></div><div><dt>Opened</dt><dd>{selectedInquiry.openedAt ? dateLabel({ date: selectedInquiry.openedAt }) : 'Not recorded'}</dd></div><div><dt>Inquiry source</dt><dd>{selectedInquiry.source || 'Not recorded'}</dd></div></dl>
-                      <section><h3>Placement</h3>{selectedInquiry.placement ? <><p>{selectedInquiry.placement.state}{selectedInquiry.placement.finalLevel ? ` · ${selectedInquiry.placement.finalLevel}` : ''}</p>{selectedInquiry.placement.reviewPath && <a className="btn btn-sm" href={selectedInquiry.placement.reviewPath} target="_blank" rel="noreferrer">Open placement review</a>}</> : <p>Placement review not recorded.</p>}</section>
-                      <section><h3>Source &amp; history</h3><p>Original evidence remains in Activity. Editing this inquiry does not rewrite contact source or prior events.</p></section>
-                    </article>}
                   </div>
+                  <dl className={s.propertyGrid}>
+                    <div><dt>Email</dt><dd>{contact.email ? <a href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a> : 'Unknown'}</dd></div>
+                    <div><dt>Phone</dt><dd>{contact.phone ? <a href={phoneHref(contact.phone)}>{contact.phone}</a> : 'Unknown'}</dd></div>
+                    <div><dt>Intended learning location</dt><dd>{schoolLocationForContact(contact) || 'Unknown'}</dd></div>
+                    <div><dt>Contact source</dt><dd>{contactSource}</dd></div>
+                    {!hasResolvedCurrentInquiry && !hasClosedInquiry && <div><dt>Assigned coordinator</dt><dd>{assignedEmployee?.label || 'Unassigned'}</dd></div>}
+                    {!hasResolvedCurrentInquiry && !hasClosedInquiry && <div><dt>Student location</dt><dd>{studentLocationForContact(contact) || 'Unknown'}</dd></div>}
+                    <div><dt>Last touch</dt><dd>{contact.lastTouch || contact.lastContact || 'None'}</dd></div>
+                    <div><dt>Last edited</dt><dd>{contact.lastEdited || 'None'}</dd></div>
+                  </dl>
+                  {detailView.contactability?.status && detailView.contactability.status !== 'reachable' && (
+                    <p className={s.recordWarning}><AlertCircle size={15} /> {detailView.contactability.reason || detailView.contactability.label}</p>
+                  )}
+                  {phoneHistoryState.contactId === contact.id && phoneHistoryState.items.some((phone) => !phone.isPrimary) && (
+                    <details className={s.phoneHistoryDisclosure}>
+                      <summary>Phone history</summary>
+                      {phoneHistoryState.items.filter((phone) => !phone.isPrimary).map((phone) => <span key={phone.id || phone.normalizedPhone}>{phone.phone}{phone.isWrongNumber ? ' · Wrong number' : phone.isDoNotCall ? ' · Do not call' : ' · Historical — do not use for outreach'}</span>)}
+                    </details>
+                  )}
+                  {phoneHistoryState.contactId === contact.id && phoneHistoryState.error && <p className={s.recordWarning}><AlertCircle size={15} /> {phoneHistoryState.error}</p>}
+                </section>
+
+                <section className={s.recordSection} aria-labelledby="inquiry-title">
+                  <div className={s.recordSectionHeader}>
+                    <div>
+                      <span>{hasClosedInquiry ? 'Inquiry history' : 'Inquiry'}</span>
+                      <h2 id="inquiry-title">{contact.opportunityConflict ? 'Inquiry needs resolution' : hasResolvedCurrentInquiry ? 'Current inquiry' : hasClosedInquiry ? 'Last inquiry (closed)' : 'No active inquiry'}</h2>
+                    </div>
+                    {(hasResolvedCurrentInquiry || hasClosedInquiry) && access.canWriteCrm && <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor()}><Edit3 size={14} /> Edit</button>}
+                  </div>
+                  {contact.opportunityConflict ? (
+                    <p className={s.recordWarning}><AlertCircle size={15} /> {contact.activeOpportunityCount || 'Multiple'} active inquiries need resolution before inquiry changes can be made.</p>
+                  ) : hasResolvedCurrentInquiry || hasClosedInquiry ? (
+                    <>
+                      <dl className={s.propertyGrid}>
+                        <div><dt>Status</dt><dd>{contact.status || 'Unknown'}</dd></div>
+                        <div><dt>Owner</dt><dd>{assignedEmployee?.label || 'Unassigned'}</dd></div>
+                        <div><dt>Program interest</dt><dd>{contact.programInterest || 'Unknown'}</dd></div>
+                        <div><dt>Inquiry source</dt><dd>{inquirySource}</dd></div>
+                        <div><dt>Preferred days</dt><dd>{contact.preferredDay || 'Unknown'}</dd></div>
+                        <div><dt>Preferred schedule</dt><dd>{contact.preferredSchedule || 'Unknown'}</dd></div>
+                        <div><dt>Student location</dt><dd>{studentLocationForContact(contact) || 'Unknown'}</dd></div>
+                        <div><dt>Qualifications</dt><dd>{[contact.testInterest, contact.educationLevel, contact.schoolName].filter(Boolean).join(' · ') || 'Unknown'}</dd></div>
+                      </dl>
+                      {hasResolvedCurrentInquiry && access.canWriteCrm && (
+                        <div className={s.inquiryActions}>
+                          {canManageContactAssignments && <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor('general')}>Change owner</button>}
+                          <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor('general')}>Change status</button>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className={s.quietInquiryState}>
+                      <p>Contact updates, history, enrollments, and linked resources remain available without an inquiry.</p>
+                      {access.canWriteCrm && <button className="btn btn-sm" type="button" onClick={openStartInquiry}>Start inquiry</button>}
+                    </div>
+                  )}
+                </section>
+                {access.canReadImportReview && !!cleanupAudits.length && (
+                  <details className={s.recordSection}>
+                    <summary>Cleanup provenance</summary>
+                    {cleanupAudits.map((audit) => (
+                      <div key={audit.id} className={s.cleanupSummaryItem}>
+                        <strong>{audit.title}</strong>
+                        <span>{audit.detail}</span>
+                      </div>
+                    ))}
+                  </details>
                 )}
-              </section>
+              </div>
             )}
+
             {renderedActiveTab === 'timeline' && (
               <div className={s.timelineView}>
-                {!isAitUsaContact && <div className={s.snapshotStrip} aria-label={`Current ${singularLabel.toLowerCase()} snapshot`}>
+                <div className={s.snapshotStrip} aria-label={`Current ${singularLabel.toLowerCase()} snapshot`}>
                   {timelineSnapshot.map((item) => {
                     const Icon = SNAPSHOT_ICONS[item.icon] || Activity;
                     return (
@@ -2315,30 +2131,24 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       </button>
                     );
                   })}
-                </div>}
+                </div>
 
                 <div className={s.timelineToolbar}>
-                  <div className={s.timelineFilterMenu} ref={timelineFilterMenuRef}>
-                    <button
-                      ref={timelineFilterTriggerRef}
-                      className={s.timelineFilterTrigger}
-                      type="button"
-                      aria-label="Activity filter"
-                      aria-haspopup="menu"
-                      aria-expanded={isTimelineFilterOpen}
-                      onClick={() => setIsTimelineFilterOpen((open) => !open)}
-                    >
-                      {timelineFilterOptions.find((filter) => filter.value === renderedTimelineFilter)?.label || 'All activity'} <span>{timelineCounts[renderedTimelineFilter] || 0}</span>
-                    </button>
-                    {isTimelineFilterOpen && <div className={s.timelineFilterOptions} role="menu" aria-label="Activity filter options">
-                      {timelineFilterOptions.map((filter) => <button key={filter.value} type="button" role="menuitemradio" aria-checked={renderedTimelineFilter === filter.value} onClick={() => {
-                        setTimelineFilter(filter.value);
-                        setIsTimelineFilterOpen(false);
-                        timelineFilterTriggerRef.current?.focus();
-                      }}>
-                        <span>{filter.label}</span><strong>{timelineCounts[filter.value] || 0}</strong>
-                      </button>)}
-                    </div>}
+                  <div className={s.timelineFilters} aria-label="Timeline filters">
+                    {detailView.timelineFilters.map((filter) => (
+                      <button
+                        key={filter.value}
+                        className={`${s.timelineFilter} ${renderedTimelineFilter === filter.value ? s.active : ''}`}
+                        onClick={() => setTimelineFilter(filter.value)}
+                        type="button"
+                        aria-pressed={renderedTimelineFilter === filter.value}
+                        aria-label={`${filter.label}: ${timelineCounts[filter.value] || 0} records`}
+                      >
+                        {filter.label}
+                        <span className={s.timelineFilterCount}>{timelineCounts[filter.value] || 0}</span>
+                        {renderedTimelineFilter === filter.value && <span className={s.srOnly}> selected</span>}
+                      </button>
+                    ))}
                   </div>
                   {timelineStatus === 'loading' && <div className={s.timelineStatus}>Syncing</div>}
                 </div>
@@ -2364,10 +2174,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   {timeline.map((item) => {
                     const dateParts = timelineDateParts(item);
                     const provenance = item.presentation?.provenance;
-                    const rawProvenanceText = timelineRawProvenanceText(item);
-                    const timelineText = String(item.text || '').trim() === rawProvenanceText
-                      ? ''
-                      : item.text;
                     const record = item.record;
                     const noteAuthor = timelineNoteAuthor(item);
                     const visibleDetails = [
@@ -2440,20 +2246,20 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                               )}
                             </div>
                           )}
-                          {timelineText && <div className={`${s.timelineText} ${record ? s.timelineTextSecondary : ''}`}>{timelineText}</div>}
-                          {(visibleDetails.length > 0 || provenance || rawProvenanceText) && (
+                          {item.text && <div className={`${s.timelineText} ${record ? s.timelineTextSecondary : ''}`}>{item.text}</div>}
+                          {(visibleDetails.length > 0 || provenance) && (
                             <div className={s.timelineDetails}>
                               {visibleDetails.map((detail) => <span key={`${item.id}-${detail}`}>{detail}</span>)}
-                              {(provenance || rawProvenanceText) && (
+                              {provenance && (
                                 <details className={s.timelineProvenance}>
                                   <summary>Source details</summary>
                                   <div>
-                                    {provenance?.sourceKind && <span>{provenance.sourceKind}</span>}
-                                    {provenance?.sourceLabel && (
+                                    {provenance.sourceKind && <span>{provenance.sourceKind}</span>}
+                                    {provenance.sourceLabel && (
                                       <span>{provenance.sourceLabel}{provenance.sourceRow ? ` row ${provenance.sourceRow}` : ''}</span>
                                     )}
-                                    {provenance?.eventType && <span>{provenance.eventType}</span>}
-                                    {rawProvenanceText && <pre className={s.timelineRawText}>{rawProvenanceText}</pre>}
+                                    {provenance.eventType && <span>{provenance.eventType}</span>}
+                                    {provenance.rawText && <pre className={s.timelineRawText}>{provenance.rawText}</pre>}
                                   </div>
                                 </details>
                               )}
@@ -2487,25 +2293,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             )}
 
             {renderedActiveTab === 'courses' && showCoursesTab && (
-              <div className={`${s.coursesPanel} ${s.enrollmentsWorkspace}`} aria-label="Courses">
-                <div className={s.enrollmentsPageHeader}>
-                  <h2>Enrollments</h2>
-                  {access.canWriteCrm && (
-                    <div className={s.enrollmentsPageActions}>
-                      <button className="btn btn-primary btn-sm" type="button" onClick={() => openCourseModal('new')}>
-                        <Plus size={14} /> Add enrollment
-                      </button>
-                      <button className="btn btn-sm" type="button" onClick={() => openCourseModal('history')}>
-                        <Plus size={14} /> Add history
-                      </button>
-                    </div>
-                  )}
-                </div>
+              <div className={s.coursesPanel} aria-label="Courses">
                 <div className={s.courseHero}>
                   <div className={s.courseHeroMain}>
                     <div className={s.courseHeroIcon}><GraduationCap size={22} /></div>
                     <div>
-                      <h2>{activeCourseRecords.length ? `Active enrollments · ${activeCourseRecords.length}` : 'No active enrollments'}</h2>
+                      <span className={s.courseEyebrow}>Active enrollments</span>
+                      <h2>{activeCourseRecords.length ? `${activeCourseRecords.length} active` : 'No active enrollments'}</h2>
                       <p>
                         {activeCourseRecords.length
                           ? 'A student can attend more than one class section at the same time.'
@@ -2513,40 +2307,49 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       </p>
                       {activeCourseRecords.length > 0 && (
                         <div className={s.courseActiveList}>
-                          <div className={s.courseTableHeader} aria-hidden="true">
-                            <span>Course</span><span>Teacher</span><span>Location</span><span>Start date</span><span>Status</span><span>Actions</span>
-                          </div>
-                          {activeCourseRecords.map((record) => {
-                            const expanded = selectedCourseRecordId === record.id;
-                            return <div key={record.id} className={s.courseRecordGroup}>
-                            <div className={s.courseActiveItem}>
-                              <button className={s.courseActiveSelect} type="button" aria-expanded={expanded} aria-controls={`course-details-${record.id}`} onClick={() => setSelectedCourseRecordId(expanded ? '' : record.id)}>
-                                <strong>{record.courseName}</strong>
-                              </button>
-                              <span className={s.courseTableCell}>{record.teacher || 'Not assigned'}</span>
-                              <span className={s.courseTableCell}>{record.courseLocation || 'Not set'}</span>
-                              <span className={s.courseTableCell}>{record.startDate || 'Not set'}</span>
-                              <span className={`${s.courseStatusBadge} ${s[`courseStatus_${record.status}`] || ''}`}>{courseRecordStatusLabel(record.status)}</span>
-                              {access.canWriteCrm && <span className={s.courseRowActions}>
-                                <button className="btn btn-sm" type="button" onClick={() => openCourseModal('edit', record)}>Edit</button>
-                                <button className="btn btn-sm" type="button" onClick={() => openCourseModal('complete', record)}>Complete</button>
-                                <button className="btn btn-sm" type="button" onClick={() => openCourseModal('end', record)}>End</button>
-                              </span>}
-                            </div>
-                            {expanded && <div id={`course-details-${record.id}`}>{renderCourseRecordDetails(record)}</div>}
-                          </div>;
-                          })}
+                          {activeCourseRecords.map((record) => (
+                            <button
+                              key={record.id}
+                              type="button"
+                              className={s.courseActiveItem}
+                              onClick={() => setSelectedCourseRecordId(record.id)}
+                            >
+                              <strong>{record.courseName}</strong>
+                              <span>{[
+                                record.teacher ? `Teacher: ${record.teacher}` : '',
+                                record.courseLocation,
+                                classSectionScheduleLabel(record.classSection),
+                              ].filter(Boolean).join(' · ') || 'Class details not set'}</span>
+                            </button>
+                          ))}
                         </div>
                       )}
                     </div>
                   </div>
+                  {access.canWriteCrm && (
+                    <div className={s.courseHeroActions}>
+                      <button className="btn btn-primary btn-sm" type="button" onClick={() => openCourseModal('new')}>
+                        <Plus size={14} /> Add Enrollment
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className={s.courseToolbar}>
                   <div>
                     <strong>Course history</strong>
-                    <span>{courseRecordsState.loading ? 'Loading' : `${historicalCourseRecords.length} records`}</span>
+                    <span>{courseRecordsState.loading ? 'Loading' : `${currentCourseRecords.length} records`}</span>
                   </div>
+                  {access.canWriteCrm && (
+                    <div className={s.courseToolbarActions}>
+                      <button className="btn btn-sm" type="button" onClick={() => openCourseModal('history')}>
+                        <Plus size={14} /> Add History
+                      </button>
+                      <button className="btn btn-primary btn-sm" type="button" onClick={() => openCourseModal('new')}>
+                        <Plus size={14} /> Add Enrollment
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {courseRecordsState.error && <div className={s.courseError}>{courseRecordsState.error}</div>}
@@ -2554,40 +2357,104 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   <div className={s.courseEmpty}>
                     <div className="empty-state-title">No course history yet</div>
                     <p className="empty-state-copy">Add an active enrollment or backfill a completed course to start the timeline.</p>
+                    {access.canWriteCrm && (
+                      <button className="btn btn-primary" type="button" onClick={() => openCourseModal('new')}>
+                        <Plus size={16} /> Start Course
+                      </button>
+                    )}
                   </div>
                 )}
 
-                {historicalCourseRecords.length > 0 && (
+                {currentCourseRecords.length > 0 && (
                   <div className={s.courseHistoryGrid}>
                     <div className={s.courseRecordList}>
-                      <div className={s.courseTableHeader} aria-hidden="true">
-                        <span>Course</span><span>Teacher</span><span>Location</span><span>Date range</span><span>Status</span><span>Actions</span>
-                      </div>
-                      {historicalCourseRecords.map((record) => {
-                        const expanded = selectedCourseRecordId === record.id;
-                        return <div key={record.id} className={s.courseRecordGroup}>
+                      {courseSummary.records.map((record) => (
                         <button
                           key={record.id}
                           type="button"
-                          className={`${s.courseRecordRow} ${expanded ? s.active : ''}`}
-                          aria-expanded={expanded}
-                          aria-controls={`course-details-${record.id}`}
-                          onClick={() => setSelectedCourseRecordId(expanded ? '' : record.id)}
+                          className={`${s.courseRecordRow} ${selectedCourseRecord?.id === record.id ? s.active : ''}`}
+                          onClick={() => setSelectedCourseRecordId(record.id)}
                         >
                           <span className={`${s.courseStatusDot} ${s[`courseStatus_${record.status}`] || ''}`} />
                           <span className={s.courseRecordMain}>
                             <strong>{record.courseName}</strong>
+                            <small>
+                              {courseRecordStatusLabel(record.status)}
+                              {` - ${record.courseLocation || 'Delivery location not set'}`}
+                              {` - ${record.teacher ? `Teacher: ${record.teacher}` : 'Teacher not assigned'}`}
+                              {record.classSection ? ` - ${classSectionScheduleLabel(record.classSection) || record.classSection.sectionKey}` : ''}
+                              {record.startDate ? ` - ${record.startDate}` : ''}
+                              {record.endDate ? ` to ${record.endDate}` : ''}
+                            </small>
                           </span>
-                          <span className={s.courseTableCell}>{record.teacher || 'Not assigned'}</span>
-                          <span className={s.courseTableCell}>{record.courseLocation || 'Not set'}</span>
-                          <span className={s.courseTableCell}>{record.startDate || 'Not set'}{record.endDate ? ` – ${record.endDate}` : ''}</span>
                           <span className={s.courseRecordStatus}>{courseRecordStatusLabel(record.status)}</span>
-                          <span className={s.courseHistoryAction}>View details</span>
                         </button>
-                        {expanded && <div id={`course-details-${record.id}`}>{renderCourseRecordDetails(record)}</div>}
-                        </div>;
-                      })}
+                      ))}
                     </div>
+
+                    <aside className={s.courseInspector}>
+                      {selectedCourseRecord ? (
+                        <>
+                          <div className={s.courseInspectorHeader}>
+                            <span className={`${s.coursePill} ${s[`coursePill_${selectedCourseRecord.status}`] || ''}`}>
+                              {courseRecordStatusLabel(selectedCourseRecord.status)}
+                            </span>
+                            <strong>{selectedCourseRecord.courseName}</strong>
+                          </div>
+                          <div className={s.courseInspectorDetails}>
+                            <div>
+                              <span>Started</span>
+                              <strong>{selectedCourseRecord.startDate || 'Not set'}</strong>
+                            </div>
+                            <div>
+                              <span>Delivery location</span>
+                              <strong>{selectedCourseRecord.courseLocation || 'Delivery location not set'}</strong>
+                            </div>
+                            <div>
+                              <span>Teacher</span>
+                              <strong>{selectedCourseRecord.teacher || 'Not assigned'}</strong>
+                            </div>
+                            <div>
+                              <span>Ended</span>
+                              <strong>{selectedCourseRecord.endDate || (selectedCourseRecord.status === 'active' ? 'Current' : 'Not set')}</strong>
+                            </div>
+                            <div className={s.courseInspectorWide}>
+                              <span>Class section</span>
+                              <strong>{selectedCourseRecord.classSection
+                                ? classSectionDisplayLabel(selectedCourseRecord.classSection)
+                                : 'Legacy or manually entered course record'}</strong>
+                            </div>
+                            <div className={s.courseInspectorWide}>
+                              <span>Outcome / reason</span>
+                              <strong>{selectedCourseRecord.outcomeReason || 'None recorded'}</strong>
+                            </div>
+                            <div className={s.courseInspectorWide}>
+                              <span>Notes</span>
+                              <strong>{selectedCourseRecord.notes || 'No notes'}</strong>
+                            </div>
+                          </div>
+                          {access.canWriteCrm && (
+                            <div className={s.courseInspectorActions}>
+                              <button className="btn btn-sm" type="button" onClick={() => openCourseModal('edit', selectedCourseRecord)}>
+                                <Edit3 size={14} /> Edit
+                              </button>
+                              {selectedCourseRecord.status === 'active' && (
+                                <>
+                                  <button className="btn btn-sm" type="button" onClick={() => openCourseModal('complete', selectedCourseRecord)}>
+                                    <CheckCircle2 size={14} /> Complete
+                                  </button>
+                                  <button className="btn btn-sm" type="button" onClick={() => openCourseModal('end', selectedCourseRecord)}>
+                                    <AlertCircle size={14} /> End
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className={s.courseEmpty}>Select a course record.</div>
+                      )}
+                    </aside>
                   </div>
                 )}
               </div>
@@ -2662,7 +2529,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                             blockedReasons: [],
                             error: '',
                           }))}
-                          disabled={manualSend.sending || aitUsaOutreachBlocked}
+                          disabled={manualSend.sending}
                         >
                           <option value="messenger">Messenger</option>
                           <option value="whatsapp">WhatsApp</option>
@@ -2681,7 +2548,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                             blockedReasons: [],
                             error: '',
                           }))}
-                          disabled={manualSend.sending || aitUsaOutreachBlocked}
+                          disabled={manualSend.sending}
                         >
                           <option value="">No template</option>
                           {channelTemplates.map((template) => (
@@ -2701,14 +2568,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                         blockedReasons: [],
                         error: '',
                       }))}
-                      disabled={manualSend.sending || aitUsaOutreachBlocked || Boolean(manualSend.templateId)}
+                      disabled={manualSend.sending || Boolean(manualSend.templateId)}
                     />
-                    {aitUsaOutreachBlocked && (
-                      <div className={s.manualSendBlocked}>
-                        <AlertCircle size={15} />
-                        <div>Outreach is disabled for this contact.</div>
-                      </div>
-                    )}
                     {(manualSend.blockedReasons.length > 0 || manualSend.error) && (
                       <div className={s.manualSendBlocked}>
                         <AlertCircle size={15} />
@@ -2726,7 +2587,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                         className="btn btn-primary btn-sm"
                         type="button"
                         onClick={submitManualSend}
-                        disabled={aitUsaOutreachBlocked || manualSend.sending || (!manualSend.textBody.trim() && !manualSend.templateId)}
+                        disabled={manualSend.sending || (!manualSend.textBody.trim() && !manualSend.templateId)}
                       >
                         <Send size={14} /> {manualSend.sending ? 'Sending' : 'Send'}
                       </button>
@@ -3203,20 +3064,18 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         <Modal
           open={isEditModalOpen}
           onClose={() => setIsEditModalOpen(false)}
-          title={isAitUsaContact ? (startOpportunityOpen ? 'Start inquiry' : editScope === 'inquiry' ? 'Edit inquiry' : 'Edit contact') : 'Edit Profile'}
+          title={isAitUsaContact ? (editScope === 'inquiry' ? 'Edit inquiry' : 'Edit contact') : 'Edit Profile'}
           variant="dialog"
-          panelClassName={`contact-profile-dialog-panel ${isAitUsaContact ? 'ait-usa-focused-editor' : ''} ${isAitUsaContact && editScope === 'contact' ? 'ait-usa-contact-editor' : ''}`}
-          footer={<><button className="btn" type="button" onClick={() => setIsEditModalOpen(false)}>Cancel</button>{!startOpportunityOpen && <button className="btn btn-primary" type="button" onClick={handleEditSave}>Save {editScope === 'inquiry' ? 'inquiry' : editScope === 'contact' ? 'contact' : 'changes'}</button>}</>}
+          panelClassName="contact-profile-dialog-panel"
+          footer={<><button className="btn" type="button" onClick={() => setIsEditModalOpen(false)}>Cancel</button><button className="btn btn-primary" type="button" onClick={handleEditSave}>Save Changes</button></>}
         >
           <div className="contact-profile-dialog-form">
-            {!startOpportunityOpen && !(isAitUsaContact && editScope === 'contact') && (
-              <div className="contact-dialog-intro">
-                <p>{editScope === 'inquiry' ? `${contact?.programInterest || 'Current inquiry'} · ${contact?.name || 'Contact'}` : `Update ${contact?.name || singularLabel.toLowerCase()} without leaving the contact record.`}</p>
-                {editScope !== 'inquiry' && <span>Contact details and attribution</span>}
-              </div>
-            )}
+            <div className="contact-dialog-intro">
+              <p>Update {editScope === 'inquiry' ? 'the selected inquiry' : (contact?.name || singularLabel.toLowerCase())} without leaving the contact record.</p>
+              <span>{editScope === 'inquiry' ? 'Inquiry details and attribution' : 'Contact details and attribution'}</span>
+            </div>
 
-            {!startOpportunityOpen && <div className="profile-editor-tabs" role="tablist" aria-label="Profile edit sections">
+            <div className="profile-editor-tabs" role="tablist" aria-label="Profile edit sections">
               {profileEditTabs.map((tab) => {
                 const selected = activeProfileEditTab === tab.id;
                 return (
@@ -3235,7 +3094,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   </button>
                 );
               })}
-            </div>}
+            </div>
 
             {activeProfileEditTab === 'general' && (
               <section
@@ -3244,13 +3103,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 id="profile-edit-panel-general"
                 aria-labelledby="profile-edit-tab-general"
               >
-                {!(isAitUsaContact && editScope === 'contact') && <div className="contact-dialog-section-header">
+                <div className="contact-dialog-section-header">
                   <div>
-                    <h2>{editScope === 'inquiry' ? 'Ownership & status' : 'General profile'}</h2>
+                    <h2>General profile</h2>
                     <p>Update the fields employees reach for most: contact info, status, and ownership.</p>
                   </div>
-                </div>}
-                {!startOpportunityOpen && editScope !== 'inquiry' && <div className="grid-2">
+                </div>
+                {editScope !== 'inquiry' && <div className="grid-2">
                   <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-name">Full Name</label>
                     <input id="profile-edit-name" className="input" value={editForm.name} autoFocus onChange={e => setEditForm({...editForm, name: e.target.value})} />
@@ -3260,7 +3119,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <input id="profile-edit-email" className="input" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} />
                   </div>
                 </div>}
-                {!startOpportunityOpen && <div className="grid-2">
+                <div className="grid-2">
                   {editScope !== 'inquiry' && <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-phone">Phone</label>
                     <input id="profile-edit-phone" className="input" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
@@ -3277,8 +3136,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       onStart={() => setStartOpportunityOpen(true)}
                     />
                   </div>}
-                </div>}
-                {isAitUsaContact && canStartInquiry && startOpportunityOpen && (
+                </div>
+                {isAitUsaContact && !contact.hasLeadStatus && startOpportunityOpen && (
                   <div className="profile-editor-account-action" aria-label="Start inquiry">
                     <div className="grid-2">
                       <div className="form-group">
@@ -3309,8 +3168,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                             ))}
                           </select>
                         </div>
-                  )}
-                </div>
+                      )}
+                    </div>
                     <div className="form-group">
                       <label className="form-label" htmlFor="start-opportunity-reason">Reason</label>
                       <textarea
@@ -3327,26 +3186,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       <button className="btn btn-primary" type="button" onClick={startOpportunity} disabled={startOpportunityBusy}>
                         {startOpportunityBusy ? 'Starting…' : 'Start inquiry'}
                       </button>
-                    </div>
-                  </div>
-                )}
-                {!startOpportunityOpen && editScope === 'contact' && isAitUsaContact && (
-                  <div className="contact-editor-routing-fields">
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="profile-edit-school-location">Intended learning location</label>
-                      <select id="profile-edit-school-location" className="input select" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})}>
-                        <option value="">Not specified</option>
-                        {editSchoolLocationOptions.map((location) => (
-                          <option key={location} value={location}>{location}</option>
-                        ))}
-                      </select>
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label" htmlFor="profile-edit-contact-source">Contact source</label>
-                      <select id="profile-edit-contact-source" className="input select" value={editForm.contactSource || ''} onChange={e => setEditForm({...editForm, contactSource: e.target.value})}>
-                        <option value="">Not recorded</option>
-                        {editSourceOptions.map(src => <option key={src} value={src}>{src}</option>)}
-                      </select>
                     </div>
                   </div>
                 )}
@@ -3381,7 +3220,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     />
                   </div>
                 )}
-                {!startOpportunityOpen && editScope !== 'contact' && (canManageContactAssignments ? (
+                {editScope !== 'contact' && (canManageContactAssignments ? (
                   <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-owner">Assigned To</label>
                     <select id="profile-edit-owner" className="input select" value={editForm.assignedTo || ''} disabled={Boolean(isAitUsaContact && contact.opportunityConflict)} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
@@ -3396,13 +3235,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 ) : (
                   <input type="hidden" value={editForm.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
                 ))}
-                {!startOpportunityOpen && editScope !== 'inquiry' && access.canWriteCrm ? (
-                  <div className={isAitUsaContact && editScope === 'contact' ? 'profile-editor-contact-more-actions' : ''}>
-                    {isAitUsaContact && editScope === 'contact' && <div className="profile-editor-scope-note">Updates these contact fields only. No inquiry is created or changed.</div>}
-                    {isAitUsaContact && editScope === 'contact' ? (
-                      <details className="profile-editor-more-actions">
-                        <summary>More actions</summary>
-                        <div className="profile-editor-account-action danger-action-panel">
+                {editScope !== 'inquiry' && access.canWriteCrm ? (
+                  <div className="profile-editor-account-action danger-action-panel">
                     <div className="danger-action-copy">
                       <span className="danger-action-eyebrow">
                         <Archive size={14} /> Separate account action
@@ -3424,20 +3258,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     >
                       {coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive ${singularLabel}` : 'Request Approval'}
                     </button>
-                        </div>
-                      </details>
-                    ) : (
-                      <div className="profile-editor-account-action danger-action-panel">
-                        <div className="danger-action-copy">
-                          <span className="danger-action-eyebrow"><Archive size={14} /> Separate account action</span>
-                          <strong>{coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive this ${singularLabel.toLowerCase()}` : 'Request archive approval'}</strong>
-                          <p>{coordinatorUiPolicy.canArchiveContactsDirectly ? `This is not saved with profile edits. It opens a separate confirmation before removing the ${singularLabel.toLowerCase()} from normal CRM lists. Notes, timeline, lead history, and linked records remain in the database for audit.` : `This is not saved with profile edits. It opens a separate confirmation and the contact stays active unless approved.`}</p>
-                        </div>
-                        <button className="btn btn-danger" type="button" onClick={() => { setArchiveReason(''); setArchiveConfirmOpen(true); }}>
-                          {coordinatorUiPolicy.canArchiveContactsDirectly ? `Archive ${singularLabel}` : 'Request Approval'}
-                        </button>
-                      </div>
-                    )}
                   </div>
                 ) : null}
               </section>
@@ -3452,8 +3272,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               >
                 <div className="contact-dialog-section-header">
                   <div>
-                    <h2>Source</h2>
-                    <p>Keep this inquiry&apos;s attribution separate from the contact source.</p>
+                    <h2>Source and routing</h2>
+                    <p>Keep acquisition source, student location, and learning intent distinct.</p>
                   </div>
                 </div>
                 <div className="grid-2">
@@ -3463,24 +3283,15 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       <option value="">Not recorded</option>
                       {editSourceOptions.map(src => <option key={src} value={src}>{src}</option>)}
                     </select>
-                    {editScope === 'inquiry' && <div className="profile-editor-helper">Updates this inquiry only. Contact source stays unchanged.</div>}
                   </div>
-                </div>
-                {editScope === 'inquiry' && (
-                  <>
+                  {showSchoolLocationField && editScope === 'inquiry' ? (
                     <div className="form-group">
-                      <label className="form-label" htmlFor="profile-edit-source-detail">Inquiry source detail</label>
-                      <textarea id="profile-edit-source-detail" className="textarea" rows={2} value={editForm.leadProfile?.sourceDetail || ''} onChange={e => updateEditLeadProfile('sourceDetail', e.target.value)} placeholder="Campaign, referral, or submission detail" />
+                      <label className="form-label" htmlFor="profile-edit-student-location">Student Location</label>
+                      <input id="profile-edit-student-location" className="input" value={editForm.leadProfile?.locationPreference || ''} placeholder="City, municipality, or address" onChange={e => updateEditLeadProfile('locationPreference', e.target.value)} />
+                      <div className="profile-editor-helper">Where the student lives; free text from Wix or an employee.</div>
                     </div>
-                    {contact?.submittedAt ? (
-                      <div className="profile-editor-readonly-block">
-                        <strong>Original submission</strong>
-                        <span>Recorded submission · {dateLabel({ date: contact.submittedAt })}</span>
-                        <small>See Activity for original submission details.</small>
-                      </div>
-                    ) : <p className="profile-editor-muted">Original submission not recorded.</p>}
-                  </>
-                )}
+                  ) : null}
+                </div>
                 <div className="grid-2">
                   {showSchoolLocationField && editScope !== 'inquiry' ? (
                     <div className="form-group">
@@ -3512,14 +3323,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               >
                 <div className="contact-dialog-section-header">
                   <div>
-                    <h2>Inquiry details</h2>
+                    <h2>Enrollment profile</h2>
                     <p>Capture program preferences and background details when they matter for follow-up.</p>
                   </div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="profile-edit-student-location">Student location</label>
-                  <input id="profile-edit-student-location" className="input" value={editForm.leadProfile?.locationPreference || ''} placeholder="City, municipality, or address" onChange={e => updateEditLeadProfile('locationPreference', e.target.value)} />
-                  <div className="profile-editor-helper">Where the student lives; free text from Wix or an employee.</div>
                 </div>
                 <div className="grid-2">
                   <div className="form-group">
@@ -3552,7 +3358,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <label className="form-label" htmlFor="profile-edit-school-name">School</label>
                     <input id="profile-edit-school-name" className="input" value={editForm.leadProfile?.schoolName || ''} onChange={e => updateEditLeadProfile('schoolName', e.target.value)} />
                   </div>
-                  <div className="form-group" aria-hidden="true" />
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-source-detail">Source Detail</label>
+                    <input id="profile-edit-source-detail" className="input" value={editForm.leadProfile?.sourceDetail || ''} onChange={e => updateEditLeadProfile('sourceDetail', e.target.value)} />
+                  </div>
                 </div>
                 <div className="form-group">
                   <label className="form-label" htmlFor="profile-edit-profile-details">Profile Details</label>

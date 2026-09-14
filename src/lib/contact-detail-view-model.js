@@ -58,6 +58,8 @@ function countFor(counts = {}, key = '') {
 }
 
 function contactabilityFor(contact = {}) {
+  const signals = contact.enrollmentSignals?.contactability;
+  if (signals?.status) return signals;
   const hasPhone = Boolean(clean(contact.phone));
   const hasEmail = Boolean(clean(contact.email));
   if (contact.isDoNotCall) {
@@ -283,7 +285,7 @@ export function buildContactDetailViewModel({
     ]);
     return {
       workflowKey,
-      profileTitle: 'Student Profile',
+      profileTitle: 'Enrollment Profile',
       sourceEyebrow: firstPresent([source.channel, contact.inquirySource, contact.source, 'AIT USA Institute']),
       workflowTitle: firstPresent([process.stage, contact.currentStage, contact.status, 'New Lead']),
       workflowNext: firstPresent([

@@ -479,19 +479,11 @@ export function CRMProvider({ children, initialData }) {
     if (!isPostgres) return null;
     const response = await fetch('/api/contacts', {
       method,
-      headers: {
-        'content-type': 'application/json',
-        ...(method === 'POST' && body?.idempotencyKey ? { 'idempotency-key': body.idempotencyKey } : {}),
-      },
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     });
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      const error = new Error(payload.error || 'Contact save failed.');
-      error.code = payload.code || '';
-      error.details = payload;
-      throw error;
-    }
+    if (!response.ok) throw new Error(payload.error || 'Contact save failed.');
     return payload.contact || null;
   }, [isPostgres]);
 

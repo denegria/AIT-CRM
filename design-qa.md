@@ -1,41 +1,37 @@
-# MIS-409 design QA
+# MIS-326 Design QA
 
-## Current revision — compact preview and navigation
+## Visual truth
 
-**In progress; not yet accepted.** Alvaro’s September 11 14:52 review replaces the old top-down Record layout with a compact two-rail workspace. The governing [revision contract](docs/contact-detail-redesign/compact-preview-revision-2026-09-11.md) supersedes the prior visual target. New evidence will be added after deployment and live checks.
+- Overview concept: `/root/.openclaw/giuseppe-workspace/media/inbound/openclaw-staged-7f250a51-be4e-48df-b36f-01c260b294b5/08588141-fdf0-464e-bf1b-09c994165625.jpg`
+- Lean Roster concept: `/root/.openclaw/giuseppe-workspace/media/inbound/openclaw-staged-03e38ec2-2d7f-424a-b050-45408932fa10/c1f35a79-80d1-4c7d-afac-6ddfe043dec8.jpg`
+- Quick Mark concept: `/root/.openclaw/giuseppe-workspace/media/inbound/openclaw-staged-c2013df1-6483-45f0-94f7-57255ea8c186/80c62a8c-dda0-414a-933c-41956a9d223e.jpg`
+- Approved refinements: only Overview, Roster, and Attendance tabs; no repeated Active badges; sessions oldest to newest; Overview contains Sessions, roster preview, and selected-session notes; regular coordinators see plain names; senior/admin users receive Contact links.
 
-## Previous revision result (historical)
+## Implementation captures
 
-previous visual result: passed
+- Desktop Overview, 1440×900: `/tmp/mis-326-qa/regular-main-overview-desktop.png`
+- Desktop Roster, 1440×900: `/tmp/mis-326-qa/regular-roster-desktop.png`
+- Desktop Quick Mark, 1440×900: `/tmp/mis-326-qa/regular-attendance-desktop.png`
+- Submitted senior view, 1440×900: `/tmp/mis-326-qa/senior-attendance-submitted-desktop.png`
+- Mobile Overview, 390×844: `/tmp/mis-326-qa/senior-overview-mobile.png`
+- Mobile Quick Mark, 390×844: `/tmp/mis-326-qa/senior-attendance-mobile.png`
 
-This passes the returned **visual correction** in the reviewed Record, Contact editor, Inquiry editor, and populated Enrollments/history states. It does not claim completed regular-account authentication or persisted database-save testing.
+## Comparison and interaction checks
 
-## References and deployment
+- Compared each approved concept and its rendered counterpart in the same visual inspection input.
+- Preserved the approved class-first hierarchy, compact class rail, tab treatment, information density, borders, spacing, and Quick Mark control pattern within the existing AIT CRM shell.
+- Confirmed sessions render oldest to newest and the current due session is the only one with a Take attendance action.
+- Confirmed session-note saves remain `Not started` and do not create attendance marks.
+- Confirmed incomplete attendance disables submission; marking all students enables it; submitted attendance becomes read-only.
+- Confirmed regular coordinators receive plain roster names and no reopen control.
+- Confirmed senior coordinators receive Contact links and an audited reopen dialog requiring a reason.
+- Confirmed responsive layouts at 390×844 without horizontal page overflow; existing mobile navigation remains usable.
+- Confirmed no browser runtime errors. Development-only React/HMR messages were the only console output.
 
-- Record: docs/contact-detail-redesign/01-contact-workspace-v3.png,1506×1045.
-- Editors: docs/contact-detail-redesign/02-focused-editor-v3.png,1586×992 composite.
-- Enrollments: docs/contact-detail-redesign/03-enrollments-workspace.png,1505×1045.
-- Reviewed application commit:1e34fb9908c6e945c23ef85901da9ca2eb798b40.
-- Canonical live staging, authenticated AIT USA senior session, Light,1506×1045. Browser appVersion independently matched exact SHA.
-- Git-triggered Vercel dpl_2QVyjxCiBNRNsHXvknX3FZuXQbeA Ready; GitHub CI34606847944 passed.
-- Full validation:747 standard +74 focused =821 passing,2 skipped; repository contract, lint/build passed.
-- Reference and corresponding final browser image opened together for each state; editor comparison uses modal region rather than backdrop.
-- Private screenshots/report outside public repository: workspace artifacts/ait-crm-design-fidelity-20260911/live/1e34fb9-*.png and qa.md. No customer screenshots or credentials committed.
+## Findings resolved
 
-## Verified corrections
+- P1: class-rail attendance state remained stale after submit or reopen. Fixed by updating the selected class summary from every returned session mutation.
 
-1. Record: flat white sections, aligned property rows, selected field order,80px avatar, underline tabs,44px header/task controls, quiet contextual Edit.
-2. Contact:590px single-column dialog, five46px inputs in selected order, readable labels, source scope note. Archive remains available through More actions and separate confirmation.
-3. Inquiry:870px dialog; Inquiry details, Ownership & status, Source; full-width source selector, scope helper directly below, source-detail textarea. Contact identity fields absent. Original submission derives only from actual submission evidence; reviewed record truthfully shows absent state.
-4. Enrollments: full-width1198px current/history tables; identical header tracks; direct Edit/Complete/End; single Add enrollment/Add history; history-only count; row-specific expand/collapse and compact outcome/notes/Edit history.
-5. Populated check used three fictional browser-memory-only GET-response fixtures:two active and one completed, including classSection=null. No DB fixtures or writes. Previous null scheduleDays crash reproduced before correction and did not recur.
-6. Actions opened correct course/status forms; history Edit selected the historical course rather than an active record. Cancel made no requests or changes; browser errors empty.
-7.390px smoke:document width390; tables scroll inside containers; Inquiry stays within viewport and Escape closes. Hard navigation removed fixture and restored real Record/zero-course state.
+## Result
 
-## Scope boundaries and P3 follow-ups
-
-- Existing shared sidebar, permission-conditional tabs, real missing values, and empty next-work state remain truthful rather than copying fictional board content.
-- P3 only:existing Current versus Active wording, ISO date formatting, singular record-count copy, and small shared-font/token differences. No remaining P0/P1/P2 visual finding in reviewed states.
-- Regular-account live access and persisted source save/reload remain separately unverified. Server-route tests cover assignment ownership and isolated source update/clear behavior; browser fixture is not evidence of DB persistence.
-- AIT Signs styles remain outside USA-scoped edits. No production promotion, DB migration/write, or provider send. Full MIS-409 functional acceptance remains separately tracked.
-- Authorized sequence: automated checks → staging Git push → automatic deployment → live visual QA → repair/redeploy/recheck. Local-preview access is not a pre-push blocker.
+final result: passed

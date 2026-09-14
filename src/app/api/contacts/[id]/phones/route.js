@@ -6,7 +6,6 @@ import { assertCanAccessContactLead, resolveContactById } from '@/lib/crm/access
 import { listContactPhoneHistory } from '@/lib/crm/contact-phone-history.js';
 import { crmErrorResponse } from '@/lib/crm/errors.js';
 import { latestLeadForContact } from '@/lib/crm/write-helpers.js';
-import { contactabilitySnapshot } from '@/lib/contacts/contactability-snapshot.js';
 
 export async function GET(request, { params }) {
   const { error, session } = await requirePermission(request, PERMISSIONS.CRM_READ);
@@ -28,10 +27,7 @@ export async function GET(request, { params }) {
       organizationId: session.user.organizationId,
       contactId: contact.id,
     });
-    return NextResponse.json({
-      contact: contactabilitySnapshot(contact),
-      phones,
-    });
+    return NextResponse.json({ phones });
   } catch (err) {
     return crmErrorResponse(err);
   }

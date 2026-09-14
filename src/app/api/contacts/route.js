@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
-import { getDb, getPool } from '@/db/index.js';
+import { getDb } from '@/db/index.js';
 import {
   activityEvents,
   businessUnitMemberships,
@@ -51,8 +51,6 @@ import {
   updateContactWithLeadAndNotes,
   updateContactWithLeadAndNotesInTransaction,
 } from '@/lib/crm/write-helpers.js';
-import { submitManualAitUsaInquiry } from '@/lib/crm/manual-ait-usa-inquiry.js';
-import { issueManualAitUsaConfirmation } from '@/lib/crm/manual-ait-usa-confirmation.js';
 import {
   loadScopedOpportunityById,
   resolveAitUsaActiveOpportunity,
@@ -278,16 +276,8 @@ function contactAddressForWrite(value, businessUnit) {
   return learningLocation;
 }
 
-export async function POST(
-  request,
-  {
-    requirePermissionForRequest = requirePermission,
-    getDbForRequest = getDb,
-    getPoolForRequest = getPool,
-    submitManualInquiryForRequest = submitManualAitUsaInquiry,
-  } = {},
-) {
-  const { error, session } = await requirePermissionForRequest(request, PERMISSIONS.CRM_WRITE);
+export async function POST(request) {
+  const { error, session } = await requirePermission(request, PERMISSIONS.CRM_WRITE);
   if (error) return error;
 
   const body = await request.json().catch(() => ({}));
@@ -295,7 +285,7 @@ export async function POST(
   const validationError = validateManualContactIdentity(body);
   if (validationError) return NextResponse.json({ error: validationError }, { status: 400 });
 
-  const db = getDbForRequest();
+  const db = getDb();
   let businessUnitId;
   try {
     businessUnitId = await resolveContactBusinessUnitForCreate(db, session, body);
@@ -340,82 +330,29 @@ export async function POST(
     return crmErrorResponse(error);
   }
 
-  const contactValues = {
-    primaryBusinessUnitId: businessUnitId,
-    name,
-    email: body.email || null,
-    phone: body.phone || null,
-    address: contactAddress,
-    sourceLabel: body.source || null,
-  };
-  const leadValues = businessUnitId ? {
-    businessUnitId,
-    sourceType: 'manual',
-    sourceName: body.source || 'Manual',
-    status,
-    currentStage: status,
-    assignedUserId,
-    ...leadProfilePatchToDrizzleValues(leadProfilePatchFromPayload(body, { allowClear: false })),
-  } : null;
-  const initialNote = normalizeAppendNoteInput(body.appendNote || body.initialNote);
-
-  if (isAitUsaCreate) {
-    try {
-      const result = await submitManualInquiryForRequest({
-        pool: getPoolForRequest(),
-        organizationId: session.user.organizationId,
-        businessUnitId,
-        actorUserId: session.user.id,
-        contactValues,
-        leadValues,
-        initialLeadStatusReason: initialTerminalReason || null,
-        initialNote,
-        idempotencyKey: String(request.headers.get('idempotency-key') || body.idempotencyKey || '').trim(),
-        confirmationProof: String(body.confirmationProof || '').trim(),
-        authorizeExistingContact: async ({ contact, activeLeads }) => {
-          if (!canAccessContact(session, contact)) return false;
-          try {
-            assertCanAccessContactLead(session, activeLeads?.length === 1 ? activeLeads[0] : null, contact);
-            return true;
-          } catch {
-            return false;
-          }
-        },
-      });
-      if (result.outcome === 'confirmation_required') {
-        return NextResponse.json({
-          error: 'Confirm that you want to add an inquiry to this existing contact.',
-          code: 'existing_identity_confirmation_required',
-          existingContact: result.existingContact,
-          confirmationProof: issueManualAitUsaConfirmation({
-            organizationId: session.user.organizationId,
-            actorUserId: session.user.id,
-            businessUnitId,
-            contactId: result.existingContact.id,
-            contactValues,
-          }),
-        }, { status: 409 });
-      }
-      if (result.outcome === 'review_required' || result.outcome === 'active_conflict' || result.outcome === 'idempotency_conflict') {
-        return NextResponse.json({ error: result.error, code: result.outcome }, { status: 409 });
-      }
-      return NextResponse.json(
-        { contact: toContactPayload(result.contact, result.lead, [], businessUnit) },
-        { status: result.outcome === 'replayed' ? 200 : 201 },
-      );
-    } catch (createError) {
-      return crmErrorResponse(createError);
-    }
-  }
-
   const { contact, lead, noteRows } = await createContactWithLead({
     db,
     organizationId: session.user.organizationId,
     actorUserId: session.user.id,
-    contactValues,
-    leadValues,
+    contactValues: {
+      primaryBusinessUnitId: businessUnitId,
+      name,
+      email: body.email || null,
+      phone: body.phone || null,
+      address: contactAddress,
+      sourceLabel: body.source || null,
+    },
+    leadValues: businessUnitId ? {
+      businessUnitId,
+      sourceType: 'manual',
+      sourceName: body.source || 'Manual',
+      status,
+      currentStage: status,
+      assignedUserId,
+      ...leadProfilePatchToDrizzleValues(leadProfilePatchFromPayload(body, { allowClear: false })),
+    } : null,
     initialLeadStatusReason: initialTerminalReason || null,
-    initialNote,
+    initialNote: normalizeAppendNoteInput(body.appendNote || body.initialNote),
   });
 
   return NextResponse.json({ contact: toContactPayload(contact, lead, noteRows, businessUnit) }, { status: 201 });
@@ -607,12 +544,6 @@ export async function PATCH(request, _context = {}, overrides = {}) {
   const hasLeadPatch = 'status' in body || hasInquirySourcePatch ||
     (!isAitUsaWorkflow && hasLegacySourcePatch) || 'assignedTo' in body ||
     hasBusinessUnitPatch || hasLeadProfilePatch || hasCourseMetadataPatch;
-  if (isAitUsaWorkflow && lead && hasLeadPatch && !String(body.updatedAt || '').trim()) {
-    return NextResponse.json(
-      { error: 'The selected Opportunity version is missing. Refresh before saving.' },
-      { status: 409 },
-    );
-  }
   let leadPatch = null;
   let leadStatusChange = null;
   if (lead && hasLeadPatch) {
@@ -717,7 +648,6 @@ export async function PATCH(request, _context = {}, overrides = {}) {
         businessUnit: statusBusinessUnit,
         contact: existing,
         expectedOpportunityId: lead.id,
-        expectedUpdatedAt: body.updatedAt || null,
         toStatus: 'status' in body ? body.status : undefined,
         reopenReason: body.statusChangeReason || body.reopenClosedStatusReason || '',
         terminalReason: body.terminalStatusReason || '',

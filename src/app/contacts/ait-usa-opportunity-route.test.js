@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { POST } from '../api/contacts/[id]/opportunities/route.js';
-import { PATCH, POST as createContact } from '../api/contacts/route.js';
+import { PATCH } from '../api/contacts/route.js';
 import {
   buildContactProfilePatch,
   hasOpportunityMutationRequest,
@@ -77,34 +77,6 @@ const contact = Object.freeze({
   email: 'ana@example.com',
 });
 const businessUnit = Object.freeze({ id: ids.businessUnit, name: 'AIT USA Institute', label: 'Division' });
-const selectedUpdatedAt = '2026-09-12T10:00:00.000Z';
-
-test('manual AIT USA identity confirmation is privacy-safe and defers writes to the transactional service', async () => {
-  let serviceInput = null;
-  const response = await createContact(new Request('http://localhost/api/contacts', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({
-      name: 'Ana Student', email: 'ana@example.com', businessUnitId: ids.businessUnit, status: 'New Lead', idempotencyKey: 'retry-1',
-    }),
-  }), {
-    requirePermissionForRequest: async () => ({ error: null, session: elevatedSession }),
-    getDbForRequest: () => dbRows([businessUnit], [businessUnit]),
-    getPoolForRequest: () => ({ connect() { throw new Error('Service mock should not connect.'); } }),
-    submitManualInquiryForRequest: async (input) => {
-      serviceInput = input;
-      return { outcome: 'confirmation_required', existingContact: { id: ids.contact, name: 'Ana Existing' } };
-    },
-  });
-  const payload = await response.json();
-  assert.equal(response.status, 409);
-  assert.equal(payload.code, 'existing_identity_confirmation_required');
-  assert.deepEqual(payload.existingContact, { id: ids.contact, name: 'Ana Existing' });
-  assert.equal(serviceInput.confirmationProof, '');
-  assert.equal(serviceInput.idempotencyKey, 'retry-1');
-  assert.equal(serviceInput.leadValues.sourceType, 'manual');
-  assert.equal(JSON.stringify(payload).includes('matchingContactIds'), false);
-});
 
 function fullBootstrapContactPayload(overrides = {}) {
   return {
@@ -116,7 +88,6 @@ function fullBootstrapContactPayload(overrides = {}) {
     status: 'Follow Up',
     currentStage: 'Follow Up',
     opportunityId: ids.opportunity,
-    updatedAt: selectedUpdatedAt,
     assignedTo: ids.otherUser,
     source: 'Website',
     businessUnitId: ids.businessUnit,
@@ -227,7 +198,6 @@ test('direct closed-to-active PATCH maps a concurrent active-Opportunity conflic
     patchRequest({
       id: ids.contact,
       opportunityId: ids.opportunity,
-      updatedAt: selectedUpdatedAt,
       status: 'Follow Up',
       statusChangeReason: 'correction',
     }),
@@ -315,7 +285,6 @@ test('direct AIT USA PATCH reports post-write active Opportunity counts', async 
       patchRequest({
         id: ids.contact,
         opportunityId: ids.opportunity,
-        updatedAt: selectedUpdatedAt,
         status: scenario.to,
         statusChangeReason: scenario.from === 'Not Interested' ? 'correction' : undefined,
         terminalStatusReason: scenario.to === 'Not Interested' ? 'Student declined.' : undefined,
@@ -359,60 +328,6 @@ test('direct AIT USA PATCH reports post-write active Opportunity counts', async 
   }
 });
 
-test('direct AIT USA PATCH forwards the selected inquiry version into the locked stale-write guard', async () => {
-  const selected = { id: ids.opportunity, organizationId: ids.organization, businessUnitId: ids.businessUnit, contactId: ids.contact, status: 'Follow Up', updatedAt: '2026-09-12T10:00:00.000Z' };
-  let writerCalled = false;
-  const response = await PATCH(
-    patchRequest({ id: ids.contact, opportunityId: ids.opportunity, updatedAt: selected.updatedAt, status: 'Follow Up' }),
-    {},
-    {
-      requirePermissionForRequest: async () => ({ error: null, session: elevatedSession }),
-      getDbForRequest: () => dbRows([contact]),
-      latestLeadForContactForRequest: async () => selected,
-      loadBusinessUnitForRequest: async () => businessUnit,
-      resolveActiveOpportunityForRequest: async () => ({ status: 'exact', leadId: ids.opportunity, opportunity: selected, activeCount: 1 }),
-      loadScopedOpportunityForRequest: async () => selected,
-      withLockedMutationForRequest: async (input) => {
-        assert.equal(input.expectedUpdatedAt, selected.updatedAt);
-        throw Object.assign(new Error('The selected Opportunity changed while this Contact was open.'), { status: 409 });
-      },
-      updateContactInTransactionForRequest: async () => { writerCalled = true; },
-    },
-  );
-  assert.equal(response.status, 409);
-  assert.equal(writerCalled, false);
-});
-
-test('direct AIT USA inquiry PATCH rejects a missing selected version before writing', async () => {
-  const selected = {
-    id: ids.opportunity,
-    organizationId: ids.organization,
-    businessUnitId: ids.businessUnit,
-    contactId: ids.contact,
-    status: 'Follow Up',
-    currentStage: 'Follow Up',
-    assignedUserId: ids.user,
-    updatedAt: selectedUpdatedAt,
-  };
-  let lockedWriterCalled = false;
-  const response = await PATCH(
-    patchRequest({ id: ids.contact, opportunityId: ids.opportunity, status: 'Follow Up' }),
-    {},
-    {
-      requirePermissionForRequest: async () => ({ error: null, session: elevatedSession }),
-      getDbForRequest: () => dbRows([contact]),
-      latestLeadForContactForRequest: async () => selected,
-      loadBusinessUnitForRequest: async () => businessUnit,
-      resolveActiveOpportunityForRequest: async () => ({ status: 'exact', leadId: ids.opportunity, opportunity: selected, activeCount: 1 }),
-      loadScopedOpportunityForRequest: async () => selected,
-      withLockedMutationForRequest: async () => { lockedWriterCalled = true; },
-    },
-  );
-  assert.equal(response.status, 409);
-  assert.match((await response.json()).error, /version is missing/);
-  assert.equal(lockedWriterCalled, false);
-});
-
 test('direct AIT USA PATCH rechecks regular Coordinator ownership under the lock', async () => {
   const initiallyOwned = {
     id: ids.opportunity,
@@ -425,7 +340,7 @@ test('direct AIT USA PATCH rechecks regular Coordinator ownership under the lock
   };
   let writes = 0;
   const response = await PATCH(
-    patchRequest({ id: ids.contact, opportunityId: ids.opportunity, updatedAt: selectedUpdatedAt, status: 'Follow Up' }),
+    patchRequest({ id: ids.contact, opportunityId: ids.opportunity, status: 'Follow Up' }),
     {},
     {
       requirePermissionForRequest: async () => ({ error: null, session }),
@@ -732,7 +647,7 @@ for (const scopeCase of [
       writeInput = input;
       return { contact: { ...sourceContact, ...input.contactPatch }, lead: { ...selectedLead, ...input.leadPatch }, noteRows: [], activityEventRows: [] };
     };
-    const response = await PATCH(patchRequest({ id: ids.contact, opportunityId: ids.opportunity, updatedAt: selectedUpdatedAt, ...scopeCase.body }), {}, {
+    const response = await PATCH(patchRequest({ id: ids.contact, opportunityId: ids.opportunity, ...scopeCase.body }), {}, {
       requirePermissionForRequest: async () => ({ error: null, session: elevatedSession }),
       getDbForRequest: () => dbRows([sourceContact]),
       latestLeadForContactForRequest: async () => selectedLead,
