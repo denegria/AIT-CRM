@@ -18,9 +18,9 @@ import {
   GraduationCap
 } from 'lucide-react';
 import { PIPELINE_STATUSES, isWorkflowStatusClosed, workflowForBusinessUnit } from '@/lib/sales-workflow';
-import { buildContactDetailViewModel, contactInquiryState } from '@/lib/contact-detail-view-model';
+import { buildContactDetailViewModel } from '@/lib/contact-detail-view-model';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
-import { schoolLocationForContact, schoolLocationOptions, studentLocationForContact } from '@/lib/school-locations';
+import { schoolLocationForContact, schoolLocationOptions } from '@/lib/school-locations';
 import {
   COURSE_RECORD_STATUS_OPTIONS,
   courseNameOptions,
@@ -441,7 +441,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     businessUnits,
     replaceContactFromServer,
   } = useCRM();
-  const [activeTab, setActiveTab] = useState('record');
+  const [activeTab, setActiveTab] = useState('timeline');
   const [timelineFilter, setTimelineFilter] = useState('all');
   const [serverTimeline, setServerTimeline] = useState({ contactId: '', reloadKey: -1, items: null, error: false });
   const [timelineReloadKey, setTimelineReloadKey] = useState(0);
@@ -501,7 +501,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState(null);
-  const [editScope, setEditScope] = useState('combined');
   const [startOpportunityOpen, setStartOpportunityOpen] = useState(false);
   const [startOpportunityBusy, setStartOpportunityBusy] = useState(false);
   const [startOpportunityError, setStartOpportunityError] = useState('');
@@ -611,11 +610,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const showLinkedPeoplePanel = isClientMode && detailView.workflowKey === WORKFLOW_KEYS.AIT_SIGNS;
   const showSchoolLocationField = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA;
   const isAitUsaContact = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA || /ait usa|institute/i.test(contactBusinessUnit?.name || '');
-  const inquiryState = contactInquiryState(contact || {});
-  const hasResolvedCurrentInquiry = isAitUsaContact && inquiryState === 'current';
-  const hasClosedInquiry = isAitUsaContact && inquiryState === 'closed';
-  const contactSource = cleanText(contact?.sourceLabel) || 'Unknown';
-  const inquirySource = cleanText(contact?.inquirySource) || 'Unknown';
   const canManageContactAssignments = isAitUsaContact
     ? canManageAitUsaAssignments
     : coordinatorUiPolicy.canManageCoordinatorAssignments;
@@ -629,19 +623,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const hasWorkOrders = contactWorkOrders.length > 0;
   const hasInvoices = contactInvoices.length > 0;
   const profileEditTabs = useMemo(() => {
-    if (isAitUsaContact && editScope === 'contact') {
-      return [
-        { id: 'general', label: 'Contact', summary: 'Identity and contact details' },
-        { id: 'source', label: 'Source & routing', summary: 'Contact attribution and location' },
-      ];
-    }
-    if (isAitUsaContact && editScope === 'inquiry') {
-      return [
-        { id: 'general', label: 'Inquiry', summary: 'Status and ownership' },
-        { id: 'source', label: 'Source & routing', summary: 'Inquiry attribution and student location' },
-        { id: 'enrollment', label: 'Enrollment', summary: 'Program preferences and profile notes' },
-      ];
-    }
     const tabs = [
       { id: 'general', label: 'General', summary: 'Identity, status, and owner' },
       { id: 'source', label: 'Source & routing', summary: 'Attribution, student location, and learning location' },
@@ -650,8 +631,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       tabs.push({ id: 'enrollment', label: 'Enrollment', summary: 'Program preferences and profile notes' });
     }
     return tabs;
-  }, [editScope, isAitUsaContact]);
-  const editSourceField = editScope === 'contact' ? 'contactSource' : editScope === 'inquiry' ? 'inquirySource' : 'source';
+  }, [isAitUsaContact]);
   const selectedInvoiceWorkOrder = contactWorkOrders.find((workOrder) => workOrder.id === invoiceWorkOrderId) || null;
   const workOrdersHref = `/work-orders${contact?.id ? `?contactId=${encodeURIComponent(contact.id)}` : ''}`;
   const visibleFinancials = useMemo(() => (
@@ -664,7 +644,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   ), [contactFinancials, isAitUsaContact]);
   const editSourceOptions = [...new Set([
     ...(sources || []),
-    ...(editForm?.[editSourceField] ? [editForm[editSourceField]] : []),
+    ...(editForm?.source ? [editForm.source] : []),
   ])];
   const editSchoolLocationOptions = schoolLocationOptions(editForm?.address);
   const courseOptions = courseNameOptions(courseForm.courseName);
@@ -712,7 +692,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             ? { tone: 'warning', text: 'Generate an invoice from a work order before recording a payment.' }
             : { tone: 'ready', text: 'Invoice is ready for payment recording.' }));
   const renderedActiveTab =
-    (!isAitUsaContact && activeTab === 'record') ||
     (!showLinkedPeoplePanel && activeTab === 'contacts') ||
     (!showWorkOrdersTab && activeTab === 'workorders') ||
     (!showFinancialsTab && activeTab === 'financials') ||
@@ -1013,14 +992,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     template.channel === manualSend.channel || template.channel === 'all'
   )), [messageTemplates, manualSend.channel]);
 
-  const openEditModal = (scope = isAitUsaContact ? 'contact' : 'combined') => {
+  const openEditModal = () => {
     if (!access.canWriteCrm) return;
-    setEditScope(scope);
     setActiveProfileEditTab('general');
     setEditForm({
       ...contact,
-      contactSource: contact?.contactSource ?? contact?.sourceLabel ?? '',
-      inquirySource: contact?.inquirySource || '',
       assignedTo: contact?.assignedTo || '',
       statusChangeReason: '',
       terminalStatusReason: '',
@@ -1046,17 +1022,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       reason: '',
     });
     setIsEditModalOpen(true);
-  };
-
-  const openInquiryEditor = (section = 'general') => {
-    openEditModal(isAitUsaContact ? 'inquiry' : 'combined');
-    setActiveProfileEditTab(section);
-  };
-
-  const openStartInquiry = () => {
-    openEditModal(isAitUsaContact ? 'inquiry' : 'combined');
-    setActiveProfileEditTab('general');
-    setStartOpportunityOpen(true);
   };
 
   const startOpportunity = async () => {
@@ -1268,7 +1233,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       editForm,
       contact,
       isAitUsa: isAitUsaContact,
-      editScope,
       lockedOwnerUserId: coordinatorUiPolicy.lockedOwnerUserId,
       canManageAssignments: canManageContactAssignments,
       isClosedStatusReopen,
@@ -1929,7 +1893,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               <ClipboardList size={16} style={{marginRight: 8}} /> Create Work Order
             </Link>
           )}
-          <button className="btn btn-block" onClick={() => openEditModal()}>
+          <button className="btn btn-block" onClick={openEditModal}>
             <Edit3 size={16} style={{marginRight: 8}} /> Edit Profile
           </button>
         </div>
@@ -1945,52 +1909,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         </button>
       </div>
 
-      <div className={`${s.detailLayout} ${isAitUsaContact ? s.usaWorkspace : ''}`}>
+      <div className={s.detailLayout}>
         {/* Main Section: Review content */}
         <div className={s.contentSection}>
-          {isAitUsaContact && (
-            <>
-              <section className={s.workspaceHeader} aria-label="Contact identity">
-                <div className={s.workspaceIdentity}>
-                  <div className={s.profileAvatarLarge} aria-hidden="true">{contact.name.charAt(0)}</div>
-                  <div className={s.profileTitleBlock}>
-                    <div className={s.workspaceNameRow}>
-                      <h1 className={s.workspaceName}>{contact.name}</h1>
-                      {contact.status && <span className={`badge badge-${contact.status.toLowerCase().replace(' ', '')}`}>{contact.status}</span>}
-                    </div>
-                    <span>{contactBusinessUnit?.name || 'AIT USA'}</span>
-                  </div>
-                </div>
-                {access.canWriteCrm && (
-                  <button className="btn btn-primary btn-sm" type="button" onClick={() => openEditModal()}>
-                    <Edit3 size={14} /> Edit contact
-                  </button>
-                )}
-              </section>
-
-              <section className={s.nextWorkBand} aria-label="Next work">
-                <div>
-                  <span>Next work</span>
-                  <strong>{detailView.workflowNext || 'No next action recorded'}</strong>
-                  {detailView.workflowChips?.length > 0 && <small>{detailView.workflowChips.join(' · ')}</small>}
-                </div>
-                {access.canWriteCrm && (
-                  <div className={s.nextWorkActions}>
-                    {nextStatus && hasResolvedCurrentInquiry && (
-                      <button className="btn btn-sm" type="button" onClick={moveToNextStatus} disabled={statusUpdating}>
-                        <ArrowRight size={14} /> {statusUpdating ? 'Updating…' : `Move to ${nextStatus}`}
-                      </button>
-                    )}
-                    <Link className="btn btn-primary btn-sm" href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}>
-                      <CheckSquare size={14} /> Create follow-up
-                    </Link>
-                  </div>
-                )}
-              </section>
-            </>
-          )}
-
-          {!isAitUsaContact && <section className={s.reviewContext} aria-label={`${detailView.profileTitle} review context`}>
+          <section className={s.reviewContext} aria-label={`${detailView.profileTitle} review context`}>
             <div className={s.reviewContextHeader}>
               <div>
                 <span>Review context</span>
@@ -2007,14 +1929,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 </div>
               ))}
             </div>
-          </section>}
+          </section>
 
           <div className={s.contentTabs}>
-            {isAitUsaContact && <button className={`${s.contentTab} ${renderedActiveTab === 'record' ? s.active : ''}`} onClick={() => setActiveTab('record')}>Record</button>}
-            <button className={`${s.contentTab} ${renderedActiveTab === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')}>{isAitUsaContact ? 'Activity' : 'Timeline'}</button>
+            <button className={`${s.contentTab} ${renderedActiveTab === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')}>Timeline</button>
             <button className={`${s.contentTab} ${renderedActiveTab === 'conversations' ? s.active : ''}`} onClick={() => setActiveTab('conversations')}>Conversations ({conversationMessages.length})</button>
             {showCoursesTab && (
-              <button className={`${s.contentTab} ${renderedActiveTab === 'courses' ? s.active : ''}`} onClick={() => setActiveTab('courses')}>{isAitUsaContact ? 'Enrollments' : 'Courses'} ({currentCourseRecords.length})</button>
+              <button className={`${s.contentTab} ${renderedActiveTab === 'courses' ? s.active : ''}`} onClick={() => setActiveTab('courses')}>Courses ({currentCourseRecords.length})</button>
             )}
             {showLinkedPeoplePanel && (
               <button className={`${s.contentTab} ${renderedActiveTab === 'contacts' ? s.active : ''}`} onClick={() => setActiveTab('contacts')}>Contacts ({currentLinkedPeople.items.length})</button>
@@ -2028,87 +1949,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           </div>
 
           <div className={s.tabContent}>
-            {isAitUsaContact && renderedActiveTab === 'record' && (
-              <div className={s.recordWorkspace}>
-                <section className={s.recordSection} aria-labelledby="contact-preferences-title">
-                  <div className={s.recordSectionHeader}>
-                    <div>
-                      <span>Contact</span>
-                      <h2 id="contact-preferences-title">Contact &amp; preferences</h2>
-                    </div>
-                  </div>
-                  <dl className={s.propertyGrid}>
-                    <div><dt>Email</dt><dd>{contact.email ? <a href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a> : 'Unknown'}</dd></div>
-                    <div><dt>Phone</dt><dd>{contact.phone ? <a href={phoneHref(contact.phone)}>{contact.phone}</a> : 'Unknown'}</dd></div>
-                    <div><dt>Intended learning location</dt><dd>{schoolLocationForContact(contact) || 'Unknown'}</dd></div>
-                    <div><dt>Contact source</dt><dd>{contactSource}</dd></div>
-                    {!hasResolvedCurrentInquiry && !hasClosedInquiry && <div><dt>Assigned coordinator</dt><dd>{assignedEmployee?.label || 'Unassigned'}</dd></div>}
-                    {!hasResolvedCurrentInquiry && !hasClosedInquiry && <div><dt>Student location</dt><dd>{studentLocationForContact(contact) || 'Unknown'}</dd></div>}
-                    <div><dt>Last touch</dt><dd>{contact.lastTouch || contact.lastContact || 'None'}</dd></div>
-                    <div><dt>Last edited</dt><dd>{contact.lastEdited || 'None'}</dd></div>
-                  </dl>
-                  {detailView.contactability?.status && detailView.contactability.status !== 'reachable' && (
-                    <p className={s.recordWarning}><AlertCircle size={15} /> {detailView.contactability.reason || detailView.contactability.label}</p>
-                  )}
-                  {phoneHistoryState.contactId === contact.id && phoneHistoryState.items.some((phone) => !phone.isPrimary) && (
-                    <details className={s.phoneHistoryDisclosure}>
-                      <summary>Phone history</summary>
-                      {phoneHistoryState.items.filter((phone) => !phone.isPrimary).map((phone) => <span key={phone.id || phone.normalizedPhone}>{phone.phone}{phone.isWrongNumber ? ' · Wrong number' : phone.isDoNotCall ? ' · Do not call' : ' · Historical — do not use for outreach'}</span>)}
-                    </details>
-                  )}
-                  {phoneHistoryState.contactId === contact.id && phoneHistoryState.error && <p className={s.recordWarning}><AlertCircle size={15} /> {phoneHistoryState.error}</p>}
-                </section>
-
-                <section className={s.recordSection} aria-labelledby="inquiry-title">
-                  <div className={s.recordSectionHeader}>
-                    <div>
-                      <span>{hasClosedInquiry ? 'Inquiry history' : 'Inquiry'}</span>
-                      <h2 id="inquiry-title">{contact.opportunityConflict ? 'Inquiry needs resolution' : hasResolvedCurrentInquiry ? 'Current inquiry' : hasClosedInquiry ? 'Last inquiry (closed)' : 'No active inquiry'}</h2>
-                    </div>
-                    {(hasResolvedCurrentInquiry || hasClosedInquiry) && access.canWriteCrm && <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor()}><Edit3 size={14} /> Edit</button>}
-                  </div>
-                  {contact.opportunityConflict ? (
-                    <p className={s.recordWarning}><AlertCircle size={15} /> {contact.activeOpportunityCount || 'Multiple'} active inquiries need resolution before inquiry changes can be made.</p>
-                  ) : hasResolvedCurrentInquiry || hasClosedInquiry ? (
-                    <>
-                      <dl className={s.propertyGrid}>
-                        <div><dt>Status</dt><dd>{contact.status || 'Unknown'}</dd></div>
-                        <div><dt>Owner</dt><dd>{assignedEmployee?.label || 'Unassigned'}</dd></div>
-                        <div><dt>Program interest</dt><dd>{contact.programInterest || 'Unknown'}</dd></div>
-                        <div><dt>Inquiry source</dt><dd>{inquirySource}</dd></div>
-                        <div><dt>Preferred days</dt><dd>{contact.preferredDay || 'Unknown'}</dd></div>
-                        <div><dt>Preferred schedule</dt><dd>{contact.preferredSchedule || 'Unknown'}</dd></div>
-                        <div><dt>Student location</dt><dd>{studentLocationForContact(contact) || 'Unknown'}</dd></div>
-                        <div><dt>Qualifications</dt><dd>{[contact.testInterest, contact.educationLevel, contact.schoolName].filter(Boolean).join(' · ') || 'Unknown'}</dd></div>
-                      </dl>
-                      {hasResolvedCurrentInquiry && access.canWriteCrm && (
-                        <div className={s.inquiryActions}>
-                          {canManageContactAssignments && <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor('general')}>Change owner</button>}
-                          <button className="btn btn-sm" type="button" onClick={() => openInquiryEditor('general')}>Change status</button>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className={s.quietInquiryState}>
-                      <p>Contact updates, history, enrollments, and linked resources remain available without an inquiry.</p>
-                      {access.canWriteCrm && <button className="btn btn-sm" type="button" onClick={openStartInquiry}>Start inquiry</button>}
-                    </div>
-                  )}
-                </section>
-                {access.canReadImportReview && !!cleanupAudits.length && (
-                  <details className={s.recordSection}>
-                    <summary>Cleanup provenance</summary>
-                    {cleanupAudits.map((audit) => (
-                      <div key={audit.id} className={s.cleanupSummaryItem}>
-                        <strong>{audit.title}</strong>
-                        <span>{audit.detail}</span>
-                      </div>
-                    ))}
-                  </details>
-                )}
-              </div>
-            )}
-
             {renderedActiveTab === 'timeline' && (
               <div className={s.timelineView}>
                 <div className={s.snapshotStrip} aria-label={`Current ${singularLabel.toLowerCase()} snapshot`}>
@@ -2824,7 +2664,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             )}
           </div>
         </div>
-        {!isAitUsaContact && profileSidebar}
+        {profileSidebar}
       </div>
 
       {courseModal && (
@@ -3064,15 +2904,15 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         <Modal
           open={isEditModalOpen}
           onClose={() => setIsEditModalOpen(false)}
-          title={isAitUsaContact ? (editScope === 'inquiry' ? 'Edit inquiry' : 'Edit contact') : 'Edit Profile'}
+          title="Edit Profile"
           variant="dialog"
           panelClassName="contact-profile-dialog-panel"
           footer={<><button className="btn" type="button" onClick={() => setIsEditModalOpen(false)}>Cancel</button><button className="btn btn-primary" type="button" onClick={handleEditSave}>Save Changes</button></>}
         >
           <div className="contact-profile-dialog-form">
             <div className="contact-dialog-intro">
-              <p>Update {editScope === 'inquiry' ? 'the selected inquiry' : (contact?.name || singularLabel.toLowerCase())} without leaving the contact record.</p>
-              <span>{editScope === 'inquiry' ? 'Inquiry details and attribution' : 'Contact details and attribution'}</span>
+              <p>Update {contact?.name || singularLabel.toLowerCase()} without leaving the contact record.</p>
+              <span>Profile and routing details</span>
             </div>
 
             <div className="profile-editor-tabs" role="tablist" aria-label="Profile edit sections">
@@ -3109,7 +2949,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <p>Update the fields employees reach for most: contact info, status, and ownership.</p>
                   </div>
                 </div>
-                {editScope !== 'inquiry' && <div className="grid-2">
+                <div className="grid-2">
                   <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-name">Full Name</label>
                     <input id="profile-edit-name" className="input" value={editForm.name} autoFocus onChange={e => setEditForm({...editForm, name: e.target.value})} />
@@ -3118,14 +2958,14 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     <label className="form-label" htmlFor="profile-edit-email">Email</label>
                     <input id="profile-edit-email" className="input" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} />
                   </div>
-                </div>}
+                </div>
                 <div className="grid-2">
-                  {editScope !== 'inquiry' && <div className="form-group">
+                  <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-phone">Phone</label>
                     <input id="profile-edit-phone" className="input" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
-                  </div>}
-                  {editScope !== 'contact' && <div className="form-group">
-                    <label className="form-label" htmlFor="profile-edit-status">{isAitUsaContact ? 'Inquiry status' : 'Status'}</label>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-status">Status</label>
                     <OpportunityLifecycleField
                       isAitUsa={isAitUsaContact}
                       hasLeadStatus={contact.hasLeadStatus}
@@ -3135,13 +2975,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       onStatusChange={e => setEditForm({...editForm, status: e.target.value, terminalStatusReason: ''})}
                       onStart={() => setStartOpportunityOpen(true)}
                     />
-                  </div>}
+                  </div>
                 </div>
                 {isAitUsaContact && !contact.hasLeadStatus && startOpportunityOpen && (
-                  <div className="profile-editor-account-action" aria-label="Start inquiry">
+                  <div className="profile-editor-account-action" aria-label="Start Opportunity">
                     <div className="grid-2">
                       <div className="form-group">
-                        <label className="form-label" htmlFor="start-opportunity-status">Initial inquiry status</label>
+                        <label className="form-label" htmlFor="start-opportunity-status">Initial Opportunity status</label>
                         <select
                           id="start-opportunity-status"
                           className="input select"
@@ -3184,7 +3024,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     {startOpportunityError && <div className={s.courseError}>{startOpportunityError}</div>}
                     <div>
                       <button className="btn btn-primary" type="button" onClick={startOpportunity} disabled={startOpportunityBusy}>
-                        {startOpportunityBusy ? 'Starting…' : 'Start inquiry'}
+                        {startOpportunityBusy ? 'Starting…' : 'Start opportunity'}
                       </button>
                     </div>
                   </div>
@@ -3220,7 +3060,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     />
                   </div>
                 )}
-                {editScope !== 'contact' && (canManageContactAssignments ? (
+                {canManageContactAssignments ? (
                   <div className="form-group">
                     <label className="form-label" htmlFor="profile-edit-owner">Assigned To</label>
                     <select id="profile-edit-owner" className="input select" value={editForm.assignedTo || ''} disabled={Boolean(isAitUsaContact && contact.opportunityConflict)} onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}>
@@ -3234,8 +3074,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   </div>
                 ) : (
                   <input type="hidden" value={editForm.assignedTo || coordinatorUiPolicy.lockedOwnerUserId} readOnly />
-                ))}
-                {editScope !== 'inquiry' && access.canWriteCrm ? (
+                )}
+                {access.canWriteCrm ? (
                   <div className="profile-editor-account-action danger-action-panel">
                     <div className="danger-action-copy">
                       <span className="danger-action-eyebrow">
@@ -3278,13 +3118,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 </div>
                 <div className="grid-2">
                   <div className="form-group">
-                    <label className="form-label" htmlFor="profile-edit-source">{editScope === 'inquiry' ? 'Inquiry source' : 'Contact source'}</label>
-                    <select id="profile-edit-source" className="input select" value={editForm[editSourceField] || ''} onChange={e => setEditForm({...editForm, [editSourceField]: e.target.value})}>
-                      <option value="">Not recorded</option>
+                    <label className="form-label" htmlFor="profile-edit-source">Source</label>
+                    <select id="profile-edit-source" className="input select" value={editForm.source} onChange={e => setEditForm({...editForm, source: e.target.value})}>
                       {editSourceOptions.map(src => <option key={src} value={src}>{src}</option>)}
                     </select>
                   </div>
-                  {showSchoolLocationField && editScope === 'inquiry' ? (
+                  {showSchoolLocationField ? (
                     <div className="form-group">
                       <label className="form-label" htmlFor="profile-edit-student-location">Student Location</label>
                       <input id="profile-edit-student-location" className="input" value={editForm.leadProfile?.locationPreference || ''} placeholder="City, municipality, or address" onChange={e => updateEditLeadProfile('locationPreference', e.target.value)} />
@@ -3293,7 +3132,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   ) : null}
                 </div>
                 <div className="grid-2">
-                  {showSchoolLocationField && editScope !== 'inquiry' ? (
+                  {showSchoolLocationField ? (
                     <div className="form-group">
                       <label className="form-label" htmlFor="profile-edit-school-location">Intended Learning Location</label>
                       <select id="profile-edit-school-location" className="input select" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})}>
@@ -3304,12 +3143,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       </select>
                       <div className="profile-editor-helper">The approved campus or Online option the student intends to use.</div>
                     </div>
-                  ) : !isAitUsaContact ? (
+                  ) : (
                     <div className="form-group">
                       <label className="form-label" htmlFor="profile-edit-address">Address</label>
                       <input id="profile-edit-address" className="input" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})} />
                     </div>
-                  ) : null}
+                  )}
                 </div>
               </section>
             )}

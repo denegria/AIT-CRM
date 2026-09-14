@@ -135,15 +135,7 @@ export function toContactPayload(row, lead = null, noteRows = [], businessUnit =
     priority: workflow.priority,
     outreachState: workflow.outreachState,
     needsFirstOutreach: workflow.needsFirstOutreach,
-    // Keep the legacy aggregate for callers that still need a display value, but
-    // expose the persisted scopes explicitly. `sourceType` is technical
-    // provenance; `sourceName` is the editable inquiry attribution.
-    source: lead
-      ? (lead.sourceName !== null && lead.sourceName !== undefined ? lead.sourceName : lead.sourceType || '')
-      : row.sourceLabel || '',
-    contactSource: row.sourceLabel || '',
-    sourceLabel: row.sourceLabel || '',
-    inquirySource: enrollmentSignals?.source?.channel || '',
+    source: lead?.sourceName || row.sourceLabel || '',
     leadProfile: leadProfileForPayload(lead),
     courseMetadata: courseMetadataForPayload(lead),
     enrollmentSignals,
@@ -393,10 +385,6 @@ export async function PATCH(request, _context = {}, overrides = {}) {
     return NextResponse.json({ error: 'Insufficient business-unit access.' }, { status: 403 });
   }
 
-  const hasContactSourcePatch = Object.prototype.hasOwnProperty.call(body, 'contactSource');
-  const hasInquirySourcePatch = Object.prototype.hasOwnProperty.call(body, 'inquirySource');
-  const hasLegacySourcePatch = Object.prototype.hasOwnProperty.call(body, 'source');
-
   const patch = { updatedAt: new Date() };
   if ('name' in body) patch.name = String(body.name || '').trim() || existing.name;
   if ('email' in body) patch.email = body.email || null;
@@ -444,11 +432,6 @@ export async function PATCH(request, _context = {}, overrides = {}) {
     }
   }
   const isAitUsaWorkflow = workflowKeyForBusinessUnit(statusBusinessUnit) === WORKFLOW_KEYS.AIT_USA;
-  // New callers must name the entity they are correcting. Keep the old `source`
-  // alias safe for AIT USA by treating it as Contact source only; Signs keeps its
-  // historical coupled behavior until its existing editor is migrated.
-  if (hasContactSourcePatch) patch.sourceLabel = body.contactSource || null;
-  else if (hasLegacySourcePatch) patch.sourceLabel = body.source || null;
   let hasAitUsaOpportunityConflict = false;
   let activeOpportunityCount = 0;
   if (isAitUsaWorkflow) {
@@ -526,14 +509,6 @@ export async function PATCH(request, _context = {}, overrides = {}) {
       { status: 400 },
     );
   }
-  if (hasInquirySourcePatch && !lead) {
-    return NextResponse.json(
-      { error: isAitUsaWorkflow
-        ? 'Contact has no Opportunity source to update. Start an Opportunity first.'
-        : 'Contact has no lead source to update.' },
-      { status: 400 },
-    );
-  }
 
   const leadProfilePatch = leadProfilePatchFromPayload(body, { allowClear: true });
   const hasLeadProfilePatch = Object.keys(leadProfilePatch).length > 0 ||
@@ -541,8 +516,7 @@ export async function PATCH(request, _context = {}, overrides = {}) {
   const courseMetadataPatch = courseMetadataPatchFromPayload(body, { allowClear: true });
   const hasCourseMetadataPatch = Object.keys(courseMetadataPatch).length > 0 ||
     (body.courseMetadata && typeof body.courseMetadata === 'object');
-  const hasLeadPatch = 'status' in body || hasInquirySourcePatch ||
-    (!isAitUsaWorkflow && hasLegacySourcePatch) || 'assignedTo' in body ||
+  const hasLeadPatch = 'status' in body || 'source' in body || 'assignedTo' in body ||
     hasBusinessUnitPatch || hasLeadProfilePatch || hasCourseMetadataPatch;
   let leadPatch = null;
   let leadStatusChange = null;
@@ -578,8 +552,7 @@ export async function PATCH(request, _context = {}, overrides = {}) {
         leadStatusChange = transition;
       }
     }
-    if (hasInquirySourcePatch) leadPatch.sourceName = String(body.inquirySource ?? '').trim();
-    else if (!isAitUsaWorkflow && hasLegacySourcePatch) leadPatch.sourceName = body.source || null;
+    if ('source' in body) leadPatch.sourceName = body.source || null;
     if ('assignedTo' in body) {
       try {
         leadPatch.assignedUserId = await resolveAssignableUserId(

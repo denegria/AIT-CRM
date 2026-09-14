@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mapContacts } from './bootstrap-data.js';
-import { contactInquiryState } from './contact-detail-view-model.js';
 
 const contact = Object.freeze({
   id: 'contact-1',
@@ -29,7 +28,6 @@ test('bootstrap Contact payload binds active-older AIT USA Opportunity over clos
   assert.equal(payload.courseMetadata.currentCourse, 'HVAC');
   assert.equal(payload.opportunityConflict, false);
   assert.equal(payload.activeOpportunityCount, 1);
-  assert.equal(contactInquiryState(payload), 'current');
 });
 
 test('bootstrap Contact payload marks multiple active AIT USA Opportunities as a conflict', () => {
@@ -45,22 +43,6 @@ test('bootstrap Contact payload marks multiple active AIT USA Opportunities as a
   );
   assert.equal(payload.opportunityConflict, true);
   assert.equal(payload.activeOpportunityCount, 2);
-  assert.equal(contactInquiryState(payload), 'conflict');
-});
-
-test('workspace identifies closed-only inquiry history even though the payload hasLeadStatus is true', () => {
-  const [payload] = mapContacts([contact], [
-    { id: 'closed-only', contactId: contact.id, businessUnitId: aitUsa.id, status: 'Not Interested', createdAt: new Date('2026-08-15T12:00:00Z') },
-  ], [], [], [aitUsa]);
-  assert.equal(payload.hasLeadStatus, true);
-  assert.equal(payload.activeOpportunityCount, 0);
-  assert.equal(contactInquiryState(payload), 'closed');
-});
-
-test('workspace does not invent an inquiry from the legacy contact default status', () => {
-  const [payload] = mapContacts([contact], [], [], [], [aitUsa]);
-  assert.equal(payload.hasLeadStatus, false);
-  assert.equal(contactInquiryState(payload), 'none');
 });
 
 test('AIT Signs bootstrap preserves newest-Lead selection regardless of AIT USA lifecycle rules', () => {
@@ -97,30 +79,4 @@ test('AIT USA bootstrap ignores newer and active Leads from another business uni
   assert.equal(payload.status, 'Follow Up');
   assert.equal(payload.opportunityConflict, false);
   assert.equal(payload.activeOpportunityCount, 1);
-});
-
-test('bootstrap preserves independent sources and does not invent attribution when both are missing', () => {
-  const [payload] = mapContacts(
-    [{ ...contact, sourceLabel: '' }],
-    [{ id: 'usa-active', contactId: contact.id, businessUnitId: aitUsa.id, status: 'Follow Up', sourceType: 'manual', sourceName: '', createdAt: new Date('2026-08-14T12:00:00Z') }],
-    [],
-    [],
-    [aitUsa],
-  );
-  assert.equal(payload.contactSource, '');
-  assert.equal(payload.inquirySource, '');
-  assert.equal(payload.source, '');
-});
-
-test('bootstrap keeps contact source separate from a corrected inquiry source', () => {
-  const [payload] = mapContacts(
-    [{ ...contact, sourceLabel: 'Legacy Import' }],
-    [{ id: 'usa-active', contactId: contact.id, businessUnitId: aitUsa.id, status: 'Follow Up', sourceType: 'facebook_lead_ads', sourceName: 'Referral', createdAt: new Date('2026-08-14T12:00:00Z') }],
-    [],
-    [],
-    [aitUsa],
-  );
-  assert.equal(payload.contactSource, 'Legacy Import');
-  assert.equal(payload.inquirySource, 'Referral');
-  assert.equal(payload.source, 'Referral');
 });

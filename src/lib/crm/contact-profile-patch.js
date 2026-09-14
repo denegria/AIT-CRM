@@ -1,7 +1,7 @@
 export function hasOpportunityMutationRequest(body = {}) {
   return [
     'status',
-    'inquirySource',
+    'source',
     'assignedTo',
     'businessUnitId',
     'primaryBusinessUnitId',
@@ -29,38 +29,16 @@ export function buildContactProfilePatch({
   isAitUsa = false,
   lockedOwnerUserId = '',
   canManageAssignments = true,
-  editScope = 'combined',
   isClosedStatusReopen = false,
   isEnteringClosedStatus = false,
 } = {}) {
-  let patch = { ...editForm };
+  const patch = { ...editForm };
   delete patch.notes;
   delete patch.timeline;
 
-  if (editScope === 'contact') {
-    return Object.fromEntries(
-      ['id', 'name', 'email', 'phone', 'address', 'contactSource']
-        .filter((field) => Object.prototype.hasOwnProperty.call(editForm, field))
-        .map((field) => [field, editForm[field]]),
-    );
-  }
-  if (editScope === 'inquiry') {
-    patch = Object.fromEntries(
-      [
-        'id', 'opportunityId', 'status', 'assignedTo', 'businessUnitId', 'primaryBusinessUnitId',
-        'inquirySource', 'leadProfile', 'courseMetadata', 'programInterest', 'preferredDay',
-        'preferredSchedule', 'testInterest', 'educationLevel', 'schoolName', 'locationPreference',
-        'profileDetails', 'sourceDetail', 'currentCourse', 'completedCourse', 'endedCourse',
-        'courseOutcome', 'statusChangeReason', 'terminalStatusReason',
-      ]
-        .filter((field) => Object.prototype.hasOwnProperty.call(editForm, field))
-        .map((field) => [field, editForm[field]]),
-    );
-  }
-
   if (isAitUsa && contact.opportunityConflict) {
     return Object.fromEntries(
-      ['id', 'name', 'email', 'phone', 'address', 'contactSource', 'opportunityId']
+      ['id', 'name', 'email', 'phone', 'address', 'opportunityId']
         .filter((field) => Object.prototype.hasOwnProperty.call(editForm, field))
         .map((field) => [field, editForm[field]]),
     );
