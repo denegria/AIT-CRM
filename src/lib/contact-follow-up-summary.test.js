@@ -44,6 +44,29 @@ test('Follow-up summary preserves ambiguity, scope-safe absence, restrictions, a
   assert.equal(snoozed.commitment.originalDueAt, null, 'the task payload has no historical pre-snooze due date to display');
 });
 
+test('Follow-up summary makes empty, undated, overdue, and owner-resolution states explicit', () => {
+  const noStructuredOutcome = buildFollowUpSummary({
+    events: [{ eventType: 'note.created', text: 'Call next week', occurredAt: '2026-09-18T10:00:00.000Z' }],
+    isPrivileged: true,
+  });
+  assert.equal(noStructuredOutcome.latest, null);
+  assert.equal(noStructuredOutcome.commitment.label, 'No open follow-up recorded');
+
+  const undated = buildFollowUpSummary({ tasks: [{ ...visibleTask, dueAt: null, ownerUserId: null }] });
+  assert.equal(undated.commitment.label, 'Follow-up needs a date');
+  assert.equal(undated.commitment.dueAt, null);
+  assert.equal(undated.commitment.ownerLabel, 'Unassigned');
+
+  const overdue = buildFollowUpSummary({
+    tasks: [{ ...visibleTask, dueAt: '2026-09-10T14:00:00.000Z', ownerUserId: 'missing-owner' }],
+    ownerOptions: [],
+    now: new Date('2026-09-14T00:00:00.000Z'),
+  });
+  assert.equal(overdue.commitment.label, 'Overdue');
+  assert.equal(overdue.commitment.isOverdue, true);
+  assert.equal(overdue.commitment.ownerLabel, 'Assigned — name unavailable');
+});
+
 test('serialized task payload boundary ignores route users and timeline-linked task records', () => {
   const restrictedPayload = {
     tasks: [],

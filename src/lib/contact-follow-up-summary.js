@@ -1,6 +1,6 @@
 import { FOLLOW_UP_OUTCOME_VALUES } from './tasks/constants.js';
 import { followUpOutcomeLabel, followUpOutcomeSuggestsNextDue } from './tasks/follow-up.js';
-import { isTaskOverdue, isTaskOpen } from './tasks/visibility.js';
+import { isTaskOverdue, isTaskOpen, taskDateKey } from './tasks/visibility.js';
 
 const OUTCOMES = new Set(FOLLOW_UP_OUTCOME_VALUES);
 
@@ -51,6 +51,7 @@ export function buildFollowUpSummary({
   const outcome = latest?.outcome || '';
   const permittedTasks = (Array.isArray(tasks) ? tasks : []).filter((task) => isTaskOpen(task));
   const outreachBlocked = contactability?.canFollowUp === false;
+  const today = taskDateKey(now);
 
   const result = {
     latest: latest
@@ -83,12 +84,12 @@ export function buildFollowUpSummary({
           ? 'Snoozed until'
           : !dueAt
             ? 'Follow-up needs a date'
-            : isTaskOverdue(task, now)
+            : isTaskOverdue(task, today)
               ? 'Overdue'
               : 'Next follow-up',
       dueAt: snoozedUntil || dueAt,
       originalDueAt: snoozedUntil && task.originalDueAt ? task.originalDueAt : null,
-      isOverdue: !snoozedUntil && isTaskOverdue(task, now),
+      isOverdue: !snoozedUntil && isTaskOverdue(task, today),
     };
     return result;
   }
