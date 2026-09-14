@@ -12,7 +12,7 @@ import { isAitUsaBusinessUnit } from '@/lib/attendance/policy.js';
 import { isClientAccountBusinessUnit } from '@/lib/crm/lifecycle';
 import s from './Sidebar.module.css';
 
-import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, CloudSun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal, Inbox, Megaphone, UsersRound, BookOpenCheck } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, CloudSun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal, PanelLeftClose, PanelLeftOpen, Pin, Inbox, Megaphone, UsersRound, BookOpenCheck } from 'lucide-react';
 
 const nav = [
   { href: '/', label: 'Dashboard', Icon: LayoutDashboard },
@@ -77,19 +77,24 @@ function divisionBrandFor(unit) {
   };
 }
 
-function sidebarRailTransition(expanded, event) {
+function sidebarRailTransition(transientExpanded, event) {
   if (event.type === 'route-selection' || event.type === 'escape') return false;
-  if (event.type === 'toggle') return !expanded;
+  if (event.type === 'toggle') return !transientExpanded;
   if (event.type === 'pointer-enter' && event.pointerType === 'mouse') return true;
   if (event.type === 'pointer-leave' && event.pointerType === 'mouse' && !event.focusWithin) return false;
   if (event.type === 'content-focus') return true;
-  return expanded;
+  return transientExpanded;
 }
 
-export default function Sidebar() {
+function navigationRailState(isPinned, isTransientExpanded) {
+  if (isPinned) return 'pinned';
+  return isTransientExpanded ? 'transient' : 'collapsed';
+}
+
+export default function Sidebar({ isPinned = false, onPinnedChange }) {
   const pathname = usePathname();
   const [isMoreOpen, setIsMoreOpen] = useState(false);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isTransientExpanded, setIsTransientExpanded] = useState(false);
   const toggleRef = useRef(null);
   const ignoreNextToggleFocus = useRef(false);
   const {
@@ -183,9 +188,18 @@ export default function Sidebar() {
     };
   }, [visibleNav]);
 
+  const isExpanded = isPinned || isTransientExpanded;
+  const railState = navigationRailState(isPinned, isTransientExpanded);
+
   const closeAfterRouteSelection = () => {
     setIsMoreOpen(false);
-    setIsExpanded((expanded) => sidebarRailTransition(expanded, { type: 'route-selection' }));
+    setIsTransientExpanded((expanded) => sidebarRailTransition(expanded, { type: 'route-selection' }));
+  };
+
+  const handlePinnedNavigationChange = () => {
+    const nextPinned = !isPinned;
+    onPinnedChange?.(nextPinned);
+    setIsTransientExpanded(nextPinned ? false : true);
   };
 
   const renderNavLink = ({ href, label, Icon }, className = s.navItem) => (
@@ -221,13 +235,14 @@ export default function Sidebar() {
     <aside
       className={`${s.sidebar} ${hasBusinessUnitScope ? s.hasMobileScope : ''}`}
       data-expanded={isExpanded}
+      data-navigation-state={railState}
       onPointerEnter={(event) => {
-        setIsExpanded((expanded) => sidebarRailTransition(expanded, { type: 'pointer-enter', pointerType: event.pointerType }));
+        setIsTransientExpanded((expanded) => sidebarRailTransition(expanded, { type: 'pointer-enter', pointerType: event.pointerType }));
       }}
       onPointerLeave={(event) => {
         const pointerType = event.pointerType;
         const focusWithin = event.currentTarget.contains(document.activeElement);
-        setIsExpanded((expanded) => sidebarRailTransition(expanded, {
+        setIsTransientExpanded((expanded) => sidebarRailTransition(expanded, {
           type: 'pointer-leave',
           pointerType,
           focusWithin,
@@ -238,30 +253,34 @@ export default function Sidebar() {
           ignoreNextToggleFocus.current = false;
           return;
         }
-        if (event.target !== toggleRef.current) setIsExpanded((expanded) => sidebarRailTransition(expanded, { type: 'content-focus' }));
+        if (event.target !== toggleRef.current) setIsTransientExpanded((expanded) => sidebarRailTransition(expanded, { type: 'content-focus' }));
       }}
       onBlurCapture={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) setIsExpanded(false);
+        if (!event.currentTarget.contains(event.relatedTarget)) setIsTransientExpanded(false);
       }}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
-          setIsExpanded((expanded) => sidebarRailTransition(expanded, { type: 'escape' }));
-          ignoreNextToggleFocus.current = true;
-          toggleRef.current?.focus();
+          setIsTransientExpanded((expanded) => sidebarRailTransition(expanded, { type: 'escape' }));
+          if (!isPinned) {
+            ignoreNextToggleFocus.current = true;
+            toggleRef.current?.focus();
+          }
         }
       }}
     >
-      <button
-        ref={toggleRef}
-        type="button"
-        className={s.railToggle}
-        aria-label={isExpanded ? 'Collapse navigation' : 'Expand navigation'}
-        aria-expanded={isExpanded}
-        aria-controls="primary-navigation"
-        onClick={() => setIsExpanded((expanded) => sidebarRailTransition(expanded, { type: 'toggle' }))}
-      >
-        <MoreHorizontal size={20} />
-      </button>
+      {!isPinned && (
+        <button
+          ref={toggleRef}
+          type="button"
+          className={s.railToggle}
+          aria-label={isTransientExpanded ? 'Close navigation' : 'Open navigation'}
+          aria-expanded={isExpanded}
+          aria-controls="primary-navigation"
+          onClick={() => setIsTransientExpanded((expanded) => sidebarRailTransition(expanded, { type: 'toggle' }))}
+        >
+          {isTransientExpanded ? <PanelLeftClose size={18} /> : <PanelLeftOpen size={18} />}
+        </button>
+      )}
       <div className={s.logo}>
         {divisionBrand.logoSrc ? (
           <Image src={divisionBrand.logoSrc} alt={divisionBrand.alt} width={40} height={40} className={s.logoImage} />
@@ -289,6 +308,18 @@ export default function Sidebar() {
             {renderScopeControl()}
           </div>
         )}
+        <div className={s.pinControl}>
+          <button
+            type="button"
+            className={s.pinToggle}
+            aria-label={isPinned ? 'Unpin navigation' : 'Pin navigation'}
+            aria-pressed={isPinned}
+            onClick={handlePinnedNavigationChange}
+          >
+            <Pin size={15} aria-hidden="true" />
+            <span>{isPinned ? 'Unpin navigation' : 'Pin navigation'}</span>
+          </button>
+        </div>
         <div className={s.navLabel}>Menu</div>
         <div className={s.desktopNav}>
           {visibleNav.map((item) => renderNavLink(item))}
