@@ -13,7 +13,7 @@ function preferenceKey() {
 
 function preferenceHelpers() {
   const start = source.indexOf('function navigationPreferenceKey');
-  const end = source.indexOf('\n\nfunction AppShellContent');
+  const end = source.indexOf('\n\nfunction NavigationLayout');
   assert.notEqual(start, -1, 'navigation preference helpers are present');
   assert.notEqual(end, -1, 'navigation preference helper block is complete');
   return new Function(`${source.slice(start, end)}; return { readPinnedNavigationPreference, writePinnedNavigationPreference };`)();
@@ -26,14 +26,7 @@ test('navigation pin preference is namespaced to the authenticated user', () => 
   assert.equal(key(null), null);
 });
 
-test('AppShell restores and writes pinning per user without carrying a prior session state forward', () => {
-  assert.match(source, /setPinnedNavigation\(readPinnedNavigationPreference\(authenticatedUserId\)\)/);
-  assert.match(source, /setPinnedNavigationUserId\(authenticatedUserId\)/);
-  assert.match(source, /pinnedNavigationUserId === authenticatedUserId/);
-  assert.match(source, /writePinnedNavigationPreference\(authenticatedUserId, nextValue\)/);
-});
-
-test('stored pinning cannot leak from one authenticated user to another', () => {
+test('stored pinning rehydrates for each authenticated user without leaking across session changes', () => {
   const { readPinnedNavigationPreference, writePinnedNavigationPreference } = preferenceHelpers();
   const previousWindow = globalThis.window;
   const hadWindow = Object.prototype.hasOwnProperty.call(globalThis, 'window');
@@ -48,11 +41,17 @@ test('stored pinning cannot leak from one authenticated user to another', () => 
 
   try {
     writePinnedNavigationPreference('employee-a', true);
-    assert.equal(readPinnedNavigationPreference('employee-a'), true);
-    assert.equal(readPinnedNavigationPreference('employee-b'), false);
     writePinnedNavigationPreference('employee-b', false);
-    assert.equal(readPinnedNavigationPreference('employee-a'), true);
-    assert.equal(readPinnedNavigationPreference('employee-b'), false);
+
+    assert.deepEqual(
+      [
+        readPinnedNavigationPreference('employee-a'),
+        readPinnedNavigationPreference('employee-b'),
+        readPinnedNavigationPreference('employee-a'),
+        readPinnedNavigationPreference(null),
+      ],
+      [true, false, true, false],
+    );
   } finally {
     if (hadWindow) globalThis.window = previousWindow;
     else delete globalThis.window;

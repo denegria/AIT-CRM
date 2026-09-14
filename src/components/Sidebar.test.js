@@ -37,6 +37,8 @@ test('desktop rail keeps transient expansion separate from persistent pinning', 
   assert.equal(transition(false, { type: 'content-focus' }), true);
   assert.equal(transition(true, { type: 'escape' }), false);
   assert.equal(transition(true, { type: 'route-selection' }), false);
+  assert.equal(state(true, transition(true, { type: 'escape' })), 'pinned');
+  assert.equal(state(true, transition(true, { type: 'route-selection' })), 'pinned');
   assert.equal(transition(false, { type: 'toggle' }), true);
   assert.equal(transition(true, { type: 'toggle' }), false);
   assert.equal(state(false, false), 'collapsed');
