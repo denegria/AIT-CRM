@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 import { usePathname } from 'next/navigation';
 import CommandPalette from '@/components/CommandPalette';
 import NotificationBell from '@/components/NotificationBell';
@@ -16,6 +16,8 @@ function navigationPreferenceKey(userId) {
   return normalizedUserId ? `ait-crm-navigation-pinned:${normalizedUserId}` : null;
 }
 
+const navigationPinnedChangeEvent = 'ait-crm-navigation-pinned-change';
+
 function readPinnedNavigationPreference(userId) {
   const preferenceKey = navigationPreferenceKey(userId);
   if (!preferenceKey || typeof window === 'undefined') return false;
@@ -27,28 +29,59 @@ function readPinnedNavigationPreference(userId) {
   }
 }
 
+function readPinnedNavigationServerSnapshot() {
+  return false;
+}
+
+function subscribePinnedNavigationPreference(userId, callback) {
+  const preferenceKey = navigationPreferenceKey(userId);
+  if (!preferenceKey || typeof window === 'undefined') return () => {};
+
+  const handleStorageChange = (event) => {
+    if (event.key === preferenceKey) callback();
+  };
+  const handleSameWindowChange = (event) => {
+    if (event.detail?.preferenceKey === preferenceKey) callback();
+  };
+
+  window.addEventListener('storage', handleStorageChange);
+  window.addEventListener(navigationPinnedChangeEvent, handleSameWindowChange);
+  return () => {
+    window.removeEventListener('storage', handleStorageChange);
+    window.removeEventListener(navigationPinnedChangeEvent, handleSameWindowChange);
+  };
+}
+
 function writePinnedNavigationPreference(userId, isPinned) {
   const preferenceKey = navigationPreferenceKey(userId);
   if (!preferenceKey || typeof window === 'undefined') return;
 
   try {
     window.localStorage.setItem(preferenceKey, isPinned ? 'true' : 'false');
+    window.dispatchEvent(new CustomEvent(navigationPinnedChangeEvent, {
+      detail: { preferenceKey },
+    }));
   } catch {
     // Navigation pinning is a local enhancement; storage failures leave it session-local.
   }
 }
 
 function NavigationLayout({ authenticatedUserId, hasMobileScopeBar, children }) {
-  const [pinnedNavigation, setPinnedNavigation] = useState(
-    () => readPinnedNavigationPreference(authenticatedUserId),
+  const subscribe = useCallback(
+    (callback) => subscribePinnedNavigationPreference(authenticatedUserId, callback),
+    [authenticatedUserId],
   );
+  const getSnapshot = useCallback(
+    () => readPinnedNavigationPreference(authenticatedUserId),
+    [authenticatedUserId],
+  );
+  const pinnedNavigation = useSyncExternalStore(subscribe, getSnapshot, readPinnedNavigationServerSnapshot);
   const isNavigationPinned = Boolean(authenticatedUserId && pinnedNavigation);
 
   const handlePinnedNavigationChange = useCallback((nextPinned) => {
     if (!authenticatedUserId) return;
 
     const nextValue = Boolean(nextPinned);
-    setPinnedNavigation(nextValue);
     writePinnedNavigationPreference(authenticatedUserId, nextValue);
   }, [authenticatedUserId]);
 

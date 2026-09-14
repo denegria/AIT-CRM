@@ -16,7 +16,7 @@ function preferenceHelpers() {
   const end = source.indexOf('\n\nfunction NavigationLayout');
   assert.notEqual(start, -1, 'navigation preference helpers are present');
   assert.notEqual(end, -1, 'navigation preference helper block is complete');
-  return new Function(`${source.slice(start, end)}; return { readPinnedNavigationPreference, writePinnedNavigationPreference };`)();
+  return new Function(`${source.slice(start, end)}; return { readPinnedNavigationPreference, readPinnedNavigationServerSnapshot, subscribePinnedNavigationPreference, writePinnedNavigationPreference };`)();
 }
 
 test('navigation pin preference is namespaced to the authenticated user', () => {
@@ -26,7 +26,43 @@ test('navigation pin preference is namespaced to the authenticated user', () => 
   assert.equal(key(null), null);
 });
 
-test('stored pinning rehydrates for each authenticated user without leaking across session changes', () => {
+test('navigation pin store uses a false server snapshot and a same-window update notification', () => {
+  const {
+    readPinnedNavigationPreference,
+    readPinnedNavigationServerSnapshot,
+    subscribePinnedNavigationPreference,
+    writePinnedNavigationPreference,
+  } = preferenceHelpers();
+  const previousWindow = globalThis.window;
+  const hadWindow = Object.prototype.hasOwnProperty.call(globalThis, 'window');
+  const storage = new Map();
+  const listeners = new Map();
+
+  globalThis.window = {
+    localStorage: {
+      getItem: (key) => storage.get(key) || null,
+      setItem: (key, value) => storage.set(key, value),
+    },
+    addEventListener: (type, callback) => listeners.set(type, callback),
+    removeEventListener: (type) => listeners.delete(type),
+    dispatchEvent: (event) => listeners.get(event.type)?.(event),
+  };
+
+  try {
+    assert.equal(readPinnedNavigationServerSnapshot(), false);
+    let updates = 0;
+    const unsubscribe = subscribePinnedNavigationPreference('employee-a', () => { updates += 1; });
+    writePinnedNavigationPreference('employee-a', true);
+    assert.equal(readPinnedNavigationPreference('employee-a'), true);
+    assert.equal(updates, 1);
+    unsubscribe();
+  } finally {
+    if (hadWindow) globalThis.window = previousWindow;
+    else delete globalThis.window;
+  }
+});
+
+test('stored pinning remains isolated when the authenticated user changes', () => {
   const { readPinnedNavigationPreference, writePinnedNavigationPreference } = preferenceHelpers();
   const previousWindow = globalThis.window;
   const hadWindow = Object.prototype.hasOwnProperty.call(globalThis, 'window');
@@ -37,6 +73,7 @@ test('stored pinning rehydrates for each authenticated user without leaking acro
       getItem: (key) => storage.get(key) || null,
       setItem: (key, value) => storage.set(key, value),
     },
+    dispatchEvent: () => {},
   };
 
   try {
@@ -59,6 +96,7 @@ test('stored pinning rehydrates for each authenticated user without leaking acro
 });
 
 test('pinned desktop geometry reserves 232px while mobile keeps its bottom navigation geometry', () => {
+  assert.ok(source.includes('useSyncExternalStore(subscribe, getSnapshot, readPinnedNavigationServerSnapshot)'));
   assert.match(source, /data-navigation-pinned=\{isNavigationPinned\}/);
   assert.match(source, /<Sidebar isPinned=\{isNavigationPinned\} onPinnedChange=\{handlePinnedNavigationChange\} \/>/);
   assert.match(globalStyles, /\.app-layout\[data-navigation-pinned="true"\] \.main-content \{\s*margin-left: var\(--sidebar-width\)/);
