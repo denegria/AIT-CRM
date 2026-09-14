@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { PIPELINE_STATUSES, isWorkflowStatusClosed, workflowForBusinessUnit } from '@/lib/sales-workflow';
 import { buildContactDetailViewModel, contactInquiryState } from '@/lib/contact-detail-view-model';
+import { buildFollowUpSummary, scopedFollowUpTasksFromPayload } from '@/lib/contact-follow-up-summary';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
 import { schoolLocationForContact, schoolLocationOptions, studentLocationForContact } from '@/lib/school-locations';
 import {
@@ -38,6 +39,7 @@ import { defaultInquiryId } from '@/lib/crm/inquiry-workspace.js';
 import {
   buildContactFollowUpLookup,
   followUpSubmissionTaskId,
+  followUpTaskEntryHref,
 } from '@/lib/tasks/follow-up-selection.js';
 import { initialFollowUpDraftFields } from '@/lib/tasks/follow-up-draft.js';
 
@@ -454,8 +456,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   } = useCRM();
   const [activeTab, setActiveTab] = useState('timeline');
   const [timelineFilter, setTimelineFilter] = useState('all');
+  const [isTimelineFilterOpen, setIsTimelineFilterOpen] = useState(false);
+  const timelineFilterMenuRef = useRef(null);
+  const timelineFilterTriggerRef = useRef(null);
   const [serverTimeline, setServerTimeline] = useState({ contactId: '', reloadKey: -1, items: null, error: false });
   const [timelineReloadKey, setTimelineReloadKey] = useState(0);
+  const [taskProjection, setTaskProjection] = useState({ key: '', items: [], loading: false, error: '' });
+  const [taskProjectionReloadKey, setTaskProjectionReloadKey] = useState(0);
   const [serverConversations, setServerConversations] = useState({ contactId: '', reloadKey: -1, items: null, error: false });
   const [conversationReloadKey, setConversationReloadKey] = useState(0);
   const [messageTemplates, setMessageTemplates] = useState([]);
@@ -800,7 +807,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     counts[category] = (counts[category] || 0) + 1;
     return counts;
   }, { all: 0 }), [timelineSource]);
-  const renderedTimelineFilter = detailView.timelineFilters.some((filter) => filter.value === timelineFilter) ? timelineFilter : 'all';
+  const renderedTimelineFilter = timelineFilter !== 'import' && detailView.timelineFilters.some((filter) => filter.value === timelineFilter) ? timelineFilter : 'all';
   const timeline = useMemo(() => {
     if (renderedTimelineFilter === 'all') return timelineSource.filter((item) => !isSourceDetailTimelineItem(item));
     return timelineSource.filter((item) => timelineFilterCategory(item) === renderedTimelineFilter);
@@ -808,6 +815,19 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const latestReviewActivity = useMemo(() => (
     timelineSource.find((item) => !isSourceDetailTimelineItem(item)) || null
   ), [timelineSource]);
+  const isPrivilegedFollowUpScope = canManageAitUsaAssignmentsForUser(currentUser);
+  const taskProjectionKey = [contact?.id, contactBusinessUnit?.id, currentUser?.id, isPrivilegedFollowUpScope ? 'privileged' : 'regular'].join(':');
+  const currentTaskProjection = taskProjection.key === taskProjectionKey ? taskProjection : { key: taskProjectionKey, items: [], loading: dataSource === 'postgres', error: '' };
+  const followUpSummary = useMemo(() => buildFollowUpSummary({
+    events: timelineSource,
+    tasks: currentTaskProjection.items,
+    ownerOptions,
+    contactability: detailView.contactability,
+    isPrivileged: isPrivilegedFollowUpScope,
+  }), [currentTaskProjection.items, detailView.contactability, isPrivilegedFollowUpScope, ownerOptions, timelineSource]);
+  const timelineFilterOptions = useMemo(() => detailView.timelineFilters.filter((filter) => (
+    filter.value !== 'import' && (filter.value === 'all' || filter.value === renderedTimelineFilter || (timelineCounts[filter.value] || 0) > 0)
+  )), [detailView.timelineFilters, renderedTimelineFilter, timelineCounts]);
   const hasMatchingServerConversations = serverConversations.contactId === contact?.id && serverConversations.reloadKey === conversationReloadKey;
   const conversationMessages = hasMatchingServerConversations && serverConversations.items ? serverConversations.items : [];
   const linkedSnapshotCounts = {
@@ -868,6 +888,57 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const currentLinkedPeople = linkedPeople.contactId === contact?.id
     ? linkedPeople
     : { contactId: contact?.id || '', items: [], loading: showLinkedPeoplePanel && dataSource === 'postgres', error: '' };
+
+  useEffect(() => {
+    if (!isTimelineFilterOpen) return undefined;
+    const closeIfOutside = (event) => {
+      if (!timelineFilterMenuRef.current?.contains(event.target)) setIsTimelineFilterOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      setIsTimelineFilterOpen(false);
+      timelineFilterTriggerRef.current?.focus();
+    };
+    document.addEventListener('pointerdown', closeIfOutside);
+    document.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeIfOutside);
+      document.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isTimelineFilterOpen]);
+
+  useEffect(() => {
+    if (!isAitUsaContact || !contact?.id || !contactBusinessUnit?.id || dataSource !== 'postgres') return undefined;
+    let cancelled = false;
+    const requestKey = taskProjectionKey;
+    setTaskProjection({ key: requestKey, items: [], loading: true, error: '' });
+    const query = new URLSearchParams({
+      contactId: contact.id,
+      businessUnitId: contactBusinessUnit.id,
+      taskType: 'follow_up',
+    });
+    fetch(`/api/tasks?${query.toString()}`, { cache: 'no-store' })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Follow-up task projection could not load.');
+        if (!cancelled) setTaskProjection({
+          key: requestKey,
+          items: scopedFollowUpTasksFromPayload(payload),
+          loading: false,
+          error: '',
+        });
+      })
+      .catch((error) => {
+        if (!cancelled) setTaskProjection({
+          key: requestKey,
+          items: [],
+          loading: false,
+          error: error.message || 'Follow-up task projection could not load.',
+        });
+      });
+    return () => { cancelled = true; };
+  }, [contact?.id, contactBusinessUnit?.id, dataSource, isAitUsaContact, taskProjectionKey, taskProjectionReloadKey]);
 
   useEffect(() => {
     if (!contact?.id || dataSource !== 'postgres') return undefined;
@@ -1538,6 +1609,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       }
       setTimelineFilter('all');
       setTimelineReloadKey((key) => key + 1);
+      setTaskProjectionReloadKey((key) => key + 1);
       const resultLabel = payload.taskMatched ? 'Follow-up task completed' : 'Follow-up logged';
       toast(payload.nextTask
         ? `${resultLabel} · next task scheduled`
@@ -1914,7 +1986,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         )}
       </div>
 
-      {isAitUsaContact && (
+      {false && isAitUsaContact && (
         <section className={s.inquiryPreview} aria-label="Contact preview and current inquiry summary">
           <div className={s.inquiryPreviewHeader}>
             <div className={s.inquiryPreviewTitle}>
@@ -2003,54 +2075,81 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       )}
 
       <div className={s.profileInfo}>
-        <div className={s.infoItem}>
-          <Mail size={16} />
-          {cleanText(contact.email) ? (
-            <a className={s.infoLink} href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a>
-          ) : (
-            <span className={s.missingInfo}>No email on file</span>
-          )}
-        </div>
-        <div className={s.infoItem}>
-          <Phone size={16} />
-          {cleanText(contact.phone) ? (
-            <a className={s.infoLink} href={phoneHref(contact.phone)}>{contact.phone}</a>
-          ) : (
-            <span className={s.missingInfo}>Missing phone</span>
-          )}
-        </div>
-        {phoneHistoryState.contactId === contact.id && phoneHistoryState.items.some((phone) => !phone.isPrimary) && (
+        {isAitUsaContact ? <>
           <div className={s.infoItem}>
-            <Archive size={16} />
-            <div className={s.phoneHistory}>
-              <strong>Previous phone numbers</strong>
-              {phoneHistoryState.items.filter((phone) => !phone.isPrimary).map((phone) => (
-                <span key={phone.id || phone.normalizedPhone}>
-                  {phone.phone}
-                  {phone.isWrongNumber ? ' · Wrong number' : phone.isDoNotCall ? ' · Do not call' : ' · Historical — do not use for outreach'}
-                </span>
-              ))}
+            <Mail size={16} />
+            {cleanText(contact.email) ? <a className={s.infoLink} href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a> : <span className={s.missingInfo}>No email on file</span>}
+          </div>
+          <div className={s.infoItem}>
+            <Phone size={16} />
+            <div className={s.phonePrimary}>
+              {cleanText(contact.phone) ? <a className={s.infoLink} href={phoneHref(contact.phone)}>{contact.phone}</a> : <span className={s.missingInfo}>Missing phone</span>}
+              {(contact.isWrongNumber || contact.isDoNotCall) && <span className={s.phoneRestriction}>{contact.isWrongNumber ? 'Wrong number' : 'Do not call'}</span>}
             </div>
           </div>
-        )}
-        {phoneHistoryState.contactId === contact.id && phoneHistoryState.error && (
+          {detailView.contactability?.canFollowUp === false && (
+            <div className={`${s.infoItem} ${s.contactabilityWarning}`}>
+              <AlertCircle size={16} />
+              <span><strong>{detailView.contactability.status === 'do_not_contact' ? 'Do not contact' : detailView.contactability.label}</strong>{detailView.contactability.reason ? ` — ${detailView.contactability.reason}` : ''}</span>
+            </div>
+          )}
+          {phoneHistoryState.contactId === contact.id && phoneHistoryState.items.some((phone) => !phone.isPrimary) && (
+            <details className={s.otherPhones}>
+              <summary>Other phone numbers ({phoneHistoryState.items.filter((phone) => !phone.isPrimary).length})</summary>
+              {phoneHistoryState.items.filter((phone) => !phone.isPrimary).map((phone) => (
+                <div key={phone.id || phone.normalizedPhone} className={s.otherPhoneRow}>
+                  <strong>{phone.phone || 'Number unavailable'}</strong>
+                  <span>{phone.isWrongNumber ? 'Wrong number' : phone.isDoNotCall ? 'Do not call' : 'Not primary'}</span>
+                  {(phone.sourceLabel || phone.createdAt || phone.retiredAt) && <small>{[phone.sourceLabel, phone.retiredAt ? `Retired ${dateLabel({ date: phone.retiredAt })}` : phone.createdAt ? `Added ${dateLabel({ date: phone.createdAt })}` : ''].filter(Boolean).join(' · ')}</small>}
+                </div>
+              ))}
+            </details>
+          )}
+          {phoneHistoryState.contactId === contact.id && phoneHistoryState.error && <div className={s.infoItem}><AlertCircle size={16} /><span className={s.missingInfo}>{phoneHistoryState.error}</span></div>}
+          {contact.address && <div className={s.infoItem}><MapPin size={16} /> <span>{contact.address}</span></div>}
+          <div className={s.profileFact}><span>Contact source</span><strong>{contactSource}</strong></div>
+          <div className={s.freshnessBlock} aria-label="Record freshness"><div><span>Last interaction</span><strong>{contact.lastTouch || contact.lastContact || 'None'}</strong></div><div><span>Profile updated</span><strong>{contact.lastEdited || contact.updatedAt || contact.createdAt || 'None'}</strong></div></div>
+        </> : <>
           <div className={s.infoItem}>
-            <AlertCircle size={16} />
-            <span className={s.missingInfo}>{phoneHistoryState.error}</span>
+            <Mail size={16} />
+            {cleanText(contact.email) ? <a className={s.infoLink} href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a> : <span className={s.missingInfo}>No email on file</span>}
           </div>
-        )}
-        {contact.address && <div className={s.infoItem}><MapPin size={16} /> <span>{contact.address}</span></div>}
-        <div className={s.infoItem}><Calendar size={16} /> <span>Last touch: {contact.lastTouch || contact.lastContact || 'None'}</span></div>
-        <div className={s.infoItem}><Edit3 size={16} /> <span>Last edited: {contact.lastEdited || 'None'}</span></div>
-        {detailView.contactability?.status && detailView.contactability.status !== 'reachable' && (
-          <div className={`${s.infoItem} ${s.contactabilityWarning}`}>
-            <AlertCircle size={16} />
-            <span>{detailView.contactability.reason || detailView.contactability.label}</span>
+          <div className={s.infoItem}>
+            <Phone size={16} />
+            {cleanText(contact.phone) ? <a className={s.infoLink} href={phoneHref(contact.phone)}>{contact.phone}</a> : <span className={s.missingInfo}>Missing phone</span>}
           </div>
-        )}
+          {contact.address && <div className={s.infoItem}><MapPin size={16} /> <span>{contact.address}</span></div>}
+          <div className={s.infoItem}><Calendar size={16} /> <span>Last touch: {contact.lastTouch || contact.lastContact || 'None'}</span></div>
+          <div className={s.infoItem}><Edit3 size={16} /> <span>Last edited: {contact.lastEdited || 'None'}</span></div>
+        </>}
       </div>
 
       {isAitUsaContact && (
+        <section className={s.followUpSummary} aria-label="Follow-up summary">
+          <div className={s.followUpSummaryHeader}><AlertCircle size={15} /><span>Follow-up</span></div>
+          <div className={s.followUpRow}>
+            <span>What happened last?</span>
+            <strong>{followUpSummary.latest?.label || 'No structured follow-up recorded'}</strong>
+            {followUpSummary.latest?.occurredAt && <small>{dateLabel({ timestamp: followUpSummary.latest.occurredAt })}</small>}
+          </div>
+          {currentTaskProjection.loading ? <p className={s.followUpHint}>Loading permitted follow-up work…</p> : currentTaskProjection.error ? (
+            <div className={s.followUpError}><span>{currentTaskProjection.error}</span><button type="button" className={s.previewLink} onClick={() => setTaskProjectionReloadKey((key) => key + 1)}>Try again</button></div>
+          ) : (
+            <div className={`${s.followUpRow} ${followUpSummary.commitment?.isOverdue ? s.followUpOverdue : ''}`}>
+              <span>What happens next?</span>
+              <strong>{followUpSummary.commitment?.label}</strong>
+              {followUpSummary.commitment?.task && <small>{followUpSummary.commitment.task.title || 'Follow-up'} · {followUpSummary.commitment.dueAt ? taskDateLabel(followUpSummary.commitment.dueAt) : 'No due date'} · {followUpSummary.commitment.ownerLabel}</small>}
+              {followUpSummary.commitment?.originalDueAt && <small>Original due {taskDateLabel(followUpSummary.commitment.originalDueAt)}</small>}
+              {followUpSummary.commitment?.detail && <small>{followUpSummary.commitment.detail}</small>}
+              {followUpSummary.commitment?.kind === 'multiple' && <Link className={s.previewLink} href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}>Review follow-ups</Link>}
+              {followUpSummary.commitment?.kind === 'exact' && access.canWriteCrm && <Link className={s.previewLink} href={followUpTaskEntryHref(followUpSummary.commitment.task)}>Log outcome</Link>}
+              {followUpSummary.commitment?.kind === 'blocked' && <Link className={s.previewLink} href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}>Review task</Link>}
+            </div>
+          )}
+        </section>
+      )}
+
+      {false && isAitUsaContact && (
         <details className={s.previewDetails}>
           <summary>Contact details</summary>
           <dl>
@@ -2130,6 +2229,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             <Edit3 size={16} style={{marginRight: 8}} /> {isAitUsaContact ? 'Edit contact' : 'Edit Profile'}
           </button>
         </div>
+      )}
+      {isAitUsaContact && (
+        <section className={s.inquiryFooter} aria-label="Current inquiry summary">
+          <div><span>{contact.opportunityConflict ? 'Inquiry needs resolution' : inquiryHistoryLoading ? 'Loading inquiry history' : inquiryHistoryError ? 'Inquiry history unavailable' : selectedInquiryIsActive ? 'Current inquiry' : selectedInquiry ? 'Last inquiry' : 'No inquiry recorded'}</span></div>
+          {contact.opportunityConflict ? <p className={s.previewWarning}><AlertCircle size={14} /> {contact.activeOpportunityCount || 'Multiple'} active inquiries need resolution.</p> : inquiryHistoryLoading ? <p className={s.previewMuted}>Loading the permitted inquiry history…</p> : inquiryHistoryError ? <p className={s.previewWarning}><AlertCircle size={14} /> Inquiry history could not load.</p> : selectedInquiry ? <p><strong>{selectedInquiry.program || 'Program not recorded'}</strong><span>{selectedInquiry.status || 'Unknown'} · {selectedInquiry.owner?.label || 'Unassigned'}</span></p> : <p className={s.previewMuted}>History and enrollments remain available without an inquiry.</p>}
+          <button className={s.previewLink} type="button" onClick={() => setActiveTab('inquiries')}>View inquiry</button>
+        </section>
       )}
     </div>
   );
@@ -2272,21 +2378,27 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 </div>}
 
                 <div className={s.timelineToolbar}>
-                  <div className={s.timelineFilters} aria-label="Timeline filters">
-                    {detailView.timelineFilters.map((filter) => (
-                      <button
-                        key={filter.value}
-                        className={`${s.timelineFilter} ${renderedTimelineFilter === filter.value ? s.active : ''}`}
-                        onClick={() => setTimelineFilter(filter.value)}
-                        type="button"
-                        aria-pressed={renderedTimelineFilter === filter.value}
-                        aria-label={`${filter.label}: ${timelineCounts[filter.value] || 0} records`}
-                      >
-                        {filter.label}
-                        <span className={s.timelineFilterCount}>{timelineCounts[filter.value] || 0}</span>
-                        {renderedTimelineFilter === filter.value && <span className={s.srOnly}> selected</span>}
-                      </button>
-                    ))}
+                  <div className={s.timelineFilterMenu} ref={timelineFilterMenuRef}>
+                    <button
+                      ref={timelineFilterTriggerRef}
+                      className={s.timelineFilterTrigger}
+                      type="button"
+                      aria-label="Activity filter"
+                      aria-haspopup="menu"
+                      aria-expanded={isTimelineFilterOpen}
+                      onClick={() => setIsTimelineFilterOpen((open) => !open)}
+                    >
+                      {timelineFilterOptions.find((filter) => filter.value === renderedTimelineFilter)?.label || 'All activity'} <span>{timelineCounts[renderedTimelineFilter] || 0}</span>
+                    </button>
+                    {isTimelineFilterOpen && <div className={s.timelineFilterOptions} role="menu" aria-label="Activity filter options">
+                      {timelineFilterOptions.map((filter) => <button key={filter.value} type="button" role="menuitemradio" aria-checked={renderedTimelineFilter === filter.value} onClick={() => {
+                        setTimelineFilter(filter.value);
+                        setIsTimelineFilterOpen(false);
+                        timelineFilterTriggerRef.current?.focus();
+                      }}>
+                        <span>{filter.label}</span><strong>{timelineCounts[filter.value] || 0}</strong>
+                      </button>)}
+                    </div>}
                   </div>
                   {timelineStatus === 'loading' && <div className={s.timelineStatus}>Syncing</div>}
                 </div>

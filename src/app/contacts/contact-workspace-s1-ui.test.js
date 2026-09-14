@@ -9,15 +9,20 @@ const pipeline = fs.readFileSync(new URL('../pipeline/page.js', import.meta.url)
 test('AIT USA defaults to Activity with direct retained tabs and no standalone Record tab', () => {
   assert.match(source, /useState\('timeline'\)/);
   assert.doesNotMatch(source, />Record<\/button>/);
-  assert.match(source, /aria-label="Contact preview and current inquiry summary"/);
-  assert.match(source, /Contact details/);
+  assert.match(source, /aria-label="Current inquiry summary"/);
+  assert.match(source, /Other phone numbers/);
+  assert.match(source, /Last interaction/);
+  assert.match(source, /Profile updated/);
+  assert.match(source, /aria-label="Follow-up summary"/);
+  assert.match(source, /scopedFollowUpTasksFromPayload/);
+  assert.match(source, /role="menuitemradio"/);
   assert.match(source, /Edit contact/);
   assert.match(source, /isAitUsaContact \? 'Activity' : 'Timeline'/);
   assert.match(source, /isAitUsaContact \? 'Enrollments' : 'Courses'/);
   assert.match(source, /detailView\.tabs\.financialLabel/);
   assert.match(source, /detailView\.tabs\.workOrdersLabel/);
   assert.match(source, /\{profileSidebar\}/);
-  assert.match(styles, /grid-template-columns: minmax\(320px, 340px\) minmax\(0, 1fr\)/);
+  assert.match(styles, /grid-template-columns: minmax\(320px, 340px\) minmax\(0, 872px\)/);
   assert.match(source, /Inquiries \(\{inquiryItems\.length\}\)/);
   assert.match(source, /aria-label="Selected inquiry"/);
   assert.match(source, /Discard the open inquiry edits before selecting another inquiry/);
