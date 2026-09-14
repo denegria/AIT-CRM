@@ -367,6 +367,7 @@ export function toTaskPayload(row, { session = null } = {}) {
     priority: row.priority,
     dueAt: row.dueAt?.toISOString?.() || row.dueAt || null,
     snoozedUntil: row.snoozedUntil?.toISOString?.() || row.snoozedUntil || null,
+    originalDueAt: row.originalDueAt?.toISOString?.() || row.originalDueAt || null,
     completedAt: row.completedAt?.toISOString?.() || row.completedAt || null,
     canceledAt: row.canceledAt?.toISOString?.() || row.canceledAt || null,
     ownerUserId: row.ownerUserId || '',
@@ -380,6 +381,43 @@ export function toTaskPayload(row, { session = null } = {}) {
     createdAt: row.createdAt?.toISOString?.() || row.createdAt || null,
     updatedAt: row.updatedAt?.toISOString?.() || row.updatedAt || null,
   };
+}
+
+export function latestSnoozeOriginalDueAtByTaskId(rows = []) {
+  const latestByTaskId = new Map();
+  for (const row of rows) {
+    if (row?.eventType !== TASK_EVENT_TYPES.SNOOZED || !row.taskId || !row.fromDueAt) continue;
+    const occurredAt = new Date(row.occurredAt || row.createdAt || 0).getTime();
+    const current = latestByTaskId.get(row.taskId);
+    if (!current || occurredAt > current.occurredAt) {
+      latestByTaskId.set(row.taskId, { occurredAt, dueAt: row.fromDueAt });
+    }
+  }
+  return new Map([...latestByTaskId].map(([taskId, value]) => [taskId, value.dueAt]));
+}
+
+export async function loadLatestSnoozeOriginalDueAtByTaskId({
+  db,
+  organizationId,
+  taskIds = [],
+}) {
+  const ids = [...new Set(taskIds.filter(Boolean))];
+  if (!ids.length) return new Map();
+  const rows = await db
+    .select({
+      taskId: taskEvents.taskId,
+      eventType: taskEvents.eventType,
+      fromDueAt: taskEvents.fromDueAt,
+      occurredAt: taskEvents.occurredAt,
+      createdAt: taskEvents.createdAt,
+    })
+    .from(taskEvents)
+    .where(and(
+      eq(taskEvents.organizationId, organizationId),
+      inArray(taskEvents.taskId, ids),
+      eq(taskEvents.eventType, TASK_EVENT_TYPES.SNOOZED),
+    ));
+  return latestSnoozeOriginalDueAtByTaskId(rows);
 }
 
 export async function listTasks({

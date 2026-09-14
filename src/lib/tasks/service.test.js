@@ -3,6 +3,7 @@ import test from 'node:test';
 import { PgDialect } from 'drizzle-orm/pg-core';
 import {
   completeFollowUpTaskWithActivity,
+  latestSnoozeOriginalDueAtByTaskId,
   reconcileAutomatedInboundFollowUpTasks,
   recordFollowUpActivity,
   TASK_STALE_WRITE_ERROR_CODE,
@@ -63,7 +64,7 @@ test('task transition payload stays scoped to the authorized task and excludes i
   assert.deepEqual(Object.keys(payload), [
     'id', 'title', 'description', 'businessUnitId', 'contactId', 'contactName',
     'leadId', 'workOrderId', 'taskType', 'status', 'priority', 'dueAt',
-    'snoozedUntil', 'completedAt', 'canceledAt', 'ownerUserId',
+    'snoozedUntil', 'originalDueAt', 'completedAt', 'canceledAt', 'ownerUserId',
     'createdByUserId', 'sourceType', 'sourceId', 'sourceLabel', 'metadataJson',
     'previousFollowUp', 'cancellationPolicy', 'createdAt', 'updatedAt',
   ]);
@@ -71,6 +72,42 @@ test('task transition payload stays scoped to the authorized task and excludes i
   for (const forbidden of ['organizationId', 'auditEvents', 'employeeTasks', 'secret']) {
     assert.equal(Object.hasOwn(payload, forbidden), false);
   }
+});
+
+test('task payload and snooze projection retain the latest original due date', () => {
+  const olderDueAt = new Date('2026-08-18T14:00:00.000Z');
+  const latestDueAt = new Date('2026-08-19T15:00:00.000Z');
+  const byTaskId = latestSnoozeOriginalDueAtByTaskId([
+    {
+      taskId: 'task-snoozed',
+      eventType: 'snoozed',
+      fromDueAt: olderDueAt,
+      occurredAt: new Date('2026-08-18T10:00:00.000Z'),
+    },
+    {
+      taskId: 'task-snoozed',
+      eventType: 'snoozed',
+      fromDueAt: latestDueAt,
+      occurredAt: new Date('2026-08-19T10:00:00.000Z'),
+    },
+    {
+      taskId: 'task-other',
+      eventType: 'updated',
+      fromDueAt: new Date('2026-08-20T10:00:00.000Z'),
+      occurredAt: new Date('2026-08-20T09:00:00.000Z'),
+    },
+  ]);
+
+  assert.equal(byTaskId.get('task-snoozed'), latestDueAt);
+  assert.equal(byTaskId.has('task-other'), false);
+  assert.equal(toTaskPayload({
+    id: 'task-snoozed',
+    status: 'snoozed',
+    taskType: 'follow_up',
+    priority: 'medium',
+    originalDueAt: byTaskId.get('task-snoozed'),
+    metadataJson: {},
+  }).originalDueAt, latestDueAt.toISOString());
 });
 
 function followUpTask(overrides = {}) {

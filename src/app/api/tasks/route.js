@@ -59,6 +59,7 @@ import {
   createTaskWithEvents,
   listTasks,
   loadLatestFollowUpOutcomePreviews,
+  loadLatestSnoozeOriginalDueAtByTaskId,
   parseExpectedTaskUpdatedAt,
   toTaskPayload,
   updateTaskWithEvents,
@@ -416,7 +417,10 @@ export async function GET(request) {
       ? rows
       : rows.filter((row) => row.taskType !== TASK_TYPES.TASK_REMOVAL_APPROVAL);
     const taskContactIds = visibleRows.map((row) => row.contactId).filter(Boolean);
-    const [assignableUsers, taskContacts, previousFollowUps] = await Promise.all([
+    const snoozedTaskIds = visibleRows
+      .filter((row) => row.status === TASK_STATUSES.SNOOZED)
+      .map((row) => row.id);
+    const [assignableUsers, taskContacts, previousFollowUps, originalDueAtByTaskId] = await Promise.all([
       listAssignableUsers(db, session),
       taskContactIds.length
         ? loadTaskContactOptions({ db, session, contactIds: taskContactIds })
@@ -429,6 +433,11 @@ export async function GET(request) {
             businessUnitIds,
           })
         : Promise.resolve(new Map()),
+      loadLatestSnoozeOriginalDueAtByTaskId({
+        db,
+        organizationId: session.user.organizationId,
+        taskIds: snoozedTaskIds,
+      }),
     ]);
     const contactNameById = new Map(taskContacts.map((contact) => [contact.id, contact.name]));
     return NextResponse.json({
@@ -436,6 +445,7 @@ export async function GET(request) {
         ...row,
         contactName: contactNameById.get(row.contactId) || '',
         previousFollowUp: previousFollowUps.get(row.contactId) || null,
+        originalDueAt: originalDueAtByTaskId.get(row.id) || null,
       }, { session })),
       users: assignableUsers,
       contacts: taskContacts,
@@ -897,7 +907,12 @@ export async function PATCH(request, runtime = {}) {
       expectedUpdatedAt,
     });
 
-    return NextResponse.json({ task: toTaskPayload(task, { session }) });
+    return NextResponse.json({
+      task: toTaskPayload({
+        ...task,
+        originalDueAt: String(body.action || '').trim() === 'snooze' ? existingTask.dueAt : null,
+      }, { session }),
+    });
   } catch (err) {
     return crmErrorResponse(err);
   }

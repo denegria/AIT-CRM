@@ -123,12 +123,13 @@ test('enrollment presentation tolerates manual records without a class section',
   assert.equal(scheduleLabel({ scheduleDays: ['Mon', 'Wed'], startTime: '09:00', endTime: '10:30' }), 'Mon, Wed 09:00–10:30');
 });
 
-test('follow-up refresh invalidates exact task links and reuses the canonical contact patch', () => {
+test('follow-up refresh reloads canonical contactability, Activity, and exact task links', () => {
   assert.match(source, /const taskProjectionKey = \[contact\?\.id, contactBusinessUnit\?\.id, currentUser\?\.id, isPrivilegedFollowUpScope \? 'privileged' : 'regular', taskProjectionReloadKey\]\.join\(':'\);/);
   assert.doesNotMatch(source, /setTaskProjection\(\{ key: requestKey, items: \[\], loading: true, error: '' \}\);/);
-  assert.match(source, /import \{ contactPatchForFollowUpOutcome \} from '@\/lib\/tasks\/follow-up\.js';/);
-  assert.match(source, /const contactPatch = contactPatchForFollowUpOutcome\(followUpDraft\.outcome\);\s+if \(contactPatch\) replaceContactFromServer\(\{ \.\.\.contact, \.\.\.contactPatch \}\);/);
-  assert.match(source, /setTimelineReloadKey\(\(key\) => key \+ 1\);\s+setTaskProjectionReloadKey\(\(key\) => key \+ 1\);/);
+  assert.doesNotMatch(source, /contactPatchForFollowUpOutcome/);
+  assert.match(source, /payload\.contact\?\.id === requestContactId\) replaceContactFromServer\(payload\.contact\)/);
+  assert.match(source, /setTimelineReloadKey\(\(key\) => key \+ 1\);\s+setTaskProjectionReloadKey\(\(key\) => key \+ 1\);\s+setPhoneHistoryReloadKey\(\(key\) => key \+ 1\);/);
+  assert.match(source, /followUpProjectionLoading \? <p[^>]*>Refreshing contactability, Activity, and permitted follow-up work…<\/p>/);
 });
 
 test('AIT USA contains no dormant legacy preview or generic contact-details wall', () => {

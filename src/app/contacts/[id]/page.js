@@ -41,7 +41,6 @@ import {
   followUpSubmissionTaskId,
   followUpTaskEntryHref,
 } from '@/lib/tasks/follow-up-selection.js';
-import { contactPatchForFollowUpOutcome } from '@/lib/tasks/follow-up.js';
 import { initialFollowUpDraftFields } from '@/lib/tasks/follow-up-draft.js';
 
 const SNAPSHOT_ICONS = {
@@ -542,7 +541,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [courseBusy, setCourseBusy] = useState(false);
   const [courseError, setCourseError] = useState('');
   const [selectedCourseRecordId, setSelectedCourseRecordId] = useState('');
-  const [phoneHistoryState, setPhoneHistoryState] = useState({ contactId: '', items: [], loading: false, error: '' });
+  const [phoneHistoryState, setPhoneHistoryState] = useState({ contactId: '', reloadKey: -1, items: [], loading: false, error: '' });
+  const [phoneHistoryReloadKey, setPhoneHistoryReloadKey] = useState(0);
   const [inquiriesState, setInquiriesState] = useState({ contactId: '', items: [], loading: false, error: '' });
   const [selectedInquiryId, setSelectedInquiryId] = useState('');
   const [inquiryDraftInitial, setInquiryDraftInitial] = useState(null);
@@ -819,6 +819,18 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const isPrivilegedFollowUpScope = canManageAitUsaAssignmentsForUser(currentUser);
   const taskProjectionKey = [contact?.id, contactBusinessUnit?.id, currentUser?.id, isPrivilegedFollowUpScope ? 'privileged' : 'regular', taskProjectionReloadKey].join(':');
   const currentTaskProjection = taskProjection.key === taskProjectionKey ? taskProjection : { key: taskProjectionKey, items: [], loading: dataSource === 'postgres', error: '' };
+  const hasMatchingPhoneHistory = phoneHistoryState.contactId === contact?.id && phoneHistoryState.reloadKey === phoneHistoryReloadKey;
+  const contactabilityRefreshStatus = dataSource === 'postgres' && contact?.id && !hasMatchingPhoneHistory
+    ? 'loading'
+    : hasMatchingPhoneHistory && phoneHistoryState.loading
+      ? 'loading'
+    : hasMatchingPhoneHistory && phoneHistoryState.error
+      ? 'error'
+      : 'idle';
+  const followUpProjectionLoading = currentTaskProjection.loading || timelineStatus === 'loading' || contactabilityRefreshStatus === 'loading';
+  const followUpProjectionError = currentTaskProjection.error ||
+    (timelineStatus === 'error' ? 'Activity refresh failed.' : '') ||
+    (contactabilityRefreshStatus === 'error' ? 'Contactability refresh failed.' : '');
   const followUpSummary = buildFollowUpSummary({
     events: timelineSource,
     tasks: currentTaskProjection.items,
@@ -1055,13 +1067,27 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     if (!contact?.id || dataSource !== 'postgres') return undefined;
     let cancelled = false;
     const requestContactId = contact.id;
+    const requestReloadKey = phoneHistoryReloadKey;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        setPhoneHistoryState((current) => ({
+          ...current,
+          contactId: requestContactId,
+          reloadKey: requestReloadKey,
+          loading: true,
+          error: '',
+        }));
+      }
+    });
     fetch(`/api/contacts/${contact.id}/phones`, { cache: 'no-store' })
       .then(async (response) => {
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload.error || 'Phone history load failed.');
         if (!cancelled) {
+          if (payload.contact?.id === requestContactId) replaceContactFromServer(payload.contact);
           setPhoneHistoryState({
             contactId: requestContactId,
+            reloadKey: requestReloadKey,
             items: Array.isArray(payload.phones) ? payload.phones : [],
             loading: false,
             error: '',
@@ -1073,6 +1099,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         if (!cancelled) {
           setPhoneHistoryState({
             contactId: requestContactId,
+            reloadKey: requestReloadKey,
             items: [],
             loading: false,
             error: error.message || 'Phone history load failed.',
@@ -1082,7 +1109,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     return () => {
       cancelled = true;
     };
-  }, [contact?.id, dataSource]);
+  }, [contact?.id, dataSource, phoneHistoryReloadKey, replaceContactFromServer]);
 
   useEffect(() => {
     if (!contact?.id || dataSource !== 'postgres') return undefined;
@@ -1599,8 +1626,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Follow-up log failed.');
-      const contactPatch = contactPatchForFollowUpOutcome(followUpDraft.outcome);
-      if (contactPatch) replaceContactFromServer({ ...contact, ...contactPatch });
       setFollowUpOpen(false);
       setFollowUpDraft(null);
       setFollowUpTask(null);
@@ -1612,6 +1637,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       setTimelineFilter('all');
       setTimelineReloadKey((key) => key + 1);
       setTaskProjectionReloadKey((key) => key + 1);
+      setPhoneHistoryReloadKey((key) => key + 1);
       const resultLabel = payload.taskMatched ? 'Follow-up task completed' : 'Follow-up logged';
       toast(payload.nextTask
         ? `${resultLabel} · next task scheduled`
@@ -2036,7 +2062,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               <span><strong>{detailView.contactability.status === 'do_not_contact' ? 'Do not contact' : detailView.contactability.label}</strong>{detailView.contactability.reason ? ` — ${detailView.contactability.reason}` : ''}</span>
             </div>
           )}
-          {phoneHistoryState.contactId === contact.id && phoneHistoryState.items.some((phone) => !phone.isPrimary) && (
+          {hasMatchingPhoneHistory && !phoneHistoryState.loading && phoneHistoryState.items.some((phone) => !phone.isPrimary) && (
             <details className={s.otherPhones}>
               <summary>Other phone numbers ({phoneHistoryState.items.filter((phone) => !phone.isPrimary).length})</summary>
               {phoneHistoryState.items.filter((phone) => !phone.isPrimary).map((phone) => (
@@ -2048,7 +2074,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               ))}
             </details>
           )}
-          {phoneHistoryState.contactId === contact.id && phoneHistoryState.error && <div className={s.infoItem}><AlertCircle size={16} /><span className={s.missingInfo}>{phoneHistoryState.error}</span></div>}
+          {hasMatchingPhoneHistory && phoneHistoryState.error && <div className={s.infoItem}><AlertCircle size={16} /><span className={s.missingInfo}>{phoneHistoryState.error}</span></div>}
           {contact.address && <div className={s.infoItem}><MapPin size={16} /> <span>{contact.address}</span></div>}
           <div className={s.profileFact}><span>Contact source</span><strong>{contactSource}</strong></div>
           <div className={s.freshnessBlock} aria-label="Record freshness"><div><span>Last interaction</span><strong>{contact.lastTouch || contact.lastContact || 'None'}</strong></div><div><span>Profile updated</span><strong>{contact.lastEdited || contact.updatedAt || contact.createdAt || 'None'}</strong></div></div>
@@ -2075,8 +2101,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             <strong>{followUpSummary.latest?.label || 'No structured follow-up recorded'}</strong>
             {followUpSummary.latest?.occurredAt && <small>{dateLabel({ timestamp: followUpSummary.latest.occurredAt })}</small>}
           </div>
-          {currentTaskProjection.loading ? <p className={s.followUpHint}>Loading permitted follow-up work…</p> : currentTaskProjection.error ? (
-            <div className={s.followUpError}><span>{currentTaskProjection.error}</span><button type="button" className={s.previewLink} onClick={() => setTaskProjectionReloadKey((key) => key + 1)}>Try again</button></div>
+          {followUpProjectionLoading ? <p className={s.followUpHint}>Refreshing contactability, Activity, and permitted follow-up work…</p> : followUpProjectionError ? (
+            <div className={s.followUpError}><span>{followUpProjectionError}</span><button type="button" className={s.previewLink} onClick={() => { setTimelineReloadKey((key) => key + 1); setTaskProjectionReloadKey((key) => key + 1); setPhoneHistoryReloadKey((key) => key + 1); }}>Try again</button></div>
           ) : (
             <div className={`${s.followUpRow} ${followUpSummary.commitment?.isOverdue ? s.followUpOverdue : ''}`}>
               <span>What happens next?</span>
