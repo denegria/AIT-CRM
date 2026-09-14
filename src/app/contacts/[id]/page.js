@@ -1966,10 +1966,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       <div className={s.profileHeader}>
         {isAitUsaContact ? (
           <>
-            <div className={s.profileIdentityMark}>
-              <div className={s.profileAvatarLarge}>{contact.name.charAt(0)}</div>
-              <div className={s.profileRole}>{detailView.profileTitle}</div>
-            </div>
+            <div className={s.profileRole}>{detailView.profileTitle}</div>
             <h1 className={s.profileName}>{contact.name}</h1>
             {detailView.sourceEyebrow && <div className={s.profileSource}>{detailView.sourceEyebrow}</div>}
           </>
@@ -2207,6 +2204,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       </div>
 
       <div className={`${s.detailLayout} ${isAitUsaContact ? s.usaWorkspace : ''}`}>
+        {isAitUsaContact && profileSidebar}
         {/* Main Section: Review content */}
         <div className={`${s.contentSection} ${isAitUsaContact ? s.usaContent : ''}`}>
           {!isAitUsaContact && <section className={s.reviewContext} aria-label={`${detailView.profileTitle} review context`}>
@@ -2939,7 +2937,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             )}
           </div>
         </div>
-        {profileSidebar}
+        {!isAitUsaContact && profileSidebar}
       </div>
 
       {courseModal && (

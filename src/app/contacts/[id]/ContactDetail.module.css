@@ -56,8 +56,6 @@
   background: linear-gradient(180deg, var(--bg-elevated), var(--bg-secondary));
 }
 .usaWorkspace .profileHeader { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; margin-bottom: 18px; }
-.profileIdentityMark { display: flex; align-items: center; gap: 10px; }
-.usaWorkspace .profileAvatarLarge { width: 48px; height: 48px; border-radius: var(--radius-xl); font-size: 20px; box-shadow: var(--shadow-md), inset 0 1px 0 rgba(255,255,255,0.22); }
 .usaWorkspace .profileName { font-size: 18px; font-weight: 650; line-height: 1.3; }
 .usaWorkspace .profileRole { margin: 0; font-size: 10px; letter-spacing: .04em; }
 .usaWorkspace .profileSource { margin-top: 0; font-size: 12px; font-weight: 650; }

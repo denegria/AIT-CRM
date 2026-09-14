@@ -90,6 +90,52 @@ test('AIT USA contact detail uses enrollment grammar and hides empty Signs finan
   assert.ok(model.highlights.some((item) => item.label === 'Contactability' && item.value === 'Missing Email'));
 });
 
+test('AIT USA current contact-wide restriction overrides stale reachable signals', () => {
+  const model = buildContactDetailViewModel({
+    businessUnit: { name: 'AIT USA Institute' },
+    contact: {
+      workflowKey: 'ait_usa',
+      phone: '9735550101',
+      email: 'student@example.com',
+      isDoNotCall: true,
+      enrollmentSignals: {
+        contactability: {
+          status: 'reachable',
+          label: 'Reachable',
+          canFollowUp: true,
+          hasPhone: true,
+          hasEmail: true,
+        },
+      },
+    },
+  });
+
+  assert.equal(model.contactability.status, 'do_not_contact');
+  assert.equal(model.contactability.canFollowUp, false);
+});
+
+test('AIT USA current contact fields are not overridden by stale historical DNC signals', () => {
+  const model = buildContactDetailViewModel({
+    businessUnit: { name: 'AIT USA Institute' },
+    contact: {
+      workflowKey: 'ait_usa',
+      phone: '9735550101',
+      email: 'student@example.com',
+      isDoNotCall: false,
+      enrollmentSignals: {
+        contactability: {
+          status: 'do_not_contact',
+          label: 'Do Not Contact',
+          canFollowUp: false,
+        },
+      },
+    },
+  });
+
+  assert.equal(model.contactability.status, 'reachable');
+  assert.equal(model.contactability.canFollowUp, true);
+});
+
 test('AIT USA contact detail identifies Facebook Lead Ads as a lead form ad', () => {
   const model = buildContactDetailViewModel({
     contact: {

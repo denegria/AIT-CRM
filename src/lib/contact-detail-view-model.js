@@ -58,8 +58,6 @@ function countFor(counts = {}, key = '') {
 }
 
 function contactabilityFor(contact = {}) {
-  const signals = contact.enrollmentSignals?.contactability;
-  if (signals?.status) return signals;
   const hasPhone = Boolean(clean(contact.phone));
   const hasEmail = Boolean(clean(contact.email));
   if (contact.isDoNotCall) {

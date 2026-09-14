@@ -21,7 +21,8 @@ test('AIT USA defaults to Activity with direct retained tabs and no standalone R
   assert.match(source, /isAitUsaContact \? 'Enrollments' : 'Courses'/);
   assert.match(source, /detailView\.tabs\.financialLabel/);
   assert.match(source, /detailView\.tabs\.workOrdersLabel/);
-  assert.match(source, /\{profileSidebar\}/);
+  assert.match(source, /\{isAitUsaContact && profileSidebar\}/);
+  assert.match(source, /\{!isAitUsaContact && profileSidebar\}/);
   assert.match(styles, /grid-template-columns: minmax\(320px, 340px\) minmax\(0, 872px\)/);
   assert.match(source, /Inquiries \(\{inquiryItems\.length\}\)/);
   assert.match(source, /Discard the open inquiry edits before selecting another inquiry/);
@@ -50,7 +51,8 @@ test('AIT USA render path keeps the production-language hierarchy without changi
   const viewModel = fs.readFileSync(new URL('../../lib/contact-detail-view-model.js', import.meta.url), 'utf8');
   assert.match(viewModel, /profileTitle: 'Student Profile'/);
   assert.doesNotMatch(viewModel, /profileTitle: 'Enrollment Profile'/);
-  assert.match(source, /<div className=\{s\.profileIdentityMark\}>/);
+  assert.match(source, /isAitUsaContact \? \(\s*<>\s*<div className=\{s\.profileRole\}>\{detailView\.profileTitle\}<\/div>/);
+  assert.doesNotMatch(styles, /\.usaWorkspace \.profileAvatarLarge/);
   assert.match(source, /<h1 className=\{s\.profileName\}>\{contact\.name\}<\/h1>/);
   assert.match(source, /selectedInquiry\.program \|\| 'Program not recorded'/);
   assert.match(source, /No email on file/);
@@ -84,6 +86,7 @@ test('S1 keeps established action paths and supplies bounded responsive layout',
   assert.match(pipeline, /isAitUsaPipeline \? 'Work next inquiry' : 'Work Next Lead'/);
   assert.match(styles, /@media \(max-width: 900px\) \{\s+\.usaWorkspace \{ grid-template-columns: minmax\(0, 1fr\); \}\s+\.usaWorkspace \.profileCard \{\s+grid-column: 1;\s+grid-row: 1;/);
   assert.match(styles, /\.usaWorkspace \.contentSection \{\s+grid-column: 1;\s+grid-row: 2;/);
+  assert.match(source, /\{isAitUsaContact && profileSidebar\}[\s\S]*?<div className=\{`\$\{s\.contentSection\}/);
 });
 
 test('AIT USA preview and mutations bind to the exact selected inquiry', () => {
