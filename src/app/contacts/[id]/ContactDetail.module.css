@@ -136,7 +136,6 @@
   .inquiriesSplit, .inquiryDetail dl { grid-template-columns: minmax(0, 1fr); }
   .freshnessBlock { grid-template-columns: minmax(0, 1fr); }
 }
-.workspaceHeader,
 @container (max-width: 1000px) {
   .usaWorkspace { grid-template-columns: minmax(0, 1fr); }
   .usaWorkspace .profileCard { grid-column: 1; grid-row: 1; position: static; }
