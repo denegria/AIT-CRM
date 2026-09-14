@@ -41,6 +41,7 @@ test('Follow-up summary preserves ambiguity, scope-safe absence, restrictions, a
   const snoozed = buildFollowUpSummary({ tasks: [{ ...visibleTask, status: 'snoozed', snoozedUntil: '2026-09-20T14:00:00.000Z' }] });
   assert.equal(snoozed.commitment.label, 'Snoozed until');
   assert.equal(snoozed.commitment.dueAt, '2026-09-20T14:00:00.000Z');
+  assert.equal(snoozed.commitment.originalDueAt, null, 'the task payload has no historical pre-snooze due date to display');
 });
 
 test('serialized task payload boundary ignores route users and timeline-linked task records', () => {
@@ -48,6 +49,8 @@ test('serialized task payload boundary ignores route users and timeline-linked t
     tasks: [],
     users: [{ id: 'other-owner', name: 'Other employee' }],
     timeline: [{ linkedRecords: [{ type: 'task', id: 'hidden-task', label: 'Other employee task' }] }],
+    completedTask: { ...visibleTask, id: 'hidden-completed-task' },
+    nextTask: { ...visibleTask, id: 'hidden-next-task' },
   };
   assert.deepEqual(scopedFollowUpTasksFromPayload(restrictedPayload), []);
 

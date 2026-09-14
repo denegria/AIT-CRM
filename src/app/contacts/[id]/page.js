@@ -18,10 +18,10 @@ import {
   GraduationCap
 } from 'lucide-react';
 import { PIPELINE_STATUSES, isWorkflowStatusClosed, workflowForBusinessUnit } from '@/lib/sales-workflow';
-import { buildContactDetailViewModel, contactInquiryState } from '@/lib/contact-detail-view-model';
+import { buildContactDetailViewModel } from '@/lib/contact-detail-view-model';
 import { buildFollowUpSummary, scopedFollowUpTasksFromPayload } from '@/lib/contact-follow-up-summary';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
-import { schoolLocationForContact, schoolLocationOptions, studentLocationForContact } from '@/lib/school-locations';
+import { schoolLocationForContact, schoolLocationOptions } from '@/lib/school-locations';
 import {
   COURSE_RECORD_STATUS_OPTIONS,
   courseNameOptions,
@@ -41,6 +41,7 @@ import {
   followUpSubmissionTaskId,
   followUpTaskEntryHref,
 } from '@/lib/tasks/follow-up-selection.js';
+import { contactPatchForFollowUpOutcome } from '@/lib/tasks/follow-up.js';
 import { initialFollowUpDraftFields } from '@/lib/tasks/follow-up-draft.js';
 
 const SNAPSHOT_ICONS = {
@@ -618,11 +619,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const showLinkedPeoplePanel = isClientMode && detailView.workflowKey === WORKFLOW_KEYS.AIT_SIGNS;
   const showSchoolLocationField = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA;
   const isAitUsaContact = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA || /ait usa|institute/i.test(contactBusinessUnit?.name || '');
-  const inquiryState = contactInquiryState(contact || {});
-  const hasResolvedCurrentInquiry = isAitUsaContact && inquiryState === 'current';
-  const hasClosedInquiry = isAitUsaContact && inquiryState === 'closed';
   const contactSource = cleanText(contact?.sourceLabel) || 'Unknown';
-  const inquirySource = cleanText(contact?.inquirySource) || 'Unknown';
   const canManageContactAssignments = isAitUsaContact
     ? canManageAitUsaAssignments
     : coordinatorUiPolicy.canManageCoordinatorAssignments;
@@ -816,18 +813,18 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     timelineSource.find((item) => !isSourceDetailTimelineItem(item)) || null
   ), [timelineSource]);
   const isPrivilegedFollowUpScope = canManageAitUsaAssignmentsForUser(currentUser);
-  const taskProjectionKey = [contact?.id, contactBusinessUnit?.id, currentUser?.id, isPrivilegedFollowUpScope ? 'privileged' : 'regular'].join(':');
+  const taskProjectionKey = [contact?.id, contactBusinessUnit?.id, currentUser?.id, isPrivilegedFollowUpScope ? 'privileged' : 'regular', taskProjectionReloadKey].join(':');
   const currentTaskProjection = taskProjection.key === taskProjectionKey ? taskProjection : { key: taskProjectionKey, items: [], loading: dataSource === 'postgres', error: '' };
-  const followUpSummary = useMemo(() => buildFollowUpSummary({
+  const followUpSummary = buildFollowUpSummary({
     events: timelineSource,
     tasks: currentTaskProjection.items,
     ownerOptions,
     contactability: detailView.contactability,
     isPrivileged: isPrivilegedFollowUpScope,
-  }), [currentTaskProjection.items, detailView.contactability, isPrivilegedFollowUpScope, ownerOptions, timelineSource]);
-  const timelineFilterOptions = useMemo(() => detailView.timelineFilters.filter((filter) => (
+  });
+  const timelineFilterOptions = detailView.timelineFilters.filter((filter) => (
     filter.value !== 'import' && (filter.value === 'all' || filter.value === renderedTimelineFilter || (timelineCounts[filter.value] || 0) > 0)
-  )), [detailView.timelineFilters, renderedTimelineFilter, timelineCounts]);
+  ));
   const hasMatchingServerConversations = serverConversations.contactId === contact?.id && serverConversations.reloadKey === conversationReloadKey;
   const conversationMessages = hasMatchingServerConversations && serverConversations.items ? serverConversations.items : [];
   const linkedSnapshotCounts = {
@@ -912,7 +909,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     if (!isAitUsaContact || !contact?.id || !contactBusinessUnit?.id || dataSource !== 'postgres') return undefined;
     let cancelled = false;
     const requestKey = taskProjectionKey;
-    setTaskProjection({ key: requestKey, items: [], loading: true, error: '' });
     const query = new URLSearchParams({
       contactId: contact.id,
       businessUnitId: contactBusinessUnit.id,
@@ -938,7 +934,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         });
       });
     return () => { cancelled = true; };
-  }, [contact?.id, contactBusinessUnit?.id, dataSource, isAitUsaContact, taskProjectionKey, taskProjectionReloadKey]);
+  }, [contact?.id, contactBusinessUnit?.id, dataSource, isAitUsaContact, taskProjectionKey]);
 
   useEffect(() => {
     if (!contact?.id || dataSource !== 'postgres') return undefined;
@@ -1599,6 +1595,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Follow-up log failed.');
+      const contactPatch = contactPatchForFollowUpOutcome(followUpDraft.outcome);
+      if (contactPatch) replaceContactFromServer({ ...contact, ...contactPatch });
       setFollowUpOpen(false);
       setFollowUpDraft(null);
       setFollowUpTask(null);
@@ -1986,62 +1984,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         )}
       </div>
 
-      {false && isAitUsaContact && (
-        <section className={s.inquiryPreview} aria-label="Contact preview and current inquiry summary">
-          <div className={s.inquiryPreviewHeader}>
-            <div className={s.inquiryPreviewTitle}>
-              <GraduationCap size={15} />
-              <span>{contact.opportunityConflict
-                ? 'Inquiry needs resolution'
-                : inquiryHistoryLoading
-                  ? 'Loading inquiry history'
-                  : inquiryHistoryError
-                    ? 'Inquiry history unavailable'
-                    : selectedInquiryIsActive
-                      ? 'Current inquiry'
-                      : selectedInquiry
-                        ? 'Last inquiry (closed)'
-                        : 'No active inquiry'}</span>
-            </div>
-            {inquiryItems.length > 1 && <select className={s.inquirySelector} aria-label="Selected inquiry" value={selectedInquiryId} onChange={(event) => selectInquiry(event.target.value)}>
-              {inquiryItems.map((inquiry) => <option key={inquiry.id} value={inquiry.id}>{inquiry.program || 'Program not recorded'} · {inquiry.status}</option>)}
-            </select>}
-            {canEditSelectedInquiry && (
-              <button className={s.previewLink} type="button" onClick={() => openInquiryEditor('general')}><Edit3 size={13} /> Edit inquiry</button>
-            )}
-          </div>
-          {contact.opportunityConflict ? (
-            <p className={s.previewWarning}><AlertCircle size={14} /> {contact.activeOpportunityCount || 'Multiple'} active inquiries need resolution.</p>
-          ) : inquiryHistoryLoading ? (
-            <p className={s.previewMuted}>Loading the permitted inquiry history…</p>
-          ) : inquiryHistoryError ? (
-            <p className={s.previewWarning}><AlertCircle size={14} /> Inquiry history could not load. Refresh before acting.</p>
-          ) : selectedInquiry ? (
-            <dl className={s.previewFacts}>
-              <div><dt>Status</dt><dd>{selectedInquiry.status || 'Unknown'}{canEditSelectedInquiry && <button className={s.previewLink} type="button" aria-label="Change inquiry status" onClick={() => openInquiryEditor('general')}>Change</button>}</dd></div>
-              <div><dt>Owner</dt><dd>{selectedInquiry.owner?.label || 'Unassigned'}{canEditSelectedInquiry && canManageContactAssignments && <button className={s.previewLink} type="button" aria-label="Change inquiry owner" onClick={() => openInquiryEditor('general')}>Change</button>}</dd></div>
-              <div><dt>Program</dt><dd>{selectedInquiry.program || 'No program selected'}</dd></div>
-            </dl>
-          ) : (
-            <>
-              <dl className={s.previewFacts}>
-                <div><dt>Coordinator</dt><dd>{assignedEmployee?.label || 'Unassigned'}</dd></div>
-                <div><dt>Student location</dt><dd>{studentLocationForContact(contact) || 'Unknown'}</dd></div>
-              </dl>
-              <p className={s.previewMuted}>History and enrollments remain available without an inquiry.</p>
-            </>
-          )}
-          {detailView.workflowNext && <div className={s.previewNext}><span>Next follow-up</span><strong>{detailView.workflowNext}</strong></div>}
-          {access.canWriteCrm && (
-            <div className={s.previewActions}>
-              {selectedInquiryNextStatus && canEditSelectedInquiry && <button className="btn btn-sm" type="button" onClick={moveToNextStatus} disabled={statusUpdating}><ArrowRight size={14} /> {statusUpdating ? 'Updating…' : `Move to ${selectedInquiryNextStatus}`}</button>}
-              <Link className="btn btn-sm" href={`/tasks?contactId=${encodeURIComponent(contact.id)}&taskType=follow_up`}><CheckSquare size={14} /> Create follow-up</Link>
-              {canStartInquiry && <button className="btn btn-sm" type="button" onClick={openStartInquiry}>Start inquiry</button>}
-            </div>
-          )}
-        </section>
-      )}
-
       {!isAitUsaContact && (detailView.workflowTitle || detailView.workflowNext || detailView.workflowChips?.length) && (
         <div className={s.workflowCard}>
           <div className={s.workflowHeader}>
@@ -2147,36 +2089,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             </div>
           )}
         </section>
-      )}
-
-      {false && isAitUsaContact && (
-        <details className={s.previewDetails}>
-          <summary>Contact details</summary>
-          <dl>
-            <div><dt>Intended learning location</dt><dd>{schoolLocationForContact(contact) || 'Unknown'}</dd></div>
-            <div><dt>Contact source</dt><dd>{contactSource}</dd></div>
-            {!hasResolvedCurrentInquiry && !hasClosedInquiry && <div><dt>Assigned coordinator</dt><dd>{assignedEmployee?.label || 'Unassigned'}</dd></div>}
-            {!hasResolvedCurrentInquiry && !hasClosedInquiry && <div><dt>Student location</dt><dd>{studentLocationForContact(contact) || 'Unknown'}</dd></div>}
-            <div><dt>Last touch</dt><dd>{contact.lastTouch || contact.lastContact || 'None'}</dd></div>
-            <div><dt>Last edited</dt><dd>{contact.lastEdited || 'None'}</dd></div>
-          </dl>
-          {(hasResolvedCurrentInquiry || hasClosedInquiry) && (
-            <>
-              <strong className={s.previewDetailsTitle}>Inquiry details</strong>
-              <dl>
-                {contact.leadCreatedAt && <div><dt>Date opened</dt><dd>{dateLabel({ date: contact.leadCreatedAt })}</dd></div>}
-                <div><dt>Placement result</dt><dd>{contact.placementResult || contact.placementLevel || 'Not recorded'}</dd></div>
-                <div><dt>Preferred days</dt><dd>{contact.preferredDay || 'Unknown'}</dd></div>
-                <div><dt>Schedule</dt><dd>{contact.preferredSchedule || 'Unknown'}</dd></div>
-                <div><dt>Student location</dt><dd>{studentLocationForContact(contact) || 'Unknown'}</dd></div>
-                <div><dt>Inquiry source</dt><dd>{inquirySource}</dd></div>
-                <div><dt>More details</dt><dd>{[contact.testInterest, contact.educationLevel, contact.schoolName].filter(Boolean).join(' · ') || 'No additional qualification details'}</dd></div>
-              </dl>
-            </>
-          )}
-          {phoneHistoryState.contactId === contact.id && phoneHistoryState.items.some((phone) => !phone.isPrimary) && <div className={s.previewPhoneHistory}><strong>Phone history</strong>{phoneHistoryState.items.filter((phone) => !phone.isPrimary).map((phone) => <span key={phone.id || phone.normalizedPhone}>{phone.phone}{phone.isWrongNumber ? ' · Wrong number' : phone.isDoNotCall ? ' · Do not call' : ' · Historical — do not use for outreach'}</span>)}</div>}
-          {access.canReadImportReview && !!cleanupAudits.length && <div className={s.previewProvenance}><strong>Cleanup provenance</strong>{cleanupAudits.map((audit) => <span key={audit.id}>{audit.title}: {audit.detail}</span>)}</div>}
-        </details>
       )}
 
       {!isAitUsaContact && !!detailView.highlights?.length && (
