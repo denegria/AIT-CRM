@@ -135,3 +135,13 @@ test('AIT USA contains no dormant legacy preview or generic contact-details wall
   assert.doesNotMatch(styles, /\.inquiryPreview/);
   assert.doesNotMatch(styles, /\.previewDetails/);
 });
+
+test('AIT USA contact-wide restrictions suppress direct outreach actions', () => {
+  assert.match(source, /const aitUsaOutreachBlocked = isAitUsaContact && detailView\.contactability\?\.canFollowUp === false;/);
+  assert.match(source, /const primaryPhoneDirectActionAllowed = !aitUsaOutreachBlocked && !contact\?\.isWrongNumber && !contact\?\.isDoNotCall;/);
+  assert.match(source, /aitUsaOutreachBlocked \? <span className=\{s\.infoLink\}>\{contact\.email\}<\/span> : <a className=\{s\.infoLink\} href=\{`mailto:/);
+  assert.match(source, /primaryPhoneDirectActionAllowed \? <a className=\{s\.infoLink\} href=\{phoneHref\(contact\.phone\)\}>/);
+  assert.match(source, /if \(!access\.canSendOutboundMessages \|\| !contact\?\.id \|\| manualSend\.sending \|\| aitUsaOutreachBlocked\) return;/);
+  assert.match(source, /Outreach is disabled for this contact\./);
+  assert.match(source, /disabled=\{aitUsaOutreachBlocked \|\| manualSend\.sending/);
+});

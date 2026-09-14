@@ -619,6 +619,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const showLinkedPeoplePanel = isClientMode && detailView.workflowKey === WORKFLOW_KEYS.AIT_SIGNS;
   const showSchoolLocationField = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA;
   const isAitUsaContact = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA || /ait usa|institute/i.test(contactBusinessUnit?.name || '');
+  const aitUsaOutreachBlocked = isAitUsaContact && detailView.contactability?.canFollowUp === false;
+  const primaryPhoneDirectActionAllowed = !aitUsaOutreachBlocked && !contact?.isWrongNumber && !contact?.isDoNotCall;
   const contactSource = cleanText(contact?.sourceLabel) || 'Unknown';
   const canManageContactAssignments = isAitUsaContact
     ? canManageAitUsaAssignments
@@ -1911,7 +1913,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   };
 
   const submitManualSend = () => {
-    if (!access.canSendOutboundMessages || !contact?.id || manualSend.sending) return;
+    if (!access.canSendOutboundMessages || !contact?.id || manualSend.sending || aitUsaOutreachBlocked) return;
     const requestId = manualSend.requestId || newManualSendRequestId();
     setManualSend((current) => ({ ...current, sending: true, blockedReasons: [], error: '' }));
     fetch(`/api/contacts/${contact.id}/conversations`, {
@@ -2020,13 +2022,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         {isAitUsaContact ? <>
           <div className={s.infoItem}>
             <Mail size={16} />
-            {cleanText(contact.email) ? <a className={s.infoLink} href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a> : <span className={s.missingInfo}>No email on file</span>}
+            {cleanText(contact.email) ? (aitUsaOutreachBlocked ? <span className={s.infoLink}>{contact.email}</span> : <a className={s.infoLink} href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a>) : <span className={s.missingInfo}>No email on file</span>}
           </div>
           <div className={s.infoItem}>
             <Phone size={16} />
             <div className={s.phonePrimary}>
-              {cleanText(contact.phone) ? <a className={s.infoLink} href={phoneHref(contact.phone)}>{contact.phone}</a> : <span className={s.missingInfo}>Missing phone</span>}
-              {(contact.isWrongNumber || contact.isDoNotCall) && <span className={s.phoneRestriction}>{contact.isWrongNumber ? 'Wrong number' : 'Do not call'}</span>}
+              {cleanText(contact.phone) ? (primaryPhoneDirectActionAllowed ? <a className={s.infoLink} href={phoneHref(contact.phone)}>{contact.phone}</a> : <span className={s.infoLink}>{contact.phone}</span>) : <span className={s.missingInfo}>Missing phone</span>}
+              {contact.isWrongNumber && <span className={s.phoneRestriction}>Wrong number</span>}
             </div>
           </div>
           {detailView.contactability?.canFollowUp === false && (
@@ -2634,7 +2636,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                             blockedReasons: [],
                             error: '',
                           }))}
-                          disabled={manualSend.sending}
+                          disabled={manualSend.sending || aitUsaOutreachBlocked}
                         >
                           <option value="messenger">Messenger</option>
                           <option value="whatsapp">WhatsApp</option>
@@ -2653,7 +2655,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                             blockedReasons: [],
                             error: '',
                           }))}
-                          disabled={manualSend.sending}
+                          disabled={manualSend.sending || aitUsaOutreachBlocked}
                         >
                           <option value="">No template</option>
                           {channelTemplates.map((template) => (
@@ -2673,8 +2675,14 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                         blockedReasons: [],
                         error: '',
                       }))}
-                      disabled={manualSend.sending || Boolean(manualSend.templateId)}
+                      disabled={manualSend.sending || aitUsaOutreachBlocked || Boolean(manualSend.templateId)}
                     />
+                    {aitUsaOutreachBlocked && (
+                      <div className={s.manualSendBlocked}>
+                        <AlertCircle size={15} />
+                        <div>Outreach is disabled for this contact.</div>
+                      </div>
+                    )}
                     {(manualSend.blockedReasons.length > 0 || manualSend.error) && (
                       <div className={s.manualSendBlocked}>
                         <AlertCircle size={15} />
@@ -2692,7 +2700,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                         className="btn btn-primary btn-sm"
                         type="button"
                         onClick={submitManualSend}
-                        disabled={manualSend.sending || (!manualSend.textBody.trim() && !manualSend.templateId)}
+                        disabled={aitUsaOutreachBlocked || manualSend.sending || (!manualSend.textBody.trim() && !manualSend.templateId)}
                       >
                         <Send size={14} /> {manualSend.sending ? 'Sending' : 'Send'}
                       </button>
