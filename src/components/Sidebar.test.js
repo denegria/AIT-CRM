@@ -14,3 +14,8 @@ test('record detail context replaces the mutable global selector with a read-onl
   assert.match(source, /isRecordScope \? 'Record division'/);
   assert.match(source, /aria-label=\{`Record division: \$\{displayedBusinessUnit\.name\}`\}/);
 });
+
+test('division title is restored after route navigation even when the division is unchanged', () => {
+  assert.match(source, /document\.title = divisionBrand\.title;/);
+  assert.match(source, /\[divisionBrand\.title, pathname\]/);
+});

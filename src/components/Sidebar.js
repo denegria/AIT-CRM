@@ -126,7 +126,7 @@ export default function Sidebar() {
 
   useEffect(() => {
     document.title = divisionBrand.title;
-  }, [divisionBrand.title]);
+  }, [divisionBrand.title, pathname]);
 
   const scopedNav = useMemo(() => nav.map((item) => {
     if (item.href === '/contacts' && isClientViewScope) {
