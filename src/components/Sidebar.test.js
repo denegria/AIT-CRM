@@ -16,6 +16,9 @@ test('record detail context replaces the mutable global selector with a read-onl
 });
 
 test('division title is restored after route navigation even when the division is unchanged', () => {
-  assert.match(source, /document\.title = divisionBrand\.title;/);
+  assert.match(source, /if \(document\.title !== divisionBrand\.title\) document\.title = divisionBrand\.title;/);
   assert.match(source, /\[divisionBrand\.title, pathname\]/);
+  assert.match(source, /new MutationObserver\(syncDivisionTitle\)/);
+  assert.match(source, /observer\.observe\(document\.head, \{ childList: true, subtree: true, characterData: true \}\)/);
+  assert.match(source, /return \(\) => observer\.disconnect\(\)/);
 });

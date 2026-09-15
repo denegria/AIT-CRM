@@ -125,7 +125,13 @@ export default function Sidebar() {
   const isAitUsaScope = isAitUsaBusinessUnit(displayedBusinessUnit?.name);
 
   useEffect(() => {
-    document.title = divisionBrand.title;
+    const syncDivisionTitle = () => {
+      if (document.title !== divisionBrand.title) document.title = divisionBrand.title;
+    };
+    syncDivisionTitle();
+    const observer = new MutationObserver(syncDivisionTitle);
+    observer.observe(document.head, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
   }, [divisionBrand.title, pathname]);
 
   const scopedNav = useMemo(() => nav.map((item) => {
