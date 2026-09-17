@@ -21,6 +21,11 @@ select
     from information_schema.columns
     where table_schema = 'public'
   ) as column_catalog_md5,
+  (
+    select md5(string_agg(concat_ws('|', table_name, column_name, data_type, udt_name, is_nullable, coalesce(column_default, '')), E'\\n' order by table_name, column_name))
+    from information_schema.columns
+    where table_schema = 'public'
+  ) as logical_column_catalog_md5,
   (select count(*)::integer from pg_indexes where schemaname = 'public') as index_count,
   (
     select md5(string_agg(concat_ws('|', tablename, indexname, indexdef), E'\\n' order by tablename, indexname))
@@ -432,6 +437,7 @@ function normalizedCatalogRow(row = {}) {
     tableNameMd5: row.table_name_md5,
     columnCount: Number(row.column_count),
     columnCatalogMd5: row.column_catalog_md5,
+    logicalColumnCatalogMd5: row.logical_column_catalog_md5,
     indexCount: Number(row.index_count),
     indexCatalogMd5: row.index_catalog_md5,
     constraintCount: Number(row.constraint_count),

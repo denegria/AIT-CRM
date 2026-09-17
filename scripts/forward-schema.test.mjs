@@ -47,6 +47,7 @@ function catalogRow(expected) {
     table_name_md5: expected.tableNameMd5,
     column_count: String(expected.columnCount),
     column_catalog_md5: expected.columnCatalogMd5,
+    logical_column_catalog_md5: expected.logicalColumnCatalogMd5,
     index_count: String(expected.indexCount),
     index_catalog_md5: expected.indexCatalogMd5,
     constraint_count: String(expected.constraintCount),

@@ -1,3 +1,16 @@
+-- The accepted live baseline contains these columns even though the historical
+-- reconstruction SQL does not. IF NOT EXISTS makes the cutover deterministic
+-- for both authoritative databases and empty disposable reconstruction targets.
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "source_detail" text;
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "program_interest" text;
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "education_level" text;
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "test_interest" text;
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "school_name" text;
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "preferred_schedule" text;
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "preferred_day" text;
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "location_preference" text;
+ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "profile_details" text;
+
 CREATE UNIQUE INDEX "contact_course_records_billing_scope_idx"
   ON "contact_course_records" ("id", "organization_id", "business_unit_id");
 CREATE UNIQUE INDEX "contacts_billing_scope_idx"
