@@ -244,6 +244,7 @@ export async function verifyRepositoryBaseline({
   rootDir = defaultRootDir,
   manifest,
   exportRunner = runDrizzleExport,
+  verifyCurrentSchema = true,
 } = {}) {
   const resolvedManifest = manifest || await loadSchemaManifest(rootDir);
   const checks = [];
@@ -302,7 +303,7 @@ export async function verifyRepositoryBaseline({
   });
 
   const fileEntries = [
-    resolvedManifest.repository.schema,
+    ...(verifyCurrentSchema ? [resolvedManifest.repository.schema] : []),
     resolvedManifest.repository.journal,
     ...tracked.flatMap((entry) => [entry, entry.snapshot]),
     ...unjournaled,
@@ -364,28 +365,36 @@ export async function verifyRepositoryBaseline({
 
   const exportErrors = [];
   let rawExport = Buffer.alloc(0);
-  try {
-    rawExport = await exportRunner(rootDir);
-    if (!Buffer.isBuffer(rawExport)) rawExport = Buffer.from(rawExport);
-    compareValue('Drizzle raw stdout sha256', resolvedManifest.repository.drizzleExport.rawStdoutSha256, sha256(rawExport), exportErrors);
-  } catch (error) {
-    exportErrors.push(error.message);
+  if (verifyCurrentSchema) {
+    try {
+      rawExport = await exportRunner(rootDir);
+      if (!Buffer.isBuffer(rawExport)) rawExport = Buffer.from(rawExport);
+      compareValue('Drizzle raw stdout sha256', resolvedManifest.repository.drizzleExport.rawStdoutSha256, sha256(rawExport), exportErrors);
+    } catch (error) {
+      exportErrors.push(error.message);
+    }
   }
   checks.push({
     name: 'Drizzle schema-from-empty export reproduces the raw stdout fingerprint',
     ok: exportErrors.length === 0,
-    detail: formatErrors(exportErrors, resolvedManifest.repository.drizzleExport.rawStdoutSha256),
+    detail: verifyCurrentSchema
+      ? formatErrors(exportErrors, resolvedManifest.repository.drizzleExport.rawStdoutSha256)
+      : 'current schema/export verification delegated to the pinned forward-lineage manifest',
   });
 
   const structureErrors = [];
   const exportShape = analyzeDrizzleExport(rawExport);
-  for (const [key, expected] of Object.entries(resolvedManifest.repository.drizzleExport.structure)) {
-    compareValue(`Drizzle export ${key}`, expected, exportShape[key], structureErrors);
+  if (verifyCurrentSchema) {
+    for (const [key, expected] of Object.entries(resolvedManifest.repository.drizzleExport.structure)) {
+      compareValue(`Drizzle export ${key}`, expected, exportShape[key], structureErrors);
+    }
   }
   checks.push({
     name: 'Drizzle export structure matches the expected schema declaration',
     ok: structureErrors.length === 0,
-    detail: formatErrors(structureErrors, Object.entries(exportShape).map(([key, value]) => `${key}=${value}`).join(', ')),
+    detail: verifyCurrentSchema
+      ? formatErrors(structureErrors, Object.entries(exportShape).map(([key, value]) => `${key}=${value}`).join(', '))
+      : 'current schema/export verification delegated to the pinned forward-lineage manifest',
   });
 
   const sqlOnlyErrors = [];

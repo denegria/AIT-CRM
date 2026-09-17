@@ -1,0 +1,66 @@
+{
+  "formatVersion": 1,
+  "lineageId": "ait-crm-forward-2026-09-17",
+  "priorBaseline": {
+    "baselineId": "ait-crm-reconciled-2026-08-10",
+    "canonicalSha256": "92f0bb1dbc8b7afc1dc0af57fb11dda11d7cc05c83b4b16bd3301f7cf23cb675",
+    "firstForwardMigration": 27
+  },
+  "serialization": {
+    "canonicalManifest": "recursive-key-sort-json-utf8-lf-v1",
+    "fileDigest": "sha256-raw-bytes-v1",
+    "drizzleExport": "sha256-raw-stdout-including-final-newline-v1"
+  },
+  "repository": {
+    "schema": {
+      "path": "src/db/schema.js",
+      "sha256": "b7f929a018afca6c72e54b5a11bf2d0344425bc394666bb64b40f912d605503f"
+    },
+    "drizzleExport": {
+      "command": "drizzle-kit export --config drizzle.config.mjs",
+      "rawStdoutSha256": "182791f8087ef4fc9301ae6be24dee5fa5001de93cf9e2c3bf97bd8a5b7fd2ec",
+      "structure": {
+        "tableCount": 55,
+        "explicitIndexCount": 117,
+        "foreignKeyCount": 217,
+        "checkConstraintCount": 20
+      }
+    },
+    "forwardMigrations": [
+      {
+        "identifier": "0027",
+        "path": "drizzle/forward/0027_student_billing_ledger.sql",
+        "sha256": "b6077d1a1eae15e0176cfbff31591ae9d303541a97fd8556b3675623d412f9af",
+        "purpose": "MIS-414 student billing ledger",
+        "provenance": "forward-migration"
+      }
+    ],
+    "migrationLedger": {
+      "schema": "ait_crm_migrations",
+      "table": "forward_migrations",
+      "baselineMarker": "0026-reconciled-cutover"
+    }
+  },
+  "database": {
+    "catalog": {
+      "contract": "postgres-public-catalog-lf-pipe-v1",
+      "expected": {
+        "tableCount": 55,
+        "tableNameMd5": "92faf6aa0823e8161bf4a447925e7c46",
+        "columnCount": 791,
+        "columnCatalogMd5": "d57cc59d804ad256e314dae45dfc26c5",
+        "indexCount": 179,
+        "indexCatalogMd5": "c0dccc9169789ba941e09607a48e1188",
+        "constraintCount": 297,
+        "constraintCatalogMd5": "76bdc84deb4d540786f4a7faa3f89cca"
+      }
+    }
+  },
+  "validation": {
+    "status": "validated-and-rolled-back",
+    "projectId": "polished-dust-24407788",
+    "branchId": "br-mute-butterfly-au92lb41",
+    "databaseName": "neondb",
+    "validatedAt": "2026-09-17T22:31:37Z"
+  }
+}

@@ -105,6 +105,7 @@ test('pinned repository baseline and Drizzle export structure reproduce exactly'
     rootDir: ROOT_DIR,
     manifest,
     exportRunner: async () => rawExport,
+    verifyCurrentSchema: false,
   });
   assert.equal(report.ok, true, report.checks.filter((check) => !check.ok).map((check) => check.detail).join('\n'));
   assert.equal(report.checks.find((check) => check.name.includes('export structure')).ok, true);

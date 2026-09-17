@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { loadSchemaManifest, verifyRepositoryBaseline } from './schema-readiness.mjs';
+import { verifyForwardSchemaRepository } from './forward-schema.mjs';
 
 export const DRIZZLE_MUTATION_OPERATIONS = Object.freeze(['generate', 'migrate', 'push']);
 
@@ -21,11 +22,21 @@ export function drizzleMutationBlockReason(manifest, operation) {
   return policy?.reason || `Drizzle ${operation} is not authorized by the reconciled schema baseline.`;
 }
 
+async function verifyRepositoryLineage({ rootDir, manifest }) {
+  const baseline = await verifyRepositoryBaseline({ rootDir, manifest, verifyCurrentSchema: false });
+  const forward = await verifyForwardSchemaRepository({ rootDir });
+  return {
+    ok: baseline.ok && forward.ok,
+    checks: [...baseline.checks, ...forward.checks],
+    forwardLineage: forward.ok,
+  };
+}
+
 export async function preflightDrizzleMutation({
   operation,
   rootDir = defaultRootDir,
   manifest,
-  verifyRepository = verifyRepositoryBaseline,
+  verifyRepository = verifyRepositoryLineage,
 } = {}) {
   assertOperation(operation);
   const resolvedManifest = manifest || await loadSchemaManifest(rootDir);
@@ -35,7 +46,9 @@ export async function preflightDrizzleMutation({
     throw new Error(`Drizzle ${operation} blocked because the reconciled baseline is not intact: ${failed.map((check) => `${check.name}: ${check.detail}`).join('; ')}`);
   }
 
-  const reason = drizzleMutationBlockReason(resolvedManifest, operation);
+  const reason = report.forwardLineage
+    ? 'The approved 0027+ lineage uses pinned forward migrations; legacy drizzle-kit mutation commands remain disabled.'
+    : drizzleMutationBlockReason(resolvedManifest, operation);
   if (reason) throw new Error(`Drizzle ${operation} blocked: ${reason}`);
   return { manifest: resolvedManifest, report };
 }
@@ -61,7 +74,7 @@ export async function runGuardedDrizzleMutation({
   extraArgs = [],
   rootDir = defaultRootDir,
   manifest,
-  verifyRepository = verifyRepositoryBaseline,
+  verifyRepository = verifyRepositoryLineage,
   executeDrizzle = spawnDrizzle,
 } = {}) {
   await preflightDrizzleMutation({ operation, rootDir, manifest, verifyRepository });
