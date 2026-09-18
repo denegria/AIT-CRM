@@ -49,6 +49,7 @@
     "test:schema": "node --test scripts/schema-readiness.test.mjs scripts/forward-schema.test.mjs scripts/schema-from-zero.test.mjs scripts/production-readiness.test.mjs scripts/drizzle-mutation-guard.test.mjs src/db/database-url.test.js",
     "test:billing-ledger": "node --test src/lib/billing-ledger/*.test.js",
     "test:registration": "node --test src/lib/registration/*.test.js",
+    "test:dejavoo": "node --test src/lib/payments/providers/dejavoo.test.js",
     "verify:production": "node scripts/verify-production-readiness.mjs",
     "diagnose:production": "node scripts/diagnose-production.mjs",
     "verify:rbac": "node scripts/verify-rbac-boundaries.mjs",
