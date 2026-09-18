@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import test from 'node:test';
 
 import { createHostedCollectionLink, recordManualCollectionPayment } from './service.js';
 
 const scope = { organizationId: 'org-1', businessUnitId: 'bu-usa' };
+const serviceSource = fs.readFileSync(new URL('./service.js', import.meta.url), 'utf8');
 
 function requestRow(metadata = {}) {
   return {
@@ -82,6 +84,23 @@ test('existing hosted attempt blocks a second provider call', async () => {
       adapter: { async createHostedPaymentPage() { adapterCalls += 1; } },
     }),
     (error) => error.code === 'hosted_link_already_attempted' && error.status === 409,
+  );
+  assert.equal(adapterCalls, 0);
+});
+
+test('existing terminal attempt blocks hosted provider I/O', async () => {
+  const client = hostedClient(requestRow({ terminalPaymentAttempt: { state: 'pending', correlationId: 'spin-first' } }));
+  let adapterCalls = 0;
+  await assert.rejects(
+    () => createHostedCollectionLink(client, {
+      ...scope,
+      paymentRequestId: 'request-1',
+      idempotencyKey: 'collections:hpp:fixture-terminal-conflict',
+      environment: 'uat',
+      baseUrl: 'https://staging.example.com',
+      adapter: { async createHostedPaymentPage() { adapterCalls += 1; } },
+    }),
+    (error) => error.code === 'payment_request_provider_conflict' && error.status === 409,
   );
   assert.equal(adapterCalls, 0);
 });
@@ -190,4 +209,8 @@ test('manual non-card payment uses verified transaction and allocation invariant
   assert.ok(client.calls.some((sql) => sql.includes("provider_environment") && sql.includes('insert into provider_transactions')));
   assert.ok(client.calls.some((sql) => sql.includes('insert into payment_allocations')));
   assert.ok(client.calls.some((sql) => sql.includes("financial.manual_payment_recorded")));
+});
+
+test('a verified full manual payment can close a final non-payment provider request', () => {
+  assert.match(serviceSource, /status in \('created', 'pending', 'failed', 'canceled', 'expired'\)/);
 });

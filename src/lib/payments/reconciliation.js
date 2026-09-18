@@ -240,7 +240,7 @@ function transactionInvariant(existing, request, statusResult) {
   }
 }
 
-async function ensureVerifiedTransaction(client, request, statusResult, now) {
+async function ensureVerifiedTransaction(client, request, statusResult, now, providerSurface = 'hpp') {
   const organizationId = value(request, 'organization_id', 'organizationId');
   const businessUnitId = value(request, 'business_unit_id', 'businessUnitId');
   const environment = value(request, 'provider_environment', 'providerEnvironment');
@@ -290,7 +290,7 @@ async function ensureVerifiedTransaction(client, request, statusResult, now) {
       now,
       value(request, 'source_reference', 'sourceReference'),
       `dejavoo:transaction:${environment}:${statusResult.providerTransactionId}`,
-      JSON.stringify({ correlationId: statusResult.correlationId || null }),
+      JSON.stringify({ correlationId: statusResult.correlationId || null, providerSurface }),
     ],
   );
   return inserted.rows[0];
@@ -317,7 +317,7 @@ function receiptItems(request) {
   }));
 }
 
-async function ensureReceipt(client, request, transaction, now) {
+async function ensureReceipt(client, request, transaction, now, providerSurface = 'hpp') {
   const existingReceiptId = value(transaction, 'receipt_document_id', 'receiptDocumentId');
   if (existingReceiptId) return { id: existingReceiptId, created: false };
   const total = value(request, 'requested_amount', 'requestedAmount');
@@ -335,7 +335,9 @@ async function ensureReceipt(client, request, transaction, now) {
       total,
       now.toISOString().slice(0, 10),
       JSON.stringify(receiptItems(request)),
-      'Verified Dejavoo hosted payment.',
+      providerSurface === 'spin'
+        ? 'Verified Dejavoo terminal payment.'
+        : 'Verified Dejavoo hosted payment.',
     ],
   );
   await client.query(
@@ -345,7 +347,16 @@ async function ensureReceipt(client, request, transaction, now) {
   return { ...inserted.rows[0], created: true };
 }
 
-async function recordVerifiedActivity(client, request, transaction, receipt, unappliedAmount, now, correlationId) {
+async function recordVerifiedActivity(
+  client,
+  request,
+  transaction,
+  receipt,
+  unappliedAmount,
+  now,
+  correlationId,
+  providerSurface = 'hpp',
+) {
   await client.query(
     `insert into activity_events
       (organization_id, business_unit_id, contact_id, event_type, message, metadata_json, occurred_at)
@@ -366,6 +377,7 @@ async function recordVerifiedActivity(client, request, transaction, receipt, una
         providerTransactionId: value(transaction, 'provider_transaction_id', 'providerTransactionId'),
         receiptDocumentId: receipt.id,
         provider: PROVIDER,
+        providerSurface,
         providerEnvironment: value(request, 'provider_environment', 'providerEnvironment'),
         unappliedCreditAmount: unappliedAmount,
         correlationId,
@@ -472,6 +484,7 @@ export async function reconcileDejavooPayment(client, {
   expectedMerchantId,
   callback,
   statusResult,
+  providerSurface = 'hpp',
   now = new Date(),
 }) {
   await client.query('begin');
@@ -600,7 +613,7 @@ export async function reconcileDejavooPayment(client, {
       };
     }
 
-    const transaction = await ensureVerifiedTransaction(client, request, statusResult, now);
+    const transaction = await ensureVerifiedTransaction(client, request, statusResult, now, providerSurface);
     const plan = allocationPlan(request);
     const allocations = [];
     let unappliedCents = 0n;
@@ -620,7 +633,7 @@ export async function reconcileDejavooPayment(client, {
         asOf: now,
       }));
     }
-    const receipt = await ensureReceipt(client, request, transaction, now);
+    const receipt = await ensureReceipt(client, request, transaction, now, providerSurface);
     const unappliedAmount = centsToMoney(unappliedCents);
     await markRegistrationPaid(client, request, transaction, now);
     await recordVerifiedActivity(
@@ -631,6 +644,7 @@ export async function reconcileDejavooPayment(client, {
       unappliedAmount,
       now,
       statusResult.correlationId || null,
+      providerSurface,
     );
     await markRequestStatus(client, request.id, 'completed');
     const fulfillment = await activateFulfillmentWithoutBlockingPayment(client, request, transaction);

@@ -6,10 +6,12 @@ import {
   Banknote,
   CheckCircle2,
   Clipboard,
+  CreditCard,
   ExternalLink,
   Link2,
   Plus,
   RefreshCw,
+  RotateCcw,
   Search,
   UserRound,
 } from 'lucide-react';
@@ -74,9 +76,12 @@ export default function CollectionsPage() {
   const [manual, setManual] = useState({ amount: '', method: 'cash', reference: '', note: '' });
   const [hostedLink, setHostedLink] = useState(null);
   const [newPaymentRequest, setNewPaymentRequest] = useState(null);
+  const [terminalConfirmId, setTerminalConfirmId] = useState('');
+  const [terminalResult, setTerminalResult] = useState(null);
   const checkoutKey = useRef('');
   const manualKey = useRef('');
   const hostedKeys = useRef(new Map());
+  const terminalKeys = useRef(new Map());
 
   const load = useCallback(async () => {
     if (!currentBusinessUnitId || !isAitUsaScope || ['all', 'unassigned'].includes(currentBusinessUnitId)) return;
@@ -206,6 +211,37 @@ export default function CollectionsPage() {
     }
   };
 
+  const runTerminalPayment = async (action, paymentRequestId = selected?.paymentRequest?.id) => {
+    if (!paymentRequestId) return;
+    const key = `${action}:${paymentRequestId}`;
+    if (!terminalKeys.current.has(key)) {
+      terminalKeys.current.set(key, idempotency(`collections:spin:${action}`));
+    }
+    setSaving(action === 'initiate_terminal_payment' ? 'terminal' : 'terminal-recovery');
+    setError(''); setNotice(''); setHostedLink(null); setTerminalResult(null);
+    try {
+      const result = await post({
+        action,
+        paymentRequestId,
+        idempotencyKey: terminalKeys.current.get(key),
+      });
+      setTerminalResult(result);
+      setTerminalConfirmId('');
+      if (result.outcome === 'completed') {
+        setNotice('Terminal payment verified. The ledger and receipt were updated exactly once.');
+      } else if (['failed', 'canceled', 'expired'].includes(result.outcome)) {
+        setNotice(`Terminal payment ended as ${result.outcome}. No money was recorded.`);
+      } else {
+        setNotice('Terminal result is not final. No money was recorded; check terminal status before another attempt.');
+      }
+      await load();
+    } catch (caught) {
+      setError(caught.message || 'Terminal payment could not be completed safely.');
+    } finally {
+      setSaving('');
+    }
+  };
+
   const recordManual = async (event) => {
     event.preventDefault();
     if (!selected) return;
@@ -271,6 +307,16 @@ export default function CollectionsPage() {
           <button className="btn btn-primary" type="button" disabled={saving === 'link'} onClick={() => createHostedLink(newPaymentRequest.id)}><Link2 size={15} /> Create secure link</button>
         </div>
       )}
+      {terminalResult && (
+        <div className={s.terminalResult} role="status">
+          <CreditCard size={18} />
+          <div>
+            <strong>Terminal result: {terminalResult.outcome?.replaceAll('_', ' ') || 'unknown'}</strong>
+            <span>{terminalResult.recoveryGuidance || 'Provider verification is complete.'}</span>
+          </div>
+          <code>{terminalResult.correlationId}</code>
+        </div>
+      )}
 
       {checkoutOpen && (
         <form className={s.checkout} onSubmit={createCheckout}>
@@ -316,9 +362,21 @@ export default function CollectionsPage() {
             <div className={s.studentHead}><div className={s.largeAvatar}><UserRound size={24} /></div><div><span>Student</span><h2>{selected.studentName}</h2><p>{[selected.studentEmail, selected.studentPhone].filter(Boolean).join(' · ') || 'No email or phone recorded'}</p></div><span className={`${s.badge} ${s[selected.state]}`}>{selected.state.replace('_', ' ')}</span></div>
             <div className={s.amountBand}><div><span>Balance</span><strong>{dollars(selected.balance)}</strong></div><div><span>Original charge</span><b>{dollars(selected.amount)}</b></div><div><span>Paid</span><b>{dollars(selected.allocated)}</b></div><div><span>Due date</span><b>{dateLabel(selected.originalDueDate)}</b></div></div>
             <div className={s.identityGrid}><div><span>Payer</span><strong>{selected.payerName || selected.studentName}</strong></div><div><span>Enrollment</span><strong>{selected.courseName || 'Placement pending'}</strong><small>{selected.sectionKey || 'Section not assigned'}</small></div><div><span>Charge</span><strong>{selected.description}</strong><small>{selected.chargeType.replaceAll('_', ' ')}</small></div><div><span>Fulfillment</span><strong>{selected.fulfillment?.deliveryMode || 'Not required'}</strong><small>{selected.fulfillment?.status || 'No book fulfillment'}</small></div></div>
-            {selected.paymentRequest && <div className={s.requestCard}><div><span>Payment request</span><strong>{selected.paymentRequest.merchantReference}</strong><small>{selected.paymentRequest.status} · {dollars(selected.paymentRequest.requestedAmount)}</small></div>{access.canWriteFinancials && !['completed', 'canceled', 'expired'].includes(selected.paymentRequest.status) && <button className="btn btn-primary" type="button" disabled={saving === 'link'} onClick={() => createHostedLink()}><Link2 size={15} /> Create secure link</button>}</div>}
+            {selected.paymentRequest && <div className={s.requestCard}>
+              <div><span>Payment request</span><strong>{selected.paymentRequest.merchantReference}</strong><small>{selected.paymentRequest.status} · {dollars(selected.paymentRequest.requestedAmount)}</small></div>
+              {access.canWriteFinancials && !['completed', 'canceled', 'expired'].includes(selected.paymentRequest.status) && !selected.paymentRequest.metadata?.hostedPaymentAttempt && !selected.paymentRequest.metadata?.terminalPaymentAttempt && <button className="btn btn-primary" type="button" disabled={saving === 'link'} onClick={() => createHostedLink()}><Link2 size={15} /> Create secure link</button>}
+              {access.canWriteFinancials && payload?.setup?.terminalCheckout?.ready && !['completed', 'canceled', 'expired'].includes(selected.paymentRequest.status) && !selected.paymentRequest.metadata?.hostedPaymentAttempt && !selected.paymentRequest.metadata?.terminalPaymentAttempt && <button className="btn" type="button" disabled={Boolean(saving)} onClick={() => setTerminalConfirmId(selected.paymentRequest.id)}><CreditCard size={15} /> Use terminal</button>}
+              {access.canWriteFinancials && selected.paymentRequest.metadata?.terminalPaymentAttempt && !['completed', 'canceled', 'expired'].includes(selected.paymentRequest.status) && <button className="btn" type="button" disabled={Boolean(saving)} onClick={() => runTerminalPayment('recover_terminal_payment')}><RotateCcw size={15} /> Check terminal status</button>}
+            </div>}
+            {selected.paymentRequest && terminalConfirmId === selected.paymentRequest.id && <div className={s.terminalConfirm} role="region" aria-label="Confirm terminal payment">
+              <div><strong>Charge {dollars(selected.paymentRequest.requestedAmount)} on the physical terminal?</strong><span>The payer must be present. A timeout is treated as unknown—not paid—and must be recovered before another attempt.</span></div>
+              <button className="btn" type="button" disabled={Boolean(saving)} onClick={() => setTerminalConfirmId('')}>Cancel</button>
+              <button className="btn btn-primary" type="button" disabled={Boolean(saving)} onClick={() => runTerminalPayment('initiate_terminal_payment')}><CreditCard size={15} /> Start terminal payment</button>
+            </div>}
             {selected.latestTransaction && <div className={s.receipt}><Banknote size={18} /><div><strong>{selected.latestTransaction.provider === 'manual' ? 'Staff-recorded payment' : 'Provider payment'}</strong><span>{selected.latestTransaction.status} · {dollars(selected.latestTransaction.amount)}</span></div><small>{selected.latestTransaction.receiptDocumentId ? 'Receipt recorded' : 'No receipt yet'}</small></div>}
-            {access.canWriteFinancials && <form className={s.manual} onSubmit={recordManual}><div><span>Non-card payment</span><h3>Record money received</h3><p>Cash, check, transfer, money order, or Zelle. Card numbers never belong here.</p></div><div className={s.manualGrid}><label>Amount<input required inputMode="decimal" value={manual.amount} onChange={(event) => setManual((current) => ({ ...current, amount: event.target.value }))} placeholder={selected.balance} /></label><label>Method<select value={manual.method} onChange={(event) => setManual((current) => ({ ...current, method: event.target.value }))}><option value="cash">Cash</option><option value="check">Check</option><option value="bank_transfer">Bank transfer</option><option value="money_order">Money order</option><option value="zelle">Zelle</option><option value="other">Other</option></select></label><label>Reference<input value={manual.reference} onChange={(event) => setManual((current) => ({ ...current, reference: event.target.value }))} /></label><label className={s.wide}>Audit note<input value={manual.note} onChange={(event) => setManual((current) => ({ ...current, note: event.target.value }))} /></label></div><button className="btn" disabled={saving === 'manual'}>Record payment</button></form>}
+            {access.canWriteFinancials && selected.paymentRequest?.metadata?.terminalPaymentAttempt && !['completed', 'failed', 'canceled', 'expired'].includes(selected.paymentRequest.status)
+              ? <div className={s.terminalLock}><AlertTriangle size={18} /><div><strong>Payment entry locked during terminal recovery</strong><span>Resolve the terminal status before recording cash, check, transfer, or another card attempt.</span></div></div>
+              : access.canWriteFinancials && <form className={s.manual} onSubmit={recordManual}><div><span>Non-card payment</span><h3>Record money received</h3><p>Cash, check, transfer, money order, or Zelle. Card numbers never belong here.</p></div><div className={s.manualGrid}><label>Amount<input required inputMode="decimal" value={manual.amount} onChange={(event) => setManual((current) => ({ ...current, amount: event.target.value }))} placeholder={selected.balance} /></label><label>Method<select value={manual.method} onChange={(event) => setManual((current) => ({ ...current, method: event.target.value }))}><option value="cash">Cash</option><option value="check">Check</option><option value="bank_transfer">Bank transfer</option><option value="money_order">Money order</option><option value="zelle">Zelle</option><option value="other">Other</option></select></label><label>Reference<input value={manual.reference} onChange={(event) => setManual((current) => ({ ...current, reference: event.target.value }))} /></label><label className={s.wide}>Audit note<input value={manual.note} onChange={(event) => setManual((current) => ({ ...current, note: event.target.value }))} /></label></div><button className="btn" disabled={saving === 'manual'}>Record payment</button></form>}
           </> : <div className={s.detailEmpty}><UserRound size={34} /><h2>Select an open balance</h2><p>The student, payer, enrollment, payment, receipt, and fulfillment trail will appear here.</p></div>}
         </section>
       </div>

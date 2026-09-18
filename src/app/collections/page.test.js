@@ -23,6 +23,19 @@ test('card entry is excluded while secure hosted links and non-card payments rem
   assert.doesNotMatch(source, /name=["']card/i);
 });
 
+test('terminal checkout requires explicit confirmation and exposes unknown-result recovery', () => {
+  assert.match(source, /Use terminal/);
+  assert.match(source, /terminalCheckout\?\.ready/);
+  assert.match(source, /Start terminal payment/);
+  assert.match(source, /The payer must be present/);
+  assert.match(source, /A timeout is treated as unknown—not paid/);
+  assert.match(source, /Check terminal status/);
+  assert.match(source, /recover_terminal_payment/);
+  assert.match(source, /No money was recorded/);
+  assert.match(source, /Payment entry locked during terminal recovery/);
+  assert.match(source, /Resolve the terminal status before recording cash/);
+});
+
 test('US fulfillment policy copy preserves pickup for in-person and shipment for online', () => {
   assert.match(source, /In person · pickup/);
   assert.match(source, /Online · ship in US/);

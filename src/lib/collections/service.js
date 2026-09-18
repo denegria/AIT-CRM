@@ -327,7 +327,8 @@ export async function recordManualCollectionPayment(client, input = {}) {
     if (allocation.charge?.status === 'paid' && value(charge, 'payment_request_id', 'paymentRequestId')) {
       await client.query(
         `update payment_requests set status = 'completed', updated_at = now()
-          where id = $1 and organization_id = $2 and business_unit_id = $3 and status in ('created', 'pending')`,
+          where id = $1 and organization_id = $2 and business_unit_id = $3
+            and status in ('created', 'pending', 'failed', 'canceled', 'expired')`,
         [value(charge, 'payment_request_id', 'paymentRequestId'), scope.organizationId, scope.businessUnitId],
       );
       await activateBookFulfillmentForVerifiedPayment(client, {
@@ -379,6 +380,17 @@ export async function createHostedCollectionLink(client, input = {}) {
       throw new CollectionsError('payment_request_completed', 'This payment request is already completed.', 409);
     }
     const metadata = json(value(request, 'metadata_json', 'metadataJson'));
+    if (metadata.terminalPaymentAttempt) {
+      throw new CollectionsError(
+        'payment_request_provider_conflict',
+        'This request already has a terminal attempt. Check its status before creating a hosted link.',
+        409,
+        {
+          state: metadata.terminalPaymentAttempt.state || 'unknown',
+          correlationId: metadata.terminalPaymentAttempt.correlationId || null,
+        },
+      );
+    }
     const attempt = metadata.hostedPaymentAttempt;
     if (attempt) {
       throw new CollectionsError(

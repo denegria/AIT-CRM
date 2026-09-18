@@ -50,6 +50,7 @@
     "test:billing-ledger": "node --test src/lib/billing-ledger/*.test.js",
     "test:registration": "node --test src/lib/registration/*.test.js",
     "test:dejavoo": "node --test src/lib/payments/providers/dejavoo.test.js",
+    "test:dejavoo-spin": "node --test src/lib/payments/providers/dejavoo-spin.test.js src/lib/collections/spin-service.test.js",
     "test:payment-reconciliation": "node --test src/lib/payments/dejavoo-callback.test.js src/lib/payments/reconciliation.test.js",
     "verify:production": "node scripts/verify-production-readiness.mjs",
     "diagnose:production": "node scripts/diagnose-production.mjs",

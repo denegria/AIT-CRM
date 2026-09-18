@@ -15,9 +15,12 @@ test('all collections operations resolve an AIT USA business-unit scope', () => 
   assert.match(source, /Collections is limited to AIT USA/);
 });
 
-test('route exposes checkout, hosted-link, and non-card payment actions', () => {
+test('route exposes checkout, hosted-link, SPIn terminal, recovery, and non-card payment actions', () => {
   assert.match(source, /body\.action === 'create_checkout'/);
   assert.match(source, /body\.action === 'create_hosted_link'/);
+  assert.match(source, /body\.action === 'initiate_terminal_payment'/);
+  assert.match(source, /body\.action === 'recover_terminal_payment'/);
+  assert.match(source, /actorUserId: session\.user\.id/);
   assert.match(source, /body\.action === 'record_manual_payment'/);
   assert.match(source, /channel: 'staff'/);
 });
@@ -26,4 +29,12 @@ test('queue and setup reads do not overlap on one pooled PostgreSQL client', () 
   assert.doesNotMatch(source, /Promise\.all\(\[\s*loadCollectionsQueue/);
   assert.match(source, /const queue = await loadCollectionsQueue/);
   assert.match(source, /const setup = await loadCollectionsSetup/);
+});
+
+test('terminal readiness is derived server-side without exposing secret metadata', () => {
+  assert.match(source, /dejavooSpinConfigHealth/);
+  assert.match(source, /terminalCheckout/);
+  assert.match(source, /ready: terminalHealth\.ready/);
+  assert.match(source, /environment: terminalHealth\.environment/);
+  assert.doesNotMatch(source, /terminalHealth\.missing/);
 });

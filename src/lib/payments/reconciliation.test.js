@@ -183,6 +183,7 @@ function fakeReconciliationClient({ failFulfillment = false } = {}) {
           currency: parameters[12],
           verified_at: parameters[13],
           receipt_document_id: null,
+          metadata_json: JSON.parse(parameters[16]),
         };
         state.transactions.push(row);
         return { rows: [row] };
@@ -246,6 +247,7 @@ function fakeReconciliationClient({ failFulfillment = false } = {}) {
           total: parameters[4],
           issue_date: parameters[5],
           items_json: JSON.parse(parameters[6]),
+          notes: parameters[7],
         };
         state.documents.push(row);
         return { rows: [row] };
@@ -332,6 +334,23 @@ test('verified payment reconciles transaction, charge, receipt, activity, and un
   assert.equal(first.fulfillmentId, 'fulfillment-1');
   assert.equal(client.state.fulfillment.status, 'pending');
   assert.equal(client.state.fulfillment.provider_transaction_id, first.transactionId);
+});
+
+test('SPIn verification records the provider surface while reusing the same ledger invariants', async () => {
+  const client = fakeReconciliationClient();
+  const result = await reconcileDejavooPayment(client, {
+    ...baseInput,
+    providerSurface: 'spin',
+    statusResult: verifiedStatus({
+      correlationId: 'collections:spin:test-001',
+      providerTransactionId: 'SPIN-TXN-100',
+    }),
+  });
+  assert.equal(result.outcome, 'completed');
+  assert.equal(client.state.transactions.length, 1);
+  assert.equal(client.state.transactions[0].metadata_json.providerSurface, 'spin');
+  assert.equal(client.state.documents[0].notes, 'Verified Dejavoo terminal payment.');
+  assert.equal(client.state.activities[0].metadata_json.providerSurface, 'spin');
 });
 
 test('fulfillment enqueue failure records attention without rolling back verified payment', async () => {

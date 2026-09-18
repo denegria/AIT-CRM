@@ -11,8 +11,13 @@ import {
   loadCollectionsSetup,
   recordManualCollectionPayment,
 } from '@/lib/collections/service.js';
+import {
+  initiateSpinCollectionPayment,
+  recoverSpinCollectionPayment,
+} from '@/lib/collections/spin-service.js';
 import { resolveBusinessUnitId } from '@/lib/crm/access.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
+import { dejavooSpinConfigHealth } from '@/lib/payments/providers/dejavoo-spin.js';
 import { orchestrateRegistration } from '@/lib/registration/action.js';
 
 function text(value) {
@@ -72,7 +77,17 @@ export async function GET(request) {
       pageSize: searchParams.get('pageSize'),
     });
     const setup = await loadCollectionsSetup(client, scope);
-    return NextResponse.json({ queue, setup }, { headers: { 'Cache-Control': 'private, no-store' } });
+    const terminalHealth = dejavooSpinConfigHealth({ environment: providerEnvironment() });
+    return NextResponse.json({
+      queue,
+      setup: {
+        ...setup,
+        terminalCheckout: {
+          ready: terminalHealth.ready,
+          environment: terminalHealth.environment,
+        },
+      },
+    }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (caught) {
     return crmErrorResponse(caught);
   } finally {
@@ -114,6 +129,26 @@ export async function POST(request) {
         baseUrl: deployedBaseUrl(request),
       });
       return NextResponse.json({ result }, { status: 201, headers: { 'Cache-Control': 'private, no-store' } });
+    }
+    if (body.action === 'initiate_terminal_payment') {
+      const result = await initiateSpinCollectionPayment(client, {
+        ...scope,
+        paymentRequestId: body.paymentRequestId,
+        idempotencyKey: body.idempotencyKey,
+        environment: providerEnvironment(),
+        actorUserId: session.user.id,
+      });
+      return NextResponse.json({ result }, { status: 201, headers: { 'Cache-Control': 'private, no-store' } });
+    }
+    if (body.action === 'recover_terminal_payment') {
+      const result = await recoverSpinCollectionPayment(client, {
+        ...scope,
+        paymentRequestId: body.paymentRequestId,
+        idempotencyKey: body.idempotencyKey,
+        environment: providerEnvironment(),
+        actorUserId: session.user.id,
+      });
+      return NextResponse.json({ result }, { headers: { 'Cache-Control': 'private, no-store' } });
     }
     if (body.action === 'record_manual_payment') {
       const result = await recordManualCollectionPayment(client, {
