@@ -59,6 +59,25 @@ export function resolveBookFulfillmentPlan({
   learningModality,
   shippingAddress,
 } = {}) {
+  const mode = resolveBookFulfillmentMode({ residenceCountryCode, learningModality });
+  const { residenceCountryCode: countryCode, learningModality: modality, deliveryMode } = mode;
+
+  if (deliveryMode !== FULFILLMENT_MODES.SHIPMENT && hasAddressInput(shippingAddress)) {
+    throw new FulfillmentPolicyError(
+      'shipping_address_not_allowed',
+      'A shipping address is collected only when physical shipment is required.',
+    );
+  }
+
+  return Object.freeze({
+    ...mode,
+    shippingAddressSnapshot: deliveryMode === FULFILLMENT_MODES.SHIPMENT
+      ? shippingAddressSnapshot(shippingAddress)
+      : null,
+  });
+}
+
+export function resolveBookFulfillmentMode({ residenceCountryCode, learningModality } = {}) {
   const countryCode = clean(residenceCountryCode).toUpperCase();
   const modality = clean(learningModality).toLowerCase();
   if (!countryCode) {
@@ -81,13 +100,6 @@ export function resolveBookFulfillmentPlan({
     requiresDigitalDelivery = true;
   }
 
-  if (deliveryMode !== FULFILLMENT_MODES.SHIPMENT && hasAddressInput(shippingAddress)) {
-    throw new FulfillmentPolicyError(
-      'shipping_address_not_allowed',
-      'A shipping address is collected only when physical shipment is required.',
-    );
-  }
-
   return Object.freeze({
     policyVersion: '2026-09-18.v1',
     residenceCountryCode: countryCode,
@@ -95,8 +107,5 @@ export function resolveBookFulfillmentPlan({
     deliveryMode,
     requiresDigitalDelivery,
     requiresPhysicalDelivery: deliveryMode !== FULFILLMENT_MODES.DIGITAL,
-    shippingAddressSnapshot: deliveryMode === FULFILLMENT_MODES.SHIPMENT
-      ? shippingAddressSnapshot(shippingAddress)
-      : null,
   });
 }

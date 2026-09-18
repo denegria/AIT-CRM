@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { resolveBookFulfillmentPlan } from './policy.js';
+import { resolveBookFulfillmentMode, resolveBookFulfillmentPlan } from './policy.js';
 
 const usAddress = Object.freeze({
   recipientName: 'Ana Student',
@@ -76,4 +76,19 @@ test('fulfillment policy rejects incomplete or non-US shipping snapshots', () =>
     learningModality: 'online',
     shippingAddress: { ...usAddress, countryCode: 'CA' },
   }), (error) => error.code === 'shipping_country_invalid');
+});
+
+test('fulfillment mode can be quoted without collecting address PII', () => {
+  assert.equal(resolveBookFulfillmentMode({
+    residenceCountryCode: 'US',
+    learningModality: 'online',
+  }).deliveryMode, 'shipment');
+  assert.equal(resolveBookFulfillmentMode({
+    residenceCountryCode: 'US',
+    learningModality: 'in_person',
+  }).deliveryMode, 'pickup');
+  assert.equal(resolveBookFulfillmentMode({
+    residenceCountryCode: 'CO',
+    learningModality: 'online',
+  }).deliveryMode, 'digital');
 });

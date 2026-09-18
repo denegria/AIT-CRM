@@ -16,6 +16,7 @@ function requestRow(metadata = {}) {
     requested_amount: '95.00',
     currency: 'USD',
     merchant_reference: 'REGISTRATION_0001',
+    source_type: 'registration',
     metadata_json: metadata,
     student_name: 'Student One',
     student_email: 'student@example.com',
@@ -83,6 +84,56 @@ test('existing hosted attempt blocks a second provider call', async () => {
     (error) => error.code === 'hosted_link_already_attempted' && error.status === 409,
   );
   assert.equal(adapterCalls, 0);
+});
+
+test('public hosted checkout pins the registration source and customer return URLs', async () => {
+  const client = hostedClient(requestRow());
+  let adapterInput;
+  const result = await createHostedCollectionLink(client, {
+    ...scope,
+    paymentRequestId: 'request-1',
+    idempotencyKey: 'registration:hpp:fixture-1',
+    environment: 'uat',
+    baseUrl: 'https://crm-staging.example.com',
+    requiredSourceType: 'registration',
+    customerUrls: {
+      returnUrl: 'https://learn.example.com/inscribete/?payment=return&state=opaque-state',
+      failureUrl: 'https://learn.example.com/inscribete/?payment=failed&state=opaque-state',
+      cancelUrl: 'https://learn.example.com/inscribete/?payment=cancelled&state=opaque-state',
+    },
+    adapter: { async createHostedPaymentPage(input) {
+      adapterInput = input;
+      return {
+        ok: true,
+        correlationId: input.correlationId,
+        checkoutUrl: 'https://pay.ipospays.tech/secret-token',
+        checkout: { origin: 'https://pay.ipospays.tech' },
+      };
+    } },
+  });
+  assert.equal(result.paymentRequestId, 'request-1');
+  assert.equal(adapterInput.returnUrl, 'https://learn.example.com/inscribete/?payment=return&state=opaque-state');
+  assert.equal(adapterInput.failureUrl, 'https://learn.example.com/inscribete/?payment=failed&state=opaque-state');
+  assert.equal(adapterInput.cancelUrl, 'https://learn.example.com/inscribete/?payment=cancelled&state=opaque-state');
+});
+
+test('public hosted checkout rejects another payment-request source before provider I/O', async () => {
+  const client = hostedClient(requestRow());
+  client.calls.length = 0;
+  const row = requestRow();
+  row.source_type = 'collections';
+  const wrongSourceClient = hostedClient(row);
+  let called = false;
+  await assert.rejects(() => createHostedCollectionLink(wrongSourceClient, {
+    ...scope,
+    paymentRequestId: 'request-1',
+    idempotencyKey: 'registration:hpp:fixture-2',
+    environment: 'uat',
+    baseUrl: 'https://crm-staging.example.com',
+    requiredSourceType: 'registration',
+    adapter: { async createHostedPaymentPage() { called = true; } },
+  }), (error) => error.code === 'payment_request_source_invalid' && error.status === 403);
+  assert.equal(called, false);
 });
 
 function manualClient({ duplicate = false } = {}) {

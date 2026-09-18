@@ -372,6 +372,9 @@ export async function createHostedCollectionLink(client, input = {}) {
     );
     request = found.rows[0];
     if (!request) throw new CollectionsError('payment_request_not_found', 'Payment request is not available in this division.', 404);
+    if (input.requiredSourceType && value(request, 'source_type', 'sourceType') !== input.requiredSourceType) {
+      throw new CollectionsError('payment_request_source_invalid', 'This payment request is not eligible for this checkout.', 403);
+    }
     if (value(request, 'status') === 'completed') {
       throw new CollectionsError('payment_request_completed', 'This payment request is already completed.', 409);
     }
@@ -405,7 +408,11 @@ export async function createHostedCollectionLink(client, input = {}) {
   const envPrefix = environment === 'production' ? 'DEJAVOO_PROD' : 'DEJAVOO_UAT';
   const merchantId = String(process.env[`${envPrefix}_CLOUDPOS_TPN`] || '').trim();
   const postAuthHeader = String(process.env[`${envPrefix}_CALLBACK_AUTH_HEADER`] || '').trim();
-  const baseUrl = String(input.baseUrl || '').replace(/\/$/, '');
+  const baseUrl = safeCheckoutOrigin(input.baseUrl, 'CRM callback').replace(/\/$/, '');
+  const customerUrls = input.customerUrls || {};
+  const returnUrl = safeCheckoutUrl(customerUrls.returnUrl || `${baseUrl}/collections?payment=return`, 'return');
+  const failureUrl = safeCheckoutUrl(customerUrls.failureUrl || `${baseUrl}/collections?payment=failed`, 'failure');
+  const cancelUrl = safeCheckoutUrl(customerUrls.cancelUrl || `${baseUrl}/collections?payment=canceled`, 'cancel');
   const adapter = input.adapter || createDejavooAdapter({ environment });
   let result;
   try {
@@ -415,9 +422,9 @@ export async function createHostedCollectionLink(client, input = {}) {
       amountCents: Math.round(Number(value(request, 'requested_amount', 'requestedAmount')) * 100),
       currency: value(request, 'currency') || 'USD',
       correlationId: request.correlationId,
-      returnUrl: `${baseUrl}/collections?payment=return`,
-      failureUrl: `${baseUrl}/collections?payment=failed`,
-      cancelUrl: `${baseUrl}/collections?payment=canceled`,
+      returnUrl,
+      failureUrl,
+      cancelUrl,
       postUrl: `${baseUrl}/api/payments/dejavoo/callback`,
       postAuthHeader,
       expiryDays: 1,
@@ -482,4 +489,27 @@ export async function createHostedCollectionLink(client, input = {}) {
     correlationId: result.correlationId,
     expiresAt: new Date(Date.now() + 86400000).toISOString(),
   };
+}
+
+function safeCheckoutOrigin(valueToCheck, label) {
+  let parsed;
+  try { parsed = new URL(String(valueToCheck || '')); } catch {
+    throw new CollectionsError('checkout_url_invalid', `${label} URL is invalid.`);
+  }
+  if (parsed.username || parsed.password || (parsed.protocol !== 'https:' && parsed.hostname !== 'localhost')) {
+    throw new CollectionsError('checkout_url_invalid', `${label} URL must use a secure origin.`);
+  }
+  return parsed.origin;
+}
+
+function safeCheckoutUrl(valueToCheck, label) {
+  let parsed;
+  try { parsed = new URL(String(valueToCheck || '')); } catch {
+    throw new CollectionsError('checkout_url_invalid', `Payment ${label} URL is invalid.`);
+  }
+  safeCheckoutOrigin(parsed.origin, `Payment ${label}`);
+  if (parsed.hash || parsed.username || parsed.password) {
+    throw new CollectionsError('checkout_url_invalid', `Payment ${label} URL is invalid.`);
+  }
+  return parsed.toString();
 }
