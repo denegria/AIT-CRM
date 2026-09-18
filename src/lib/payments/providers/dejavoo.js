@@ -653,6 +653,7 @@ export function createDejavooAdapter({
       ok: true,
       correlationId: operationCorrelationId,
       environment: config.environment,
+      merchantId: common.merchantId,
       merchantReference: common.merchantReference,
       status: normalizeStatus(providerStatus),
       providerStatus: providerStatus || null,

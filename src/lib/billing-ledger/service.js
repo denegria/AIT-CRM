@@ -167,99 +167,101 @@ export async function recordProviderEvent(client, input) {
   return result.rows[0] ? { record: result.rows[0], duplicate: false } : resolveDuplicate(client, 'payment_provider_events', ledgerScope, idempotencyKey);
 }
 
-export async function allocateVerifiedPayment(client, input) {
+export async function allocateVerifiedPaymentInTransaction(client, input) {
   const ledgerScope = scope(input);
   const idempotencyKey = required(input.idempotencyKey, 'idempotencyKey');
+  await client.query(
+    'select pg_advisory_xact_lock(hashtextextended($1, 0))',
+    [`billing-allocation:${ledgerScope.organizationId}:${ledgerScope.businessUnitId}:${input.chargeId}:${input.transactionId}`],
+  );
+  const duplicate = await client.query(
+    `select * from payment_allocations
+      where organization_id = $1 and business_unit_id = $2 and idempotency_key = $3
+      limit 1`,
+    [ledgerScope.organizationId, ledgerScope.businessUnitId, idempotencyKey],
+  );
+  if (duplicate.rows[0]) return { allocation: duplicate.rows[0], duplicate: true };
+  const chargeResult = await client.query(
+    `select * from student_charges
+      where id = $1 and organization_id = $2 and business_unit_id = $3
+      for update`,
+    [input.chargeId, ledgerScope.organizationId, ledgerScope.businessUnitId],
+  );
+  const transactionResult = await client.query(
+    `select * from provider_transactions
+      where id = $1 and organization_id = $2 and business_unit_id = $3
+      for update`,
+    [input.transactionId, ledgerScope.organizationId, ledgerScope.businessUnitId],
+  );
+  if (!chargeResult.rows[0] || !transactionResult.rows[0]) {
+    throw new BillingLedgerError('scope_not_found', 'Charge or transaction is not available in the requested business unit.', 404);
+  }
+  const chargeRecord = {
+    ...chargeResult.rows[0],
+    originalDueDate: chargeResult.rows[0].original_due_date ?? chargeResult.rows[0].originalDueDate ?? null,
+  };
+  const transactionRecord = {
+    ...transactionResult.rows[0],
+    transactionKind: transactionResult.rows[0].transaction_kind ?? transactionResult.rows[0].transactionKind,
+  };
+  const chargeAllocations = await client.query(
+    `select coalesce(sum(case when t.transaction_kind = 'refund' then -a.amount else a.amount end), 0)::text as allocated
+       from payment_allocations a
+       join provider_transactions t on t.id = a.transaction_id
+      where a.charge_id = $1 and a.organization_id = $2 and a.business_unit_id = $3 and t.status = 'verified'`,
+    [input.chargeId, ledgerScope.organizationId, ledgerScope.businessUnitId],
+  );
+  const transactionAllocations = await client.query(
+    `select coalesce(sum(amount), 0)::text as allocated
+       from payment_allocations
+      where transaction_id = $1 and organization_id = $2 and business_unit_id = $3`,
+    [input.transactionId, ledgerScope.organizationId, ledgerScope.businessUnitId],
+  );
+  const invariant = assertPaymentAllocation({
+    charge: chargeRecord,
+    transaction: transactionRecord,
+    chargeAllocated: chargeAllocations.rows[0]?.allocated || '0.00',
+    transactionAllocated: transactionAllocations.rows[0]?.allocated || '0.00',
+    amount: input.amount,
+  });
+  const inserted = await client.query(
+    `insert into payment_allocations
+      (organization_id, business_unit_id, charge_id, transaction_id, amount, idempotency_key, metadata_json)
+     values ($1, $2, $3, $4, $5, $6, $7::jsonb)
+     returning *`,
+    [
+      ledgerScope.organizationId, ledgerScope.businessUnitId, input.chargeId, input.transactionId,
+      invariant.amount, idempotencyKey, JSON.stringify(input.metadata || {}),
+    ],
+  );
+  const snapshot = summarizeChargeLedger({
+    charge: chargeRecord,
+    allocations: [{ amount: invariant.amount, transactionKind: 'payment', transactionStatus: 'verified' }],
+    asOf: input.asOf || new Date(),
+  });
+  const totalAfter = centsToMoney(
+    nonnegativeMoneyToCents(chargeAllocations.rows[0]?.allocated || '0.00', 'charge allocated amount')
+      + moneyToCents(invariant.amount, 'allocation amount'),
+  );
+  const fullSnapshot = summarizeChargeLedger({
+    charge: chargeRecord,
+    allocations: [{ amount: totalAfter, transactionKind: 'payment', transactionStatus: 'verified' }],
+    asOf: input.asOf || new Date(),
+  });
+  await client.query(
+    `update student_charges set status = $1, updated_at = now()
+      where id = $2 and organization_id = $3 and business_unit_id = $4`,
+    [fullSnapshot.status, input.chargeId, ledgerScope.organizationId, ledgerScope.businessUnitId],
+  );
+  return { allocation: inserted.rows[0], duplicate: false, charge: fullSnapshot, applied: snapshot };
+}
+
+export async function allocateVerifiedPayment(client, input) {
   await client.query('begin');
   try {
-    await client.query(
-      'select pg_advisory_xact_lock(hashtextextended($1, 0))',
-      [`billing-allocation:${ledgerScope.organizationId}:${ledgerScope.businessUnitId}:${input.chargeId}:${input.transactionId}`],
-    );
-    const duplicate = await client.query(
-      `select * from payment_allocations
-        where organization_id = $1 and business_unit_id = $2 and idempotency_key = $3
-        limit 1`,
-      [ledgerScope.organizationId, ledgerScope.businessUnitId, idempotencyKey],
-    );
-    if (duplicate.rows[0]) {
-      await client.query('commit');
-      return { allocation: duplicate.rows[0], duplicate: true };
-    }
-    const chargeResult = await client.query(
-      `select * from student_charges
-        where id = $1 and organization_id = $2 and business_unit_id = $3
-        for update`,
-      [input.chargeId, ledgerScope.organizationId, ledgerScope.businessUnitId],
-    );
-    const transactionResult = await client.query(
-      `select * from provider_transactions
-        where id = $1 and organization_id = $2 and business_unit_id = $3
-        for update`,
-      [input.transactionId, ledgerScope.organizationId, ledgerScope.businessUnitId],
-    );
-    if (!chargeResult.rows[0] || !transactionResult.rows[0]) {
-      throw new BillingLedgerError('scope_not_found', 'Charge or transaction is not available in the requested business unit.', 404);
-    }
-    const chargeRecord = {
-      ...chargeResult.rows[0],
-      originalDueDate: chargeResult.rows[0].original_due_date ?? chargeResult.rows[0].originalDueDate ?? null,
-    };
-    const transactionRecord = {
-      ...transactionResult.rows[0],
-      transactionKind: transactionResult.rows[0].transaction_kind ?? transactionResult.rows[0].transactionKind,
-    };
-    const chargeAllocations = await client.query(
-      `select coalesce(sum(case when t.transaction_kind = 'refund' then -a.amount else a.amount end), 0)::text as allocated
-         from payment_allocations a
-         join provider_transactions t on t.id = a.transaction_id
-        where a.charge_id = $1 and a.organization_id = $2 and a.business_unit_id = $3 and t.status = 'verified'`,
-      [input.chargeId, ledgerScope.organizationId, ledgerScope.businessUnitId],
-    );
-    const transactionAllocations = await client.query(
-      `select coalesce(sum(amount), 0)::text as allocated
-         from payment_allocations
-        where transaction_id = $1 and organization_id = $2 and business_unit_id = $3`,
-      [input.transactionId, ledgerScope.organizationId, ledgerScope.businessUnitId],
-    );
-    const invariant = assertPaymentAllocation({
-      charge: chargeRecord,
-      transaction: transactionRecord,
-      chargeAllocated: chargeAllocations.rows[0]?.allocated || '0.00',
-      transactionAllocated: transactionAllocations.rows[0]?.allocated || '0.00',
-      amount: input.amount,
-    });
-    const inserted = await client.query(
-      `insert into payment_allocations
-        (organization_id, business_unit_id, charge_id, transaction_id, amount, idempotency_key, metadata_json)
-       values ($1, $2, $3, $4, $5, $6, $7::jsonb)
-       returning *`,
-      [
-        ledgerScope.organizationId, ledgerScope.businessUnitId, input.chargeId, input.transactionId,
-        invariant.amount, idempotencyKey, JSON.stringify(input.metadata || {}),
-      ],
-    );
-    const snapshot = summarizeChargeLedger({
-      charge: chargeRecord,
-      allocations: [{ amount: invariant.amount, transactionKind: 'payment', transactionStatus: 'verified' }],
-      asOf: input.asOf || new Date(),
-    });
-    const totalAfter = centsToMoney(
-      nonnegativeMoneyToCents(chargeAllocations.rows[0]?.allocated || '0.00', 'charge allocated amount')
-        + moneyToCents(invariant.amount, 'allocation amount'),
-    );
-    const fullSnapshot = summarizeChargeLedger({
-      charge: chargeRecord,
-      allocations: [{ amount: totalAfter, transactionKind: 'payment', transactionStatus: 'verified' }],
-      asOf: input.asOf || new Date(),
-    });
-    await client.query(
-      `update student_charges set status = $1, updated_at = now()
-        where id = $2 and organization_id = $3 and business_unit_id = $4`,
-      [fullSnapshot.status, input.chargeId, ledgerScope.organizationId, ledgerScope.businessUnitId],
-    );
+    const result = await allocateVerifiedPaymentInTransaction(client, input);
     await client.query('commit');
-    return { allocation: inserted.rows[0], duplicate: false, charge: fullSnapshot, applied: snapshot };
+    return result;
   } catch (error) {
     await client.query('rollback').catch(() => {});
     throw error;

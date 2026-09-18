@@ -281,6 +281,7 @@ test('normalizes status responses and retries the safe GET once', async () => {
   });
 
   assert.equal(result.ok, true);
+  assert.equal(result.merchantId, UAT_ENV.DEJAVOO_UAT_CLOUDPOS_TPN);
   assert.equal(result.status, 'succeeded');
   assert.equal(result.providerStatus, 'Successful');
   assert.equal(result.providerTransactionId, 'HPP-TXN-100');

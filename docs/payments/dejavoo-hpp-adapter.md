@@ -16,6 +16,7 @@ UAT:
 - `DEJAVOO_UAT_SECRET_KEY`
 - `DEJAVOO_UAT_CLOUDPOS_TPN`
 - `DEJAVOO_UAT_ECOM_TOKEN`
+- `DEJAVOO_UAT_CALLBACK_AUTH_HEADER`
 
 Production:
 
@@ -23,6 +24,7 @@ Production:
 - `DEJAVOO_PROD_SECRET_KEY`
 - `DEJAVOO_PROD_CLOUDPOS_TPN`
 - `DEJAVOO_PROD_ECOM_TOKEN`
+- `DEJAVOO_PROD_CALLBACK_AUTH_HEADER`
 - `DEJAVOO_PRODUCTION_IO_ENABLED=true`
 
 The production enable flag is an additional fail-closed release gate. The
@@ -39,6 +41,9 @@ shared `AIT_CRM_EXTERNAL_IO_DISABLED` kill switch blocks both environments.
   reference plus the TPN-bound Ecom token.
 - Treat browser redirects as navigation only. MIS-417 must verify status
   server-to-server before recording money.
+- Configure `postAPI` as `/api/payments/dejavoo/callback` and pass the matching
+  environment-qualified callback authorization value as `authHeader`. UAT and
+  production callback values must be distinct.
 
 ## Retry and secrecy rules
 
