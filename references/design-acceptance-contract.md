@@ -118,3 +118,43 @@
 - Customer-facing registration or portal UI; those remain MIS-421 and MIS-420.
 - Shipping-label purchasing, carrier APIs, inventory management, email delivery, or automated fulfillment messages.
 - Production deployment or production data writes.
+
+# MIS-419 Staff Checkout and Collections Acceptance Contract
+
+## Workflow and problem
+
+- `/collections` is the AIT USA staff desk for creating a registration checkout and working balances after the request exists. It does not replace the financial-document archive.
+- Due, partially paid, and overdue are derived from exact verified allocations and the immutable original due date. A partial payment never extends or rewrites that date.
+- Student, payer, enrollment, charge, payment request, transaction, receipt, and fulfillment remain visibly separate records.
+
+## Interaction model
+
+- The primary surface is a queue-detail workspace: balance lanes and search on the left, the selected student's complete commerce trail and next action on the right.
+- New checkout is a guided inline composer using the approved server-side catalog. It supports an existing or identity-matched student, a separate payer, section assignment, the locked fulfillment policy, and optional regional tuition prepayment.
+- A hosted payment URL is revealed once after an explicit action. CRM persists only the safe provider origin and correlation identifier—not the URL token or card data.
+- Manual payments accept only non-card methods and require auditable method, actor, amount, and reference metadata. They share ledger allocation and receipt invariants with verified provider payments without pretending to be Dejavoo.
+
+## Locked behavior and safety
+
+- Reads require financial read access; all checkout, hosted-link, and manual-payment writes require financial write access plus exact AIT USA scope.
+- Hosted-link creation never retries automatically. A started, created, or uncertain attempt blocks another provider request until reviewed.
+- Duplicate checkout and manual-payment submissions are idempotent. A replay cannot create a second payment request, provider transaction, allocation, or receipt.
+- United States in-person students use pickup; United States online students use shipment plus digital delivery; students outside the United States use digital delivery.
+- Production provider execution remains fail-closed and production is outside this slice.
+
+## Responsive and state acceptance
+
+- Desktop basis: 1440 x 900. Mobile basis: 390 x 844.
+- On mobile, lanes scroll horizontally, the queue precedes detail, forms collapse to one column, and no payment reference or long student identity creates page overflow.
+- Loading, empty, denied, provider-uncertain, stale, validation, and mutation failure states are explicit. Successful writes refresh canonical server state.
+
+## Required evidence
+
+- RBAC, queue derivation, exact-money, duplicate/retry, manual-payment, receipt, hosted-link redaction, and registration/ledger regression tests.
+- Full repository tests, lint, Turbopack build, and webpack build in the warm lane.
+- Authenticated staging walkthrough for desktop and mobile with synthetic data removed afterward.
+
+## Non-goals
+
+- Customer-facing registration or portal payment UI.
+- Card entry, terminal integration, refunds, payment-plan scheduling, collections messaging automation, or production deployment.

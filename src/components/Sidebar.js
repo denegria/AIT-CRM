@@ -12,7 +12,7 @@ import { isAitUsaBusinessUnit } from '@/lib/attendance/policy.js';
 import { isClientAccountBusinessUnit } from '@/lib/crm/lifecycle';
 import s from './Sidebar.module.css';
 
-import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, CloudSun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal, Inbox, Megaphone, UsersRound, BookOpenCheck, PackageCheck } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, CloudSun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal, Inbox, Megaphone, UsersRound, BookOpenCheck, PackageCheck, HandCoins } from 'lucide-react';
 
 const nav = [
   { href: '/', label: 'Dashboard', Icon: LayoutDashboard },
@@ -21,6 +21,7 @@ const nav = [
   { href: '/tasks', label: 'Tasks', Icon: ListTodo },
   { href: '/recovery-queue', label: 'Recovery Queue', mobileLabel: 'Recovery', Icon: ListTodo },
   { href: '/active-classes', label: 'Active Classes', mobileLabel: 'Classes', Icon: BookOpenCheck },
+  { href: '/collections', label: 'Collections', Icon: HandCoins },
   { href: '/fulfillment', label: 'Book Fulfillment', mobileLabel: 'Fulfillment', Icon: PackageCheck },
   { href: '/team-monitor', label: 'Team Monitor', Icon: UsersRound },
   { href: '/inbox', label: 'Inbox', Icon: Inbox },
@@ -34,7 +35,7 @@ const nav = [
 ];
 
 const mobilePrimaryPriority = ['/', '/clients', '/contacts', '/pipeline', '/tasks', '/work-orders'];
-const regularCoordinatorNav = new Set(['/', '/clients', '/contacts', '/pipeline', '/tasks', '/recovery-queue', '/active-classes', '/fulfillment', '/work-orders']);
+const regularCoordinatorNav = new Set(['/', '/clients', '/contacts', '/pipeline', '/tasks', '/recovery-queue', '/active-classes', '/collections', '/fulfillment', '/work-orders']);
 const scopePersistenceKeys = ['ait-crm-business-unit-scope', 'ait-crm-scope-user-id'];
 
 const themeOptions = [
@@ -145,6 +146,7 @@ export default function Sidebar() {
   const visibleNav = useMemo(() => scopedNav.filter(({ href }) => {
     if (coordinatorUiPolicy.isRegularCoordinator && !regularCoordinatorNav.has(href)) return false;
     if (href === '/active-classes' && !isAitUsaScope) return false;
+    if (href === '/collections' && (!isAitUsaScope || !access.canReadFinancials)) return false;
     if (href === '/fulfillment' && (!isAitUsaScope || !access.canReadCrm)) return false;
     if (href === '/work-orders' && !canUseWorkOrders) return false;
     if (href === '/team-monitor' && !canUseTeamMonitorWorkspace(monitorCurrentUser)) return false;

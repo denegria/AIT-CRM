@@ -22,3 +22,8 @@ test('division title is restored after route navigation even when the division i
   assert.match(source, /observer\.observe\(document\.head, \{ childList: true, subtree: true, characterData: true \}\)/);
   assert.match(source, /return \(\) => observer\.disconnect\(\)/);
 });
+
+test('collections is limited to AIT USA staff with financial read access', () => {
+  assert.match(source, /href: '\/collections', label: 'Collections'/);
+  assert.match(source, /href === '\/collections' && \(!isAitUsaScope \|\| !access\.canReadFinancials\)/);
+});
