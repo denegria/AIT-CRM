@@ -40,6 +40,16 @@ unallocated balance until a later charge consumes it.
 
 ## Validation
 
+### Protected Preview environments
+
+Vercel Deployment Protection can stop Dejavoo before the callback reaches the
+route. A successful hosted-page redirect is therefore not callback evidence in
+a protected Preview deployment. For UAT, confirm provider status first, then
+replay the same sanitized callback body through an authenticated Preview access
+path and verify that an identical replay is idempotent. Production must use a
+provider-reachable callback origin; never infer payment from the browser return
+URL.
+
 ```bash
 npm run test:payment-reconciliation
 npm run test:billing-ledger
