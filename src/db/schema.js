@@ -988,6 +988,97 @@ export const paymentProviderEvents = pgTable('payment_provider_events', {
   ),
 }));
 
+export const bookFulfillments = pgTable('book_fulfillments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
+  studentContactId: uuid('student_contact_id').notNull(),
+  enrollmentId: uuid('enrollment_id').notNull(),
+  paymentRequestId: uuid('payment_request_id').notNull(),
+  providerTransactionId: uuid('provider_transaction_id'),
+  deliveryMode: text('delivery_mode').notNull(),
+  status: text('status').notNull().default('payment_pending'),
+  digitalStatus: text('digital_status').notNull().default('not_required'),
+  physicalStatus: text('physical_status').notNull().default('not_required'),
+  shippingAddressSnapshotJson: jsonb('shipping_address_snapshot_json').notNull().default({}),
+  assignedUserId: uuid('assigned_user_id').references(() => users.id, { onDelete: 'set null' }),
+  carrier: text('carrier'),
+  trackingReference: text('tracking_reference'),
+  notes: text('notes'),
+  readyAt: timestamp('ready_at', { withTimezone: true }),
+  digitalSentAt: timestamp('digital_sent_at', { withTimezone: true }),
+  shippedAt: timestamp('shipped_at', { withTimezone: true }),
+  pickedUpAt: timestamp('picked_up_at', { withTimezone: true }),
+  idempotencyKey: text('idempotency_key').notNull(),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  scopeIdx: uniqueIndex('book_fulfillments_scope_idx').on(table.id, table.organizationId, table.businessUnitId),
+  idempotencyIdx: uniqueIndex('book_fulfillments_idempotency_idx').on(
+    table.organizationId,
+    table.businessUnitId,
+    table.idempotencyKey,
+  ),
+  paymentRequestIdx: uniqueIndex('book_fulfillments_payment_request_idx').on(
+    table.organizationId,
+    table.businessUnitId,
+    table.paymentRequestId,
+  ),
+  queueIdx: index('book_fulfillments_queue_idx').on(
+    table.organizationId,
+    table.businessUnitId,
+    table.status,
+    table.createdAt,
+  ),
+  studentScopeFk: foreignKey({
+    columns: [table.studentContactId, table.organizationId, table.businessUnitId],
+    foreignColumns: [contacts.id, contacts.organizationId, contacts.primaryBusinessUnitId],
+    name: 'book_fulfillments_student_scope_fk',
+  }).onDelete('restrict'),
+  enrollmentScopeFk: foreignKey({
+    columns: [table.enrollmentId, table.organizationId, table.businessUnitId],
+    foreignColumns: [contactCourseRecords.id, contactCourseRecords.organizationId, contactCourseRecords.businessUnitId],
+    name: 'book_fulfillments_enrollment_scope_fk',
+  }).onDelete('restrict'),
+  requestScopeFk: foreignKey({
+    columns: [table.paymentRequestId, table.organizationId, table.businessUnitId],
+    foreignColumns: [paymentRequests.id, paymentRequests.organizationId, paymentRequests.businessUnitId],
+    name: 'book_fulfillments_request_scope_fk',
+  }).onDelete('restrict'),
+  transactionScopeFk: foreignKey({
+    columns: [table.providerTransactionId, table.organizationId, table.businessUnitId],
+    foreignColumns: [providerTransactions.id, providerTransactions.organizationId, providerTransactions.businessUnitId],
+    name: 'book_fulfillments_transaction_scope_fk',
+  }).onDelete('restrict'),
+  modeCheck: check('book_fulfillments_mode_check', sql`${table.deliveryMode} in ('pickup', 'shipment', 'digital')`),
+  statusCheck: check(
+    'book_fulfillments_status_check',
+    sql`${table.status} in ('payment_pending', 'pending', 'in_progress', 'completed')`,
+  ),
+  digitalStatusCheck: check(
+    'book_fulfillments_digital_status_check',
+    sql`${table.digitalStatus} in ('not_required', 'pending', 'delivered')`,
+  ),
+  physicalStatusCheck: check(
+    'book_fulfillments_physical_status_check',
+    sql`${table.physicalStatus} in ('not_required', 'pending', 'ready', 'picked_up', 'shipped')`,
+  ),
+  componentCheck: check(
+    'book_fulfillments_component_check',
+    sql`(${table.deliveryMode} = 'pickup' and ${table.digitalStatus} = 'not_required' and ${table.physicalStatus} in ('pending', 'ready', 'picked_up'))
+      or (${table.deliveryMode} = 'shipment' and ${table.digitalStatus} in ('pending', 'delivered') and ${table.physicalStatus} in ('pending', 'shipped'))
+      or (${table.deliveryMode} = 'digital' and ${table.digitalStatus} in ('pending', 'delivered') and ${table.physicalStatus} = 'not_required')`,
+  ),
+  addressCheck: check(
+    'book_fulfillments_address_check',
+    sql`(${table.deliveryMode} = 'shipment'
+        and jsonb_typeof(${table.shippingAddressSnapshotJson}) = 'object'
+        and ${table.shippingAddressSnapshotJson} ?& array['recipientName', 'addressLine1', 'city', 'state', 'postalCode', 'countryCode']
+        and ${table.shippingAddressSnapshotJson}->>'countryCode' = 'US')
+      or (${table.deliveryMode} <> 'shipment' and ${table.shippingAddressSnapshotJson} = '{}'::jsonb)`,
+  ),
+}));
+
 export const paymentSnapshots = pgTable('payment_snapshots', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),

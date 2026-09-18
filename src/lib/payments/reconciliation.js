@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 
 import { allocateVerifiedPaymentInTransaction, recordProviderEvent } from '../billing-ledger/service.js';
 import { centsToMoney, moneyToCents } from '../billing-ledger/model.js';
+import { activateBookFulfillmentForVerifiedPayment } from '../fulfillment/service.js';
 
 const PROVIDER = 'dejavoo';
 const TERMINAL_EVENT_STATUSES = new Set(['processed', 'ignored']);
@@ -410,6 +411,61 @@ async function markRequestStatus(client, requestId, status) {
   );
 }
 
+function expectsBookFulfillment(request) {
+  const metadata = json(value(request, 'metadata_json', 'metadataJson'));
+  return Boolean(metadata.registrationResult?.quote?.lines?.some((line) => (
+    ['registration_book_bundle', 'book_only'].includes(String(line?.code || ''))
+  )));
+}
+
+async function recordFulfillmentAttention(client, request, transaction, code) {
+  await client.query(
+    `insert into activity_events
+      (organization_id, business_unit_id, contact_id, event_type, message, metadata_json, occurred_at)
+     select $1, $2, $3, 'fulfillment.enqueue_attention', $4, $5::jsonb, now()
+      where not exists (
+        select 1 from activity_events
+         where organization_id = $1
+           and event_type = 'fulfillment.enqueue_attention'
+           and metadata_json->>'providerTransactionId' = $6
+      )`,
+    [
+      value(request, 'organization_id', 'organizationId'),
+      value(request, 'business_unit_id', 'businessUnitId'),
+      value(request, 'student_contact_id', 'studentContactId'),
+      `Verified payment needs fulfillment review (${code}).`,
+      JSON.stringify({
+        paymentRequestId: request.id,
+        providerTransactionId: value(transaction, 'provider_transaction_id', 'providerTransactionId'),
+        reconciliationCode: code,
+      }),
+      value(transaction, 'provider_transaction_id', 'providerTransactionId'),
+    ],
+  );
+}
+
+async function activateFulfillmentWithoutBlockingPayment(client, request, transaction) {
+  if (!expectsBookFulfillment(request)) return { queued: false, reason: 'not_required', fulfillmentId: null };
+  await client.query('savepoint fulfillment_enqueue');
+  try {
+    const fulfillment = await activateBookFulfillmentForVerifiedPayment(client, {
+      organizationId: value(request, 'organization_id', 'organizationId'),
+      businessUnitId: value(request, 'business_unit_id', 'businessUnitId'),
+      paymentRequestId: request.id,
+      providerTransactionId: transaction.id,
+    });
+    if (!fulfillment) throw new Error('Expected book fulfillment record was not found.');
+    await client.query('release savepoint fulfillment_enqueue');
+    return { queued: true, reason: null, fulfillmentId: fulfillment.id };
+  } catch (error) {
+    await client.query('rollback to savepoint fulfillment_enqueue');
+    await client.query('release savepoint fulfillment_enqueue');
+    const code = error?.code || 'fulfillment_enqueue_failed';
+    await recordFulfillmentAttention(client, request, transaction, code);
+    return { queued: false, reason: code, fulfillmentId: null };
+  }
+}
+
 export async function reconcileDejavooPayment(client, {
   merchantReference,
   environment,
@@ -577,6 +633,7 @@ export async function reconcileDejavooPayment(client, {
       statusResult.correlationId || null,
     );
     await markRequestStatus(client, request.id, 'completed');
+    const fulfillment = await activateFulfillmentWithoutBlockingPayment(client, request, transaction);
     await updateEvent(client, event.id, {
       processingStatus: 'processed',
       transactionId: transaction.id,
@@ -584,6 +641,9 @@ export async function reconcileDejavooPayment(client, {
         receiptDocumentId: receipt.id,
         allocatedChargeCount: allocations.length,
         unappliedCreditAmount: unappliedAmount,
+        fulfillmentQueued: fulfillment.queued,
+        fulfillmentId: fulfillment.fulfillmentId,
+        fulfillmentReason: fulfillment.reason,
       }),
       processed: true,
     });
@@ -596,6 +656,8 @@ export async function reconcileDejavooPayment(client, {
       receiptDocumentId: receipt.id,
       allocatedChargeCount: allocations.length,
       unappliedCreditAmount: unappliedAmount,
+      fulfillmentQueued: fulfillment.queued,
+      fulfillmentId: fulfillment.fulfillmentId,
       eventId: event.id,
     };
   } catch (error) {

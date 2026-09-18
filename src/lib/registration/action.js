@@ -122,6 +122,7 @@ export async function orchestrateRegistration(client, input = {}) {
       studentContactId: student.id,
       payerContactId: payer.id,
       quote: request.quote,
+      fulfillmentPlan: request.fulfillmentPlan,
     });
     await client.query('commit');
     return result;

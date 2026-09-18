@@ -14,6 +14,7 @@ function fakeRegistrationClient(seed = {}) {
     enrollments: [],
     charges: [],
     requests: [],
+    fulfillments: [],
     sections: [...(seed.sections || [])],
     calls: [],
     next: 1,
@@ -30,6 +31,13 @@ function fakeRegistrationClient(seed = {}) {
           row.organization_id === parameters[0]
           && row.business_unit_id === parameters[1]
           && row.idempotency_key === parameters[2]
+        )).slice(0, 1) };
+      }
+      if (statement.startsWith('select * from book_fulfillments')) {
+        return { rows: state.fulfillments.filter((row) => (
+          row.organization_id === parameters[0]
+          && row.business_unit_id === parameters[1]
+          && row.payment_request_id === parameters[2]
         )).slice(0, 1) };
       }
       if (statement.startsWith('select id, name, label, is_active from business_units')) {
@@ -143,6 +151,30 @@ function fakeRegistrationClient(seed = {}) {
         state.requests.push(row);
         return { rows: [row] };
       }
+      if (statement.startsWith('insert into book_fulfillments')) {
+        const existing = state.fulfillments.find((row) => (
+          row.organization_id === parameters[0]
+          && row.business_unit_id === parameters[1]
+          && row.payment_request_id === parameters[4]
+        ));
+        if (existing) return { rows: [] };
+        const row = {
+          id: `fulfillment-${state.next++}`,
+          organization_id: parameters[0],
+          business_unit_id: parameters[1],
+          student_contact_id: parameters[2],
+          enrollment_id: parameters[3],
+          payment_request_id: parameters[4],
+          delivery_mode: parameters[5],
+          status: 'payment_pending',
+          digital_status: parameters[6],
+          physical_status: parameters[7],
+          shipping_address_snapshot_json: JSON.parse(parameters[8]),
+          idempotency_key: parameters[9],
+        };
+        state.fulfillments.push(row);
+        return { rows: [row] };
+      }
       throw new Error(`Unexpected query: ${statement}`);
     },
   };
@@ -155,6 +187,7 @@ const publicRequest = {
   sourceReference: 'public-form-0001',
   channel: 'public',
   residenceCountryCode: 'MX',
+  learningModality: 'online',
   student: { name: 'Ana Student', email: 'ana@example.com', phone: '+52 55 1000 2000' },
 };
 
@@ -175,6 +208,8 @@ test('guest registration creates one contact, planned enrollment, charge, and fi
   assert.equal(client.state.enrollments[0].status, 'planned');
   assert.equal(client.state.charges.length, 1);
   assert.equal(client.state.requests.length, 1);
+  assert.equal(client.state.fulfillments.length, 1);
+  assert.equal(result.fulfillment.deliveryMode, 'digital');
 });
 
 test('repeated idempotency key returns the original registration without duplicate records', async () => {
@@ -193,6 +228,8 @@ test('repeated idempotency key returns the original registration without duplica
   assert.equal(client.state.enrollments.length, 1);
   assert.equal(client.state.charges.length, 1);
   assert.equal(client.state.requests.length, 1);
+  assert.equal(client.state.fulfillments.length, 1);
+  assert.equal(second.fulfillment.id, first.fulfillment.id);
 });
 
 test('tuition prepayment stays unapplied while registration charge remains allocatable', async () => {
@@ -335,6 +372,20 @@ test('staff-only items require explicit permission and persist separate charges'
   assert.equal(result.quote.total, '110.00');
   assert.equal(result.chargeIds.length, 2);
   assert.equal(result.paymentRequest.charge_id, null);
+});
+
+test('registration-only staff purchase creates no book fulfillment obligation', async () => {
+  const client = fakeRegistrationClient();
+  const result = await orchestrateRegistration(client, {
+    ...publicRequest,
+    idempotencyKey: 'registration:staff:0002',
+    sourceReference: 'staff-checkout-0002',
+    channel: 'staff',
+    actor: { canManageRegistrations: true, businessUnitIds: ['bu-usa'] },
+    itemCodes: [REGISTRATION_ITEM_CODES.REGISTRATION_ONLY],
+  });
+  assert.equal(result.fulfillment, null);
+  assert.equal(client.state.fulfillments.length, 0);
 });
 
 test('registration fails closed when the scoped business unit is not AIT USA', async () => {

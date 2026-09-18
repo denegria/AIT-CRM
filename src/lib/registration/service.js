@@ -4,6 +4,7 @@ import {
   createPaymentRequest,
   createStudentCharge,
 } from '../billing-ledger/service.js';
+import { createBookFulfillment, loadRegistrationFulfillment } from '../fulfillment/service.js';
 
 const PROGRAMS = Object.freeze({
   english_program: Object.freeze({ code: 'english_program', courseName: 'English Program' }),
@@ -34,6 +35,7 @@ export function registrationRecordKeys(scope, idempotencyKey) {
     root,
     enrollment: `${root}:enrollment`,
     paymentRequest: `${root}:payment-request`,
+    fulfillment: `${root}:book-fulfillment`,
     merchantReference: `AITUSA-REG-${digest}`,
     charge: (lineCode) => `${root}:charge:${lineCode}`,
   });
@@ -50,11 +52,17 @@ export async function loadRegistrationReplay(client, scope, idempotencyKey) {
   if (!result.rows[0]) return null;
   const record = result.rows[0];
   const metadata = record.metadata_json ?? record.metadataJson ?? {};
+  const fulfillment = await loadRegistrationFulfillment(client, {
+    organizationId: scope.organizationId,
+    businessUnitId: scope.businessUnitId,
+    paymentRequestId: record.id,
+  });
   return {
     status: 'payment_request_created',
     duplicate: true,
     ...metadata.registrationResult,
     paymentRequest: record,
+    fulfillment,
   };
 }
 
@@ -134,6 +142,10 @@ async function createPlannedEnrollment(client, input) {
         placementState: 'not_started',
         sectionState: input.section ? 'assigned' : 'pending',
         sourceReference: input.sourceReference,
+        ...(input.fulfillmentPlan ? {
+          fulfillmentPolicyVersion: input.fulfillmentPlan.policyVersion,
+          fulfillmentMode: input.fulfillmentPlan.deliveryMode,
+        } : {}),
       }),
     ],
   );
@@ -159,6 +171,7 @@ export async function persistRegistrationBundle(client, input) {
     studentContactId: input.studentContactId,
     idempotencyKey: keys.enrollment,
     sourceReference: input.sourceReference,
+    fulfillmentPlan: input.fulfillmentPlan,
   });
 
   const charges = [];
@@ -211,6 +224,14 @@ export async function persistRegistrationBundle(client, input) {
     quote: input.quote,
     allocationPlan,
     states,
+    fulfillmentPolicy: input.fulfillmentPlan ? {
+      policyVersion: input.fulfillmentPlan.policyVersion,
+      residenceCountryCode: input.fulfillmentPlan.residenceCountryCode,
+      learningModality: input.fulfillmentPlan.learningModality,
+      deliveryMode: input.fulfillmentPlan.deliveryMode,
+      requiresDigitalDelivery: input.fulfillmentPlan.requiresDigitalDelivery,
+      requiresPhysicalDelivery: input.fulfillmentPlan.requiresPhysicalDelivery,
+    } : null,
   };
   const singleChargeOnly = charges.length === 1
     && allocationPlan.every((entry) => entry.treatment === 'charge');
@@ -234,10 +255,21 @@ export async function persistRegistrationBundle(client, input) {
       registrationResult,
     },
   });
+  const fulfillment = input.fulfillmentPlan
+    ? await createBookFulfillment(client, {
+      ...scope,
+      studentContactId: input.studentContactId,
+      enrollmentId: enrollment.id,
+      paymentRequestId: paymentRequest.record.id,
+      idempotencyKey: keys.fulfillment,
+      plan: input.fulfillmentPlan,
+    })
+    : null;
   return {
     status: 'payment_request_created',
     duplicate: false,
     ...registrationResult,
     paymentRequest: paymentRequest.record,
+    fulfillment,
   };
 }

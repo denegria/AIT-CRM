@@ -14,16 +14,16 @@
   "repository": {
     "schema": {
       "path": "src/db/schema.js",
-      "sha256": "b7f929a018afca6c72e54b5a11bf2d0344425bc394666bb64b40f912d605503f"
+      "sha256": "ef43d9cbae967bbd71bed1bc2b17c64a3a267c0740c1dbad699ae516cc01be80"
     },
     "drizzleExport": {
       "command": "drizzle-kit export --config drizzle.config.mjs",
-      "rawStdoutSha256": "182791f8087ef4fc9301ae6be24dee5fa5001de93cf9e2c3bf97bd8a5b7fd2ec",
+      "rawStdoutSha256": "ca29c9e1bad3bf9ff3c68ba8661e47ecd81bf6f5068a92eaaa9ae21ffd6d392c",
       "structure": {
-        "tableCount": 55,
-        "explicitIndexCount": 117,
-        "foreignKeyCount": 217,
-        "checkConstraintCount": 20
+        "tableCount": 56,
+        "explicitIndexCount": 121,
+        "foreignKeyCount": 224,
+        "checkConstraintCount": 26
       }
     },
     "forwardMigrations": [
@@ -32,6 +32,13 @@
         "path": "drizzle/forward/0027_student_billing_ledger.sql",
         "sha256": "c90176c2939cfcffc076766ca5519ce77def10a60d6c96b03027667b2e3221ab",
         "purpose": "MIS-414 student billing ledger",
+        "provenance": "forward-migration"
+      },
+      {
+        "identifier": "0028",
+        "path": "drizzle/forward/0028_book_fulfillment.sql",
+        "sha256": "d317a6711c2aa3d144fa049ae920f3d2fc2aae7bd2f17e81edf36c6ab34eff01",
+        "purpose": "MIS-418 book fulfillment contract and staff worklist",
         "provenance": "forward-migration"
       }
     ],
@@ -45,23 +52,23 @@
     "catalog": {
       "contract": "postgres-public-catalog-lf-pipe-v1",
       "expected": {
-        "tableCount": 55,
-        "tableNameMd5": "92faf6aa0823e8161bf4a447925e7c46",
-        "columnCount": 800,
-        "columnCatalogMd5": "1cc8a000e81a8ac4e36abd2d580b95ea",
-        "logicalColumnCatalogMd5": "3e7480ddb94d6092b126f70c6c469961",
-        "indexCount": 179,
-        "indexCatalogMd5": "c0dccc9169789ba941e09607a48e1188",
-        "constraintCount": 297,
-        "constraintCatalogMd5": "76bdc84deb4d540786f4a7faa3f89cca"
+        "tableCount": 56,
+        "tableNameMd5": "aeeecdd9a80b26da053de907c2f8b2ff",
+        "columnCount": 823,
+        "columnCatalogMd5": "7b178e1b0e6beacc18bbb77c8b2b9e48",
+        "logicalColumnCatalogMd5": "4c50b3364c4064f853c0cb97cf63d65c",
+        "indexCount": 184,
+        "indexCatalogMd5": "dc560563257c32c8cc0653c89328f8ac",
+        "constraintCount": 311,
+        "constraintCatalogMd5": "69e541dc194b1ce4a70114434af3b11c"
       }
     }
   },
   "validation": {
     "status": "validated-and-rolled-back",
-    "projectId": "polished-dust-24407788",
-    "branchId": "br-mute-butterfly-au92lb41",
+    "projectId": "plain-band-07005942",
+    "branchId": "br-broad-hill-aptjpyea",
     "databaseName": "neondb",
-    "validatedAt": "2026-09-17T22:53:38Z"
+    "validatedAt": "2026-09-18T02:58:00Z"
   }
 }

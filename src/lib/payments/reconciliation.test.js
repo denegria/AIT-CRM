@@ -33,7 +33,7 @@ function verifiedStatus(overrides = {}) {
   };
 }
 
-function fakeReconciliationClient() {
+function fakeReconciliationClient({ failFulfillment = false } = {}) {
   const request = {
     id: 'request-1',
     organization_id: 'org-1',
@@ -58,7 +58,7 @@ function fakeReconciliationClient() {
         ],
         quote: {
           lines: [
-            { code: 'registration', label: 'Registration fee', amount: '95.00', ledgerTreatment: 'charge' },
+            { code: 'registration_book_bundle', label: 'Registration and book bundle', amount: '95.00', ledgerTreatment: 'charge' },
             { code: 'tuition-credit', label: 'Tuition prepayment', amount: '145.00', ledgerTreatment: 'unapplied_credit' },
           ],
         },
@@ -74,6 +74,20 @@ function fakeReconciliationClient() {
     documents: [],
     activities: [],
     enrollment: { id: 'enrollment-1', metadata_json: { registrationState: 'payment_pending' } },
+    fulfillment: {
+      id: 'fulfillment-1',
+      organization_id: 'org-1',
+      business_unit_id: 'bu-usa',
+      student_contact_id: 'student-1',
+      enrollment_id: 'enrollment-1',
+      payment_request_id: 'request-1',
+      provider_transaction_id: null,
+      delivery_mode: 'digital',
+      status: 'payment_pending',
+      digital_status: 'pending',
+      physical_status: 'not_required',
+      shipping_address_snapshot_json: {},
+    },
     calls: [],
     next: 1,
   };
@@ -82,7 +96,10 @@ function fakeReconciliationClient() {
     async query(sql, parameters = []) {
       const statement = String(sql).replace(/\s+/g, ' ').trim();
       state.calls.push({ sql: statement, parameters });
-      if (['begin', 'commit', 'rollback'].includes(statement)) return { rows: [] };
+      if (['begin', 'commit', 'rollback'].includes(statement)
+        || statement.startsWith('savepoint ')
+        || statement.startsWith('release savepoint ')
+        || statement.startsWith('rollback to savepoint ')) return { rows: [] };
       if (statement.startsWith('select pg_advisory_xact_lock')) return { rows: [{}] };
       if (statement.startsWith('select * from payment_requests')) {
         const row = state.request.merchant_reference === parameters[0]
@@ -241,14 +258,30 @@ function fakeReconciliationClient() {
         state.enrollment.metadata_json = { ...state.enrollment.metadata_json, ...JSON.parse(parameters[0]) };
         return { rows: [] };
       }
+      if (statement.startsWith('update book_fulfillments')) {
+        if (failFulfillment) throw Object.assign(new Error('synthetic fulfillment failure'), { code: 'synthetic_failure' });
+        if (state.fulfillment.provider_transaction_id && state.fulfillment.provider_transaction_id !== parameters[0]) {
+          return { rows: [] };
+        }
+        state.fulfillment.provider_transaction_id ||= parameters[0];
+        if (state.fulfillment.status === 'payment_pending') state.fulfillment.status = 'pending';
+        return { rows: [state.fulfillment] };
+      }
+      if (statement.startsWith('select * from book_fulfillments')) {
+        return { rows: state.fulfillment && state.fulfillment.payment_request_id === parameters[2] ? [state.fulfillment] : [] };
+      }
       if (statement.startsWith('insert into activity_events')) {
         const metadata = JSON.parse(parameters[4]);
         const eventType = statement.includes('financial.payment_verified')
           ? 'financial.payment_verified'
-          : 'financial.payment_reconciliation_attention';
+          : statement.includes('fulfillment.enqueue_attention')
+            ? 'fulfillment.enqueue_attention'
+            : 'financial.payment_reconciliation_attention';
         const uniqueValue = eventType === 'financial.payment_verified'
           ? metadata.providerTransactionId
-          : metadata.paymentProviderEventId;
+          : eventType === 'fulfillment.enqueue_attention'
+            ? metadata.providerTransactionId
+            : metadata.paymentProviderEventId;
         const exists = state.activities.some((row) => row.event_type === eventType && row.uniqueValue === uniqueValue);
         if (!exists) state.activities.push({ event_type: eventType, uniqueValue, metadata_json: metadata });
         return { rows: [] };
@@ -295,6 +328,23 @@ test('verified payment reconciles transaction, charge, receipt, activity, and un
   assert.equal(client.state.events.length, 1);
   assert.equal(client.state.events[0].processing_status, 'processed');
   assert.equal(client.state.enrollment.metadata_json.registrationState, 'payment_verified');
+  assert.equal(first.fulfillmentQueued, true);
+  assert.equal(first.fulfillmentId, 'fulfillment-1');
+  assert.equal(client.state.fulfillment.status, 'pending');
+  assert.equal(client.state.fulfillment.provider_transaction_id, first.transactionId);
+});
+
+test('fulfillment enqueue failure records attention without rolling back verified payment', async () => {
+  const client = fakeReconciliationClient({ failFulfillment: true });
+  const result = await reconcileDejavooPayment(client, { ...baseInput, statusResult: verifiedStatus() });
+  assert.equal(result.outcome, 'completed');
+  assert.equal(result.fulfillmentQueued, false);
+  assert.equal(client.state.request.status, 'completed');
+  assert.equal(client.state.transactions.length, 1);
+  assert.equal(client.state.allocations.length, 1);
+  assert.equal(client.state.activities.filter((row) => row.event_type === 'fulfillment.enqueue_attention').length, 1);
+  assert.ok(client.state.calls.some((call) => call.sql === 'rollback to savepoint fulfillment_enqueue'));
+  assert.equal(client.state.calls.at(-1).sql, 'commit');
 });
 
 test('a reordered failed callback cannot regress a completed payment', async () => {

@@ -26,6 +26,7 @@ test('public pricing ignores browser amounts and returns an immutable non-taxabl
     channel: 'public',
     itemCodes: [REGISTRATION_ITEM_CODES.PUBLIC_BUNDLE],
     residenceCountryCode: 'US',
+    learningModality: 'in_person',
     submittedAmount: '0.01',
     prices: { registration_book_bundle: '0.01' },
   });
@@ -139,4 +140,19 @@ test('registration policy gates staff permissions and unverified public contact 
     }),
     (error) => error instanceof RegistrationPolicyError && error.code === 'business_unit_permission_denied',
   );
+});
+
+test('staff registration-only quote does not collect fulfillment address data', () => {
+  const request = authorizeRegistrationRequest({
+    organizationId: 'org-1',
+    businessUnitId: 'bu-1',
+    idempotencyKey: 'registration:staff:no-book:123',
+    sourceReference: 'staff-no-book-123',
+    residenceCountryCode: 'US',
+    channel: 'staff',
+    actor: { canManageRegistrations: true, businessUnitIds: ['bu-1'] },
+    itemCodes: [REGISTRATION_ITEM_CODES.REGISTRATION_ONLY],
+    student: { name: 'Student', email: 'student@example.com' },
+  });
+  assert.equal(request.fulfillmentPlan, null);
 });

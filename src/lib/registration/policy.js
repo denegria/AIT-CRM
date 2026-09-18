@@ -3,6 +3,7 @@ import {
   REGISTRATION_ITEM_CODES,
   calculateRegistrationQuote,
 } from './catalog.js';
+import { resolveBookFulfillmentPlan } from '../fulfillment/policy.js';
 
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]{12,160}$/;
 
@@ -101,6 +102,16 @@ export function authorizeRegistrationRequest(input = {}) {
   const payer = input.payer
     ? cleanIdentity(input.payer, { channel, label: 'Payer', verifiedContactIds })
     : null;
+  const includesBook = quote.lines.some((line) => (
+    [REGISTRATION_ITEM_CODES.PUBLIC_BUNDLE, REGISTRATION_ITEM_CODES.BOOK_ONLY].includes(line.code)
+  ));
+  const fulfillmentPlan = includesBook
+    ? resolveBookFulfillmentPlan({
+      residenceCountryCode: quote.regionalPricing.residenceCountryCode,
+      learningModality: input.learningModality,
+      shippingAddress: input.shippingAddress,
+    })
+    : null;
   return Object.freeze({
     status: 'authorized',
     organizationId,
@@ -116,5 +127,6 @@ export function authorizeRegistrationRequest(input = {}) {
     student,
     payer,
     quote,
+    fulfillmentPlan,
   });
 }
