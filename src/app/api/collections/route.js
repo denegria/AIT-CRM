@@ -64,16 +64,14 @@ export async function GET(request) {
     const businessUnitId = await resolveAitUsaScope(session, searchParams.get('businessUnitId'));
     client = await getPool().connect();
     const scope = { organizationId: session.user.organizationId, businessUnitId };
-    const [queue, setup] = await Promise.all([
-      loadCollectionsQueue(client, {
-        ...scope,
-        state: searchParams.get('state'),
-        search: searchParams.get('search'),
-        page: searchParams.get('page'),
-        pageSize: searchParams.get('pageSize'),
-      }),
-      loadCollectionsSetup(client, scope),
-    ]);
+    const queue = await loadCollectionsQueue(client, {
+      ...scope,
+      state: searchParams.get('state'),
+      search: searchParams.get('search'),
+      page: searchParams.get('page'),
+      pageSize: searchParams.get('pageSize'),
+    });
+    const setup = await loadCollectionsSetup(client, scope);
     return NextResponse.json({ queue, setup }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (caught) {
     return crmErrorResponse(caught);

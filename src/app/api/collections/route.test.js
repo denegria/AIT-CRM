@@ -21,3 +21,9 @@ test('route exposes checkout, hosted-link, and non-card payment actions', () => 
   assert.match(source, /body\.action === 'record_manual_payment'/);
   assert.match(source, /channel: 'staff'/);
 });
+
+test('queue and setup reads do not overlap on one pooled PostgreSQL client', () => {
+  assert.doesNotMatch(source, /Promise\.all\(\[\s*loadCollectionsQueue/);
+  assert.match(source, /const queue = await loadCollectionsQueue/);
+  assert.match(source, /const setup = await loadCollectionsSetup/);
+});
