@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { and, eq, inArray } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
 import { businessUnits, roles } from '@/db/schema.js';
-import { PERMISSIONS, requirePermission } from '@/lib/auth';
+import { PERMISSIONS, requirePermission, usesWorkOSAuth } from '@/lib/auth';
 import { createSignupInviteToken } from '@/lib/signup-invites';
 import {
   INVITE_ROLE_KEYS,
@@ -37,6 +37,9 @@ function inviteOrigin(request) {
 }
 
 export async function POST(request) {
+  if (usesWorkOSAuth()) {
+    return NextResponse.json({ error: 'Legacy signup links are disabled.' }, { status: 410 });
+  }
   const { error, session } = await requirePermission(request, PERMISSIONS.SETTINGS_WRITE);
   if (error) return error;
 

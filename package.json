@@ -38,6 +38,7 @@
     "reconcile:automated-inbound-follow-ups": "node scripts/reconcile-automated-inbound-follow-ups.mjs",
     "db:promote-ait-signs-staging": "node scripts/promote-ait-signs-staging.mjs",
     "db:bootstrap-auth-user": "node scripts/bootstrap-auth-user.mjs",
+    "auth:workos-migrate": "node scripts/migrate-users-to-workos.mjs",
     "db:generate": "node scripts/run-guarded-drizzle-mutation.mjs generate",
     "db:migrate": "node scripts/run-guarded-drizzle-mutation.mjs migrate",
     "db:push": "node scripts/run-guarded-drizzle-mutation.mjs push",
@@ -65,6 +66,7 @@
     "validate": "npm run check:repository && npm test && npm run test:follow-up-outcome && npm run lint && npm run build"
   },
   "dependencies": {
+    "@workos-inc/node": "^10.13.0",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
     "jspdf": "^4.2.1",

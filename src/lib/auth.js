@@ -16,6 +16,22 @@ import {
   userSessions,
 } from '@/db/schema.js';
 import { applyBusinessUnitAccessPolicy } from '@/lib/auth/business-unit-policy.js';
+import {
+  acceptEmployeeInvitation,
+  createEmployeeInvitation,
+  recordEmployeePasswordResetRequest,
+  reconcileAcceptedEmployeeInvitation,
+  resendEmployeeInvitation,
+  revokeEmployeeInvitation,
+} from '@/lib/auth/employee-auth-service.js';
+import {
+  CRMIdentityProviderError,
+  createWorkOSAuthProvider,
+} from '@/lib/auth/workos-provider.js';
+import {
+  getWorkOSAuthConfig,
+  isWorkOSAuthMode,
+} from '@/lib/auth/workos-runtime.js';
 
 export const AUTH_COOKIE_NAME = 'ait_crm_session';
 export const SESSION_SECRET_ENV = 'AIT_CRM_SESSION_SECRET';
@@ -68,17 +84,35 @@ export const DEFAULT_ROLE_PERMISSIONS = {
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
-  sameSite: 'strict',
   secure: process.env.NODE_ENV === 'production',
   path: '/',
 };
+
+const WORKOS_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+let workosProviderInstance = null;
+
+function getWorkOSProvider() {
+  if (!workosProviderInstance) {
+    workosProviderInstance = createWorkOSAuthProvider(getWorkOSAuthConfig());
+  }
+  return workosProviderInstance;
+}
 
 function getSessionSecret() {
   return process.env[SESSION_SECRET_ENV] || '';
 }
 
 export function isAuthEnabled() {
-  return Boolean(process.env.DATABASE_URL && getSessionSecret());
+  if (!process.env.DATABASE_URL) return false;
+  try {
+    if (isWorkOSAuthMode()) {
+      getWorkOSAuthConfig();
+      return true;
+    }
+    return Boolean(getSessionSecret());
+  } catch {
+    return false;
+  }
 }
 
 function signToken(token) {
@@ -110,14 +144,24 @@ export function createSessionToken() {
 export function setAuthCookie(response, token, expiresAt) {
   response.cookies.set(AUTH_COOKIE_NAME, token, {
     ...COOKIE_OPTIONS,
+    sameSite: 'strict',
     expires: expiresAt,
     maxAge: Math.floor((expiresAt.getTime() - Date.now()) / 1000),
+  });
+}
+
+export function setWorkOSAuthCookie(response, sessionData) {
+  response.cookies.set(AUTH_COOKIE_NAME, sessionData, {
+    ...COOKIE_OPTIONS,
+    sameSite: 'lax',
+    maxAge: WORKOS_SESSION_MAX_AGE_SECONDS,
   });
 }
 
 export function clearAuthCookie(response) {
   response.cookies.set(AUTH_COOKIE_NAME, '', {
     ...COOKIE_OPTIONS,
+    sameSite: 'lax',
     maxAge: 0,
   });
 }
@@ -131,10 +175,7 @@ async function getServerCookieToken() {
   return cookieStore.get(AUTH_COOKIE_NAME)?.value || '';
 }
 
-async function loadSession(token) {
-  if (!isAuthEnabled() || !token) return null;
-
-  const db = getDb();
+async function loadLegacySessionRow(db, token) {
   const [sessionRow] = await db
     .select({
       sessionId: userSessions.id,
@@ -155,6 +196,31 @@ async function loadSession(token) {
     ))
     .limit(1);
 
+  return sessionRow || null;
+}
+
+async function loadWorkOSSessionRow(db, identity) {
+  const [sessionRow] = await db
+    .select({
+      sessionId: users.workosUserId,
+      userId: users.id,
+      organizationId: users.organizationId,
+      name: users.name,
+      email: users.email,
+      isActive: users.isActive,
+    })
+    .from(users)
+    .where(and(
+      eq(users.workosUserId, identity.providerUserId),
+      eq(users.isActive, true),
+    ))
+    .limit(1);
+
+  if (!sessionRow || String(sessionRow.email || '').trim().toLowerCase() !== identity.email) return null;
+  return { ...sessionRow, sessionId: identity.sessionId || identity.providerUserId };
+}
+
+async function loadAuthorizationContext(db, sessionRow) {
   if (!sessionRow) return null;
 
   const [roleRows, permissionRows, membershipRows, allBusinessUnitRows] = await Promise.all([
@@ -230,11 +296,50 @@ async function loadSession(token) {
   };
 }
 
+async function loadSession(token, { allowRefresh = true } = {}) {
+  if (!isAuthEnabled() || !token) return { session: null, refreshedSessionData: null };
+
+  const db = getDb();
+  if (!isWorkOSAuthMode()) {
+    const sessionRow = await loadLegacySessionRow(db, token);
+    return {
+      session: await loadAuthorizationContext(db, sessionRow),
+      refreshedSessionData: null,
+    };
+  }
+
+  try {
+    const maintained = await getWorkOSProvider().maintainSession(token, { allowRefresh });
+    const sessionRow = await loadWorkOSSessionRow(db, maintained.identity);
+    return {
+      session: await loadAuthorizationContext(db, sessionRow),
+      refreshedSessionData: maintained.refreshed ? maintained.sessionData : null,
+    };
+  } catch {
+    return { session: null, refreshedSessionData: null };
+  }
+}
+
 export async function getCurrentSession() {
-  return loadSession(await getServerCookieToken());
+  // Server Components cannot persist a rotated sealed cookie. Leave refresh to
+  // a Route Handler so the refreshed WorkOS session is never discarded.
+  return (await loadSession(await getServerCookieToken(), { allowRefresh: false })).session;
 }
 
 export async function getRequestSession(request) {
+  const state = await loadSession(getRequestCookieToken(request));
+  if (state.session && state.refreshedSessionData) {
+    const cookieStore = await cookies();
+    cookieStore.set(AUTH_COOKIE_NAME, state.refreshedSessionData, {
+      ...COOKIE_OPTIONS,
+      sameSite: 'lax',
+      maxAge: WORKOS_SESSION_MAX_AGE_SECONDS,
+    });
+  }
+  return state.session;
+}
+
+export async function getRequestSessionState(request) {
   return loadSession(getRequestCookieToken(request));
 }
 
@@ -271,9 +376,172 @@ export async function createUserSession(userId) {
   return { token, expiresAt };
 }
 
+async function linkWorkOSIdentity(identity) {
+  if (!identity?.providerUserId || !identity.email || identity.emailVerified !== true) {
+    throw new CRMIdentityProviderError('verified_identity_required', 403);
+  }
+
+  const db = getDb();
+  return db.transaction(async (tx) => {
+    const [providerUser] = await tx
+      .select({
+        id: users.id,
+        organizationId: users.organizationId,
+        email: users.email,
+        workosUserId: users.workosUserId,
+        isActive: users.isActive,
+      })
+      .from(users)
+      .where(eq(users.workosUserId, identity.providerUserId))
+      .limit(1);
+    const [emailUser] = await tx
+      .select({
+        id: users.id,
+        organizationId: users.organizationId,
+        email: users.email,
+        workosUserId: users.workosUserId,
+        isActive: users.isActive,
+      })
+      .from(users)
+      .where(eq(users.email, identity.email))
+      .limit(1);
+
+    if (providerUser && emailUser && providerUser.id !== emailUser.id) {
+      throw new CRMIdentityProviderError('provider_identity_conflict', 409);
+    }
+
+    const localUser = providerUser;
+    if (!localUser && emailUser) {
+      throw new CRMIdentityProviderError('crm_identity_not_migrated', 403);
+    }
+    if (!localUser || !localUser.isActive) {
+      throw new CRMIdentityProviderError('crm_access_denied', 403);
+    }
+    if (String(localUser.email || '').trim().toLowerCase() !== identity.email) {
+      throw new CRMIdentityProviderError('provider_email_mismatch', 403);
+    }
+    if (localUser.workosUserId && localUser.workosUserId !== identity.providerUserId) {
+      throw new CRMIdentityProviderError('provider_identity_conflict', 409);
+    }
+
+    return localUser;
+  });
+}
+
+async function reconcileWorkOSInvitation(identity) {
+  return reconcileAcceptedEmployeeInvitation({
+    db: getDb(),
+    provider: getWorkOSProvider(),
+    identity,
+    expectedProviderOrganizationId: getWorkOSAuthConfig().organizationId,
+  });
+}
+
+export function usesWorkOSAuth() {
+  return isWorkOSAuthMode();
+}
+
+export async function authenticateWorkOSPassword({ email, password, ipAddress, userAgent }) {
+  const result = await getWorkOSProvider().authenticatePassword({ email, password, ipAddress, userAgent });
+  await reconcileWorkOSInvitation(result.identity);
+  const localUser = await linkWorkOSIdentity(result.identity);
+  return { ...result, localUser };
+}
+
+export async function reauthenticateWorkOSPassword({ session, password, ipAddress, userAgent }) {
+  const result = await getWorkOSProvider().authenticatePassword({
+    email: session?.user?.email,
+    password,
+    ipAddress,
+    userAgent,
+  });
+  const localUser = await linkWorkOSIdentity(result.identity);
+  if (localUser.id !== session?.user?.id) {
+    throw new CRMIdentityProviderError('provider_identity_mismatch', 403);
+  }
+  return result;
+}
+
+export function getWorkOSAuthorizationUrl(options) {
+  return getWorkOSProvider().authorizationUrl(options);
+}
+
+export async function authenticateWorkOSCode(options) {
+  const result = await getWorkOSProvider().authenticateCode(options);
+  await reconcileWorkOSInvitation(result.identity);
+  const localUser = await linkWorkOSIdentity(result.identity);
+  return { ...result, localUser };
+}
+
+export async function authenticateWorkOSInvitationCode({ invitationToken, ...options }) {
+  const provider = getWorkOSProvider();
+  const providerInvitation = await provider.findInvitationByToken(invitationToken);
+  const result = await provider.authenticateCode({ ...options, invitationToken });
+  await acceptEmployeeInvitation({
+    db: getDb(),
+    providerInvitation: await provider.getInvitation(providerInvitation.id),
+    identity: result.identity,
+    expectedProviderOrganizationId: getWorkOSAuthConfig().organizationId,
+  });
+  return result;
+}
+
+export async function createWorkOSEmployeeInvitation(options) {
+  return createEmployeeInvitation({
+    ...options,
+    db: getDb(),
+    provider: getWorkOSProvider(),
+  });
+}
+
+export async function resendWorkOSEmployeeInvitation(options) {
+  return resendEmployeeInvitation({
+    ...options,
+    db: getDb(),
+    provider: getWorkOSProvider(),
+  });
+}
+
+export async function revokeWorkOSEmployeeInvitation(options) {
+  return revokeEmployeeInvitation({
+    ...options,
+    db: getDb(),
+    provider: getWorkOSProvider(),
+  });
+}
+
+export async function sendWorkOSPasswordReset(email) {
+  return getWorkOSProvider().sendPasswordReset(email);
+}
+
+export async function sendAdminWorkOSPasswordReset({
+  email,
+  organizationId,
+  actorUserId,
+  subjectUserId,
+}) {
+  await getWorkOSProvider().sendPasswordReset(email);
+  await recordEmployeePasswordResetRequest({
+    db: getDb(),
+    organizationId,
+    actorUserId,
+    subjectUserId,
+  });
+  return { accepted: true };
+}
+
+export async function revokeAllWorkOSUserSessions(providerUserId) {
+  return getWorkOSProvider().revokeAllUserSessions(providerUserId);
+}
+
 export async function revokeRequestSession(request) {
   const token = getRequestCookieToken(request);
   if (!isAuthEnabled() || !token) return;
+  if (isWorkOSAuthMode()) {
+    const maintained = await getWorkOSProvider().maintainSession(token);
+    await getWorkOSProvider().revokeSession(maintained.identity.sessionId);
+    return;
+  }
   await getDb()
     .update(userSessions)
     .set({ revokedAt: new Date(), updatedAt: new Date() })

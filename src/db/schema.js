@@ -45,11 +45,15 @@ export const users = pgTable('users', {
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   email: text('email').unique(),
+  workosUserId: text('workos_user_id'),
+  authMigratedAt: timestamp('auth_migrated_at', { withTimezone: true }),
   phone: text('phone'),
   isActive: boolean('is_active').notNull().default(true),
   createdAt,
   updatedAt,
-});
+}, (table) => ({
+  workosUserIdx: uniqueIndex('users_workos_user_id_idx').on(table.workosUserId),
+}));
 
 export const userPasswordCredentials = pgTable('user_password_credentials', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -125,6 +129,81 @@ export const businessUnitMemberships = pgTable('business_unit_memberships', {
   updatedAt,
 }, (table) => ({
   membershipIdx: uniqueIndex('business_unit_memberships_unique_idx').on(table.businessUnitId, table.userId),
+}));
+
+export const employeeAuthInvitations = pgTable('employee_auth_invitations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  intendedEmail: text('intended_email').notNull(),
+  intendedName: text('intended_name').notNull(),
+  roleId: uuid('role_id').notNull().references(() => roles.id, { onDelete: 'restrict' }),
+  providerInvitationId: text('provider_invitation_id'),
+  status: text('status').notNull().default('pending'),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  lastSentAt: timestamp('last_sent_at', { withTimezone: true }),
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  failedAt: timestamp('failed_at', { withTimezone: true }),
+  acceptedUserId: uuid('accepted_user_id').references(() => users.id, { onDelete: 'set null' }),
+  createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  replacedByInvitationId: uuid('replaced_by_invitation_id'),
+  failureCode: text('failure_code'),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  providerInvitationIdx: uniqueIndex('employee_auth_invitations_provider_idx').on(table.providerInvitationId),
+  pendingEmailIdx: uniqueIndex('employee_auth_invitations_pending_email_idx')
+    .on(table.organizationId, table.intendedEmail)
+    .where(sql`${table.status} = 'pending'`),
+  organizationStatusIdx: index('employee_auth_invitations_org_status_idx')
+    .on(table.organizationId, table.status, table.createdAt),
+  statusCheck: check(
+    'employee_auth_invitations_status_check',
+    sql`${table.status} in ('pending', 'accepted', 'revoked', 'expired', 'failed')`,
+  ),
+  emailCheck: check(
+    'employee_auth_invitations_email_check',
+    sql`${table.intendedEmail} = lower(btrim(${table.intendedEmail})) and length(${table.intendedEmail}) > 3`,
+  ),
+  nameCheck: check(
+    'employee_auth_invitations_name_check',
+    sql`length(btrim(${table.intendedName})) > 0`,
+  ),
+}));
+
+export const employeeAuthInvitationBusinessUnits = pgTable('employee_auth_invitation_business_units', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  invitationId: uuid('invitation_id').notNull().references(() => employeeAuthInvitations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'restrict' }),
+  isPrimary: boolean('is_primary').notNull().default(false),
+  createdAt,
+}, (table) => ({
+  invitationBusinessUnitIdx: uniqueIndex('employee_auth_invitation_business_units_unique_idx')
+    .on(table.invitationId, table.businessUnitId),
+}));
+
+export const employeeAuthEvents = pgTable('employee_auth_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  eventType: text('event_type').notNull(),
+  outcome: text('outcome').notNull().default('succeeded'),
+  actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+  subjectUserId: uuid('subject_user_id').references(() => users.id, { onDelete: 'set null' }),
+  invitationId: uuid('invitation_id').references(() => employeeAuthInvitations.id, { onDelete: 'set null' }),
+  providerReference: text('provider_reference'),
+  failureCode: text('failure_code'),
+  metadataJson: jsonb('metadata_json').notNull().default({}),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt,
+}, (table) => ({
+  organizationOccurredIdx: index('employee_auth_events_org_occurred_idx')
+    .on(table.organizationId, table.occurredAt),
+  subjectOccurredIdx: index('employee_auth_events_subject_occurred_idx')
+    .on(table.subjectUserId, table.occurredAt),
+  outcomeCheck: check(
+    'employee_auth_events_outcome_check',
+    sql`${table.outcome} in ('succeeded', 'denied', 'failed')`,
+  ),
 }));
 
 export const contacts = pgTable('contacts', {
@@ -1579,6 +1658,9 @@ export const allTables = {
   rolePermissions,
   userRoles,
   businessUnitMemberships,
+  employeeAuthInvitations,
+  employeeAuthInvitationBusinessUnits,
+  employeeAuthEvents,
   contacts,
   contactPhoneNumbers,
   contactChannelConsents,

@@ -91,7 +91,21 @@ export function LoginGate({ authError }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState(authError || '');
+  const [resetNotice, setResetNotice] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    fetch('/api/auth/session', { cache: 'no-store' })
+      .then((response) => response.json().catch(() => ({})))
+      .then((payload) => {
+        if (active && payload?.authenticated) router.refresh();
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [router]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -117,6 +131,21 @@ export function LoginGate({ authError }) {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  async function requestPasswordReset() {
+    setError('');
+    setResetNotice('');
+    if (!email.trim()) {
+      setError('Enter your email first.');
+      return;
+    }
+    await fetch('/api/auth/password-reset', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ email }),
+    }).catch(() => null);
+    setResetNotice('If that email has CRM access, a reset link is on the way.');
   }
 
   return (
@@ -168,11 +197,16 @@ export function LoginGate({ authError }) {
           </div>
         )}
 
+        {resetNotice && <div className="auth-note" role="status">{resetNotice}</div>}
+
         <button className="auth-submit" type="submit" disabled={submitting}>
           {submitting ? 'Checking access...' : 'Continue'}
         </button>
 
         <p className="auth-note">Invite required for workspace access</p>
+        <button className="btn btn-sm" type="button" onClick={requestPasswordReset} disabled={submitting}>
+          Forgot password?
+        </button>
         <div className="auth-divider" />
         <p className="auth-help">
           <span>Need access?</span>

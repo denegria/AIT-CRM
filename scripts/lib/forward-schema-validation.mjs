@@ -63,10 +63,14 @@ export function validateForwardTarget(options) {
   if (!options.execute) throw new Error('Forward validation requires FORWARD_SCHEMA_EXECUTE=1.');
   const clientConfig = clientConfigFromUrl(options.databaseUrl);
   if (options.expectedHost?.toLowerCase() !== clientConfig.host) throw new Error('FORWARD_SCHEMA_EXPECTED_HOST must exactly match the connection hostname.');
-  if (!/^polished-[a-z0-9-]+$/.test(options.expectedProjectId || '')) throw new Error('FORWARD_SCHEMA_EXPECTED_PROJECT_ID is required.');
+  if (!/^[a-z][a-z0-9-]*-[a-z0-9-]+$/.test(options.expectedProjectId || '')) {
+    throw new Error('FORWARD_SCHEMA_EXPECTED_PROJECT_ID is required.');
+  }
   if (!/^br-[a-z0-9-]+$/.test(options.expectedBranchId || '')) throw new Error('FORWARD_SCHEMA_EXPECTED_BRANCH_ID is required.');
-  if (!/^qa-mis-414-[a-z0-9-]+$/.test(options.targetLabel || '')) throw new Error('FORWARD_SCHEMA_TARGET_LABEL must start with qa-mis-414-.');
-  const expectedConfirmation = `MIS-414_FORWARD:${options.expectedProjectId}:${options.expectedBranchId}:${clientConfig.database}`;
+  if (!/^qa-mis-[0-9]+-[a-z0-9-]+$/.test(options.targetLabel || '')) {
+    throw new Error('FORWARD_SCHEMA_TARGET_LABEL must start with qa-mis-<issue-number>-.');
+  }
+  const expectedConfirmation = `FORWARD_SCHEMA:${options.expectedProjectId}:${options.expectedBranchId}:${clientConfig.database}`;
   if (options.confirmation !== expectedConfirmation) throw new Error(`FORWARD_SCHEMA_CONFIRM must exactly equal ${expectedConfirmation}.`);
   return {
     clientConfig,

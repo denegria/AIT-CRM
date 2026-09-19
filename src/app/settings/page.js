@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Check, MessageSquare, Pencil, RotateCcw, Shield, ToggleLeft, ToggleRight, UserMinus, UserPlus } from 'lucide-react';
+import { Check, Mail, MessageSquare, Pencil, RotateCcw, Shield, ToggleLeft, ToggleRight, UserMinus, UserPlus, X } from 'lucide-react';
 import { useCRM } from '@/lib/store';
 import PageState, { PageStateAction } from '@/components/PageState';
 import { useToast } from '@/components/Toast';
@@ -64,6 +64,8 @@ export default function SettingsPage() {
   const { resetData, loaded, access, dataSource, businessUnits, setBusinessUnits, currentUser } = useCRM();
   const { toast } = useToast();
   const [users, setUsers] = useState([]);
+  const [employeeInvitations, setEmployeeInvitations] = useState([]);
+  const [employeeAuthMode, setEmployeeAuthMode] = useState('legacy');
   const [userRoleOptions, setUserRoleOptions] = useState(defaultRoleOptions);
   const [usersLoading, setUsersLoading] = useState(false);
   const [usersError, setUsersError] = useState('');
@@ -108,6 +110,8 @@ export default function SettingsPage() {
         if (!response.ok) throw new Error(payload.error || 'Failed to load users.');
         if (!cancelled) {
           setUsers(Array.isArray(payload.users) ? payload.users : []);
+          setEmployeeInvitations(Array.isArray(payload.invitations) ? payload.invitations : []);
+          setEmployeeAuthMode(payload.authMode === 'workos' ? 'workos' : 'legacy');
           if (Array.isArray(payload.roleOptions) && payload.roleOptions.length) {
             setUserRoleOptions(payload.roleOptions);
           }
@@ -241,11 +245,13 @@ export default function SettingsPage() {
       if (!response.ok) throw new Error(result.error || 'Failed to save user.');
 
       setUsers(Array.isArray(result.users) ? result.users : []);
+      setEmployeeInvitations(Array.isArray(result.invitations) ? result.invitations : []);
+      setEmployeeAuthMode(result.authMode === 'workos' ? 'workos' : 'legacy');
       if (Array.isArray(result.roleOptions) && result.roleOptions.length) {
         setUserRoleOptions(result.roleOptions);
       }
       resetUserForm();
-      toast(isEditing ? 'User updated' : 'User created');
+      toast(isEditing ? 'User updated' : employeeAuthMode === 'workos' ? 'Invitation sent' : 'User created');
     } catch (error) {
       setUsersError(error.message || 'Failed to save user.');
     } finally {
@@ -279,6 +285,45 @@ export default function SettingsPage() {
       toast(isActive ? 'User reactivated' : 'User deactivated');
     } catch (error) {
       setUsersError(error.message || 'Failed to update user.');
+    } finally {
+      setSavingUser(false);
+    }
+  }
+
+  async function updateInvitation(invitation, action) {
+    setSavingUser(true);
+    setUsersError('');
+    try {
+      const response = await fetch(`/api/users/invitations/${invitation.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Invitation action failed.');
+      setEmployeeInvitations((current) => current.map((row) => (
+        row.id === invitation.id
+          ? { ...row, status: result.invitation?.status || row.status, lastSentAt: new Date().toISOString() }
+          : row
+      )));
+      toast(action === 'resend' ? 'Invitation resent' : 'Invitation revoked');
+    } catch (error) {
+      setUsersError(error.message || 'Invitation action failed.');
+    } finally {
+      setSavingUser(false);
+    }
+  }
+
+  async function sendPasswordReset(user) {
+    setSavingUser(true);
+    setUsersError('');
+    try {
+      const response = await fetch(`/api/users/${user.id}/password-reset`, { method: 'POST' });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(result.error || 'Password reset could not be sent.');
+      toast('Password reset sent');
+    } catch (error) {
+      setUsersError(error.message || 'Password reset could not be sent.');
     } finally {
       setSavingUser(false);
     }
@@ -823,8 +868,8 @@ export default function SettingsPage() {
               <form onSubmit={handleCreateOrUpdateUser} style={{display:'flex',flexDirection:'column',gap:10,padding:'12px',background:'var(--bg-tertiary)',borderRadius:'var(--radius-md)',border:'1px solid var(--border-subtle)'}}>
                 <div className="flex-between" style={{gap:10}}>
                   <div>
-                    <div style={{fontSize:'var(--text-sm)',fontWeight:700}}>{userForm.id ? 'Edit user' : 'Create user'}</div>
-                    <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>{userForm.id ? userForm.email : 'New employee account'}</div>
+                    <div style={{fontSize:'var(--text-sm)',fontWeight:700}}>{userForm.id ? 'Edit user' : employeeAuthMode === 'workos' ? 'Invite employee' : 'Create user'}</div>
+                    <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>{userForm.id ? userForm.email : employeeAuthMode === 'workos' ? 'Email-bound secure invitation' : 'New employee account'}</div>
                   </div>
                   {userForm.id && (
                     <button className="btn btn-sm" type="button" onClick={resetUserForm}>
@@ -848,15 +893,17 @@ export default function SettingsPage() {
                   disabled={Boolean(userForm.id)}
                   required={!userForm.id}
                 />
-                <input
-                  className="input"
-                  type="password"
-                  placeholder={userForm.id ? 'New password (optional)' : 'Initial password'}
-                  value={userForm.password}
-                  onChange={(event) => setUserForm((prev) => ({ ...prev, password: event.target.value }))}
-                  required={!userForm.id}
-                  minLength={8}
-                />
+                {employeeAuthMode !== 'workos' && (
+                  <input
+                    className="input"
+                    type="password"
+                    placeholder={userForm.id ? 'New password (optional)' : 'Initial password'}
+                    value={userForm.password}
+                    onChange={(event) => setUserForm((prev) => ({ ...prev, password: event.target.value }))}
+                    required={!userForm.id}
+                    minLength={8}
+                  />
+                )}
                 <select
                   className="input select"
                   value={userForm.roleKey}
@@ -901,7 +948,7 @@ export default function SettingsPage() {
                 )}
                 <button className="btn btn-primary" type="submit" disabled={savingUser}>
                   {userForm.id ? <Check size={14} /> : <UserPlus size={14} />}
-                  {savingUser ? 'Saving...' : userForm.id ? 'Save Changes' : 'Create User'}
+                  {savingUser ? 'Saving...' : userForm.id ? 'Save Changes' : employeeAuthMode === 'workos' ? 'Send Invitation' : 'Create User'}
                 </button>
               </form>
 
@@ -914,6 +961,23 @@ export default function SettingsPage() {
                   {usersLoading && <span className="badge badge-draft">Loading</span>}
                 </div>
                 {!usersLoading && users.length === 0 && <div style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>No users found yet.</div>}
+                {employeeAuthMode === 'workos' && employeeInvitations.filter((invitation) => invitation.status === 'pending').map((invitation) => (
+                  <div key={invitation.id} style={{display:'grid',gap:4,padding:'10px',border:'1px dashed var(--border-subtle)',borderRadius:'var(--radius-md)'}}>
+                    <div className="flex-between" style={{gap:10}}>
+                      <strong style={{fontSize:'var(--text-sm)'}}>{invitation.name}</strong>
+                      <span className="badge badge-draft">Invitation pending</span>
+                    </div>
+                    <span style={{fontSize:'var(--text-xs)',color:'var(--text-muted)'}}>{invitation.email}</span>
+                    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                      <button className="btn btn-sm" type="button" disabled={savingUser} onClick={() => updateInvitation(invitation, 'resend')}>
+                        <RotateCcw size={13} /> Resend
+                      </button>
+                      <button className="btn btn-sm btn-danger" type="button" disabled={savingUser} onClick={() => updateInvitation(invitation, 'revoke')}>
+                        <X size={13} /> Revoke
+                      </button>
+                    </div>
+                  </div>
+                ))}
                 {!usersLoading && users.map((user) => {
                   const isCurrentUser = user.id === currentUser?.id;
                   return (
@@ -948,6 +1012,11 @@ export default function SettingsPage() {
                         <button className="btn btn-sm" type="button" onClick={() => editUser(user)}>
                           <Pencil size={13} /> Edit
                         </button>
+                        {employeeAuthMode === 'workos' && user.authLinked && (
+                          <button className="btn btn-sm" type="button" disabled={savingUser} onClick={() => sendPasswordReset(user)}>
+                            <Mail size={13} /> Reset password
+                          </button>
+                        )}
                         {user.isActive !== false ? (
                           <button className="btn btn-sm btn-danger" type="button" disabled={savingUser || isCurrentUser} onClick={() => updateUserStatus(user, false)}>
                             <UserMinus size={13} /> Deactivate

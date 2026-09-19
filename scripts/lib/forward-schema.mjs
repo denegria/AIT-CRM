@@ -11,7 +11,7 @@ import {
 
 export const FORWARD_SCHEMA_MANIFEST_RELATIVE_PATH = 'drizzle/forward-schema-manifest.json';
 export const ACCEPTED_RECONCILED_MANIFEST_SHA256 = '92f0bb1dbc8b7afc1dc0af57fb11dda11d7cc05c83b4b16bd3301f7cf23cb675';
-export const FORWARD_SCHEMA_MANIFEST_CANONICAL_SHA256 = 'c2dee0fed45ba218bfcd23a3c7ba5a7b2868a3f8097518765f5b7b1dc38fc728';
+export const FORWARD_SCHEMA_MANIFEST_CANONICAL_SHA256 = '26a27ad98922d215635e9cdc88f580ea2809ce734611f3ee9ea2e7a558db66ed';
 const defaultRootDir = fileURLToPath(new URL('../../', import.meta.url));
 
 export async function loadForwardSchemaManifest(rootDir = defaultRootDir) {

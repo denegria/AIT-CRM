@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   publishActiveSession,
@@ -10,10 +10,23 @@ import {
 function JoinForm() {
   const searchParams = useSearchParams();
   const inviteToken = useMemo(() => searchParams.get('token') || searchParams.get('t') || '', [searchParams]);
+  const workosInvitationToken = useMemo(() => searchParams.get('invitation_token') || '', [searchParams]);
   const [form, setForm] = useState({ name: '', email: '', password: '', confirmPassword: '' });
-  const [error, setError] = useState('');
+  const [error, setError] = useState(() => searchParams.get('error') ? 'This sign-in link could not be completed. Ask an administrator to resend the invitation.' : '');
   const [success, setSuccess] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!workosInvitationToken) return;
+    const authorizeUrl = new URL('/api/auth/authorize', window.location.origin);
+    authorizeUrl.searchParams.set('invitation_token', workosInvitationToken);
+    authorizeUrl.searchParams.set('return_to', '/contacts');
+    window.location.replace(authorizeUrl.toString());
+  }, [workosInvitationToken]);
+
+  if (workosInvitationToken) {
+    return <div className="join-shell"><div className="card join-card">Opening secure employee signup…</div></div>;
+  }
 
   function updateField(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }));

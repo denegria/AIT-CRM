@@ -14,16 +14,16 @@
   "repository": {
     "schema": {
       "path": "src/db/schema.js",
-      "sha256": "ef43d9cbae967bbd71bed1bc2b17c64a3a267c0740c1dbad699ae516cc01be80"
+      "sha256": "a195c052a79cab325233723fa2fbda471a144f18e13f4878c9977db6d3891cba"
     },
     "drizzleExport": {
       "command": "drizzle-kit export --config drizzle.config.mjs",
-      "rawStdoutSha256": "ca29c9e1bad3bf9ff3c68ba8661e47ecd81bf6f5068a92eaaa9ae21ffd6d392c",
+      "rawStdoutSha256": "9a97a4beb362d47ad6a19b6ebb4411921585e2c84de922d679fe8830884a8ec2",
       "structure": {
-        "tableCount": 56,
-        "explicitIndexCount": 121,
-        "foreignKeyCount": 224,
-        "checkConstraintCount": 26
+        "tableCount": 59,
+        "explicitIndexCount": 128,
+        "foreignKeyCount": 234,
+        "checkConstraintCount": 30
       }
     },
     "forwardMigrations": [
@@ -40,6 +40,13 @@
         "sha256": "d317a6711c2aa3d144fa049ae920f3d2fc2aae7bd2f17e81edf36c6ab34eff01",
         "purpose": "MIS-418 book fulfillment contract and staff worklist",
         "provenance": "forward-migration"
+      },
+      {
+        "identifier": "0029",
+        "path": "drizzle/forward/0029_workos_employee_auth.sql",
+        "sha256": "59dc24c6b5c55ec3fdb60b81bcebbe67797931d1624a526eb474046c6a2c95ad",
+        "purpose": "MIS-413 WorkOS employee authentication and invitation lifecycle",
+        "provenance": "forward-migration"
       }
     ],
     "migrationLedger": {
@@ -52,23 +59,23 @@
     "catalog": {
       "contract": "postgres-public-catalog-lf-pipe-v1",
       "expected": {
-        "tableCount": 56,
-        "tableNameMd5": "aeeecdd9a80b26da053de907c2f8b2ff",
-        "columnCount": 823,
-        "columnCatalogMd5": "7b178e1b0e6beacc18bbb77c8b2b9e48",
-        "logicalColumnCatalogMd5": "4c50b3364c4064f853c0cb97cf63d65c",
-        "indexCount": 184,
-        "indexCatalogMd5": "dc560563257c32c8cc0653c89328f8ac",
-        "constraintCount": 311,
-        "constraintCatalogMd5": "69e541dc194b1ce4a70114434af3b11c"
+        "tableCount": 59,
+        "tableNameMd5": "eafbb3ee2a8f09904a27ea8340550546",
+        "columnCount": 860,
+        "columnCatalogMd5": "313b90337cbb5497c1eb2a47a82d26fb",
+        "logicalColumnCatalogMd5": "600dc84843192b9731b66398c6d95477",
+        "indexCount": 194,
+        "indexCatalogMd5": "91fef6aa16fa079f75f8d333bf64ad3a",
+        "constraintCount": 329,
+        "constraintCatalogMd5": "4eec57fa87be62e56c96e66c4f6ac3ec"
       }
     }
   },
   "validation": {
     "status": "validated-and-rolled-back",
     "projectId": "plain-band-07005942",
-    "branchId": "br-broad-hill-aptjpyea",
-    "databaseName": "neondb",
-    "validatedAt": "2026-09-18T02:58:00Z"
+    "branchId": "br-gentle-lab-aphoglfc",
+    "databaseName": "mis413_validation",
+    "validatedAt": "2026-09-19T13:17:50Z"
   }
 }

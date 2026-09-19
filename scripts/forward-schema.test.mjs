@@ -33,8 +33,8 @@ function options(overrides = {}) {
     expectedHost: HOST,
     expectedProjectId: PROJECT_ID,
     expectedBranchId: BRANCH_ID,
-    targetLabel: 'qa-mis-414-ledger',
-    confirmation: `MIS-414_FORWARD:${PROJECT_ID}:${BRANCH_ID}:neondb`,
+    targetLabel: 'qa-mis-413-workos-auth',
+    confirmation: `FORWARD_SCHEMA:${PROJECT_ID}:${BRANCH_ID}:neondb`,
     execute: true,
     capture: false,
     ...overrides,
@@ -97,13 +97,13 @@ test('forward manifest and current Drizzle export reproduce the pinned lineage',
   });
   assert.equal(report.ok, true, report.checks.filter((check) => !check.ok).map((check) => check.detail).join('\n'));
   assert.equal(report.manifestSha256, FORWARD_SCHEMA_MANIFEST_CANONICAL_SHA256);
-  assert.deepEqual(manifest.repository.forwardMigrations.map((entry) => entry.identifier), ['0027', '0028']);
+  assert.deepEqual(manifest.repository.forwardMigrations.map((entry) => entry.identifier), ['0027', '0028', '0029']);
 });
 
 test('forward target guard rejects execution without every exact disposable-target assertion', () => {
   assert.throws(() => validateForwardTarget(options({ execute: false })), /FORWARD_SCHEMA_EXECUTE=1/);
   assert.throws(() => validateForwardTarget(options({ expectedHost: 'ep-wrong.c-10.us-east-1.aws.neon.tech' })), /exactly match/);
-  assert.throws(() => validateForwardTarget(options({ targetLabel: 'staging' })), /qa-mis-414/);
+  assert.throws(() => validateForwardTarget(options({ targetLabel: 'staging' })), /qa-mis-<issue-number>/);
   assert.throws(() => validateForwardTarget(options({ confirmation: 'yes' })), /must exactly equal/);
   const accepted = validateForwardTarget(options());
   assert.equal(accepted.safeTarget.expectedProjectId, PROJECT_ID);

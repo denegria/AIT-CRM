@@ -3,10 +3,12 @@ import { eq } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
 import {
   createUserSession,
+  authenticateWorkOSPassword,
   findCredentialByEmail,
   isAuthEnabled,
-  SESSION_SECRET_ENV,
   setAuthCookie,
+  setWorkOSAuthCookie,
+  usesWorkOSAuth,
   verifyPassword,
 } from '@/lib/auth';
 import { userPasswordCredentials } from '@/db/schema.js';
@@ -106,7 +108,7 @@ export async function POST(request) {
   }
 
   if (!isAuthEnabled()) {
-    return NextResponse.json({ error: `${SESSION_SECRET_ENV} is required for sign in.` }, { status: 503 });
+    return NextResponse.json({ error: 'Authentication service is not configured.' }, { status: 503 });
   }
 
   const body = await request.json().catch(() => ({}));
@@ -121,6 +123,26 @@ export async function POST(request) {
   const activeBlock = currentLoginBlock(attemptKey);
   if (activeBlock) {
     return rateLimitResponse(activeBlock);
+  }
+
+  if (usesWorkOSAuth()) {
+    try {
+      const result = await authenticateWorkOSPassword({
+        email,
+        password,
+        ipAddress: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || undefined,
+        userAgent: request.headers.get('user-agent') || undefined,
+      });
+      clearLoginFailures(attemptKey);
+      const response = NextResponse.json({ ok: true });
+      setWorkOSAuthCookie(response, result.sessionData);
+      return response;
+    } catch (error) {
+      if (error?.status === 429) return rateLimitResponse(Date.now() + LOGIN_LOCKOUT_MS);
+      const lockedUntil = recordLoginFailure(attemptKey);
+      if (lockedUntil) return rateLimitResponse(lockedUntil);
+      return NextResponse.json({ error: 'Invalid email or password.' }, { status: 401 });
+    }
   }
 
   const row = await findCredentialByEmail(email);
