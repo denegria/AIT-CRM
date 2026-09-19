@@ -119,7 +119,9 @@ async function applyMigration(client, provider, plan) {
 
 async function runCanary(provider) {
   const localId = randomUUID();
-  const email = `ait-crm-auth-canary+${Date.now()}@example.com`;
+  // WorkOS staging reserves example.com for its built-in Test SSO connection.
+  // Use another reserved example domain so the canary exercises password auth.
+  const email = `ait-crm-auth-canary+${Date.now()}@example.net`;
   const password = randomBytes(24).toString('base64url');
   const salt = randomBytes(16).toString('hex');
   const passwordHash = pbkdf2Sync(password, salt, 310000, 64, 'sha512').toString('base64');
