@@ -11,16 +11,21 @@ import { aitUsaAssigneeOptionLabel, isEligibleAitUsaAssignee } from '@/lib/crm/a
 import { generateInvoicePDF, generateEstimatePDF, generateReceiptPDF, generateAitUsaReceiptPDF } from '@/lib/pdf';
 import s from './ContactDetail.module.css';
 import {
-  AlertCircle, ArrowLeft, ArrowRight, Mail, Phone, MapPin, Calendar,
+  AlertCircle, ArrowLeft, ArrowRight, Mail, Phone, MapPin, Calendar, CalendarPlus,
   Plus, FileText, ClipboardList,
-  MessageSquare, Edit3, Tag, Activity, CheckSquare, MessageCircle,
-  Inbox, Send, DollarSign, Archive, BriefcaseBusiness, CheckCircle2,
-  GraduationCap
+  MessageSquare, MessageSquarePlus, Edit3, Tag, Activity, CheckSquare, MessageCircle,
+  Inbox, Send, DollarSign, Archive, BriefcaseBusiness, CheckCircle2, RefreshCw,
+  GraduationCap, ClipboardCheck, MoreHorizontal
 } from 'lucide-react';
 import { PIPELINE_STATUSES, isWorkflowStatusClosed, workflowForBusinessUnit } from '@/lib/sales-workflow';
 import { buildContactDetailViewModel } from '@/lib/contact-detail-view-model';
+import {
+  buildContactSidebarInquiry,
+  buildContactSidebarNextStep,
+  scopedOpenFollowUpTasks,
+} from '@/lib/contact-sidebar-model.js';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
-import { schoolLocationForContact, schoolLocationOptions } from '@/lib/school-locations';
+import { schoolLocationForContact, schoolLocationOptions, studentLocationForContact } from '@/lib/school-locations';
 import {
   COURSE_RECORD_STATUS_OPTIONS,
   courseNameOptions,
@@ -32,6 +37,7 @@ import { appendContactNote, contactDetailPageState, loadContactTimeline } from '
 import { useRecordScopeRegistration } from '@/components/RecordScopeContext';
 import { InternalNoteComposer } from '@/components/ContactTimelineNoteFields';
 import FollowUpOutcomeDialog from '@/components/FollowUpOutcomeDialog';
+import AitUsaActivityRecord from './AitUsaActivityRecord';
 import OpportunityLifecycleField from '@/components/OpportunityLifecycleField';
 import { buildContactProfilePatch } from '@/lib/crm/contact-profile-patch.js';
 import {
@@ -172,7 +178,7 @@ function timelineDateParts(item) {
       day: 'numeric',
       year: 'numeric',
     }).format(date),
-    time: item.timestamp
+    time: item.timestamp && item.presentation?.timestampPrecision !== 'date'
       ? new Intl.DateTimeFormat(undefined, {
           hour: 'numeric',
           minute: '2-digit',
@@ -194,6 +200,14 @@ function isSourceDetailTimelineItem(item) {
 
 function timelineFilterCategory(item) {
   return isSourceDetailTimelineItem(item) ? 'import' : timelineCategory(item);
+}
+
+function timelineMatchesFilter(item, filterValue, isAitUsaContact) {
+  if (filterValue === 'all') return !isSourceDetailTimelineItem(item);
+  if (isAitUsaContact && filterValue === 'import') {
+    return Boolean(item.presentation?.isImported || isSourceDetailTimelineItem(item));
+  }
+  return timelineCategory(item) === filterValue;
 }
 
 function timelineCategoryLabel(item) {
@@ -285,10 +299,6 @@ function isInvoiceRecord(record = {}) {
   return String(record.type || '').toLowerCase().includes('invoice') && Boolean(record.workOrderId);
 }
 
-function isEnrolledStudent(contact = {}) {
-  return String(contact?.currentStage || contact?.status || '').trim().toLowerCase() === 'enrolled';
-}
-
 function isEnrolledWorkflowStatus(status = '') {
   return String(status || '').trim().toLowerCase() === 'enrolled';
 }
@@ -375,6 +385,13 @@ function dateInputToIso(value) {
   return date.toISOString();
 }
 
+function dateTimeInputToIso(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
 function taskDateLabel(value) {
   if (!value) return 'No due date';
   const date = new Date(value);
@@ -443,6 +460,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   } = useCRM();
   const [activeTab, setActiveTab] = useState('timeline');
   const [timelineFilter, setTimelineFilter] = useState('all');
+  const contentTabRefs = useRef([]);
+  const timelineMoreRef = useRef(null);
   const [serverTimeline, setServerTimeline] = useState({ contactId: '', reloadKey: -1, items: null, error: false });
   const [timelineReloadKey, setTimelineReloadKey] = useState(0);
   const [serverConversations, setServerConversations] = useState({ contactId: '', reloadKey: -1, items: null, error: false });
@@ -488,7 +507,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const canManageAitUsaAssignments = canManageAitUsaAssignmentsForUser(currentUser);
   const [noteInput, setNoteInput] = useState('');
   const [noteSaving, setNoteSaving] = useState(false);
+  const [noteComposerOpen, setNoteComposerOpen] = useState(false);
   const noteSaveInFlight = useRef(false);
+  const noteInputRef = useRef(null);
+  const noteTriggerRef = useRef(null);
+  const profileEditTabRefs = useRef([]);
   const followUpActionHandledRef = useRef('');
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [followUpDraft, setFollowUpDraft] = useState(null);
@@ -521,6 +544,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [courseError, setCourseError] = useState('');
   const [selectedCourseRecordId, setSelectedCourseRecordId] = useState('');
   const [phoneHistoryState, setPhoneHistoryState] = useState({ contactId: '', items: [], loading: false, error: '' });
+
+  useEffect(() => {
+    if (noteComposerOpen) noteInputRef.current?.focus();
+  }, [noteComposerOpen]);
+  const [taskProjection, setTaskProjection] = useState({ key: '', items: [], loading: false, error: '' });
+  const [taskProjectionReloadKey, setTaskProjectionReloadKey] = useState(0);
 
   const scopedContact = useMemo(() => contacts.find(c => c.id === params.id), [contacts, params.id]);
   const allAccessibleContacts = allContacts?.length ? allContacts : contacts;
@@ -610,6 +639,68 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const showLinkedPeoplePanel = isClientMode && detailView.workflowKey === WORKFLOW_KEYS.AIT_SIGNS;
   const showSchoolLocationField = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA;
   const isAitUsaContact = detailView.workflowKey === WORKFLOW_KEYS.AIT_USA || /ait usa|institute/i.test(contactBusinessUnit?.name || '');
+  const hasCurrentInquiry = !contact?.opportunityConflict && (
+    Number(contact?.activeOpportunityCount || 0) === 1 ||
+    (Boolean(contact?.opportunityId) && !isWorkflowStatusClosed(contact?.status, contactBusinessUnit))
+  );
+  const inquiryProfileHeading = contact?.opportunityConflict
+    ? 'Inquiry conflict'
+    : hasCurrentInquiry
+      ? 'Current inquiry'
+      : 'Last inquiry';
+  const inquiryProfileDisabled = Boolean(contact?.opportunityConflict || !contact?.hasLeadStatus);
+  const profileStatusOptions = useMemo(() => (
+    isAitUsaContact && !isEnrolledWorkflowStatus(contact?.status)
+      ? contactStatusOptions.filter((status) => !isEnrolledWorkflowStatus(status))
+      : contactStatusOptions
+  ), [contact?.status, contactStatusOptions, isAitUsaContact]);
+  const taskProjectionKey = [contact?.id, contactBusinessUnit?.id, currentUser?.id, canManageAitUsaAssignments ? 'all' : 'mine', taskProjectionReloadKey].join(':');
+  const currentTaskProjection = taskProjection.key === taskProjectionKey
+    ? taskProjection
+    : { key: taskProjectionKey, items: [], loading: dataSource === 'postgres' && isAitUsaContact, error: '' };
+  const sidebarNextStep = buildContactSidebarNextStep({
+    contact,
+    tasks: currentTaskProjection.items,
+    ownerOptions,
+    contactability: detailView.contactability,
+    canSeeAllTasks: canManageAitUsaAssignments,
+  });
+  const instituteInquiry = contact?.enrollmentSignals?.inquiry || {};
+  const sidebarInquiry = buildContactSidebarInquiry({
+    contact,
+    studentLocation: studentLocationForContact(contact),
+  });
+  const secondaryInquiryFacts = [
+    { label: 'Learning location', value: schoolLocationForContact(contact) },
+    { label: 'Preferred day', value: cleanText(contact?.preferredDay || instituteInquiry.preferredDay) },
+    { label: 'Schedule', value: cleanText(contact?.preferredSchedule || instituteInquiry.preferredSchedule) },
+    { label: 'Test interest', value: cleanText(contact?.testInterest || instituteInquiry.testInterest) },
+    { label: 'Level', value: cleanText(contact?.educationLevel || instituteInquiry.level) },
+    { label: 'School', value: cleanText(contact?.schoolName || instituteInquiry.school) },
+  ].filter((item) => item.value);
+  const NextStepIcon = sidebarNextStep.kind === 'scheduled'
+    ? Calendar
+    : sidebarNextStep.kind === 'first_outreach'
+      ? Send
+    : sidebarNextStep.kind === 'retargeting'
+      ? RefreshCw
+    : sidebarNextStep.kind === 'missing_contact'
+      ? Phone
+      : ['overdue', 'restricted', 'inquiry_conflict', 'closed_blocked', 'missing_inquiry'].includes(sidebarNextStep.kind)
+        ? AlertCircle
+        : sidebarNextStep.kind === 'closed'
+          ? CheckCircle2
+          : CheckSquare;
+  const NextStepActionIcon = ['first_outreach', 'retargeting', 'empty'].includes(sidebarNextStep.kind)
+    ? CalendarPlus
+    : ['scheduled', 'overdue'].includes(sidebarNextStep.kind)
+      ? CheckCircle2
+      : ['multiple', 'inquiry_conflict'].includes(sidebarNextStep.kind)
+        ? ClipboardList
+        : NextStepIcon;
+  const inlineContactabilityStatus = ['missing_email', 'missing_phone'].includes(
+    detailView.contactability?.status,
+  );
   const canManageContactAssignments = isAitUsaContact
     ? canManageAitUsaAssignments
     : coordinatorUiPolicy.canManageCoordinatorAssignments;
@@ -619,19 +710,21 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         owner.id === contact?.assignedTo
       ))
     : ownerOptions;
-  const canGenerateStudentReceipt = !isAitUsaContact || isEnrolledStudent(contact);
   const hasWorkOrders = contactWorkOrders.length > 0;
   const hasInvoices = contactInvoices.length > 0;
   const profileEditTabs = useMemo(() => {
-    const tabs = [
+    if (isAitUsaContact) {
+      return [
+        { id: 'contact', label: 'Contact', summary: 'Identity and contact channels' },
+        { id: 'inquiry', label: inquiryProfileHeading, summary: 'Lifecycle, ownership, location, and source' },
+        { id: 'preferences', label: 'Inquiry preferences', summary: 'Program, schedule, and background' },
+      ];
+    }
+    return [
       { id: 'general', label: 'General', summary: 'Identity, status, and owner' },
       { id: 'source', label: 'Source & routing', summary: 'Attribution, student location, and learning location' },
     ];
-    if (isAitUsaContact) {
-      tabs.push({ id: 'enrollment', label: 'Enrollment', summary: 'Program preferences and profile notes' });
-    }
-    return tabs;
-  }, [isAitUsaContact]);
+  }, [inquiryProfileHeading, isAitUsaContact]);
   const selectedInvoiceWorkOrder = contactWorkOrders.find((workOrder) => workOrder.id === invoiceWorkOrderId) || null;
   const workOrdersHref = `/work-orders${contact?.id ? `?contactId=${encodeURIComponent(contact.id)}` : ''}`;
   const visibleFinancials = useMemo(() => (
@@ -650,7 +743,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const courseOptions = courseNameOptions(courseForm.courseName);
   const courseLocationOptions = schoolLocationOptions(courseForm.courseLocation);
   const showWorkOrdersTab = detailView.tabs.showWorkOrders;
-  const showFinancialsTab = detailView.tabs.showFinancials || (isAitUsaContact && access.canWriteFinancials);
+  const showFinancialsTab = isAitUsaContact
+    ? visibleFinancials.length > 0
+    : detailView.tabs.showFinancials;
   const showCoursesTab = isAitUsaContact;
   const currentCourseRecords = useMemo(() => (
     showCoursesTab && courseRecordsState.contactId === contact?.id
@@ -665,6 +760,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const courseSummary = useMemo(() => deriveCourseSummary(currentCourseRecords), [currentCourseRecords]);
   const activeCourseRecord = courseSummary.currentCourse;
   const activeCourseRecords = courseSummary.currentCourses;
+  const historicalCourseRecords = useMemo(
+    () => courseSummary.records.filter((record) => record.status !== 'active'),
+    [courseSummary.records],
+  );
+  const canStartEnrollment = access.canWriteCrm && hasCurrentInquiry;
   const selectedClassSection = useMemo(() => (
     currentClassSections.find((section) => section.id === courseForm.classSectionId) || null
   ), [courseForm.classSectionId, currentClassSections]);
@@ -678,19 +778,22 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const courseStatusIsTerminal = isTerminalCourseRecordStatus(courseForm.status);
   const courseStatusLabel = courseRecordStatusLabel(courseForm.status);
   const courseModeLabel = courseForm.id
-    ? 'Edit saved record'
-    : (courseModal === 'history' ? 'Backfill history' : 'Start enrollment');
+    ? 'Edit saved enrollment'
+    : (courseModal === 'history' ? 'Add past enrollment' : 'Start enrollment');
+  const courseStatusOptions = courseForm.id
+    ? COURSE_RECORD_STATUS_OPTIONS
+    : COURSE_RECORD_STATUS_OPTIONS.filter((option) => (
+        courseModal === 'history'
+          ? ['completed', 'dropped', 'cancelled', 'transferred'].includes(option.value)
+          : option.value === 'active'
+      ));
   const canSaveCourseForm = Boolean(cleanText(courseForm.courseName)) &&
     (!courseStartDateRequired || Boolean(courseForm.startDate));
-  const financialNotice = isAitUsaContact
-    ? (canGenerateStudentReceipt
-        ? { tone: 'ready', text: 'Ready to generate a student receipt.' }
-        : { tone: 'blocked', text: 'Student must be Enrolled before generating a receipt.' })
-    : (!hasWorkOrders
-        ? { tone: 'blocked', text: 'Create a work order before generating an invoice.' }
-        : (!hasInvoices
-            ? { tone: 'warning', text: 'Generate an invoice from a work order before recording a payment.' }
-            : { tone: 'ready', text: 'Invoice is ready for payment recording.' }));
+  const financialNotice = !hasWorkOrders
+    ? { tone: 'blocked', text: 'Create a work order before generating an invoice.' }
+    : (!hasInvoices
+        ? { tone: 'warning', text: 'Generate an invoice from a work order before recording a payment.' }
+        : { tone: 'ready', text: 'Invoice is ready for payment recording.' });
   const renderedActiveTab =
     (!showLinkedPeoplePanel && activeTab === 'contacts') ||
     (!showWorkOrdersTab && activeTab === 'workorders') ||
@@ -716,16 +819,18 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   ), [dataSource, fallbackTimeline, hasMatchingServerTimeline, serverTimeline.items]);
   const cleanupAudits = useMemo(() => timelineSource.map(timelineCleanupAudit).filter(Boolean).slice(0, 3), [timelineSource]);
   const timelineCounts = useMemo(() => timelineSource.reduce((counts, item) => {
-    const category = timelineFilterCategory(item);
+    const category = isAitUsaContact ? timelineCategory(item) : timelineFilterCategory(item);
     if (!isSourceDetailTimelineItem(item)) counts.all += 1;
     counts[category] = (counts[category] || 0) + 1;
+    if (isAitUsaContact && item.presentation?.isImported && category !== 'import') {
+      counts.import = (counts.import || 0) + 1;
+    }
     return counts;
-  }, { all: 0 }), [timelineSource]);
+  }, { all: 0 }), [isAitUsaContact, timelineSource]);
   const renderedTimelineFilter = detailView.timelineFilters.some((filter) => filter.value === timelineFilter) ? timelineFilter : 'all';
   const timeline = useMemo(() => {
-    if (renderedTimelineFilter === 'all') return timelineSource.filter((item) => !isSourceDetailTimelineItem(item));
-    return timelineSource.filter((item) => timelineFilterCategory(item) === renderedTimelineFilter);
-  }, [renderedTimelineFilter, timelineSource]);
+    return timelineSource.filter((item) => timelineMatchesFilter(item, renderedTimelineFilter, isAitUsaContact));
+  }, [isAitUsaContact, renderedTimelineFilter, timelineSource]);
   const latestReviewActivity = useMemo(() => (
     timelineSource.find((item) => !isSourceDetailTimelineItem(item)) || null
   ), [timelineSource]);
@@ -789,6 +894,78 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const currentLinkedPeople = linkedPeople.contactId === contact?.id
     ? linkedPeople
     : { contactId: contact?.id || '', items: [], loading: showLinkedPeoplePanel && dataSource === 'postgres', error: '' };
+  const contentTabs = [
+    { id: 'timeline', label: isAitUsaContact ? 'Activity' : 'Timeline' },
+    { id: 'conversations', label: 'Conversations', count: conversationMessages.length },
+    ...(showCoursesTab ? [{ id: 'courses', label: isAitUsaContact ? 'Enrollments' : 'Courses', count: currentCourseRecords.length }] : []),
+    ...(showLinkedPeoplePanel ? [{ id: 'contacts', label: 'Contacts', count: currentLinkedPeople.items.length }] : []),
+    ...(showWorkOrdersTab ? [{ id: 'workorders', label: detailView.tabs.workOrdersLabel, count: contactWorkOrders.length }] : []),
+    ...(showFinancialsTab ? [{ id: 'financials', label: detailView.tabs.financialLabel, count: visibleFinancials.length }] : []),
+  ];
+  const visibleTimelineFilters = detailView.timelineFilters.filter((filter) => {
+    if (!isAitUsaContact) return true;
+    if (['import', 'system'].includes(filter.value)) return false;
+    return filter.value === 'all' || filter.value === renderedTimelineFilter || (timelineCounts[filter.value] || 0) > 0;
+  });
+  const timelineMoreFilters = isAitUsaContact
+    ? detailView.timelineFilters.filter((filter) => (
+        ['import', 'system'].includes(filter.value) &&
+        ((timelineCounts[filter.value] || 0) > 0 || renderedTimelineFilter === filter.value)
+      ))
+    : [];
+  const timelineMoreCount = isAitUsaContact
+    ? timelineSource.filter((item) => timelineMoreFilters.some((filter) => timelineMatchesFilter(item, filter.value, true))).length
+    : 0;
+
+  const handleContentTabKeyDown = (event, index) => {
+    const lastIndex = contentTabs.length - 1;
+    let nextIndex = index;
+    if (event.key === 'ArrowRight') nextIndex = index === lastIndex ? 0 : index + 1;
+    else if (event.key === 'ArrowLeft') nextIndex = index === 0 ? lastIndex : index - 1;
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = lastIndex;
+    else return;
+    event.preventDefault();
+    setActiveTab(contentTabs[nextIndex].id);
+    requestAnimationFrame(() => contentTabRefs.current[nextIndex]?.focus());
+  };
+
+  useEffect(() => {
+    if (!isAitUsaContact || !contact?.id || !contactBusinessUnit?.id || dataSource !== 'postgres') return undefined;
+    let cancelled = false;
+    const requestKey = taskProjectionKey;
+    const query = new URLSearchParams({
+      contactId: contact.id,
+      businessUnitId: contactBusinessUnit.id,
+      taskType: 'follow_up',
+    });
+    fetch(`/api/tasks?${query.toString()}`, { cache: 'no-store' })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload.error || 'Follow-up tasks could not load.');
+        if (!cancelled) {
+          setTaskProjection({
+            key: requestKey,
+            items: scopedOpenFollowUpTasks(payload),
+            loading: false,
+            error: '',
+          });
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setTaskProjection({
+            key: requestKey,
+            items: [],
+            loading: false,
+            error: error.message || 'Follow-up tasks could not load.',
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [contact?.id, contactBusinessUnit?.id, dataSource, isAitUsaContact, taskProjectionKey]);
 
   useEffect(() => {
     if (!contact?.id || dataSource !== 'postgres') return undefined;
@@ -994,7 +1171,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
   const openEditModal = () => {
     if (!access.canWriteCrm) return;
-    setActiveProfileEditTab('general');
+    setActiveProfileEditTab(isAitUsaContact ? 'contact' : 'general');
     setEditForm({
       ...contact,
       assignedTo: contact?.assignedTo || '',
@@ -1136,7 +1313,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       ...emptyCourseForm,
       courseLocation: mode === 'history' ? '' : schoolLocationForContact(contact),
       status: mode === 'history' ? 'completed' : 'active',
-      startDate: mode === 'enrollment' ? todayDate() : '',
+      startDate: mode === 'history' ? '' : todayDate(),
       endDate: mode === 'history' ? todayDate() : '',
     });
     setCourseModal(mode);
@@ -1144,9 +1321,15 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   };
 
   const openEnrollmentCoursePrompt = () => {
-    if (!access.canWriteCrm || !showCoursesTab || activeCourseRecord) return;
+    if (!canStartEnrollment || !showCoursesTab || activeCourseRecord) return;
     setActiveTab('courses');
-    openCourseModal('enrollment');
+    openCourseModal('start');
+  };
+
+  const openEnrollmentWorkspaceFromProfile = () => {
+    setIsEditModalOpen(false);
+    setActiveTab('courses');
+    if (canStartEnrollment && !activeCourseRecord) openCourseModal('start');
   };
 
   const closeCourseModal = () => {
@@ -1189,7 +1372,13 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       const response = await fetch(`/api/contacts/${contact.id}/courses`, {
         method: courseForm.id ? 'PATCH' : 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(courseForm),
+        body: JSON.stringify({
+          ...courseForm,
+          ...(!courseForm.id ? {
+            enrollmentIntent: courseModal === 'history' ? 'past_enrollment' : 'start_enrollment',
+            opportunityId: contact.opportunityId || '',
+          } : {}),
+        }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload.error || 'Course save failed.');
@@ -1202,9 +1391,23 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         error: '',
       });
       setSelectedCourseRecordId(courseForm.id || items[0]?.id || '');
+      if (payload.opportunity) {
+        replaceContactFromServer({
+          ...contact,
+          opportunityId: payload.opportunity.id,
+          status: payload.opportunity.status,
+          currentStage: payload.opportunity.currentStage || payload.opportunity.status,
+          activeOpportunityCount: 1,
+          opportunityConflict: false,
+        });
+        setTimelineReloadKey((current) => current + 1);
+        setTaskProjectionReloadKey((current) => current + 1);
+      }
       setCourseModal(null);
       setCourseForm(emptyCourseForm);
-      toast(courseForm.id ? 'Course updated' : 'Course added');
+      toast(courseForm.id
+        ? 'Enrollment updated'
+        : (courseModal === 'history' ? 'Past enrollment added' : 'Enrollment started'));
     } catch (error) {
       const message = error.message || 'Course save failed.';
       setCourseError(message);
@@ -1216,19 +1419,23 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
   const handleEditSave = () => {
     if (isClosedStatusReopen && !editForm.statusChangeReason) {
-      setActiveProfileEditTab('general');
+      focusProfileEditField(isAitUsaContact ? 'inquiry' : 'general', 'profile-edit-reopen-reason');
       toast('Choose why this closed status is being reopened.', 'error');
       return;
     }
     if (isEnteringClosedStatus && !editForm.terminalStatusReason?.trim()) {
-      setActiveProfileEditTab('general');
+      focusProfileEditField(isAitUsaContact ? 'inquiry' : 'general', 'profile-edit-terminal-reason');
       toast('Add a reason for closing this Opportunity.', 'error');
       return;
     }
-    const shouldPromptForCourse = isAitUsaContact &&
+    const attemptedEnrollmentTransition = isAitUsaContact &&
       editForm.status !== contact.status &&
-      isEnrolledWorkflowStatus(editForm.status) &&
-      !activeCourseRecord;
+      isEnrolledWorkflowStatus(editForm.status);
+    if (attemptedEnrollmentTransition) {
+      focusProfileEditField('inquiry', 'profile-edit-status');
+      toast('Start enrollment from the Enrollments workspace so the enrollment and inquiry update together.', 'error');
+      return;
+    }
     const profilePatch = buildContactProfilePatch({
       editForm,
       contact,
@@ -1243,13 +1450,32 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         toast('Profile updated');
         setTimelineReloadKey((key) => key + 1);
         setIsEditModalOpen(false);
-        if (shouldPromptForCourse) {
-          openEnrollmentCoursePrompt();
-        }
       })
       .catch((error) => {
         toast(error.message || 'Profile update failed', 'error');
-      });
+    });
+  };
+
+  const handleProfileEditTabKeyDown = (event, tabIndex) => {
+    if (!['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const lastIndex = profileEditTabs.length - 1;
+    const nextIndex = event.key === 'Home'
+      ? 0
+      : event.key === 'End'
+        ? lastIndex
+        : event.key === 'ArrowRight'
+          ? (tabIndex + 1) % profileEditTabs.length
+          : (tabIndex - 1 + profileEditTabs.length) % profileEditTabs.length;
+    setActiveProfileEditTab(profileEditTabs[nextIndex].id);
+    profileEditTabRefs.current[nextIndex]?.focus();
+  };
+
+  const focusProfileEditField = (tabId, fieldId) => {
+    setActiveProfileEditTab(tabId);
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => document.getElementById(fieldId)?.focus());
+    });
   };
 
   const handleArchiveContact = () => {
@@ -1393,6 +1619,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           contactMethod: followUpDraft.contactMethod,
           note: followUpDraft.note,
           nextDueAt: dateInputToIso(followUpDraft.nextDueDate),
+          appointmentAt: dateTimeInputToIso(followUpDraft.appointmentAt),
           nextOwnerUserId: coordinatorUiPolicy.lockedOwnerUserId || followUpDraft.nextOwnerUserId || currentUser?.id || null,
           leadProfile: followUpDraft.leadProfile,
         }),
@@ -1409,6 +1636,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       }
       setTimelineFilter('all');
       setTimelineReloadKey((key) => key + 1);
+      setTaskProjectionReloadKey((key) => key + 1);
       const resultLabel = payload.taskMatched ? 'Follow-up task completed' : 'Follow-up logged';
       toast(payload.nextTask
         ? `${resultLabel} · next task scheduled`
@@ -1502,17 +1730,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
   const openPaymentModal = (invoice = latestInvoice) => {
     if (!contact?.id || !access.canWriteFinancials) return;
-    if (isAitUsaContact && !canGenerateStudentReceipt) {
-      toast('Student must be Enrolled before generating a receipt. Change the status to Enrolled first.', 'error');
-      return;
-    }
-    if (!isAitUsaContact && !invoice) {
+    if (!invoice) {
       toast('Generate an invoice from a work order before recording a payment.', 'error');
       return;
     }
-    const workOrder = isAitUsaContact
-      ? null
-      : contactWorkOrders.find((entry) => entry.id === invoice?.workOrderId) || null;
+    const workOrder = contactWorkOrders.find((entry) => entry.id === invoice?.workOrderId) || null;
     const workOrderTotal = moneyValue(invoice?.amount || invoice?.balanceDue || workOrder?.estimatedCost || workOrder?.amount);
     const paid = contactFinancials
       .filter((record) => record.workOrderId && record.workOrderId === workOrder?.id)
@@ -1520,7 +1742,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       .reduce((sum, record) => sum + moneyValue(record.paidAmount || record.amount), 0);
     setPaymentForm({
       ...emptyPaymentForm,
-      workOrderId: isAitUsaContact ? '' : (workOrder?.id || ''),
+      workOrderId: workOrder?.id || '',
       amount: workOrderTotal ? String(Math.max(workOrderTotal - paid, 0)) : '',
       paidAt: todayDate(),
     });
@@ -1534,12 +1756,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       toast('Payment amount is required.', 'error');
       return;
     }
-    if (isAitUsaContact && !canGenerateStudentReceipt) {
-      toast('Student must be Enrolled before generating a receipt. Change the status to Enrolled first.', 'error');
-      return;
-    }
     const workOrder = contactWorkOrders.find((entry) => entry.id === paymentForm.workOrderId) || null;
-    if (!isAitUsaContact && !contactInvoices.some((invoice) => invoice.workOrderId && invoice.workOrderId === workOrder?.id)) {
+    if (!contactInvoices.some((invoice) => invoice.workOrderId && invoice.workOrderId === workOrder?.id)) {
       toast('Generate an invoice from a work order before recording a payment.', 'error');
       return;
     }
@@ -1555,18 +1773,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       note: paymentForm.note,
     };
     recordPayment(paymentPayload)
-      .then((receipt) => {
-        if (isAitUsaContact) {
-          generateAitUsaReceiptPDF(receipt || {
-            ...paymentPayload,
-            type: 'Receipt',
-            number: `REC-${todayDate().replaceAll('-', '')}`,
-            status: 'Paid',
-          }, financialContext);
-        }
+      .then(() => {
         setPaymentModalOpen(false);
         setTimelineReloadKey((key) => key + 1);
-        toast(isAitUsaContact ? 'Payment recorded and receipt downloaded' : 'Payment recorded');
+        toast('Payment recorded');
       })
       .catch((error) => toast(error.message || 'Payment save failed.', 'error'));
   };
@@ -1630,10 +1840,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   };
 
   const recordPaymentAgainstInvoice = (invoice = latestInvoice) => {
-    if (isAitUsaContact) {
-      openPaymentModal();
-      return;
-    }
     if (!invoice) {
       toast('Generate an invoice from a work order before recording a payment.', 'error');
       return;
@@ -1696,6 +1902,10 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           });
       await save;
       setNoteInput('');
+      if (isAitUsaContact) {
+        setNoteComposerOpen(false);
+        window.requestAnimationFrame(() => noteTriggerRef.current?.focus());
+      }
       setTimelineReloadKey((key) => key + 1);
       toast('Note added');
     } catch (error) {
@@ -1704,6 +1914,21 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       noteSaveInFlight.current = false;
       setNoteSaving(false);
     }
+  };
+
+  const openInternalNoteComposer = () => {
+    if (noteComposerOpen) {
+      noteInputRef.current?.focus();
+      return;
+    }
+    setNoteComposerOpen(true);
+  };
+
+  const cancelInternalNote = () => {
+    if (noteSaving) return;
+    setNoteInput('');
+    setNoteComposerOpen(false);
+    window.requestAnimationFrame(() => noteTriggerRef.current?.focus());
   };
 
   const submitManualSend = () => {
@@ -1753,7 +1978,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
       });
   };
 
-  const profileSidebar = (
+  const legacyProfileSidebar = (
     <div className={s.profileCard}>
       <div className={s.profileHeader}>
         <div className={s.profileAvatarLarge}>{contact.name.charAt(0)}</div>
@@ -1901,6 +2126,274 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     </div>
   );
 
+  const renderInstituteNextStep = (headingId, className = '') => (
+    <section className={`${s.nextStep} ${s[`nextStep_${sidebarNextStep.kind}`] || ''} ${className}`} aria-labelledby={headingId}>
+      <div className={s.nextStepHeader}>
+        <div>
+          <NextStepIcon size={16} />
+          <h2 id={headingId}>Next step</h2>
+        </div>
+        {!currentTaskProjection.loading && !currentTaskProjection.error && (
+          <span className={s.nextStepState}>{sidebarNextStep.stateLabel}</span>
+        )}
+      </div>
+
+      {currentTaskProjection.loading ? (
+        <div className={s.nextStepLoading} role="status">Loading follow-up status…</div>
+      ) : currentTaskProjection.error ? (
+        <div className={s.nextStepError} role="alert">
+          <strong>Follow-up status unavailable</strong>
+          <span>{currentTaskProjection.error}</span>
+          <button type="button" onClick={() => setTaskProjectionReloadKey((key) => key + 1)}>Try again</button>
+        </div>
+      ) : (
+        <>
+          <div className={s.nextStepBody}>
+            <strong>{sidebarNextStep.title}</strong>
+            <p>{sidebarNextStep.detail}</p>
+            {sidebarNextStep.dueAt && <span>Due {taskDateLabel(sidebarNextStep.dueAt)}</span>}
+            {sidebarNextStep.ownerLabel && <span>Owner: {sidebarNextStep.ownerLabel}</span>}
+            {['restricted', 'missing_contact'].includes(sidebarNextStep.kind) && sidebarNextStep.taskCount > 0 && (
+              <span>{sidebarNextStep.taskCount} open follow-up{sidebarNextStep.taskCount === 1 ? '' : 's'} remains in the task queue.</span>
+            )}
+          </div>
+          {access.canWriteCrm && sidebarNextStep.actionType !== 'none' && (
+            <div className={s.nextStepActions}>
+              {sidebarNextStep.actionType === 'disabled' ? (
+                <button type="button" className="btn btn-primary btn-block" disabled>
+                  <AlertCircle size={16} /> {sidebarNextStep.actionLabel}
+                </button>
+              ) : sidebarNextStep.actionType === 'edit' ? (
+                <button type="button" className="btn btn-primary btn-block" onClick={openEditModal}>
+                  <Edit3 size={16} /> {sidebarNextStep.actionLabel}
+                </button>
+              ) : (
+                <Link className="btn btn-primary btn-block" href={sidebarNextStep.actionHref}>
+                  <NextStepActionIcon size={16} /> {sidebarNextStep.actionLabel}
+                </Link>
+              )}
+              {sidebarNextStep.openHref && (
+                <Link className={s.openTaskLink} href={sidebarNextStep.openHref}>Open task details</Link>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+
+  const instituteProfileSidebar = (
+    <aside className={`${s.profileCard} ${s.instituteProfileCard}`} aria-label={`${contact.name} contact sidebar`}>
+      <div className={s.instituteIdentity}>
+        <div className={s.profileAvatarLarge}>{contact.name.charAt(0)}</div>
+        <h1 className={s.profileName}>{contact.name}</h1>
+      </div>
+
+      <section className={s.sidebarSection} aria-labelledby="contact-sidebar-contact">
+        <h2 id="contact-sidebar-contact" className={s.sidebarSectionTitle}>Contact</h2>
+        <div className={s.contactChannelList}>
+          <div className={s.contactChannel}>
+            <Mail size={16} />
+            <div>
+              <span>Email</span>
+              {cleanText(contact.email) ? (
+                <a href={`mailto:${cleanText(contact.email)}`}>{contact.email}</a>
+              ) : (
+                <>
+                  <strong className={s.placeholderValue}>Not recorded</strong>
+                  {detailView.contactability?.status === 'missing_email' && (
+                    <small className={s.channelInlineNotice}>{detailView.contactability.reason}</small>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+          <div className={s.contactChannel}>
+            <Phone size={16} />
+            <div>
+              <span>Phone</span>
+              {cleanText(contact.phone) && !contact.isWrongNumber && !contact.isDoNotCall ? (
+                <a href={phoneHref(contact.phone)}>{contact.phone}</a>
+              ) : cleanText(contact.phone) ? (
+                <strong>{contact.phone}</strong>
+              ) : (
+                <>
+                  <strong className={s.placeholderValue}>Not recorded</strong>
+                  {detailView.contactability?.status === 'missing_phone' && (
+                    <small className={s.channelInlineNotice}>{detailView.contactability.reason}</small>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+          {contact.address && (
+            <div className={s.contactChannel}>
+              <MapPin size={16} />
+              <div><span>Intended learning location</span><strong>{contact.address}</strong></div>
+            </div>
+          )}
+        </div>
+
+        {detailView.contactability?.status && detailView.contactability.status !== 'reachable' && !inlineContactabilityStatus && (
+          <div className={`${s.channelNotice} ${detailView.contactability.canFollowUp === false ? s.channelNoticeBlocked : ''}`}>
+            <AlertCircle size={15} />
+            <span><strong>{detailView.contactability.label}</strong>{detailView.contactability.reason ? ` — ${detailView.contactability.reason}` : ''}</span>
+          </div>
+        )}
+
+        {phoneHistoryState.contactId === contact.id && phoneHistoryState.items.some((phone) => !phone.isPrimary) && (
+          <details className={s.otherPhones}>
+            <summary>Other phone numbers ({phoneHistoryState.items.filter((phone) => !phone.isPrimary).length})</summary>
+            <div className={s.otherPhoneList}>
+              {phoneHistoryState.items.filter((phone) => !phone.isPrimary).map((phone) => (
+                <div key={phone.id || phone.normalizedPhone} className={s.otherPhoneRow}>
+                  <strong>{phone.phone || 'Number unavailable'}</strong>
+                  <span>{phone.isWrongNumber ? 'Wrong number' : phone.isDoNotCall ? 'Do not call' : 'Historical — not primary'}</span>
+                </div>
+              ))}
+            </div>
+          </details>
+        )}
+        {phoneHistoryState.contactId === contact.id && phoneHistoryState.error && (
+          <div className={s.sidebarInlineError}><AlertCircle size={15} /><span>{phoneHistoryState.error}</span></div>
+        )}
+      </section>
+
+      <section className={s.sidebarSection} aria-labelledby="contact-sidebar-inquiry">
+        <h2 id="contact-sidebar-inquiry" className={s.sidebarSectionTitle}>{sidebarInquiry.heading || 'Current inquiry'}</h2>
+
+        {['active', 'history'].includes(sidebarInquiry.kind) ? (
+          <>
+            <dl className={s.inquiryFacts}>
+              <div><dt>Inquiry status</dt><dd><span className={s.inquiryStage}>{sidebarInquiry.facts.status}</span></dd></div>
+              <div><dt>Program</dt><dd className={sidebarInquiry.facts.program === 'Not recorded' ? s.placeholderValue : undefined}>{sidebarInquiry.facts.program}</dd></div>
+              <div><dt>Student location</dt><dd className={sidebarInquiry.facts.studentLocation === 'Not recorded' ? s.placeholderValue : undefined}>{sidebarInquiry.facts.studentLocation}</dd></div>
+              <div>
+                <dt>Inquiry owner</dt>
+                <dd className={`${s.inquiryOwner} ${!assignedEmployee ? s.placeholderValue : ''}`}>
+                  {assignedEmployee && (
+                    <span className={s.userAvatarSmall}>{assignedEmployee.label.charAt(0)}</span>
+                  )}
+                  <span>{assignedEmployee?.label || 'Unassigned'}</span>
+                </dd>
+              </div>
+            </dl>
+
+            {!!secondaryInquiryFacts.length && (
+          <details className={s.inquiryPreferences}>
+            <summary>More preferences ({secondaryInquiryFacts.length})</summary>
+            <dl className={s.inquiryFacts}>
+              {secondaryInquiryFacts.map((fact) => (
+                <div key={fact.label}><dt>{fact.label}</dt><dd>{fact.value}</dd></div>
+              ))}
+            </dl>
+          </details>
+            )}
+          </>
+        ) : (
+          <div className={`${s.inquiryEmptyState} ${sidebarInquiry.kind === 'conflict' ? s.inquiryEmptyStateConflict : ''}`}>
+            <strong>{sidebarInquiry.title}</strong>
+            <span>{sidebarInquiry.detail}</span>
+          </div>
+        )}
+      </section>
+
+      {renderInstituteNextStep('contact-sidebar-next-step')}
+
+      {access.canWriteCrm && (
+        <div className={s.contactProfileActions}>
+          <button className={`${s.editProfileButton} btn btn-block`} type="button" onClick={openEditModal}>
+            <Edit3 size={16} /> Edit profile
+          </button>
+          <details className={s.contactActionOverflow}>
+            <summary aria-label="More contact actions">
+              <MoreHorizontal size={16} /> More contact actions
+            </summary>
+            <div className={s.contactActionOverflowPanel}>
+              <strong>Contact actions</strong>
+              <span>Archive is separate from profile and inquiry edits.</span>
+              <button
+                className="btn btn-danger"
+                type="button"
+                onClick={() => {
+                  setArchiveReason('');
+                  setArchiveConfirmOpen(true);
+                }}
+              >
+                <Archive size={15} />
+                {coordinatorUiPolicy.canArchiveContactsDirectly ? 'Archive contact' : 'Request archive approval'}
+              </button>
+            </div>
+          </details>
+        </div>
+      )}
+    </aside>
+  );
+
+  const instituteMobileContext = (
+    <section className={s.mobileContactContext} aria-labelledby="mobile-contact-context-name">
+      <div className={s.mobileContextIdentity}>
+        <div className={s.profileAvatarLarge}>{contact.name.charAt(0)}</div>
+        <div className={s.mobileContextIdentityCopy}>
+          <span>{sidebarInquiry.heading || 'Current inquiry'}</span>
+          <h1 id="mobile-contact-context-name">{contact.name}</h1>
+          {['active', 'history'].includes(sidebarInquiry.kind) ? (
+            <span className={s.inquiryStage}>{sidebarInquiry.facts.status}</span>
+          ) : (
+            <small>{sidebarInquiry.title}</small>
+          )}
+        </div>
+      </div>
+
+      {detailView.contactability?.status && detailView.contactability.status !== 'reachable' && !inlineContactabilityStatus && (
+        <div className={`${s.channelNotice} ${detailView.contactability.canFollowUp === false ? s.channelNoticeBlocked : ''}`}>
+          <AlertCircle size={15} />
+          <span><strong>{detailView.contactability.label}</strong>{detailView.contactability.reason ? ` — ${detailView.contactability.reason}` : ''}</span>
+        </div>
+      )}
+
+      {renderInstituteNextStep('mobile-contact-next-step', s.mobileNextStep)}
+
+      <details className={s.mobileContextDetails}>
+        <summary>Contact and inquiry details</summary>
+        <div className={s.mobileContextDetailsBody}>
+          <div className={s.mobileContextFacts}>
+            <div><span>Email</span><strong>{cleanText(contact.email) || 'Not recorded'}</strong></div>
+            <div><span>Phone</span><strong>{cleanText(contact.phone) || 'Not recorded'}</strong></div>
+            {contact.address && <div><span>Intended learning location</span><strong>{contact.address}</strong></div>}
+            {['active', 'history'].includes(sidebarInquiry.kind) && (
+              <>
+                <div><span>Program</span><strong>{sidebarInquiry.facts.program}</strong></div>
+                <div><span>Student location</span><strong>{sidebarInquiry.facts.studentLocation}</strong></div>
+                <div><span>Inquiry owner</span><strong>{assignedEmployee?.label || 'Unassigned'}</strong></div>
+              </>
+            )}
+          </div>
+          {access.canWriteCrm && (
+            <div className={s.mobileContextActions}>
+              <button className="btn" type="button" onClick={openEditModal}>
+                <Edit3 size={15} /> Edit profile
+              </button>
+              <button
+                className="btn btn-danger"
+                type="button"
+                onClick={() => {
+                  setArchiveReason('');
+                  setArchiveConfirmOpen(true);
+                }}
+              >
+                <Archive size={15} />
+                {coordinatorUiPolicy.canArchiveContactsDirectly ? 'Archive contact' : 'Request archive approval'}
+              </button>
+            </div>
+          )}
+        </div>
+      </details>
+    </section>
+  );
+
+  const profileSidebar = isAitUsaContact ? instituteProfileSidebar : legacyProfileSidebar;
+
   return (
     <div className={s.detailPage + " fade-in"}>
       <div className="page-header">
@@ -1909,48 +2402,62 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         </button>
       </div>
 
-      <div className={s.detailLayout}>
+      <div className={`${s.detailLayout} ${isAitUsaContact ? s.instituteDetailLayout : ''}`}>
+        {isAitUsaContact && profileSidebar}
+        {isAitUsaContact && instituteMobileContext}
         {/* Main Section: Review content */}
         <div className={s.contentSection}>
-          <section className={s.reviewContext} aria-label={`${detailView.profileTitle} review context`}>
-            <div className={s.reviewContextHeader}>
-              <div>
-                <span>Review context</span>
-                <strong>{contact.name}</strong>
-              </div>
-              <small>{detailView.profileTitle}</small>
-            </div>
-            <div className={s.reviewGrid}>
-              {reviewSummary.map((item) => (
-                <div key={item.label} className={`${s.reviewItem} ${item.tone ? s[`review_${item.tone}`] || '' : ''}`}>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                  {item.detail && <small>{item.detail}</small>}
+          {!isAitUsaContact && (
+            <section className={s.reviewContext} aria-label={`${detailView.profileTitle} review context`}>
+              <div className={s.reviewContextHeader}>
+                <div>
+                  <span>Review context</span>
+                  <strong>{contact.name}</strong>
                 </div>
-              ))}
-            </div>
-          </section>
+                <small>{detailView.profileTitle}</small>
+              </div>
+              <div className={s.reviewGrid}>
+                {reviewSummary.map((item) => (
+                  <div key={item.label} className={`${s.reviewItem} ${item.tone ? s[`review_${item.tone}`] || '' : ''}`}>
+                    <span>{item.label}</span>
+                    <strong>{item.value}</strong>
+                    {item.detail && <small>{item.detail}</small>}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
-          <div className={s.contentTabs}>
-            <button className={`${s.contentTab} ${renderedActiveTab === 'timeline' ? s.active : ''}`} onClick={() => setActiveTab('timeline')}>Timeline</button>
-            <button className={`${s.contentTab} ${renderedActiveTab === 'conversations' ? s.active : ''}`} onClick={() => setActiveTab('conversations')}>Conversations ({conversationMessages.length})</button>
-            {showCoursesTab && (
-              <button className={`${s.contentTab} ${renderedActiveTab === 'courses' ? s.active : ''}`} onClick={() => setActiveTab('courses')}>Courses ({currentCourseRecords.length})</button>
-            )}
-            {showLinkedPeoplePanel && (
-              <button className={`${s.contentTab} ${renderedActiveTab === 'contacts' ? s.active : ''}`} onClick={() => setActiveTab('contacts')}>Contacts ({currentLinkedPeople.items.length})</button>
-            )}
-            {showWorkOrdersTab && (
-              <button className={`${s.contentTab} ${renderedActiveTab === 'workorders' ? s.active : ''}`} onClick={() => setActiveTab('workorders')}>{detailView.tabs.workOrdersLabel} ({contactWorkOrders.length})</button>
-            )}
-            {showFinancialsTab && (
-              <button className={`${s.contentTab} ${renderedActiveTab === 'financials' ? s.active : ''}`} onClick={() => setActiveTab('financials')}>{detailView.tabs.financialLabel} ({visibleFinancials.length})</button>
-            )}
+          <div className={s.contentTabs} role="tablist" aria-label="Contact detail sections">
+            {contentTabs.map((tab, index) => (
+              <button
+                key={tab.id}
+                ref={(node) => { contentTabRefs.current[index] = node; }}
+                id={`contact-tab-${tab.id}`}
+                className={`${s.contentTab} ${renderedActiveTab === tab.id ? s.active : ''}`}
+                type="button"
+                role="tab"
+                aria-selected={renderedActiveTab === tab.id}
+                aria-controls={`contact-panel-${tab.id}`}
+                tabIndex={renderedActiveTab === tab.id ? 0 : -1}
+                onClick={() => setActiveTab(tab.id)}
+                onKeyDown={(event) => handleContentTabKeyDown(event, index)}
+              >
+                <span>{tab.label}</span>
+                {Number.isFinite(tab.count) && <span className={s.contentTabCount}>{tab.count}</span>}
+              </button>
+            ))}
           </div>
 
-          <div className={s.tabContent}>
+          <div
+            className={s.tabContent}
+            id={`contact-panel-${renderedActiveTab}`}
+            role="tabpanel"
+            aria-labelledby={`contact-tab-${renderedActiveTab}`}
+          >
             {renderedActiveTab === 'timeline' && (
               <div className={s.timelineView}>
+                {!isAitUsaContact && (
                 <div className={s.snapshotStrip} aria-label={`Current ${singularLabel.toLowerCase()} snapshot`}>
                   {timelineSnapshot.map((item) => {
                     const Icon = SNAPSHOT_ICONS[item.icon] || Activity;
@@ -1972,10 +2479,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     );
                   })}
                 </div>
+                )}
 
                 <div className={s.timelineToolbar}>
-                  <div className={s.timelineFilters} aria-label="Timeline filters">
-                    {detailView.timelineFilters.map((filter) => (
+                  <div className={s.timelineFilters} aria-label={isAitUsaContact ? 'Activity filters' : 'Timeline filters'}>
+                    {visibleTimelineFilters.map((filter) => (
                       <button
                         key={filter.value}
                         className={`${s.timelineFilter} ${renderedTimelineFilter === filter.value ? s.active : ''}`}
@@ -1989,9 +2497,86 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                         {renderedTimelineFilter === filter.value && <span className={s.srOnly}> selected</span>}
                       </button>
                     ))}
+                    {timelineMoreFilters.length > 0 && (
+                      <details
+                        ref={timelineMoreRef}
+                        className={`${s.timelineMore} ${timelineMoreFilters.some((filter) => filter.value === renderedTimelineFilter) ? s.active : ''}`}
+                      >
+                        <summary
+                          className={`${s.timelineFilter} ${timelineMoreFilters.some((filter) => filter.value === renderedTimelineFilter) ? s.active : ''}`}
+                          aria-label={`More Activity filters. ${timelineMoreFilters.map((filter) => `${filter.label}: ${timelineCounts[filter.value] || 0} records`).join('. ')}`}
+                        >
+                          More
+                          <span className={s.timelineFilterCount}>{timelineMoreCount}</span>
+                        </summary>
+                        <div className={s.timelineMoreMenu}>
+                          {timelineMoreFilters.map((filter) => (
+                            <button
+                              key={filter.value}
+                              className={`${s.timelineMoreOption} ${renderedTimelineFilter === filter.value ? s.active : ''}`}
+                              type="button"
+                              aria-pressed={renderedTimelineFilter === filter.value}
+                              onClick={() => {
+                                setTimelineFilter(filter.value);
+                                timelineMoreRef.current?.removeAttribute('open');
+                              }}
+                            >
+                              <span>{filter.label}</span>
+                              <span className={s.timelineFilterCount}>{timelineCounts[filter.value] || 0}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </details>
+                    )}
                   </div>
-                  {timelineStatus === 'loading' && <div className={s.timelineStatus}>Syncing</div>}
+                  <div className={s.timelineToolbarEnd}>
+                    {timelineStatus === 'loading' && <div className={s.timelineStatus}>Syncing</div>}
+                    {isAitUsaContact && access.canWriteCrm && (
+                      <div className={s.timelineActions} aria-label="Activity actions">
+                        <button
+                          ref={noteTriggerRef}
+                          className={`btn btn-sm ${noteComposerOpen ? s.internalNoteActionActive : ''}`}
+                          type="button"
+                          aria-expanded={noteComposerOpen}
+                          aria-controls="contact-internal-note-composer"
+                          onClick={openInternalNoteComposer}
+                        >
+                          <MessageSquarePlus size={14} /> Add internal note
+                        </button>
+                        <button
+                          className={`btn btn-sm ${s.recordOutreachAction}`}
+                          type="button"
+                          onClick={openFollowUpModal}
+                        >
+                          <ClipboardCheck size={14} /> Record outreach
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
+
+                {isAitUsaContact && noteComposerOpen && (
+                  <div id="contact-internal-note-composer" className={s.noteComposerRegion}>
+                    <InternalNoteComposer
+                      value={noteInput}
+                      onChange={(event) => setNoteInput(event.target.value)}
+                      canWrite={access.canWriteCrm}
+                      pending={noteSaving}
+                      onSubmit={addNote}
+                      onCancel={cancelInternalNote}
+                      helpText="Internal context only. Does not record outreach, complete tasks, or schedule follow-up. Saved notes cannot be edited."
+                      submitLabel="Save note"
+                      textareaRef={noteInputRef}
+                      classNames={{
+                        noteBox: s.noteBox,
+                        noteBoxHeader: s.noteBoxHeader,
+                        noteBoxLabel: s.noteBoxLabel,
+                        noteBoxHelp: s.noteBoxHelp,
+                        noteBoxFooter: s.noteBoxFooter,
+                      }}
+                    />
+                  </div>
+                )}
 
                 {timelineStatus === 'loading' && (
                   <PageState
@@ -2013,6 +2598,16 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 {timelineStatus === 'idle' && <div className={s.timeline}>
                   {timeline.map((item) => {
                     const dateParts = timelineDateParts(item);
+                    if (isAitUsaContact) {
+                      return (
+                        <AitUsaActivityRecord
+                          key={item.id}
+                          item={item}
+                          dateParts={dateParts}
+                          fullDateLabel={dateLabel(item)}
+                        />
+                      );
+                    }
                     const provenance = item.presentation?.provenance;
                     const record = item.record;
                     const noteAuthor = timelineNoteAuthor(item);
@@ -2114,80 +2709,46 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   )}
                 </div>}
 
-                <InternalNoteComposer
-                  value={noteInput}
-                  onChange={(event) => setNoteInput(event.target.value)}
-                  canWrite={access.canWriteCrm}
-                  pending={noteSaving}
-                  onSubmit={addNote}
-                  onOpenFollowUp={openFollowUpModal}
-                  classNames={{
-                    noteBox: s.noteBox,
-                    noteBoxHeader: s.noteBoxHeader,
-                    noteBoxLabel: s.noteBoxLabel,
-                    noteBoxHelp: s.noteBoxHelp,
-                    noteBoxFooter: s.noteBoxFooter,
-                  }}
-                />
+                {!isAitUsaContact && (
+                  <InternalNoteComposer
+                    value={noteInput}
+                    onChange={(event) => setNoteInput(event.target.value)}
+                    canWrite={access.canWriteCrm}
+                    pending={noteSaving}
+                    onSubmit={addNote}
+                    onOpenFollowUp={openFollowUpModal}
+                    classNames={{
+                      noteBox: s.noteBox,
+                      noteBoxHeader: s.noteBoxHeader,
+                      noteBoxLabel: s.noteBoxLabel,
+                      noteBoxHelp: s.noteBoxHelp,
+                      noteBoxFooter: s.noteBoxFooter,
+                    }}
+                  />
+                )}
               </div>
             )}
 
             {renderedActiveTab === 'courses' && showCoursesTab && (
-              <div className={s.coursesPanel} aria-label="Courses">
-                <div className={s.courseHero}>
+              <div className={s.coursesPanel} aria-label="Enrollments">
+                <div className={s.courseWorkspaceHeader}>
                   <div className={s.courseHeroMain}>
                     <div className={s.courseHeroIcon}><GraduationCap size={22} /></div>
                     <div>
-                      <span className={s.courseEyebrow}>Active enrollments</span>
-                      <h2>{activeCourseRecords.length ? `${activeCourseRecords.length} active` : 'No active enrollments'}</h2>
-                      <p>
-                        {activeCourseRecords.length
-                          ? 'A student can attend more than one class section at the same time.'
-                          : 'Start an enrollment when the student joins a class. Older courses stay in history.'}
-                      </p>
-                      {activeCourseRecords.length > 0 && (
-                        <div className={s.courseActiveList}>
-                          {activeCourseRecords.map((record) => (
-                            <button
-                              key={record.id}
-                              type="button"
-                              className={s.courseActiveItem}
-                              onClick={() => setSelectedCourseRecordId(record.id)}
-                            >
-                              <strong>{record.courseName}</strong>
-                              <span>{[
-                                record.teacher ? `Teacher: ${record.teacher}` : '',
-                                record.courseLocation,
-                                classSectionScheduleLabel(record.classSection),
-                              ].filter(Boolean).join(' · ') || 'Class details not set'}</span>
-                            </button>
-                          ))}
-                        </div>
-                      )}
+                      <h2>Enrollments</h2>
+                      <p>Current classes first, with completed and ended enrollment history below.</p>
                     </div>
                   </div>
                   {access.canWriteCrm && (
-                    <div className={s.courseHeroActions}>
-                      <button className="btn btn-primary btn-sm" type="button" onClick={() => openCourseModal('new')}>
-                        <Plus size={14} /> Add Enrollment
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                <div className={s.courseToolbar}>
-                  <div>
-                    <strong>Course history</strong>
-                    <span>{courseRecordsState.loading ? 'Loading' : `${currentCourseRecords.length} records`}</span>
-                  </div>
-                  {access.canWriteCrm && (
-                    <div className={s.courseToolbarActions}>
+                    <div className={s.courseWorkspaceActions}>
                       <button className="btn btn-sm" type="button" onClick={() => openCourseModal('history')}>
-                        <Plus size={14} /> Add History
+                        <Plus size={14} /> Add past enrollment
                       </button>
-                      <button className="btn btn-primary btn-sm" type="button" onClick={() => openCourseModal('new')}>
-                        <Plus size={14} /> Add Enrollment
-                      </button>
+                      {canStartEnrollment && (
+                        <button className="btn btn-primary btn-sm" type="button" onClick={() => openCourseModal('start')}>
+                          <Plus size={14} /> {activeCourseRecords.length ? 'Add another enrollment' : 'Start enrollment'}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2195,41 +2756,79 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 {courseRecordsState.error && <div className={s.courseError}>{courseRecordsState.error}</div>}
                 {!courseRecordsState.error && !courseRecordsState.loading && currentCourseRecords.length === 0 && (
                   <div className={s.courseEmpty}>
-                    <div className="empty-state-title">No course history yet</div>
-                    <p className="empty-state-copy">Add an active enrollment or backfill a completed course to start the timeline.</p>
-                    {access.canWriteCrm && (
-                      <button className="btn btn-primary" type="button" onClick={() => openCourseModal('new')}>
-                        <Plus size={16} /> Start Course
-                      </button>
-                    )}
+                    <div className="empty-state-title">No enrollments yet</div>
+                    <p className="empty-state-copy">
+                      {hasCurrentInquiry
+                        ? 'Start the current enrollment or add a past enrollment to build this student history.'
+                        : 'Add past enrollment history here. Start or reopen an inquiry before creating a current enrollment.'}
+                    </p>
                   </div>
                 )}
 
                 {currentCourseRecords.length > 0 && (
                   <div className={s.courseHistoryGrid}>
-                    <div className={s.courseRecordList}>
-                      {courseSummary.records.map((record) => (
-                        <button
-                          key={record.id}
-                          type="button"
-                          className={`${s.courseRecordRow} ${selectedCourseRecord?.id === record.id ? s.active : ''}`}
-                          onClick={() => setSelectedCourseRecordId(record.id)}
-                        >
-                          <span className={`${s.courseStatusDot} ${s[`courseStatus_${record.status}`] || ''}`} />
-                          <span className={s.courseRecordMain}>
-                            <strong>{record.courseName}</strong>
-                            <small>
-                              {courseRecordStatusLabel(record.status)}
-                              {` - ${record.courseLocation || 'Delivery location not set'}`}
-                              {` - ${record.teacher ? `Teacher: ${record.teacher}` : 'Teacher not assigned'}`}
-                              {record.classSection ? ` - ${classSectionScheduleLabel(record.classSection) || record.classSection.sectionKey}` : ''}
-                              {record.startDate ? ` - ${record.startDate}` : ''}
-                              {record.endDate ? ` to ${record.endDate}` : ''}
-                            </small>
-                          </span>
-                          <span className={s.courseRecordStatus}>{courseRecordStatusLabel(record.status)}</span>
-                        </button>
-                      ))}
+                    <div className={s.courseRecordGroups}>
+                      <section className={s.courseRecordGroup} aria-labelledby="active-enrollments-heading">
+                        <div className={s.courseSectionHeader}>
+                          <strong id="active-enrollments-heading">Active enrollments</strong>
+                          <span>{activeCourseRecords.length}</span>
+                        </div>
+                        {activeCourseRecords.length ? (
+                          <div className={s.courseRecordList}>
+                            {activeCourseRecords.map((record) => (
+                              <button
+                                key={record.id}
+                                type="button"
+                                className={`${s.courseRecordRow} ${selectedCourseRecord?.id === record.id ? s.active : ''}`}
+                                onClick={() => setSelectedCourseRecordId(record.id)}
+                              >
+                                <span className={`${s.courseStatusDot} ${s[`courseStatus_${record.status}`] || ''}`} />
+                                <span className={s.courseRecordMain}>
+                                  <strong>{record.courseName}</strong>
+                                  <small>{[
+                                    record.courseLocation || 'Delivery location not set',
+                                    record.teacher ? `Teacher: ${record.teacher}` : 'Teacher not assigned',
+                                    classSectionScheduleLabel(record.classSection),
+                                    record.startDate ? `Started ${record.startDate}` : '',
+                                  ].filter(Boolean).join(' · ')}</small>
+                                </span>
+                                <span className={s.courseRecordStatus}>{courseRecordStatusLabel(record.status)}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : <p className={s.courseSectionEmpty}>No active enrollments.</p>}
+                      </section>
+
+                      <section className={s.courseRecordGroup} aria-labelledby="enrollment-history-heading">
+                        <div className={s.courseSectionHeader}>
+                          <strong id="enrollment-history-heading">Enrollment history</strong>
+                          <span>{historicalCourseRecords.length}</span>
+                        </div>
+                        {historicalCourseRecords.length ? (
+                          <div className={s.courseRecordList}>
+                            {historicalCourseRecords.map((record) => (
+                              <button
+                                key={record.id}
+                                type="button"
+                                className={`${s.courseRecordRow} ${selectedCourseRecord?.id === record.id ? s.active : ''}`}
+                                onClick={() => setSelectedCourseRecordId(record.id)}
+                              >
+                                <span className={`${s.courseStatusDot} ${s[`courseStatus_${record.status}`] || ''}`} />
+                                <span className={s.courseRecordMain}>
+                                  <strong>{record.courseName}</strong>
+                                  <small>{[
+                                    record.courseLocation || 'Delivery location not set',
+                                    record.teacher ? `Teacher: ${record.teacher}` : 'Teacher not assigned',
+                                    record.startDate ? `Started ${record.startDate}` : '',
+                                    record.endDate ? `Ended ${record.endDate}` : '',
+                                  ].filter(Boolean).join(' · ')}</small>
+                                </span>
+                                <span className={s.courseRecordStatus}>{courseRecordStatusLabel(record.status)}</span>
+                              </button>
+                            ))}
+                          </div>
+                        ) : <p className={s.courseSectionEmpty}>No past enrollments recorded.</p>}
+                      </section>
                     </div>
 
                     <aside className={s.courseInspector}>
@@ -2548,44 +3147,46 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
             {renderedActiveTab === 'financials' && (
               <div className={s.recordsList}>
-                {access.canWriteFinancials && (
+                {isAitUsaContact ? (
+                  <div className={s.receiptArchiveHeader}>
+                    <div className={s.commandCopy}>
+                      <div className={s.commandTitle}>Receipt history</div>
+                      <p>Verified receipts for this contact. Payments and checkouts are managed in Collections.</p>
+                    </div>
+                    {access.canReadFinancials && (
+                      <Link className="btn" href="/collections">
+                        <DollarSign size={16} /> Open Collections
+                      </Link>
+                    )}
+                  </div>
+                ) : access.canWriteFinancials && (
                   <div className={s.commandCard}>
                     <div className={s.commandCopy}>
-                      <div className={s.commandTitle}>{isAitUsaContact ? 'Student receipts' : 'Financial workflow'}</div>
-                      <p>
-                        {isAitUsaContact
-                          ? 'Generate AIT USA receipt PDFs once the student is enrolled.'
-                          : 'Estimates can start here. Invoices come from work orders, and payments are recorded against invoices.'}
-                      </p>
+                      <div className={s.commandTitle}>Financial workflow</div>
+                      <p>Estimates can start here. Invoices come from work orders, and payments are recorded against invoices.</p>
                     </div>
-                    {!isAitUsaContact && (
-                      <div className={s.commandControls}>
-                        <label className={s.commandField}>
-                          <span>Work order for invoice</span>
-                          <select className="input select" value={selectedInvoiceWorkOrder ? invoiceWorkOrderId : ''} onChange={(event) => setInvoiceWorkOrderId(event.target.value)}>
-                            <option value="">Select work order</option>
-                            {contactWorkOrders.map((workOrder) => (
-                              <option key={workOrder.id} value={workOrder.id}>
-                                {workOrder.number || 'Work order'} - {workOrder.title || 'Untitled'}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                      </div>
-                    )}
+                    <div className={s.commandControls}>
+                      <label className={s.commandField}>
+                        <span>Work order for invoice</span>
+                        <select className="input select" value={selectedInvoiceWorkOrder ? invoiceWorkOrderId : ''} onChange={(event) => setInvoiceWorkOrderId(event.target.value)}>
+                          <option value="">Select work order</option>
+                          {contactWorkOrders.map((workOrder) => (
+                            <option key={workOrder.id} value={workOrder.id}>
+                              {workOrder.number || 'Work order'} - {workOrder.title || 'Untitled'}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </div>
                     <div className={s.commandActions}>
-                      {!isAitUsaContact && (
-                        <>
-                          <button className="btn btn-primary" type="button" onClick={openEstimateModal}>
-                            <FileText size={16} /> New Estimate
-                          </button>
-                          <button className="btn" type="button" onClick={downloadSelectedWorkOrderInvoice}>
-                            <FileText size={16} /> Generate Invoice
-                          </button>
-                        </>
-                      )}
+                      <button className="btn btn-primary" type="button" onClick={openEstimateModal}>
+                        <FileText size={16} /> New Estimate
+                      </button>
+                      <button className="btn" type="button" onClick={downloadSelectedWorkOrderInvoice}>
+                        <FileText size={16} /> Generate Invoice
+                      </button>
                       <button className="btn" type="button" onClick={() => recordPaymentAgainstInvoice()}>
-                        <DollarSign size={16} /> {isAitUsaContact ? 'Generate Student Receipt' : 'Record Invoice Payment'}
+                        <DollarSign size={16} /> Record Invoice Payment
                       </button>
                     </div>
                     <div className={`${s.workflowNotice} ${
@@ -2600,58 +3201,54 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     </div>
                   </div>
                 )}
-                {visibleFinancials.map(f => (
-                  <div key={f.id} className={s.recordCard}>
-                    <div className={s.recordMain}>
-                      <div className={s.recordIcon}><FileText size={20} /></div>
-                      <div>
-                        <div className={s.recordTitle}>
-                          {isAitUsaContact ? 'Receipt' : f.type} {f.number}
+                {visibleFinancials.map((f) => {
+                  const receiptContext = [
+                    f.date ? `Paid ${f.date}` : '',
+                    f.paymentMethod || '',
+                    f.checkNumber ? `Ref ${f.checkNumber}` : '',
+                  ].filter(Boolean).join(' · ');
+                  return (
+                    <div key={f.id} className={s.recordCard}>
+                      <div className={s.recordMain}>
+                        <div className={s.recordIcon}><FileText size={20} /></div>
+                        <div>
+                          <div className={s.recordTitle}>
+                            {isAitUsaContact ? 'Receipt' : f.type} {f.number}
+                          </div>
+                          <div className={s.recordSubtitle}>
+                            {isAitUsaContact ? (receiptContext || 'Payment receipt') : f.date}
+                          </div>
+                          {isAitUsaContact && f.note && <div className={s.receiptRecordNote}>{f.note}</div>}
                         </div>
-                        <div className={s.recordSubtitle}>{f.date}</div>
+                      </div>
+                      <div className={s.recordValue}>
+                        <div className={s.valueAmount}>${f.amount.toLocaleString()}</div>
+                        <span className={`badge badge-${f.status.toLowerCase()}`}>{f.status}</span>
+                        <button className="btn btn-sm" type="button" onClick={() => downloadFinancialPdf(f)}>
+                          Download PDF
+                        </button>
                       </div>
                     </div>
-                    <div className={s.recordValue}>
-                      <div className={s.valueAmount}>${f.amount.toLocaleString()}</div>
-                      <span className={`badge badge-${f.status.toLowerCase()}`}>{f.status}</span>
-                      <button className="btn btn-sm" type="button" onClick={() => downloadFinancialPdf(f)}>
-                        Download PDF
-                      </button>
-                    </div>
-                  </div>
-                ))}
-                {visibleFinancials.length === 0 && (
+                  );
+                })}
+                {!isAitUsaContact && visibleFinancials.length === 0 && (
                   <div className={`empty-state ${s.financialEmptyState}`}>
-                    <div className="empty-state-title">
-                      {isAitUsaContact ? 'No receipts for this student yet' : 'No financial records for this contact yet'}
-                    </div>
+                    <div className="empty-state-title">No financial records for this contact yet</div>
                     <p className="empty-state-copy">
                       {access.canWriteFinancials
-                        ? (isAitUsaContact
-                            ? 'Change the student status to Enrolled before generating the first AIT USA receipt.'
-                            : 'You can create the first estimate from this contact record. Invoices are generated from linked work orders, and payments are recorded against invoices.')
-                        : (isAitUsaContact
-                            ? 'No receipts are visible for this student in the current scope.'
-                            : 'No estimates, invoices, receipts, or payments are visible for this contact in the current scope.')}
+                        ? 'You can create the first estimate from this contact record. Invoices are generated from linked work orders, and payments are recorded against invoices.'
+                        : 'No estimates, invoices, receipts, or payments are visible for this contact in the current scope.'}
                     </p>
                     <div className="empty-state-actions">
                       {access.canWriteFinancials ? (
                         <>
-                          {isAitUsaContact ? (
-                            <button className="btn btn-primary" type="button" onClick={() => recordPaymentAgainstInvoice()}>
-                              <DollarSign size={16} /> Generate Student Receipt
+                          <button className="btn btn-primary" type="button" onClick={openEstimateModal}>
+                            <FileText size={16} /> New Estimate
+                          </button>
+                          {hasWorkOrders && (
+                            <button className="btn" type="button" onClick={downloadSelectedWorkOrderInvoice}>
+                              <FileText size={16} /> Generate Invoice
                             </button>
-                          ) : (
-                            <>
-                              <button className="btn btn-primary" type="button" onClick={openEstimateModal}>
-                                <FileText size={16} /> New Estimate
-                              </button>
-                              {hasWorkOrders && (
-                                <button className="btn" type="button" onClick={downloadSelectedWorkOrderInvoice}>
-                                  <FileText size={16} /> Generate Invoice
-                                </button>
-                              )}
-                            </>
                           )}
                         </>
                       ) : (
@@ -2664,14 +3261,14 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             )}
           </div>
         </div>
-        {profileSidebar}
+        {!isAitUsaContact && profileSidebar}
       </div>
 
       {courseModal && (
         <Modal
           open={Boolean(courseModal)}
           onClose={closeCourseModal}
-          title={courseForm.id ? 'Edit Enrollment' : (courseModal === 'history' ? 'Add Course History' : 'Add Enrollment')}
+          title={courseForm.id ? 'Edit Enrollment' : (courseModal === 'history' ? 'Add Past Enrollment' : 'Start Enrollment')}
           variant="dialog"
           panelClassName="course-editor-dialog-panel"
           footer={(
@@ -2683,14 +3280,18 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 onClick={saveCourseRecord}
                 disabled={courseBusy || !canSaveCourseForm}
               >
-                <CheckCircle2 size={16} /> {courseBusy ? 'Saving...' : 'Save Course'}
+                <CheckCircle2 size={16} /> {courseBusy ? 'Saving...' : 'Save enrollment'}
               </button>
             </>
           )}
         >
           <div className="course-editor-form">
             <div className="contact-dialog-intro">
-              <p>Record the course exactly as the student moved through it. Status changes which dates and outcome details matter.</p>
+              <p>{courseModal === 'history'
+                ? 'Add an enrollment that already ended without changing the current inquiry.'
+                : (courseForm.id
+                    ? 'Keep this enrollment accurate as the student moves through the class.'
+                    : 'Starting this enrollment also updates the current inquiry status to Enrolled.')}</p>
               <span>{courseModeLabel}</span>
             </div>
 
@@ -2770,8 +3371,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   <p>Pick the student course state. The form below adapts to what that state needs.</p>
                 </div>
               </div>
-              <div className="course-status-grid" role="radiogroup" aria-label="Course status">
-                {COURSE_RECORD_STATUS_OPTIONS.map((option) => {
+              <div className="course-status-grid" role="radiogroup" aria-label="Enrollment status">
+                {courseStatusOptions.map((option) => {
                   const selected = courseForm.status === option.value;
                   return (
                     <button
@@ -2893,10 +3494,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             ? `Completes this task: ${followUpTask.title || 'Follow-up'} (${taskDateLabel(followUpTask.dueAt)}).`
             : followUpRequestedTaskId
               ? 'The selected follow-up task could not be loaded. Close this dialog and reopen it from the task queue.'
-              : 'Records outreach for this Contact and does not complete or cancel any task.'}
+              : 'Records outreach for this Contact. No task is selected for completion.'}
         ownerOptions={ownerOptions}
         canManageAssignments={coordinatorUiPolicy.canManageCoordinatorAssignments}
         showProfile={isAitUsaContact}
+        isAitUsa={isAitUsaContact}
+        isTaskCompletion={Boolean(followUpRequestedTaskId || followUpTask)}
         title={followUpRequestedTaskId || followUpTask ? 'Complete follow-up' : 'Record outreach'}
       />
       {/* Edit Profile Dialog */}
@@ -2910,24 +3513,27 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           footer={<><button className="btn" type="button" onClick={() => setIsEditModalOpen(false)}>Cancel</button><button className="btn btn-primary" type="button" onClick={handleEditSave}>Save Changes</button></>}
         >
           <div className="contact-profile-dialog-form">
-            <div className="contact-dialog-intro">
+            {!isAitUsaContact && <div className="contact-dialog-intro">
               <p>Update {contact?.name || singularLabel.toLowerCase()} without leaving the contact record.</p>
               <span>Profile and routing details</span>
-            </div>
+            </div>}
 
             <div className="profile-editor-tabs" role="tablist" aria-label="Profile edit sections">
-              {profileEditTabs.map((tab) => {
+              {profileEditTabs.map((tab, tabIndex) => {
                 const selected = activeProfileEditTab === tab.id;
                 return (
                   <button
                     key={tab.id}
+                    ref={(node) => { profileEditTabRefs.current[tabIndex] = node; }}
                     type="button"
                     role="tab"
                     aria-selected={selected}
                     aria-controls={`profile-edit-panel-${tab.id}`}
                     id={`profile-edit-tab-${tab.id}`}
+                    tabIndex={selected ? 0 : -1}
                     className={`profile-editor-tab ${selected ? 'is-active' : ''}`}
                     onClick={() => setActiveProfileEditTab(tab.id)}
+                    onKeyDown={(event) => handleProfileEditTabKeyDown(event, tabIndex)}
                   >
                     <span>{tab.label}</span>
                     <small>{tab.summary}</small>
@@ -2936,7 +3542,321 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               })}
             </div>
 
-            {activeProfileEditTab === 'general' && (
+            {activeProfileEditTab === 'contact' && isAitUsaContact && (
+              <section
+                className="contact-profile-dialog-section"
+                role="tabpanel"
+                id="profile-edit-panel-contact"
+                aria-labelledby="profile-edit-tab-contact"
+              >
+                <div className="contact-dialog-section-header">
+                  <div>
+                    <h2>Contact details</h2>
+                    <p>Permanent identity and contact channels shared across every inquiry.</p>
+                  </div>
+                </div>
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-name">Full name</label>
+                    <input id="profile-edit-name" className="input" value={editForm.name} autoFocus onChange={e => setEditForm({...editForm, name: e.target.value})} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-email">Email</label>
+                    <input id="profile-edit-email" className="input" value={editForm.email} onChange={e => setEditForm({...editForm, email: e.target.value})} />
+                  </div>
+                </div>
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-phone">Phone</label>
+                    <input id="profile-edit-phone" className="input" value={editForm.phone} onChange={e => setEditForm({...editForm, phone: e.target.value})} />
+                  </div>
+                </div>
+              </section>
+            )}
+
+            {activeProfileEditTab === 'inquiry' && isAitUsaContact && (
+              <section
+                className="contact-profile-dialog-section"
+                role="tabpanel"
+                id="profile-edit-panel-inquiry"
+                aria-labelledby="profile-edit-tab-inquiry"
+              >
+                <div className="contact-dialog-section-header">
+                  <div>
+                    <h2>{inquiryProfileHeading}</h2>
+                    <p>Lifecycle, ownership, locations, and acquisition context for this inquiry.</p>
+                  </div>
+                </div>
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-status">Inquiry status</label>
+                    <OpportunityLifecycleField
+                      isAitUsa={isAitUsaContact}
+                      hasLeadStatus={contact.hasLeadStatus}
+                      opportunityConflict={contact.opportunityConflict}
+                      status={editForm.status}
+                      statuses={profileStatusOptions}
+                      onStatusChange={e => setEditForm({...editForm, status: e.target.value, terminalStatusReason: ''})}
+                      onStart={() => setStartOpportunityOpen(true)}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-owner">Inquiry owner</label>
+                    {canManageContactAssignments ? (
+                      <select
+                        id="profile-edit-owner"
+                        className="input select"
+                        value={editForm.assignedTo || ''}
+                        disabled={inquiryProfileDisabled}
+                        onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}
+                      >
+                        <option value="">Unassigned</option>
+                        {aitUsaOwnerOptions.map((owner) => (
+                          <option key={owner.id} value={owner.id}>{aitUsaAssigneeOptionLabel(owner, currentUser?.id)}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        id="profile-edit-owner"
+                        className="input"
+                        value={assignedEmployee?.label || 'Unassigned'}
+                        disabled
+                        readOnly
+                      />
+                    )}
+                  </div>
+                </div>
+
+                {isAitUsaContact && !contact.hasLeadStatus && startOpportunityOpen && (
+                  <div className="profile-editor-account-action" aria-label="Start Opportunity">
+                    <div className="grid-2">
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="start-opportunity-status">Initial inquiry status</label>
+                        <select
+                          id="start-opportunity-status"
+                          className="input select"
+                          value={startOpportunityForm.status}
+                          onChange={(event) => setStartOpportunityForm((current) => ({ ...current, status: event.target.value }))}
+                        >
+                          {profileStatusOptions.map((status) => <option key={status} value={status}>{status}</option>)}
+                        </select>
+                      </div>
+                      {canManageContactAssignments && (
+                        <div className="form-group">
+                          <label className="form-label" htmlFor="start-opportunity-owner">Inquiry owner</label>
+                          <select
+                            id="start-opportunity-owner"
+                            className="input select"
+                            value={startOpportunityForm.assignedTo}
+                            onChange={(event) => setStartOpportunityForm((current) => ({ ...current, assignedTo: event.target.value }))}
+                          >
+                            <option value="">Unassigned</option>
+                            {aitUsaOwnerOptions.map((owner) => (
+                              <option key={owner.id} value={owner.id}>{aitUsaAssigneeOptionLabel(owner, currentUser?.id)}</option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="start-opportunity-reason">Reason</label>
+                      <textarea
+                        id="start-opportunity-reason"
+                        className="textarea"
+                        rows={2}
+                        value={startOpportunityForm.reason}
+                        placeholder="Required when the initial status is closed"
+                        onChange={(event) => setStartOpportunityForm((current) => ({ ...current, reason: event.target.value }))}
+                      />
+                    </div>
+                    {startOpportunityError && <div className={s.courseError}>{startOpportunityError}</div>}
+                    <div>
+                      <button className="btn btn-primary" type="button" onClick={startOpportunity} disabled={startOpportunityBusy}>
+                        {startOpportunityBusy ? 'Starting…' : 'Start inquiry'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {isClosedStatusReopen && (
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-reopen-reason">Reopen reason</label>
+                    <select
+                      id="profile-edit-reopen-reason"
+                      className="input select"
+                      value={editForm.statusChangeReason || ''}
+                      onChange={e => setEditForm({...editForm, statusChangeReason: e.target.value})}
+                    >
+                      <option value="">Choose why this closed status is changing</option>
+                      <option value="correction">Correction - closed status was entered by mistake</option>
+                      <option value="new_course_follow_up">New course follow-up - previous student is active again</option>
+                    </select>
+                    <div className="profile-editor-helper">
+                      Use correction only for data-entry mistakes. For a new class or program, choose new course follow-up so history shows this is re-engagement, not an erased completion.
+                    </div>
+                  </div>
+                )}
+                {isEnteringClosedStatus && (
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-terminal-reason">Outcome reason</label>
+                    <textarea
+                      id="profile-edit-terminal-reason"
+                      className="textarea"
+                      rows={2}
+                      value={editForm.terminalStatusReason || ''}
+                      placeholder="Explain why this inquiry is moving to a closed status"
+                      onChange={e => setEditForm({...editForm, terminalStatusReason: e.target.value})}
+                    />
+                  </div>
+                )}
+
+                <div className="grid-2">
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-student-location">Student location</label>
+                    <input
+                      id="profile-edit-student-location"
+                      className="input"
+                      value={editForm.leadProfile?.locationPreference || ''}
+                      placeholder="City, municipality, or address"
+                      disabled={inquiryProfileDisabled}
+                      onChange={e => updateEditLeadProfile('locationPreference', e.target.value)}
+                    />
+                    <div className="profile-editor-helper">Where the student currently lives.</div>
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-school-location">Intended learning location</label>
+                    <select
+                      id="profile-edit-school-location"
+                      className="input select"
+                      value={editForm.address || ''}
+                      disabled={inquiryProfileDisabled}
+                      onChange={e => setEditForm({...editForm, address: e.target.value})}
+                    >
+                      <option value="">Not recorded</option>
+                      {editSchoolLocationOptions.map((location) => <option key={location} value={location}>{location}</option>)}
+                    </select>
+                    <div className="profile-editor-helper">The campus or Online option the student intends to use.</div>
+                  </div>
+                </div>
+
+                {hasCurrentInquiry && (
+                  <div className="profile-editor-workflow-note">
+                    <div>
+                      <strong>Enrollment status is managed in the Enrollments workspace.</strong>
+                      <span>Starting enrollment creates the enrollment and updates this inquiry together.</span>
+                    </div>
+                    <button className="btn" type="button" onClick={openEnrollmentWorkspaceFromProfile}>
+                      {activeCourseRecord ? 'Open Enrollments' : 'Start enrollment'}
+                    </button>
+                  </div>
+                )}
+
+                <details className="profile-editor-disclosure">
+                  <summary>
+                    <span>Source details</span>
+                    <small>{[editForm.source, editForm.leadProfile?.sourceDetail].filter((value) => cleanText(value)).length} recorded</small>
+                  </summary>
+                  <div className="profile-editor-disclosure-body grid-2">
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="profile-edit-source">Source</label>
+                      <select
+                        id="profile-edit-source"
+                        className="input select"
+                        value={editForm.source || ''}
+                        disabled={inquiryProfileDisabled}
+                        onChange={e => setEditForm({...editForm, source: e.target.value})}
+                      >
+                        <option value="">Not recorded</option>
+                        {editSourceOptions.filter(Boolean).map(src => <option key={src} value={src}>{src}</option>)}
+                      </select>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="profile-edit-source-detail">Source detail</label>
+                      <input
+                        id="profile-edit-source-detail"
+                        className="input"
+                        value={editForm.leadProfile?.sourceDetail || ''}
+                        disabled={inquiryProfileDisabled}
+                        onChange={e => updateEditLeadProfile('sourceDetail', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </details>
+              </section>
+            )}
+
+            {activeProfileEditTab === 'preferences' && isAitUsaContact && (
+              <section
+                className="contact-profile-dialog-section"
+                role="tabpanel"
+                id="profile-edit-panel-preferences"
+                aria-labelledby="profile-edit-tab-preferences"
+              >
+                <div className="contact-dialog-section-header">
+                  <div>
+                    <h2>Inquiry preferences</h2>
+                    <p>Program and scheduling context used for this inquiry’s follow-up.</p>
+                  </div>
+                </div>
+                {inquiryProfileDisabled && (
+                  <div className="profile-editor-helper" role="alert">
+                    {contact.opportunityConflict
+                      ? 'Inquiry preferences are read-only until the active-inquiry conflict is resolved.'
+                      : 'This Contact has no inquiry record available for preference edits.'}
+                  </div>
+                )}
+                <div className="grid-2">
+                  <div className="form-group profile-editor-span-2">
+                    <label className="form-label" htmlFor="profile-edit-program-interest">Program interest</label>
+                    <input id="profile-edit-program-interest" className="input" value={editForm.leadProfile?.programInterest || ''} disabled={inquiryProfileDisabled} onChange={e => updateEditLeadProfile('programInterest', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-preferred-day">Preferred day</label>
+                    <input id="profile-edit-preferred-day" className="input" value={editForm.leadProfile?.preferredDay || ''} disabled={inquiryProfileDisabled} onChange={e => updateEditLeadProfile('preferredDay', e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label" htmlFor="profile-edit-preferred-schedule">Preferred schedule</label>
+                    <input id="profile-edit-preferred-schedule" className="input" value={editForm.leadProfile?.preferredSchedule || ''} disabled={inquiryProfileDisabled} onChange={e => updateEditLeadProfile('preferredSchedule', e.target.value)} />
+                  </div>
+                </div>
+                <details className="profile-editor-disclosure">
+                  <summary>
+                    <span>Additional preferences</span>
+                    <small>{[
+                      editForm.leadProfile?.testInterest,
+                      editForm.leadProfile?.educationLevel,
+                      editForm.leadProfile?.schoolName,
+                      editForm.leadProfile?.profileDetails,
+                    ].filter((value) => cleanText(value)).length} recorded</small>
+                  </summary>
+                  <div className="profile-editor-disclosure-body">
+                    <div className="grid-2">
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="profile-edit-test-interest">Test interest</label>
+                        <input id="profile-edit-test-interest" className="input" value={editForm.leadProfile?.testInterest || ''} disabled={inquiryProfileDisabled} onChange={e => updateEditLeadProfile('testInterest', e.target.value)} />
+                      </div>
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="profile-edit-education-level">Education level</label>
+                        <input id="profile-edit-education-level" className="input" value={editForm.leadProfile?.educationLevel || ''} disabled={inquiryProfileDisabled} onChange={e => updateEditLeadProfile('educationLevel', e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="grid-2">
+                      <div className="form-group">
+                        <label className="form-label" htmlFor="profile-edit-school-name">School</label>
+                        <input id="profile-edit-school-name" className="input" value={editForm.leadProfile?.schoolName || ''} disabled={inquiryProfileDisabled} onChange={e => updateEditLeadProfile('schoolName', e.target.value)} />
+                      </div>
+                    </div>
+                    <div className="form-group">
+                      <label className="form-label" htmlFor="profile-edit-profile-details">Inquiry details</label>
+                      <textarea id="profile-edit-profile-details" className="textarea" rows={3} value={editForm.leadProfile?.profileDetails || ''} disabled={inquiryProfileDisabled} onChange={e => updateEditLeadProfile('profileDetails', e.target.value)} />
+                      <div className="profile-editor-helper">Persistent inquiry context—not an internal Activity note.</div>
+                    </div>
+                  </div>
+                </details>
+              </section>
+            )}
+
+            {activeProfileEditTab === 'general' && !isAitUsaContact && (
               <section
                 className="contact-profile-dialog-section"
                 role="tabpanel"
@@ -3103,7 +4023,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               </section>
             )}
 
-            {activeProfileEditTab === 'source' && (
+            {activeProfileEditTab === 'source' && !isAitUsaContact && (
               <section
                 className="contact-profile-dialog-section"
                 role="tabpanel"
@@ -3153,61 +4073,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
               </section>
             )}
 
-            {activeProfileEditTab === 'enrollment' && isAitUsaContact && (
-              <section
-                className="contact-profile-dialog-section"
-                role="tabpanel"
-                id="profile-edit-panel-enrollment"
-                aria-labelledby="profile-edit-tab-enrollment"
-              >
-                <div className="contact-dialog-section-header">
-                  <div>
-                    <h2>Enrollment profile</h2>
-                    <p>Capture program preferences and background details when they matter for follow-up.</p>
-                  </div>
-                </div>
-                <div className="grid-2">
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="profile-edit-program-interest">Program Interest</label>
-                    <input id="profile-edit-program-interest" className="input" value={editForm.leadProfile?.programInterest || ''} onChange={e => updateEditLeadProfile('programInterest', e.target.value)} />
-                  </div>
-                </div>
-                <div className="grid-2">
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="profile-edit-preferred-day">Preferred Day</label>
-                    <input id="profile-edit-preferred-day" className="input" value={editForm.leadProfile?.preferredDay || ''} onChange={e => updateEditLeadProfile('preferredDay', e.target.value)} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="profile-edit-preferred-schedule">Preferred Schedule</label>
-                    <input id="profile-edit-preferred-schedule" className="input" value={editForm.leadProfile?.preferredSchedule || ''} onChange={e => updateEditLeadProfile('preferredSchedule', e.target.value)} />
-                  </div>
-                </div>
-                <div className="grid-2">
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="profile-edit-test-interest">Test</label>
-                    <input id="profile-edit-test-interest" className="input" value={editForm.leadProfile?.testInterest || ''} onChange={e => updateEditLeadProfile('testInterest', e.target.value)} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="profile-edit-education-level">Level</label>
-                    <input id="profile-edit-education-level" className="input" value={editForm.leadProfile?.educationLevel || ''} onChange={e => updateEditLeadProfile('educationLevel', e.target.value)} />
-                  </div>
-                </div>
-                <div className="grid-2">
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="profile-edit-school-name">School</label>
-                    <input id="profile-edit-school-name" className="input" value={editForm.leadProfile?.schoolName || ''} onChange={e => updateEditLeadProfile('schoolName', e.target.value)} />
-                  </div>
-                  <div className="form-group">
-                    <label className="form-label" htmlFor="profile-edit-source-detail">Source Detail</label>
-                    <input id="profile-edit-source-detail" className="input" value={editForm.leadProfile?.sourceDetail || ''} onChange={e => updateEditLeadProfile('sourceDetail', e.target.value)} />
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label className="form-label" htmlFor="profile-edit-profile-details">Profile Details</label>
-                  <textarea id="profile-edit-profile-details" className="textarea" rows={3} value={editForm.leadProfile?.profileDetails || ''} onChange={e => updateEditLeadProfile('profileDetails', e.target.value)} />
-                </div>
-              </section>
-            )}
           </div>
         </Modal>
       )}
@@ -3296,26 +4161,24 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
         </Modal>
       )}
 
-      {paymentModalOpen && (
+      {!isAitUsaContact && paymentModalOpen && (
         <Modal
           open={paymentModalOpen}
           onClose={() => setPaymentModalOpen(false)}
-          title={isAitUsaContact ? 'Generate Student Receipt' : 'Record Payment'}
-          footer={<><button className="btn" onClick={() => setPaymentModalOpen(false)}>Cancel</button><button className="btn btn-primary" onClick={savePayment}>{isAitUsaContact ? 'Save & Download Receipt' : 'Save Payment'}</button></>}
+          title="Record Payment"
+          footer={<><button className="btn" onClick={() => setPaymentModalOpen(false)}>Cancel</button><button className="btn btn-primary" onClick={savePayment}>Save Payment</button></>}
         >
-          {!isAitUsaContact && (
-            <div className="form-group">
-              <label className="form-label">Invoice</label>
-              <select className="input select" value={paymentForm.workOrderId} onChange={e => setPaymentForm({...paymentForm, workOrderId: e.target.value})}>
-                <option value="">Select invoice</option>
-                {contactInvoices.map((invoice) => (
-                  <option key={invoice.id} value={invoice.workOrderId}>
-                    {invoice.number || 'Invoice'} - ${moneyLabel(invoice.balanceDue || invoice.amount)}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
+          <div className="form-group">
+            <label className="form-label">Invoice</label>
+            <select className="input select" value={paymentForm.workOrderId} onChange={e => setPaymentForm({...paymentForm, workOrderId: e.target.value})}>
+              <option value="">Select invoice</option>
+              {contactInvoices.map((invoice) => (
+                <option key={invoice.id} value={invoice.workOrderId}>
+                  {invoice.number || 'Invoice'} - ${moneyLabel(invoice.balanceDue || invoice.amount)}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="grid-2">
             <div className="form-group">
               <label className="form-label">Amount</label>
@@ -3339,21 +4202,19 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
             </div>
           </div>
           <div className="form-group">
-            <label className="form-label">{isAitUsaContact ? 'Receipt Memo' : 'Payment Note / Partial Payment Memo'}</label>
+            <label className="form-label">Payment Note / Partial Payment Memo</label>
             <textarea className="input" rows={3} value={paymentForm.note} onChange={e => setPaymentForm({...paymentForm, note: e.target.value})} />
           </div>
-          {!isAitUsaContact && (
-            <div className="card" style={{padding: 12, display: 'grid', gap: 4}}>
-              <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                <span className="page-subtitle" style={{margin: 0}}>Current balance</span>
-                <strong>${moneyLabel(selectedPaymentBalance)}</strong>
-              </div>
-              <div style={{display: 'flex', justifyContent: 'space-between'}}>
-                <span className="page-subtitle" style={{margin: 0}}>Balance after payment</span>
-                <strong>${moneyLabel(balanceAfterPayment)}</strong>
-              </div>
+          <div className="card" style={{padding: 12, display: 'grid', gap: 4}}>
+            <div style={{display: 'flex', justifyContent: 'space-between'}}>
+              <span className="page-subtitle" style={{margin: 0}}>Current balance</span>
+              <strong>${moneyLabel(selectedPaymentBalance)}</strong>
             </div>
-          )}
+            <div style={{display: 'flex', justifyContent: 'space-between'}}>
+              <span className="page-subtitle" style={{margin: 0}}>Balance after payment</span>
+              <strong>${moneyLabel(balanceAfterPayment)}</strong>
+            </div>
+          </div>
         </Modal>
       )}
 

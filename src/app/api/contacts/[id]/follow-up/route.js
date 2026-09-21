@@ -35,8 +35,10 @@ import {
   TASK_TYPES,
 } from '@/lib/tasks/constants.js';
 import {
+  assertFollowUpOutcomeAllowed,
   contactPatchForFollowUpOutcome,
   followUpActivityMessage,
+  followUpOutcomeAllowsProfileUpdate,
   leadStatusForFollowUpOutcome,
   normalizeFollowUpCompletionPayload,
 } from '@/lib/tasks/follow-up.js';
@@ -123,7 +125,9 @@ function buildFollowUpTransition({
   contactId,
 }) {
   const suggestedLeadStatus = lead ? leadStatusForFollowUpOutcome(completion.outcome, businessUnit) : null;
-  const leadProfilePatch = leadProfilePatchFromPayload(completion.rawPayload || {}, { allowClear: false });
+  const leadProfilePatch = followUpOutcomeAllowsProfileUpdate(completion.outcome)
+    ? leadProfilePatchFromPayload(completion.rawPayload || {}, { allowClear: false })
+    : {};
   const leadProfileDbPatch = leadProfilePatchToDrizzleValues(leadProfilePatch);
   const leadProfileUpdateSummary = leadProfileSummary(leadProfilePatch);
   let leadPatch = null;
@@ -172,6 +176,7 @@ function buildFollowUpTransition({
     contactMethod: completion.contactMethod,
     note: completion.note,
     nextDueAt: completion.nextDueAt?.toISOString?.() || null,
+    appointmentAt: completion.appointmentAt?.toISOString?.() || null,
     statusTransition: statusTransitionMeta,
     leadProfile: Object.keys(leadProfilePatch).length ? leadProfilePatch : null,
   });
@@ -365,6 +370,7 @@ export async function POST(request, { params }, runtime = {}) {
     }
     const businessUnit = await resolveBusinessUnitById(db, session, businessUnitId);
     if (!businessUnit) throw createCrmError('Business unit not found.', 404);
+    assertFollowUpOutcomeAllowed(completion.outcome, businessUnit);
 
     const source = existingTask ? 'contact_log_follow_up_task' : 'contact_log_follow_up';
     const transition = buildFollowUpTransition({
@@ -387,13 +393,17 @@ export async function POST(request, { params }, runtime = {}) {
         )
       : null;
     if (completion.createNextTask && completion.nextDueAt && !nextOwnerUserId) {
-      throw createCrmError('Next follow-up owner is required.');
+      throw createCrmError(completion.appointmentAt
+        ? 'Appointment owner is required.'
+        : 'Next follow-up owner is required.');
     }
     const nextTaskValues = completion.createNextTask && completion.nextDueAt
       ? {
-          title: stringParam(body.nextTaskTitle) || existingTask?.title || `Follow up - ${contact.name}`,
+          title: stringParam(body.nextTaskTitle) || (completion.appointmentAt
+            ? `Appointment - ${contact.name}`
+            : existingTask?.title || `Follow up - ${contact.name}`),
           description: stringParam(body.nextTaskDescription) || null,
-          taskType: TASK_TYPES.FOLLOW_UP,
+          taskType: completion.appointmentAt ? TASK_TYPES.APPOINTMENT : TASK_TYPES.FOLLOW_UP,
           status: TASK_STATUSES.OPEN,
           priority: existingTask?.priority || TASK_PRIORITIES.MEDIUM,
           dueAt: completion.nextDueAt,
@@ -403,7 +413,7 @@ export async function POST(request, { params }, runtime = {}) {
           canceledAt: null,
           sourceType: 'manual',
           sourceId: existingTask?.id || contact.id,
-          sourceLabel: 'Follow-up completion',
+          sourceLabel: completion.appointmentAt ? 'Appointment commitment' : 'Follow-up completion',
           metadataJson: compactObject({
             createdFromTaskId: existingTask?.id || null,
             previousOutcome: completion.outcome,
@@ -436,6 +446,7 @@ export async function POST(request, { params }, runtime = {}) {
           followUpOutcome: completion.outcome,
           activityEventType: completion.eventType,
           nextDueAt: completion.nextDueAt?.toISOString?.() || null,
+          appointmentAt: completion.appointmentAt?.toISOString?.() || null,
           nextOwnerUserId,
         }),
         contactPatch: contactPatchForFollowUpOutcome(completion.outcome, now),
@@ -466,6 +477,7 @@ export async function POST(request, { params }, runtime = {}) {
           createdFromTaskId: existingTask.id,
           followUpOutcome: completion.outcome,
           ownerUserId: nextOwnerUserId,
+          appointmentAt: completion.appointmentAt?.toISOString?.() || null,
         }),
       });
 
@@ -495,7 +507,11 @@ export async function POST(request, { params }, runtime = {}) {
       contactPatch: contactPatchForFollowUpOutcome(completion.outcome, now),
       leadPatch: transition.leadPatch,
       leadStatusChange: transition.leadStatusChange,
-      cancelOpenFollowUps: false,
+      cancelOpenFollowUps: isNoFurtherProspectingLifecycleStatus(transition.leadStatusChange?.toStatus),
+      cancelOpenFollowUpsContext: {
+        source: 'contact_follow_up_record',
+        lifecycleStatus: transition.leadStatusChange?.toStatus || null,
+      },
       followUpOutcome: completion.outcome,
       followUpChannel: completion.channel,
       ...(workflowKeyForBusinessUnit(businessUnit) === WORKFLOW_KEYS.AIT_USA && transition.leadPatch && lead ? {
@@ -516,6 +532,7 @@ export async function POST(request, { params }, runtime = {}) {
         contactId: contact.id,
         followUpOutcome: completion.outcome,
         ownerUserId: nextOwnerUserId,
+        appointmentAt: completion.appointmentAt?.toISOString?.() || null,
       }),
     });
 

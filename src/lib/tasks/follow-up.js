@@ -92,6 +92,28 @@ export function followUpOutcomeClosesFollowUp(outcome) {
   ].includes(outcome);
 }
 
+export function followUpOutcomeRequiresAppointment(outcome) {
+  return outcome === FOLLOW_UP_OUTCOMES.APPOINTMENT_SCHEDULED;
+}
+
+export function followUpOutcomeAllowsProfileUpdate(outcome) {
+  return [
+    FOLLOW_UP_OUTCOMES.REACHED_INTERESTED,
+    FOLLOW_UP_OUTCOMES.APPOINTMENT_SCHEDULED,
+    FOLLOW_UP_OUTCOMES.NEEDS_NEXT_FOLLOW_UP,
+  ].includes(outcome);
+}
+
+export function assertFollowUpOutcomeAllowed(outcome, businessUnit = null) {
+  if (
+    workflowKeyForBusinessUnit(businessUnit) === WORKFLOW_KEYS.AIT_USA &&
+    outcome === FOLLOW_UP_OUTCOMES.ENROLLED_OR_WON
+  ) {
+    throw followUpError('Use Start enrollment to enroll an AIT USA student.', 409);
+  }
+  return outcome;
+}
+
 export function normalizeFollowUpCompletionPayload({
   task,
   payload = {},
@@ -106,9 +128,15 @@ export function normalizeFollowUpCompletionPayload({
   const channel = normalizeFollowUpChannel(payload.channel || payload.followUpChannel);
   const contactMethod = cleanText(payload.contactMethod || payload.phone || payload.email);
   const closesFollowUp = followUpOutcomeClosesFollowUp(outcome);
-  const nextDueAt = !closesFollowUp && (payload.nextDueAt || payload.nextFollowUpAt)
-    ? parseFollowUpDateTime(payload.nextDueAt || payload.nextFollowUpAt, 'nextDueAt')
+  const appointmentAt = followUpOutcomeRequiresAppointment(outcome)
+    ? parseFollowUpDateTime(payload.appointmentAt, 'appointmentAt')
     : null;
+  if (followUpOutcomeRequiresAppointment(outcome) && !appointmentAt) {
+    throw followUpError('Appointment date and time are required when an appointment is scheduled.');
+  }
+  const nextDueAt = appointmentAt || (!closesFollowUp && (payload.nextDueAt || payload.nextFollowUpAt)
+    ? parseFollowUpDateTime(payload.nextDueAt || payload.nextFollowUpAt, 'nextDueAt')
+    : null);
   const occurredAt = payload.occurredAt
     ? parseFollowUpDateTime(payload.occurredAt, 'occurredAt')
     : now;
@@ -125,6 +153,7 @@ export function normalizeFollowUpCompletionPayload({
     channel,
     contactMethod,
     occurredAt,
+    appointmentAt,
     nextDueAt,
     createNextTask,
   };
@@ -139,10 +168,12 @@ export function parseFollowUpDateTime(value, fieldName) {
   return date;
 }
 
-export function followUpActivityMessage({ outcomeLabel, note, nextDueAt }) {
+export function followUpActivityMessage({ outcomeLabel, note, nextDueAt, appointmentAt }) {
   const parts = [`Follow-up completed: ${outcomeLabel}.`];
   if (note) parts.push(note);
-  if (nextDueAt) {
+  if (appointmentAt) {
+    parts.push(`Appointment ${appointmentAt.toISOString()}.`);
+  } else if (nextDueAt) {
     parts.push(`Next follow-up ${nextDueAt.toISOString().slice(0, 10)}.`);
   }
   return parts.join(' ');

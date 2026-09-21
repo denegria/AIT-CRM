@@ -291,3 +291,126 @@ test('both follow-up routes bind AIT USA Lead mutations to the selected Opportun
   assert.equal(contactServiceInput.aitUsaOpportunityMutation.toStatus, 'Follow Up');
   assert.equal(typeof contactServiceInput.aitUsaOpportunityMutation.authorize, 'function');
 });
+
+test('both routes reject direct AIT USA enrollment before the follow-up writer runs', async () => {
+  const contact = {
+    id: ids.contact,
+    organizationId: ids.organization,
+    primaryBusinessUnitId: ids.businessUnit,
+    name: 'Student',
+  };
+  const lead = {
+    id: ids.lead,
+    organizationId: ids.organization,
+    businessUnitId: ids.businessUnit,
+    contactId: ids.contact,
+    assignedUserId: ids.user,
+    status: 'Follow Up',
+    currentStage: 'Follow Up',
+  };
+  const businessUnit = { id: ids.businessUnit, name: 'AIT USA Institute' };
+  const payload = {
+    taskId: ids.task,
+    contactId: ids.contact,
+    leadId: ids.lead,
+    outcome: 'enrolled_or_won',
+    channel: 'in_person',
+    note: 'Student is ready to enroll.',
+  };
+  let writerCalls = 0;
+
+  const taskResponse = await patchTask(
+    jsonRequest('http://localhost/api/tasks', { id: ids.task, action: 'complete', ...payload }, 'PATCH'),
+    {
+      requirePermissionForRequest: permission,
+      getDbForRequest: () => sequentialReadDb([selectedTask], [contact], [lead], [businessUnit]),
+      completeFollowUpForRequest: async () => { writerCalls += 1; },
+    },
+  );
+  assert.equal(taskResponse.status, 409);
+  assert.match((await taskResponse.json()).error, /Start enrollment/);
+
+  const contactResponse = await postContactFollowUp(
+    jsonRequest(`http://localhost/api/contacts/${ids.contact}/follow-up`, payload),
+    { params: Promise.resolve({ id: ids.contact }) },
+    {
+      requirePermissionForRequest: permission,
+      getDbForRequest: () => sequentialReadDb([contact], [selectedTask], [lead], [businessUnit]),
+      completeFollowUpForRequest: async () => { writerCalls += 1; },
+    },
+  );
+  assert.equal(contactResponse.status, 409);
+  assert.match((await contactResponse.json()).error, /Start enrollment/);
+  assert.equal(writerCalls, 0);
+});
+
+test('appointment outcomes create appointment tasks and ordinary terminal outreach reconciles open follow-ups', async () => {
+  const contact = {
+    id: ids.contact,
+    organizationId: ids.organization,
+    primaryBusinessUnitId: ids.businessUnit,
+    name: 'Student',
+  };
+  const lead = {
+    id: ids.lead,
+    organizationId: ids.organization,
+    businessUnitId: ids.businessUnit,
+    contactId: ids.contact,
+    assignedUserId: ids.user,
+    status: 'New Lead',
+    currentStage: 'New Lead',
+  };
+  const businessUnit = { id: ids.businessUnit, name: 'AIT USA Institute' };
+  const appointmentAt = '2026-09-22T18:30:00.000Z';
+  let appointmentInput = null;
+  const appointmentResponse = await postContactFollowUp(
+    jsonRequest(`http://localhost/api/contacts/${ids.contact}/follow-up`, {
+      contactId: ids.contact,
+      leadId: ids.lead,
+      outcome: 'appointment_scheduled',
+      channel: 'in_person',
+      note: 'Confirmed front-desk appointment.',
+      appointmentAt,
+      nextOwnerUserId: ids.user,
+    }),
+    { params: Promise.resolve({ id: ids.contact }) },
+    {
+      requirePermissionForRequest: permission,
+      getDbForRequest: () => sequentialReadDb([contact], [lead], [businessUnit], [{ id: ids.user }]),
+      recordFollowUpForRequest: async (input) => {
+        appointmentInput = input;
+        return { nextTask: { id: ids.task, ...input.nextTaskValues } };
+      },
+    },
+  );
+  assert.equal(appointmentResponse.status, 200);
+  assert.equal(appointmentInput.nextTaskValues.taskType, 'appointment');
+  assert.equal(appointmentInput.nextTaskValues.title, 'Appointment - Student');
+  assert.equal(appointmentInput.nextTaskValues.dueAt.toISOString(), appointmentAt);
+
+  let terminalInput = null;
+  const terminalResponse = await postContactFollowUp(
+    jsonRequest(`http://localhost/api/contacts/${ids.contact}/follow-up`, {
+      contactId: ids.contact,
+      leadId: ids.lead,
+      outcome: 'do_not_contact',
+      channel: 'phone',
+      note: 'Student requested no further contact.',
+      leadProfile: { programInterest: 'Must not be updated from a hidden field.' },
+    }),
+    { params: Promise.resolve({ id: ids.contact }) },
+    {
+      requirePermissionForRequest: permission,
+      getDbForRequest: () => sequentialReadDb([contact], [lead], [businessUnit]),
+      recordFollowUpForRequest: async (input) => {
+        terminalInput = input;
+        return { nextTask: null };
+      },
+    },
+  );
+  assert.equal(terminalResponse.status, 200);
+  assert.equal(terminalInput.cancelOpenFollowUps, true);
+  assert.equal(terminalInput.cancelOpenFollowUpsContext.lifecycleStatus, 'Not Interested');
+  assert.equal(terminalInput.contactPatch.isDoNotCall, true);
+  assert.equal(Object.prototype.hasOwnProperty.call(terminalInput.leadPatch, 'programInterest'), false);
+});

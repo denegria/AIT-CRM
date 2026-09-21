@@ -82,7 +82,7 @@ test('AIT USA contact detail uses enrollment grammar and hides empty Signs finan
   assert.equal(model.profileTitle, 'Enrollment Profile');
   assert.equal(model.sourceEyebrow, 'Wix Website Form');
   assert.deepEqual(model.snapshotItems.map((item) => item.key), ['lead', 'follow_up', 'message', 'task']);
-  assert.deepEqual(model.timelineFilters.map((filter) => filter.value), ['all', 'lead', 'follow_up', 'message', 'task', 'note', 'import']);
+  assert.deepEqual(model.timelineFilters.map((filter) => filter.value), ['all', 'lead', 'follow_up', 'message', 'task', 'note', 'system', 'import']);
   assert.equal(model.tabs.showWorkOrders, false);
   assert.equal(model.tabs.showFinancials, false);
   assert.ok(model.highlights.some((item) => item.label === 'Program' && item.value === 'ESL'));
@@ -224,15 +224,16 @@ test('AIT USA contact detail only adds student receipt finance affordances when 
   assert.deepEqual(model.snapshotItems.map((item) => item.key), ['lead', 'follow_up', 'message', 'task', 'work', 'payment']);
   assert.deepEqual(model.snapshotItems.map((item) => item.label), ['Inquiry', 'Outreach', 'Messages', 'Tasks', 'Related work', 'Receipts']);
   assert.deepEqual(model.timelineFilters.map((filter) => filter.label), [
-    'All history',
-    'Enrollment leads',
-    'Follow-ups',
+    'All activity',
+    'Inquiries',
+    'Outreach',
     'Messages',
     'Tasks',
     'Notes',
+    'System history',
     'Related work',
     'Receipts',
-    'Source details',
+    'Import history',
   ]);
 });
 

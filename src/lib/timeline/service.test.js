@@ -134,7 +134,7 @@ test('buildContactTimeline preserves imported AIT USA follow-up provenance', () 
   assert.deepEqual(followUp.source, { label: '2025', row: 12 });
   assert.deepEqual(followUp.presentation, {
     category: 'follow_up',
-    categoryLabel: 'Follow-up',
+    categoryLabel: 'Outreach',
     priority: 'primary',
     provenance: {
       eventType: 'ait_usa.follow_up',
@@ -143,6 +143,11 @@ test('buildContactTimeline preserves imported AIT USA follow-up provenance', () 
       sourceKind: 'Import source',
     },
     isImported: true,
+    facets: ['import'],
+    template: 'outreach',
+    title: 'Follow-up attempt',
+    statusLabel: '',
+    meta: [],
   });
   assert.equal(followUp.businessUnit.name, 'AIT USA');
   assert.deepEqual(followUp.linkedRecords.map((record) => record.type), ['contact', 'lead']);
@@ -179,6 +184,10 @@ test('buildContactTimeline treats employee follow-up completion as structured ac
   assert.equal(followUp.type, 'activity');
   assert.equal(followUp.title, 'No answer');
   assert.equal(followUp.presentation.category, 'follow_up');
+  assert.equal(followUp.presentation.categoryLabel, 'Outreach');
+  assert.equal(followUp.presentation.template, 'outreach');
+  assert.equal(followUp.presentation.statusLabel, 'No answer');
+  assert.deepEqual(followUp.presentation.meta, []);
   assert.equal(followUp.presentation.isImported, false);
   assert.deepEqual(followUp.linkedRecords.map((record) => record.type), ['contact', 'lead', 'task']);
   assert.equal(followUp.linkedRecords.find((record) => record.type === 'task').label, 'Task: Call Hilda');
@@ -218,7 +227,7 @@ test('buildContactTimeline labels first manual AIT USA follow-up as first outrea
   assert.equal(firstOutreach.presentation.categoryLabel, 'First outreach');
   assert.equal(firstOutreach.presentation.provenance, null);
   assert.equal(followUp.title, 'Follow-up attempt');
-  assert.equal(followUp.presentation.categoryLabel, 'Follow-up');
+  assert.equal(followUp.presentation.categoryLabel, 'Outreach');
   assert.equal(followUp.presentation.provenance, null);
 });
 
@@ -315,6 +324,11 @@ test('buildContactTimeline interprets Wix website imports without raw pipe text'
   assert.equal(lead.record.kind, 'website_lead');
   assert.deepEqual(lead.record.meta, ['Stage New Lead', 'For myself', 'Location New jersey', 'Age 36', 'Source wix-ait-usa']);
   assert.equal(lead.presentation.category, 'lead');
+  assert.equal(lead.presentation.categoryLabel, 'Inquiry');
+  assert.equal(lead.presentation.template, 'inquiry');
+  assert.equal(lead.presentation.statusLabel, 'New Lead');
+  assert.deepEqual(lead.presentation.meta, ['For myself', 'Location New jersey', 'Age 36']);
+  assert.deepEqual(lead.presentation.facets, ['import']);
   assert.equal(lead.presentation.provenance.sourceKind, 'Website form row');
   assert.match(lead.presentation.provenance.rawText, /source_key=wix-ait-usa/);
   assert.equal(detailsNote.title, 'Website form details');
@@ -360,7 +374,202 @@ test('buildContactTimeline keeps historical Wix imports chip-only by default', (
     'Source wix-ait-usa',
     'Submission wix-history-123',
   ]);
+  assert.deepEqual(lead.presentation.meta, []);
   assert.match(lead.presentation.provenance.rawText, /Wix sources: Wix Contacts Export/);
+});
+
+test('buildContactTimeline classifies AIT USA workflow events as System with human titles', () => {
+  const timeline = buildContactTimeline({
+    activityEvents: [{
+      id: 'placement-review-created',
+      contactId: 'contact-1',
+      leadId: 'lead-1',
+      businessUnitId: 'bu-ait-usa',
+      eventType: 'aitusa.placement_review_created',
+      message: 'AIT USA placement_review_created | level:book-2 | answered:9',
+      metadataJson: {
+        placement: {
+          recommendedLevelLabel: 'Book 2',
+          reviewStatus: 'pending',
+          communicationPreference: 'email',
+        },
+        correlationId: 'private-machine-id',
+      },
+      occurredAt: new Date('2026-06-03T14:00:00.000Z'),
+    }],
+    businessUnits: [{ id: 'bu-ait-usa', name: 'AIT USA Institute' }],
+  });
+
+  const event = timeline[0];
+  assert.equal(event.title, 'Placement review created');
+  assert.equal(event.text, '');
+  assert.equal(event.presentation.category, 'system');
+  assert.equal(event.presentation.categoryLabel, 'System');
+  assert.equal(event.presentation.template, 'system');
+  assert.deepEqual(event.presentation.meta, ['Level Book 2', 'Review Pending', 'Contact Email']);
+  assert.equal(event.presentation.provenance, null);
+});
+
+test('buildContactTimeline projects useful task state without duplicating its title', () => {
+  const timeline = buildContactTimeline({
+    tasks: [{
+      id: 'task-1',
+      contactId: 'contact-1',
+      leadId: 'lead-1',
+      businessUnitId: 'bu-1',
+      title: 'Review placement result',
+      status: 'open',
+      priority: 'high',
+      dueAt: new Date('2026-06-04T15:00:00.000Z'),
+      ownerUserId: 'owner-1',
+    }],
+    taskEvents: [{
+      id: 'task-event-1',
+      taskId: 'task-1',
+      businessUnitId: 'bu-1',
+      eventType: 'created',
+      message: 'Created task Review placement result.',
+      actorUserId: 'actor-1',
+      occurredAt: new Date('2026-06-03T14:00:00.000Z'),
+    }],
+    users: [
+      { id: 'owner-1', name: 'Lili' },
+      { id: 'actor-1', name: 'Coordinator' },
+    ],
+    businessUnits: [{ id: 'bu-1', name: 'AIT USA Institute' }],
+  });
+
+  const event = timeline[0];
+  assert.equal(event.title, 'Review placement result');
+  assert.equal(event.text, '');
+  assert.equal(event.presentation.category, 'task');
+  assert.equal(event.presentation.statusLabel, 'Created');
+  assert.deepEqual(event.presentation.meta, ['Status Open', 'Owner Lili', 'Due Jun 4, 2026', 'Priority High']);
+  assert.equal(event.linkedRecords.some((record) => record.label === 'Task: Review placement result'), false);
+});
+
+test('buildContactTimeline makes inquiry transitions concise and human', () => {
+  const timeline = buildContactTimeline({
+    leadStatusHistory: [{
+      id: 'lead-status-1',
+      contactId: 'contact-1',
+      leadId: 'lead-1',
+      businessUnitId: 'bu-1',
+      fromStatus: 'New Lead',
+      toStatus: 'Follow Up',
+      actorUserId: 'user-1',
+      occurredAt: new Date('2026-05-23T12:30:00.000Z'),
+    }],
+    users: [{ id: 'user-1', name: 'Coordinator' }],
+    businessUnits: [{ id: 'bu-1', name: 'AIT USA Institute' }],
+  });
+
+  const event = timeline[0];
+  assert.equal(event.title, 'Inquiry moved to Follow Up');
+  assert.equal(event.text, '');
+  assert.equal(event.presentation.categoryLabel, 'Inquiry');
+  assert.equal(event.presentation.statusLabel, 'Follow Up');
+  assert.deepEqual(event.presentation.meta, ['From New Lead', 'By Coordinator']);
+});
+
+test('buildContactTimeline consolidates an unlinked capture event with its matching website inquiry', () => {
+  const timeline = buildContactTimeline({
+    activityEvents: [{
+      id: 'capture-1',
+      contactId: 'contact-1',
+      businessUnitId: 'bu-1',
+      eventType: 'website_lead_captured',
+      message: 'Facebook lead captured.',
+      metadataJson: { externalId: 'fb-1' },
+      occurredAt: new Date('2026-05-20T20:07:20.000Z'),
+    }],
+    leads: [{
+      id: 'lead-1',
+      contactId: 'contact-1',
+      businessUnitId: 'bu-1',
+      sourceType: 'website_form',
+      sourceName: 'Facebook Lead Ads',
+      status: 'New Lead',
+      currentStage: 'New Lead',
+      originalNotes: 'website_form | external_id=fb-1 | source_key=facebook-lead-ads',
+      createdAt: new Date('2026-05-20T20:07:00.000Z'),
+    }],
+  });
+
+  assert.equal(timeline.some((entry) => entry.id === 'activity:capture-1'), false);
+  assert.equal(timeline.filter((entry) => entry.type === 'lead').length, 1);
+});
+
+test('buildContactTimeline consolidates a linked Facebook capture when the source type is provider-specific', () => {
+  const timeline = buildContactTimeline({
+    activityEvents: [{
+      id: 'capture-facebook-linked',
+      contactId: 'contact-facebook',
+      leadId: 'lead-facebook',
+      businessUnitId: 'bu-1',
+      eventType: 'facebook_lead_captured',
+      message: 'Facebook lead captured from form 1514075503748068.',
+      occurredAt: new Date('2026-06-17T09:18:35.652Z'),
+    }],
+    leads: [{
+      id: 'lead-facebook',
+      contactId: 'contact-facebook',
+      businessUnitId: 'bu-1',
+      sourceType: 'facebook_lead_ads',
+      sourceName: 'Facebook Ads',
+      status: 'New Lead',
+      currentStage: 'New Lead',
+      originalNotes: 'Facebook leadgen_id=984635700998361 source_row_id=row-1 | form_fields=Education Level: High school / GED',
+      createdAt: new Date('2026-06-17T09:18:35.652Z'),
+    }],
+    businessUnits: [{ id: 'bu-1', name: 'AIT USA Institute' }],
+  });
+
+  assert.equal(timeline.some((entry) => entry.id === 'activity:capture-facebook-linked'), false);
+  const inquiry = timeline.find((entry) => entry.id === 'lead:lead-facebook');
+  assert.equal(inquiry.presentation.title, 'Facebook inquiry received');
+  assert.equal(inquiry.text, 'Website lead submitted.');
+  assert.match(inquiry.presentation.provenance.rawText, /leadgen_id=/);
+});
+
+test('buildContactTimeline keeps workbook-like inquiry payloads exclusively in source details', () => {
+  const timeline = buildContactTimeline({
+    leads: [{
+      id: 'lead-imported-inquiry',
+      contactId: 'contact-imported-inquiry',
+      businessUnitId: 'bu-1',
+      sourceType: 'import',
+      sourceName: 'AIT USA Retargeting A2 Dropped Out',
+      status: 'Dropped / Quit',
+      currentStage: 'Dropped / Quit',
+      originalNotes: 'ait_usa_xlsx | workbook_hash=abc123 | source_row=2025#1195 | policy=named_import_candidate | source_sheet=Retargetting List - A2',
+      createdAt: new Date('2026-01-08T12:00:00.000Z'),
+    }],
+    businessUnits: [{ id: 'bu-1', name: 'AIT USA Institute' }],
+  });
+
+  const inquiry = timeline[0];
+  assert.equal(inquiry.text, '');
+  assert.equal(inquiry.presentation.statusLabel, 'Dropped / Quit');
+  assert.match(inquiry.presentation.provenance.rawText, /workbook_hash=/);
+});
+
+test('buildContactTimeline marks midnight imported records as date precision', () => {
+  const timeline = buildContactTimeline({
+    activityEvents: [{
+      id: 'imported-follow-up-midnight',
+      contactId: 'contact-1',
+      businessUnitId: 'bu-1',
+      eventType: 'ait_usa.follow_up',
+      message: 'Called student.',
+      sourceSheet: '2025',
+      sourceRow: 9,
+      occurredAt: new Date('2025-06-01T00:00:00.000Z'),
+    }],
+    businessUnits: [{ id: 'bu-1', name: 'AIT USA Institute' }],
+  });
+
+  assert.equal(timeline[0].presentation.timestampPrecision, 'date');
 });
 
 test('buildContactTimeline makes AIT Signs promoted work and financial history readable', () => {

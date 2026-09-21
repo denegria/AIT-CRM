@@ -41,6 +41,10 @@ export function InternalNoteComposer({
   pending = false,
   onSubmit,
   onOpenFollowUp,
+  onCancel,
+  helpText = 'Saved notes are added to the timeline and cannot be edited.',
+  submitLabel = 'Add note',
+  textareaRef,
   id = 'contact-timeline-internal-note',
   classNames = {},
 } = {}) {
@@ -64,11 +68,12 @@ export function InternalNoteComposer({
       createElement(
         'p',
         { key: 'help', id: helpId, className: className('noteBoxHelp') },
-        'Saved notes are added to the timeline and cannot be edited.',
+        helpText,
       ),
     ]),
     createElement('textarea', {
       key: 'textarea',
+      ref: textareaRef,
       id,
       name: 'internal-note',
       value,
@@ -83,9 +88,14 @@ export function InternalNoteComposer({
       createElement(
         'button',
         { key: 'submit', className: 'btn btn-primary btn-sm', type: 'submit', disabled: submitDisabled },
-        'Add note',
+        submitLabel,
       ),
-      createElement(
+      onCancel && createElement(
+        'button',
+        { key: 'cancel', className: 'btn btn-sm', type: 'button', onClick: onCancel, disabled: pending },
+        'Cancel',
+      ),
+      onOpenFollowUp && createElement(
         'button',
         { key: 'follow-up', className: 'btn btn-sm', type: 'button', onClick: onOpenFollowUp, disabled: !canWrite },
         'Log Follow-up',

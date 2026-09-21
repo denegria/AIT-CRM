@@ -23,7 +23,7 @@ test('Contact outcome submission carries the resolved exact identifiers and disa
   assert.match(contactPageSource, /leadId: followUpLeadId/);
   assert.match(contactPageSource, /submitDisabled=\{followUpResolving \|\| Boolean\(followUpError\)\}/);
   assert.doesNotMatch(contactPageSource, /Completes oldest open follow-up task/);
-  assert.match(contactPageSource, /does not complete or cancel any task/);
+  assert.match(contactPageSource, /No task is selected for completion/);
   assert.match(contactPageSource, /followUpRequestedTaskId \|\| followUpTask \? 'Complete follow-up' : 'Record outreach'/);
 });
 
@@ -35,7 +35,10 @@ test('Contact completion route has no oldest-open completion fallback', () => {
   assert.match(contactRouteSource, /assertExactFollowUpTaskSelection\(\{/);
   assert.match(contactRouteSource, /resolveExactFollowUpTaskRequest\(\{/);
   assert.match(contactRouteSource, /resolveFollowUpLeadContext\(\{/);
-  assert.match(contactRouteSource, /cancelOpenFollowUps: false/);
+  assert.match(
+    contactRouteSource,
+    /cancelOpenFollowUps: isNoFurtherProspectingLifecycleStatus\(transition\.leadStatusChange\?\.toStatus\)/,
+  );
 });
 
 test('Tasks completion validates the exact Contact and Lead chain before calling the write service', () => {

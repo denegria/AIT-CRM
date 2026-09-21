@@ -141,6 +141,13 @@ function dateInputToIso(value) {
   return date.toISOString();
 }
 
+function dateTimeInputToIso(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
 function formatDate(value) {
   const key = dateKey(value);
   if (!key) return 'No due date';
@@ -1211,6 +1218,7 @@ export default function FollowUpQueuePage() {
       note: draft.note,
       leadProfile: draft.leadProfile,
       nextDueAt: dateInputToIso(draft.nextDueDate),
+      appointmentAt: dateTimeInputToIso(draft.appointmentAt),
       nextOwnerUserId: draft.nextOwnerUserId || task.ownerUserId || null,
       ...(coordinatorUiPolicy.lockedOwnerUserId ? { nextOwnerUserId: coordinatorUiPolicy.lockedOwnerUserId } : {}),
     });
@@ -1420,6 +1428,10 @@ export default function FollowUpQueuePage() {
   const activeFollowUpDraft = activeFollowUpTask
     ? followUpDraft(activeFollowUpTask.id, activeFollowUpTask)
     : null;
+  const activeFollowUpIsAitUsa = Boolean(
+    activeFollowUpTask &&
+    accessibleContacts.find((contact) => contact.id === activeFollowUpTask.contactId)?.workflowKey === 'ait_usa'
+  );
   if (!access.canReadCrm) {
     return (
       <div className="fade-in">
@@ -2215,11 +2227,10 @@ export default function FollowUpQueuePage() {
           label: user.name || user.email || 'Unnamed User',
         }))}
         canManageAssignments={coordinatorUiPolicy.canManageCoordinatorAssignments}
-        showProfile={Boolean(
-          activeFollowUpTask &&
-          accessibleContacts.find((contact) => contact.id === activeFollowUpTask.contactId)?.workflowKey === 'ait_usa'
-        )}
-        title="Log follow-up outcome"
+        showProfile={activeFollowUpIsAitUsa}
+        isAitUsa={activeFollowUpIsAitUsa}
+        isTaskCompletion
+        title="Complete follow-up"
         returnFocusRef={followUpOutcomeTriggerRef}
       />
       <ConfirmDialog

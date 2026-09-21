@@ -36,6 +36,7 @@ import {
   scopedWorkOrderWhere,
 } from './crm/access.js';
 import { toBusinessUnitPayload } from './crm/payloads.js';
+import { leadProfileForPayload } from './crm/lead-profile.js';
 import { isPipelineEligibleContact, workflowFromLead } from './sales-workflow';
 import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from './crm/lifecycle.js';
 import { filterTimelineRowsForBusinessUnit } from './timeline/service.js';
@@ -391,6 +392,16 @@ export function mapContacts(
         sourceLabel: contact.sourceLabel,
         workflowKey: workflow.workflowKey,
       }),
+      leadProfile: leadProfileForPayload(lead),
+      programInterest: lead?.programInterest || '',
+      preferredDay: lead?.preferredDay || '',
+      preferredSchedule: lead?.preferredSchedule || '',
+      testInterest: lead?.testInterest || '',
+      educationLevel: lead?.educationLevel || '',
+      schoolName: lead?.schoolName || '',
+      locationPreference: lead?.locationPreference || '',
+      profileDetails: lead?.profileDetails || '',
+      sourceDetail: lead?.sourceDetail || '',
       courseMetadata: {
         currentCourse: courseSummary.currentCourse?.courseName || lead?.currentCourse || '',
         completedCourse: courseSummary.latestCompletedCourse?.courseName || lead?.completedCourse || '',
@@ -420,7 +431,6 @@ export function mapContacts(
       lastEdited: touchSummary.lastEdited,
       enrollmentSignals,
       inquirySource: enrollmentSignals?.source?.channel || '',
-      programInterest: enrollmentSignals?.inquiry?.programInterest || '',
       contactabilityStatus: enrollmentSignals?.contactability?.status || '',
       qualityDisposition: enrollmentSignals?.quality?.disposition || '',
       processPills: enrollmentSignals?.process?.pills || [],

@@ -21,7 +21,8 @@ test('contact detail keeps profile edits note-free and gives the timeline compos
   assert.match(detailSource, /if \(!noteInput\.trim\(\) \|\| !access\.canWriteCrm \|\| noteSaving \|\| noteSaveInFlight\.current\) return;/);
   assert.match(detailSource, /noteSaveInFlight\.current = true;\s+setNoteSaving\(true\);/);
   assert.match(detailSource, /noteSaveInFlight\.current = false;\s+setNoteSaving\(false\);/);
-  assert.match(detailSource, /await save;\s+setNoteInput\(''\);\s+setTimelineReloadKey/s);
+  assert.match(detailSource, /await save;\s+setNoteInput\(''\);\s+if \(isAitUsaContact\) \{\s+setNoteComposerOpen\(false\);\s+window\.requestAnimationFrame\(\(\) => noteTriggerRef\.current\?\.focus\(\)\);\s+\}\s+setTimelineReloadKey/s);
+  assert.match(detailSource, /const cancelInternalNote = \(\) => \{\s+if \(noteSaving\) return;\s+setNoteInput\(''\);\s+setNoteComposerOpen\(false\);/s);
 });
 
 test('contact profile patch helper strips notes and timeline collections', () => {
