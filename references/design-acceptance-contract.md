@@ -702,3 +702,97 @@
   split-tender settlement, production provider execution, or production deploy.
 - Changing portal self-pay authorization, Dejavoo credentials, receipt PDF
   branding, Book Fulfillment policy, or AIT Signs financial workflows.
+
+# MIS-426 Book Fulfillment Shell Acceptance Contract
+
+## Workflow and problem
+
+- AIT USA staff need to see whether any verified bundles require digital delivery, pickup preparation/completion, or shipment, then enter the correct operational queue without interpreting a separate mini-design system.
+- The existing page uses three oversized lane cards, repeats the selected lane title and description, gives Refresh page-level visual priority, and renders a large lane-specific empty panel even when every lane is clear.
+- On mobile, the horizontally scrolling lane cards visibly clip the next lane without an explicit workspace cue and consume most of the first viewport.
+
+## Interaction model and visual direction
+
+- Book Fulfillment remains a queue workspace with three random-access lanes: Digital, Pickup, and Shipment.
+- Compact CRM-blue tabs carry the canonical lane labels and counts. The selected lane owns one worklist panel; lane descriptions live in that panel rather than being repeated inside navigation.
+- When all three counts are zero, one page-level all-clear state replaces the selected-lane panel. Staff can still inspect the compact lane tabs, but do not see three conceptual empty states.
+- When any lane contains work, selecting a lane shows its existing queue and lane-specific empty state when appropriate.
+- The address-privacy rule appears only beside the selected Shipment address. The global Scope row is removed because the persistent division selector already establishes AIT USA context. Refresh moves into the worklist/all-clear toolbar.
+- Reference mode: inspiration from the accepted Payments and Contact Detail CRM shell. Existing AIT CRM typography, blue accent, neutral surfaces, 8px radii, and button hierarchy are authoritative.
+
+## Locked behavior, permissions, and state
+
+- Fulfillment policy, verified-payment activation, Digital/Pickup/Shipment eligibility, counts, pagination, assignments, notes, tracking, transitions, stale-write protection, address privacy, RBAC, and business-unit scope remain unchanged.
+- Shipment addresses continue to be returned only for the Shipment lane.
+- Populated work-item cards remain functionally unchanged in this slice; their queue/detail redesign is the next element group.
+- Loading, denied, and fatal error behavior continue to use PageState.
+
+## Responsive and visual invariants
+
+- Primary viewport: `1440 x 1000` CSS pixels.
+- Regression viewports: `1024 x 768` and `390 x 844`.
+- Desktop places title/context first, compact lane tabs second, and one worklist/all-clear surface third.
+- Mobile keeps title, lane tabs, and the beginning of the workspace inside the first viewport. Shipment privacy context appears only when its protected address is visible. The lane row provides a visible horizontal-scroll cue without clipping page content.
+- No horizontal page overflow, nested scrollbar, duplicated selected-lane description, or oversized empty panel.
+
+## Evidence required
+
+- Matched desktop and mobile before/after screenshots using authenticated staging-backed reads.
+- Focused component/source tests for all-clear versus lane-specific empty behavior, navigation semantics, Refresh placement, and locked populated-item rendering.
+- UI validation profile: targeted tests, full ESLint, webpack production build, and read-only browser smoke with zero write requests.
+
+## Non-goals
+
+- Work-item queue/detail redesign, search, assignment filters, bulk actions, confirmation dialogs, policy changes, schema/API/service changes, or new fulfillment integrations.
+- AIT Signs fulfillment changes.
+- Commit, push, staging deployment, production promotion, or CRM writes before Alvaro accepts the page candidate.
+
+# MIS-426 Book Fulfillment Work Item Acceptance Contract
+
+## Workflow and problem
+
+- AIT USA fulfillment staff need to scan active work, choose one record, understand its truthful current stage, and complete the next safe action without editing every record at once.
+- The existing populated state renders every item as a full editable card. Notes, tracking fields, ownership, metadata, and completion actions compete for attention; mobile stacks these work forms into one long page.
+- Completion actions immediately remove records from the active queue without first stating the consequence.
+
+## Interaction model and visual direction
+
+- The approved Book Fulfillment shell and Digital / Pickup / Shipment lanes remain authoritative.
+- Each populated lane renders a compact queue of selectable rows. A row shows student, human-readable stage, waiting time, and a selection chevron. The primary action lives only in the selected detail. Assignment remains a backend concurrency/audit concern rather than primary queue content.
+- Desktop uses a queue-and-detail workspace. Selecting a row reveals one dedicated work-item panel beside the queue; only that record exposes address, tracking, note, assignment, and workflow actions.
+- Mobile shows one surface at a time: queue first, then the selected work item with an explicit Back to queue action. It must not stack multiple editable work items.
+- The selected work item has one primary next action based on lane and stage. Explicit Claim is removed from the UI; the existing server action auto-assigns the acting employee when operational work is completed. Save note remains secondary, and Operational note uses progressive disclosure unless it already contains content.
+- Student identity links directly to Contact Detail. Raw status strings are replaced with human-readable stage copy.
+- `Mark ready` remains immediate because the item stays active. `Confirm access sent`, `Mark picked up`, and `Mark shipped` open an outcome-focused confirmation that states the item will leave the active queue after success.
+- Digital delivery is currently manual. The Digital lane remains as a temporary operational obligation, but its stage and confirmation must say `Needs manual delivery` and `Confirm access sent`. The confirmation explicitly requires the employee to have sent or granted access outside the CRM; the CRM only records completion.
+- Presentation simplification: remove the duplicate global scope row, localize privacy copy to Shipment, omit lane-name eyebrows from selected details, and show a detail stage badge only for Pickup where it communicates real progression. Exact payment-verification timestamps stay out of the primary workspace; waiting age remains visible. The Digital manual-handoff prerequisite is a quiet inline rule rather than a competing information card.
+- Reference mode: inspiration from the accepted Fulfillment shell and CRM operational workspaces. Existing typography, CRM blue, neutral surfaces, eight-pixel radii, and semantic colors remain authoritative.
+
+## Locked behavior, permissions, and state
+
+- Fulfillment policy, verified-payment activation, queue eligibility, ordering, counts, pagination, assignment, notes, tracking requirements, transitions, stale-write protection, address privacy, RBAC, and business-unit scope remain unchanged.
+- Existing mutation actions and payloads remain canonical: claim, save note, mark digital delivered, mark ready, mark picked up, and mark shipped. The standalone claim action stays supported by the backend but is not exposed in this worklist.
+- Shipment address remains available only in Shipment. Carrier and tracking remain required before shipment completion.
+- Existing automatic claim-on-operational-action behavior remains; the selected-item UI must not invent a separate ownership mutation.
+- The confirmation is a client-side consequence boundary, not a second server mutation or a new approval state.
+
+## Responsive and accessibility acceptance
+
+- Primary viewport: `1440 x 1000` CSS pixels. Regression viewports: `1024 x 768` and `390 x 844`.
+- Queue rows are keyboard selectable and expose selected state. Desktop visual, DOM, and focus order remain queue then detail.
+- On mobile, opening an item moves focus to the work-item heading; Back returns focus to the originating row.
+- Confirmation uses dialog semantics, traps focus, identifies the exact student/action, and returns focus to the triggering action when canceled.
+- Error feedback remains announced, saving state disables duplicate actions, and long names, notes, addresses, carriers, and tracking references do not create horizontal overflow.
+
+## Evidence required
+
+- Focused tests cover row/detail selection, manual-digital language, absence of explicit ownership controls, one primary action per state, Contact Detail linking, note disclosure, completion confirmation, and mobile queue/detail behavior.
+- Existing model, route, service, shell, and workflow tests remain green; run full ESLint and the webpack production build.
+- Render populated Digital, Pickup pending/ready, and Shipment fixtures without CRM writes at desktop and mobile viewports. Also run one authenticated staging-backed empty-state regression because staging contains no fulfillment records.
+
+## Non-goals
+
+- Completed-history UI or query, search, My work, owner filters, SLA/Needs attention, bulk actions, packing lists, labels, pickup identity capture, or notification delivery.
+- Sending digital access, pickup-ready messages, or shipment notifications. Automatic digital delivery and exception recovery require a separate provider/portal capability; this worklist must not imply they exist.
+- Fulfillment schema, policy, route, service, or provider changes.
+- Commit, push, staging deployment, production promotion, or CRM writes before Alvaro accepts the page candidate.
