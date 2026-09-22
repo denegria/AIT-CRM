@@ -1,5 +1,15 @@
 # MIS-426 Contacts Directory Acceptance Contract
 
+## Typography normalization addendum — 2026-09-22
+
+- Workflow: office employees scan the AIT USA Contacts directory at `1920 x 1080`, with `1536 x 960` as the WFH regression viewport.
+- Visual direction: match the hierarchy already used by upgraded Payments, Book Fulfillment, and Contact Detail surfaces without changing the accepted directory composition.
+- AIT USA Contacts uses a `var(--text-3xl)` page title, a 13px subtitle, 12px contact names, 11px contact metadata and operational values, 10px Source text, and 10px table headers.
+- Compact action labels remain at the existing utility size so the approved 112px contextual buttons, 4px button gap, and 180px Actions track do not move.
+- Locked invariants: column order and widths, 57px-class row density, sticky header, explicit View navigation, contextual action states, filters, sorting, pagination, permissions, and all CRM read/write behavior.
+- Evidence: matched authenticated before/after screenshots at `1920 x 1080`, rendered font-size measurements, and a `1536 x 960` overflow regression check.
+- Non-goals: any grid rebalance, copy change, action change, new interaction, backend change, data write, or production promotion.
+
 ## Workflow and problem
 
 - AIT USA employees use Contacts to find a person, understand the current inquiry context, and decide whether outreach is needed.

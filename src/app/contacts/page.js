@@ -1098,8 +1098,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     <div className="fade-in">
       <div className="page-header">
         <div>
-          <h1 className="page-title">{pluralLabel}</h1>
-          <p className="page-subtitle">{directorySummary}</p>
+          <h1 className={`page-title ${columnMode === 'ait_usa' ? 'contacts-directory-title' : ''}`}>{pluralLabel}</h1>
+          <p className={`page-subtitle ${columnMode === 'ait_usa' ? 'contacts-directory-subtitle' : ''}`}>{directorySummary}</p>
         </div>
       </div>
 
@@ -1523,6 +1523,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           fixedLayout={columnMode === 'ait_usa'}
           stickyHeader={columnMode === 'ait_usa'}
           comfortableRows={columnMode === 'ait_usa'}
+          readableTypography={columnMode === 'ait_usa'}
           actionColumnWidth={columnMode === 'ait_usa' ? '180px' : undefined}
           mobileBadges={['status']}
           mobileFields={mobileFieldKeys}

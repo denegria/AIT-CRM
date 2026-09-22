@@ -55,6 +55,7 @@ export default function DataTable({
   fixedLayout = false,
   stickyHeader = false,
   comfortableRows = false,
+  readableTypography = false,
   actionColumnWidth,
   sortKey: controlledSortKey,
   sortDirection: controlledSortDirection,
@@ -241,7 +242,7 @@ export default function DataTable({
       ) : (
         <>
         <div className={`${s.tableScroller} ${useFixedLayout ? s.fixedScroller : ''}`}>
-        <table className={`${s.table} ${useFixedLayout ? s.tableFixed : ''} ${stickyHeader ? s.tableStickyHeader : ''} ${comfortableRows ? s.tableComfortable : ''}`}>
+        <table className={`${s.table} ${useFixedLayout ? s.tableFixed : ''} ${stickyHeader ? s.tableStickyHeader : ''} ${comfortableRows ? s.tableComfortable : ''} ${readableTypography ? s.tableReadable : ''}`}>
           {useFixedLayout && (
             <colgroup>
               {selectable && <col style={{ width: 40 }} />}

@@ -172,6 +172,8 @@
   transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
 }
 .tableComfortable td { padding-top:14px; padding-bottom:14px; }
+.tableReadable th { font-size:10px; }
+.tableReadable td { font-size:11px; }
 .table tr:hover td { background:color-mix(in srgb, var(--bg-hover) 86%, var(--bg-secondary)); color:var(--text-primary); }
 .table tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .table tr { transition: background var(--transition-fast); }

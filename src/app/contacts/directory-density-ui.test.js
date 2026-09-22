@@ -46,16 +46,35 @@ test('large desktop directory uses intentional widths, comfortable rows, and a s
   assert.match(contactsSource, /fixedLayout=\{columnMode === 'ait_usa'\}/);
   assert.match(contactsSource, /stickyHeader=\{columnMode === 'ait_usa'\}/);
   assert.match(contactsSource, /comfortableRows=\{columnMode === 'ait_usa'\}/);
+  assert.match(contactsSource, /readableTypography=\{columnMode === 'ait_usa'\}/);
   assert.match(contactsSource, /actionColumnWidth=\{columnMode === 'ait_usa' \? '180px' : undefined\}/);
   assert.match(tableStyles, /\.tableFixed \{ min-width:0; table-layout:fixed; \}/);
   assert.match(tableStyles, /\.tableStickyHeader thead th/);
   assert.match(tableStyles, /\.tableComfortable td \{ padding-top:14px; padding-bottom:14px; \}/);
+  assert.match(tableStyles, /\.tableReadable th \{ font-size:10px; \}/);
+  assert.match(tableStyles, /\.tableReadable td \{ font-size:11px; \}/);
   assert.doesNotMatch(tableSource, /headerAlign/);
   assert.match(tableStyles, /\.table th\.actionHeader \{ text-align:left; padding-left:12px; \}/);
-  assert.match(fs.readFileSync(new URL('../globals.css', import.meta.url), 'utf8'), /\.contacts-contact-cell > span \{[\s\S]*?color:var\(--text-secondary\);[\s\S]*?font-size:12px;/);
+  assert.match(fs.readFileSync(new URL('../globals.css', import.meta.url), 'utf8'), /\.contacts-contact-name \{[\s\S]*?font-size:12px;/);
+  assert.match(fs.readFileSync(new URL('../globals.css', import.meta.url), 'utf8'), /\.contacts-contact-cell > span \{[\s\S]*?color:var\(--text-secondary\);[\s\S]*?font-size:11px;/);
   assert.match(fs.readFileSync(new URL('../globals.css', import.meta.url), 'utf8'), /\.contacts-source-cell \{[\s\S]*?font-weight:500;/);
   assert.match(fs.readFileSync(new URL('../globals.css', import.meta.url), 'utf8'), /\.contacts-next-step-cell \{[\s\S]*?justify-content:flex-start;[\s\S]*?text-align:left;/);
   assert.match(tableSource, /visibleColumns\.every\(\(column\) => defaultLayoutKeys\.has\(column\.key\)\)/);
+});
+
+test('AIT USA typography matches the upgraded CRM hierarchy without resizing actions', () => {
+  const globalStyles = fs.readFileSync(new URL('../globals.css', import.meta.url), 'utf8');
+  assert.match(contactsSource, /contacts-directory-title/);
+  assert.match(contactsSource, /contacts-directory-subtitle/);
+  assert.match(globalStyles, /\.contacts-directory-title \{ font-size:var\(--text-3xl\);/);
+  assert.match(globalStyles, /\.contacts-directory-subtitle \{ font-size:13px; \}/);
+  assert.match(globalStyles, /\.contacts-enrollment-cell \{[\s\S]*?font-size:11px;/);
+  assert.match(globalStyles, /\.contacts-source-cell \{[\s\S]*?font-size:10px;/);
+  assert.match(globalStyles, /\.contacts-next-step-cell strong \{[\s\S]*?font-size:11px;/);
+  assert.match(tableSource, /readableTypography = false/);
+  assert.match(tableSource, /readableTypography \? s\.tableReadable/);
+  assert.match(contactsSource, /buttonWidth: '112px'/);
+  assert.match(tableStyles, /\.actBtn \{[\s\S]*?font-size:var\(--text-xs\)/);
 });
 
 test('closed rows do not repeat the enrollment reason in Next Step', () => {
