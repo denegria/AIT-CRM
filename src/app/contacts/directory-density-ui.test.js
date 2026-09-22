@@ -54,7 +54,9 @@ test('closed rows do not repeat the enrollment reason in Next Step', () => {
   assert.match(contactsSource, /nextStep\.label === 'No active work' && nextStep\.detail === row\.enrollmentStage/);
 });
 
-test('Next Step stays informational and suppresses redundant first-outreach detail', () => {
+test('Next Step stays informational and suppresses redundant actionable detail', () => {
   assert.doesNotMatch(contactsSource, /contacts-next-step-action/);
   assert.match(contactsSource, /nextStep\.label === 'Needs first outreach' && nextStep\.detail === 'No outreach recorded'/);
+  assert.match(contactsSource, /nextStep\.label === 'Ready for retargeting' && nextStep\.detail === 'Outreach may be recorded now'/);
+  assert.match(contactsSource, /nextStep\.label === 'No follow-up recorded' && nextStep\.detail === 'Record the next outreach'/);
 });

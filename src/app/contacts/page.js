@@ -354,9 +354,14 @@ function directoryNextStepFor(row) {
 
 function DirectoryNextStepCell({ row }) {
   const nextStep = directoryNextStepFor(row);
+  const redundantDetail = (
+    (nextStep.label === 'Needs first outreach' && nextStep.detail === 'No outreach recorded') ||
+    (nextStep.label === 'Ready for retargeting' && nextStep.detail === 'Outreach may be recorded now') ||
+    (nextStep.label === 'No follow-up recorded' && nextStep.detail === 'Record the next outreach')
+  );
   const detail = (
     (nextStep.label === 'No active work' && nextStep.detail === row.enrollmentStage) ||
-    (nextStep.label === 'Needs first outreach' && nextStep.detail === 'No outreach recorded')
+    redundantDetail
   )
     ? ''
     : nextStep.detail;
