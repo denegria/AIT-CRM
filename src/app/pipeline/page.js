@@ -723,8 +723,8 @@ export default function PipelinePage() {
     <div className="fade-in">
       <div className={`page-header ${s.pipelineHeader}`}>
         <div className={s.headerCopy}>
-          <h1 className="page-title">Pipeline</h1>
-          <p className="page-subtitle">{pipelineSummaryCopy}</p>
+          <h1 className={`page-title ${s.pipelineTitle}`}>Pipeline</h1>
+          <p className={`page-subtitle ${s.pipelineSubtitle}`}>{pipelineSummaryCopy}</p>
         </div>
       </div>
 
@@ -1124,7 +1124,7 @@ export default function PipelinePage() {
             )}
           </div>
           <div className={s.pipelineActions}>
-            <button className="btn" onClick={() => nextLead ? router.push(`/contacts/${nextLead.id}`) : toast('No lead matches the current filters.', 'error')}>
+            <button className="btn btn-primary" onClick={() => nextLead ? router.push(`/contacts/${nextLead.id}`) : toast('No lead matches the current filters.', 'error')}>
               <ArrowRight size={14} /> Work Next Lead
             </button>
             {canWrite && currentUser?.id && coordinatorUiPolicy.canManageCoordinatorAssignments && (
@@ -1133,7 +1133,7 @@ export default function PipelinePage() {
               </button>
             )}
             {canWrite && (
-              <button className="btn btn-primary" onClick={() => router.push('/contacts')}>
+              <button className="btn" onClick={() => router.push('/contacts')}>
                 <UserPlus size={14} /> Add Contact
               </button>
             )}
@@ -1211,6 +1211,7 @@ export default function PipelinePage() {
             onLogFollowUp={canWrite ? openLogFollowUp : undefined}
             showMobileMoveControls={false}
             compact={compactMode}
+            fitColumns
             selectedIds={selectedIds}
             onSelect={bulkAssignMode ? setSelectedIds : undefined}
           />
