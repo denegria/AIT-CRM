@@ -176,7 +176,7 @@
 .table tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .table tr { transition: background var(--transition-fast); }
 .actions { display:flex; gap:8px; flex-wrap:nowrap; justify-content:flex-end; align-items:center; }
-.table th.actionHeader { text-align:right; }
+.table th.actionHeader { text-align:left; padding-left:17px; }
 .actionCell { text-align:right; white-space:normal; max-width:220px; }
 .actBtn {
   min-height:28px;

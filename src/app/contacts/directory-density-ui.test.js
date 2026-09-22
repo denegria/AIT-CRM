@@ -40,6 +40,7 @@ test('large desktop directory uses intentional widths, comfortable rows, and a s
   assert.match(contactsSource, /desktopWidth: '14%'/);
   assert.match(contactsSource, /desktopWidth: '10%'/);
   assert.doesNotMatch(contactsSource, /key: 'directoryNextStep',[\s\S]*?desktopWidth:/);
+  assert.match(contactsSource, /key: 'directoryNextStep',[\s\S]*?headerAlign: 'right'/);
   assert.match(contactsSource, /fixedLayout=\{columnMode === 'ait_usa'\}/);
   assert.match(contactsSource, /stickyHeader=\{columnMode === 'ait_usa'\}/);
   assert.match(contactsSource, /comfortableRows=\{columnMode === 'ait_usa'\}/);
@@ -47,7 +48,9 @@ test('large desktop directory uses intentional widths, comfortable rows, and a s
   assert.match(tableStyles, /\.tableFixed \{ min-width:0; table-layout:fixed; \}/);
   assert.match(tableStyles, /\.tableStickyHeader thead th/);
   assert.match(tableStyles, /\.tableComfortable td \{ padding-top:14px; padding-bottom:14px; \}/);
-  assert.match(tableStyles, /\.table th\.actionHeader \{ text-align:right; \}/);
+  assert.match(tableSource, /justifyContent:c\.headerAlign === 'right' \? 'flex-end' : undefined/);
+  assert.match(tableStyles, /\.table th\.actionHeader \{ text-align:left; padding-left:17px; \}/);
+  assert.match(fs.readFileSync(new URL('../globals.css', import.meta.url), 'utf8'), /\.contacts-next-step-cell \{[\s\S]*?justify-content:flex-end;[\s\S]*?text-align:right;/);
   assert.match(tableSource, /visibleColumns\.every\(\(column\) => defaultLayoutKeys\.has\(column\.key\)\)/);
 });
 
