@@ -834,3 +834,63 @@
 - Sending digital access, pickup-ready messages, or shipment notifications. Automatic digital delivery and exception recovery require a separate provider/portal capability; this worklist must not imply they exist.
 - Fulfillment schema, policy, route, service, or provider changes.
 - Commit, push, staging deployment, production promotion, or CRM writes before Alvaro accepts the page candidate.
+
+# MIS-426 Contacts Final Column And Action Alignment Contract
+
+## Workflow and problem
+
+- AIT USA employees need to scan identity, lifecycle stage, responsibility,
+  source, recent contact history, and the next truthful step before acting.
+- The current directory separates the contextual workflow action from `View`
+  by 55 px at the primary office viewport, which reads like a missing Edit
+  control. First-outreach rows also repeat the same state in the label, detail,
+  and action.
+
+## Interaction model and visual direction
+
+- Reference mode: faithful refinement of the accepted live Contacts directory;
+  retain its design system, toolbar, density, sticky header, filters, and 57 px
+  rows.
+- Desktop order is locked to `Contact | Stage | Owner | Source | Last Touch |
+  Next Step | Actions`.
+- `Stage` communicates lifecycle position; `Next Step` communicates what should
+  happen now. Next Step is informational and contains no button.
+- The final Actions cell owns one compact right-aligned button group. The
+  contextual workflow action appears first and `View` second, with an 8 px gap.
+- Contextual action labels remain `Start outreach`, `Record outreach`, and
+  `Record follow-up`; they all reuse the existing outreach-recording flow.
+- Redundant first-outreach detail is suppressed when the state label and action
+  already communicate the same fact.
+
+## Locked behavior, permissions, and state
+
+- Rows remain non-interactive. `View` is the only directory navigation control;
+  AIT USA exposes no directory Edit action.
+- Existing task/commitment authority, blocked-contact behavior, Retargeting
+  semantics, permissions, API routes, and optional scheduling inside the
+  outreach outcome flow remain unchanged.
+- Closed or otherwise ineligible rows show only `View` in Actions.
+
+## Responsive and visual invariants
+
+- Primary viewport: `1920 x 1080` CSS pixels.
+- Regression viewport: `1536 x 960`; mobile receives an obvious-regression
+  check only.
+- Both action buttons remain visible on one line at primary and regression
+  widths with no horizontal page overflow.
+- Long source and contact content remains truncated within its column; adding
+  optional secondary columns may revert to the existing scrollable auto-layout.
+
+## Evidence required
+
+- Focused source/state tests cover column order, Stage naming, text-only Next
+  Step, per-row contextual Actions, View-only ineligible rows, and spacing.
+- Run the `ui` validation profile: targeted tests, ESLint, webpack production
+  build, and authenticated browser smoke.
+- Capture primary and regression screenshots from canonical staging without
+  submitting CRM data.
+
+## Non-goals
+
+- Changes to workflow state derivation, scheduling policy, APIs, schemas,
+  permissions, filters, toolbar behavior, mobile redesign, or production.

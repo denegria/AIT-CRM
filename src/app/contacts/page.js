@@ -348,9 +348,16 @@ function ContactIdentityCell({ row }) {
   );
 }
 
-function DirectoryNextStepCell({ row, onLogFollowUp }) {
-  const nextStep = row.directoryNextStepModel || contactDirectoryNextStep(row);
-  const detail = nextStep.label === 'No active work' && nextStep.detail === row.enrollmentStage
+function directoryNextStepFor(row) {
+  return row.directoryNextStepModel || contactDirectoryNextStep(row);
+}
+
+function DirectoryNextStepCell({ row }) {
+  const nextStep = directoryNextStepFor(row);
+  const detail = (
+    (nextStep.label === 'No active work' && nextStep.detail === row.enrollmentStage) ||
+    (nextStep.label === 'Needs first outreach' && nextStep.detail === 'No outreach recorded')
+  )
     ? ''
     : nextStep.detail;
   return (
@@ -359,16 +366,6 @@ function DirectoryNextStepCell({ row, onLogFollowUp }) {
         <strong>{nextStep.label}</strong>
         {detail && <span>{detail}</span>}
       </div>
-      {nextStep.action === 'log_follow_up' && onLogFollowUp && (
-        <button
-          type="button"
-          className="contacts-next-step-action"
-          onClick={() => onLogFollowUp(row)}
-        >
-          <ClipboardCheck size={13} />
-          {nextStep.actionLabel}
-        </button>
-      )}
     </div>
   );
 }
@@ -747,21 +744,21 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       key: 'name',
       label: 'Contact',
       sortable: true,
-      desktopWidth: '22%',
+      desktopWidth: '20%',
       render: (row) => <ContactIdentityCell row={row} />,
     },
     { key: 'email', label: 'Email', sortable: true },
     { key: 'phone', label: 'Phone', sortable: true },
-    { key: 'enrollmentStage', label: 'Enrollment', sortable: true, desktopWidth: '12%', render: (row) => <CompactEnrollmentCell row={row} /> },
-    { key: 'assignedLabel', label: 'Owner', sortable: true, desktopWidth: '12%' },
+    { key: 'enrollmentStage', label: 'Stage', sortable: true, desktopWidth: '11%', render: (row) => <CompactEnrollmentCell row={row} /> },
+    { key: 'assignedLabel', label: 'Owner', sortable: true, desktopWidth: '11%' },
+    { key: 'inquirySource', label: 'Source', sortable: true, desktopWidth: '14%', render: (row) => <EnrollmentSourceCell row={row} /> },
     { key: 'lastTouch', label: 'Last Touch', sortable: true, desktopWidth: '10%' },
-    { key: 'inquirySource', label: 'Source', sortable: true, desktopWidth: '16%', render: (row) => <EnrollmentSourceCell row={row} /> },
     {
       key: 'directoryNextStep',
       label: 'Next Step',
       sortable: false,
-      desktopWidth: '22%',
-      render: (row) => <DirectoryNextStepCell row={row} onLogFollowUp={canWrite ? openLogFollowUp : undefined} />,
+      desktopWidth: '18%',
+      render: (row) => <DirectoryNextStepCell row={row} />,
     },
     { key: 'studentLocation', label: 'Student Location', sortable: true },
     { key: 'schoolLocation', label: 'Learning Location', sortable: true },
@@ -1495,23 +1492,32 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
               })
               .catch((error) => toast(error?.message || 'Update failed.', 'error'));
           } : undefined}
-          actions={[
+          actions={columnMode === 'ait_usa' ? [
+            {
+              label: (row) => directoryNextStepFor(row).actionLabel,
+              visible: (row) => canWrite && directoryNextStepFor(row).action === 'log_follow_up',
+              onClick: openLogFollowUp,
+              icon: <ClipboardCheck size={13} />,
+              primary: true,
+            },
+            { label: 'View', onClick: openContact },
+          ] : [
             { label: 'View', onClick: openContact },
             ...(canWrite ? [{ label: 'Edit', onClick: openEdit }] : []),
-          ].filter((action) => columnMode !== 'ait_usa' || action.label === 'View')}
+          ]}
           defaultVisibleColumnKeys={columnMode === 'ait_usa' ? [
             'name',
             'enrollmentStage',
             'assignedLabel',
-            'lastTouch',
             'inquirySource',
+            'lastTouch',
             'directoryNextStep',
           ] : undefined}
           wideSearch={columnMode === 'ait_usa'}
           fixedLayout={columnMode === 'ait_usa'}
           stickyHeader={columnMode === 'ait_usa'}
           comfortableRows={columnMode === 'ait_usa'}
-          actionColumnWidth={columnMode === 'ait_usa' ? '6%' : undefined}
+          actionColumnWidth={columnMode === 'ait_usa' ? '16%' : undefined}
           mobileBadges={['status']}
           mobileFields={mobileFieldKeys}
         />

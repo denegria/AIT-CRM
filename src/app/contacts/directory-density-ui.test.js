@@ -8,38 +8,42 @@ const tableStyles = fs.readFileSync(new URL('../../components/DataTable.module.c
 
 test('AIT USA directory defaults to the accepted lookup hierarchy', () => {
   assert.match(contactsSource, /label: 'Contact'/);
-  assert.match(contactsSource, /label: 'Enrollment'/);
+  assert.match(contactsSource, /label: 'Stage'/);
   assert.match(contactsSource, /label: 'Owner'/);
-  assert.match(contactsSource, /label: 'Next Step'/);
-  assert.match(contactsSource, /label: 'Last Touch'/);
   assert.match(contactsSource, /label: 'Source'/);
+  assert.match(contactsSource, /label: 'Last Touch'/);
+  assert.match(contactsSource, /label: 'Next Step'/);
   assert.match(contactsSource, /defaultVisibleColumnKeys=\{columnMode === 'ait_usa' \? \[/);
-  assert.match(contactsSource, /'name',\s*'enrollmentStage',\s*'assignedLabel',\s*'lastTouch',\s*'inquirySource',\s*'directoryNextStep'/s);
+  assert.match(contactsSource, /'name',\s*'enrollmentStage',\s*'assignedLabel',\s*'inquirySource',\s*'lastTouch',\s*'directoryNextStep'/s);
 });
 
 test('AIT USA rows use explicit View navigation without row-wide handlers or Edit', () => {
   assert.doesNotMatch(contactsSource, /onRowClick=/);
   assert.doesNotMatch(tableSource, /handleRowClick|handleRowKeyDown|clickableRow/);
   assert.match(contactsSource, /\{ label: 'View', onClick: openContact \}/);
-  assert.match(contactsSource, /columnMode !== 'ait_usa' \|\| action\.label === 'View'/);
+  assert.match(contactsSource, /columnMode === 'ait_usa' \? \[/);
+  assert.match(contactsSource, /visible: \(row\) => canWrite && directoryNextStepFor\(row\)\.action === 'log_follow_up'/);
   assert.doesNotMatch(contactsSource, /ChevronRight|DirectoryRowEnd/);
 });
 
-test('mobile keeps only the high-value contact fields and explicit View action', () => {
+test('mobile keeps only the high-value contact fields and contextual actions beside View', () => {
   assert.match(contactsSource, /\? \['assignedLabel', 'directoryNextStep', 'lastTouch'\]/);
-  assert.match(contactsSource, /nextStep\.action === 'log_follow_up'/);
-  assert.match(contactsSource, /\{nextStep\.actionLabel\}/);
-  assert.match(tableSource, /\{actions\?\.map/);
+  assert.match(contactsSource, /label: \(row\) => directoryNextStepFor\(row\)\.actionLabel/);
+  assert.match(contactsSource, /visible: \(row\) => canWrite && directoryNextStepFor\(row\)\.action === 'log_follow_up'/);
+  assert.match(tableSource, /visibleActionsForRow\(actions, row\)/);
+  assert.match(tableSource, /action\.primary \? s\.actBtnPrimary/);
+  assert.match(tableStyles, /\.actions \{ display:flex; gap:8px;/);
 });
 
 test('large desktop directory uses intentional widths, comfortable rows, and a sticky header', () => {
-  assert.match(contactsSource, /desktopWidth: '22%'/);
-  assert.match(contactsSource, /desktopWidth: '16%'/);
+  assert.match(contactsSource, /desktopWidth: '20%'/);
+  assert.match(contactsSource, /desktopWidth: '18%'/);
+  assert.match(contactsSource, /desktopWidth: '14%'/);
   assert.match(contactsSource, /desktopWidth: '10%'/);
   assert.match(contactsSource, /fixedLayout=\{columnMode === 'ait_usa'\}/);
   assert.match(contactsSource, /stickyHeader=\{columnMode === 'ait_usa'\}/);
   assert.match(contactsSource, /comfortableRows=\{columnMode === 'ait_usa'\}/);
-  assert.match(contactsSource, /actionColumnWidth=\{columnMode === 'ait_usa' \? '6%' : undefined\}/);
+  assert.match(contactsSource, /actionColumnWidth=\{columnMode === 'ait_usa' \? '16%' : undefined\}/);
   assert.match(tableStyles, /\.tableFixed \{ min-width:0; table-layout:fixed; \}/);
   assert.match(tableStyles, /\.tableStickyHeader thead th/);
   assert.match(tableStyles, /\.tableComfortable td \{ padding-top:14px; padding-bottom:14px; \}/);
@@ -48,4 +52,9 @@ test('large desktop directory uses intentional widths, comfortable rows, and a s
 
 test('closed rows do not repeat the enrollment reason in Next Step', () => {
   assert.match(contactsSource, /nextStep\.label === 'No active work' && nextStep\.detail === row\.enrollmentStage/);
+});
+
+test('Next Step stays informational and suppresses redundant first-outreach detail', () => {
+  assert.doesNotMatch(contactsSource, /contacts-next-step-action/);
+  assert.match(contactsSource, /nextStep\.label === 'Needs first outreach' && nextStep\.detail === 'No outreach recorded'/);
 });

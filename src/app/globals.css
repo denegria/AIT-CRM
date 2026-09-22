@@ -1088,29 +1088,8 @@ a { color: inherit; text-decoration: none; }
   font-size:11px;
   line-height:1.3;
 }
-.contacts-next-step-action {
-  min-height:28px;
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  gap:5px;
-  flex:0 0 auto;
-  padding:4px 8px;
-  border:1px solid color-mix(in srgb, var(--accent) 32%, var(--border-default));
-  border-radius:999px;
-  background:color-mix(in srgb, var(--accent-muted) 46%, var(--bg-elevated));
-  color:var(--accent);
-  cursor:pointer;
-  font:inherit;
-  font-size:11px;
-  font-weight:750;
-  white-space:nowrap;
-}
-.contacts-next-step-action:hover { border-color:var(--accent); background:var(--accent-muted); }
-.contacts-next-step-action:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 @media (max-width: 520px) {
   .contacts-next-step-cell { align-items:stretch; flex-direction:column; }
-  .contacts-next-step-action { width:fit-content; }
 }
 .workflow-line {
   display: flex;

@@ -175,7 +175,7 @@
 .table tr:hover td { background:color-mix(in srgb, var(--bg-hover) 86%, var(--bg-secondary)); color:var(--text-primary); }
 .table tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .table tr { transition: background var(--transition-fast); }
-.actions { display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end; }
+.actions { display:flex; gap:8px; flex-wrap:nowrap; justify-content:flex-end; align-items:center; }
 .actionHeader { text-align:right; }
 .actionCell { text-align:right; white-space:normal; max-width:220px; }
 .actBtn {
@@ -192,6 +192,12 @@
 .actBtn:hover { background:var(--bg-hover); color:var(--text-primary); border-color:var(--border-strong); transform:translateY(-1px); }
 .actBtn:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .actBtn:disabled { cursor:not-allowed; opacity:.5; transform:none; }
+.actBtnPrimary {
+  color:var(--accent);
+  border-color:color-mix(in srgb, var(--accent) 32%, var(--border-default));
+  background:color-mix(in srgb, var(--accent-muted) 46%, var(--bg-elevated));
+}
+.actBtnPrimary:hover { color:var(--accent); border-color:var(--accent); background:var(--accent-muted); }
 .actBtnDanger { color:var(--danger); border-color:color-mix(in srgb, var(--danger) 24%, var(--border-default)); }
 .actBtnDanger:hover { color:var(--danger); border-color:var(--danger); background:var(--danger-muted); }
 .editInput {

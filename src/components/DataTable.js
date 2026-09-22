@@ -13,6 +13,24 @@ function badgeClass(val) {
   return map[v] || 'badge-new';
 }
 
+function visibleActionsForRow(actions, row) {
+  return (actions || [])
+    .filter((action) => typeof action.visible !== 'function' || action.visible(row))
+    .map((action) => ({
+      ...action,
+      resolvedLabel: typeof action.label === 'function' ? action.label(row) : action.label,
+    }))
+    .filter((action) => action.resolvedLabel);
+}
+
+function actionButtonClass(action) {
+  return [
+    s.actBtn,
+    action.primary ? s.actBtnPrimary : '',
+    action.danger ? s.actBtnDanger : '',
+  ].filter(Boolean).join(' ');
+}
+
 export default function DataTable({
   columns,
   data,
@@ -263,7 +281,9 @@ export default function DataTable({
             {actions && <th className={s.actionHeader}>Actions</th>}
           </tr></thead>
           <tbody>
-            {filtered.map(row => (
+            {filtered.map(row => {
+              const rowActions = visibleActionsForRow(actions, row);
+              return (
               <tr key={row.id}>
                 {selectable && (
                   <td style={{ textAlign: 'center' }}>
@@ -281,28 +301,31 @@ export default function DataTable({
                 ))}
                 {actions && (
                   <td className={s.actionCell}><div className={s.actions}>
-                    {actions.map((a,i) => (
-                      <button key={i} className={`${s.actBtn} ${a.danger?s.actBtnDanger:''}`} onClick={()=>{
+                    {rowActions.map((a,i) => (
+                      <button key={i} className={actionButtonClass(a)} onClick={()=>{
                         if (a.danger) {
                           setConfirm({
-                            title: `${a.label} Record`,
-                            message: `Are you sure you want to ${a.label.toLowerCase()} this record? This action cannot be undone.`,
+                            title: `${a.resolvedLabel} Record`,
+                            message: `Are you sure you want to ${a.resolvedLabel.toLowerCase()} this record? This action cannot be undone.`,
                             onConfirm: () => a.onClick(row)
                           });
                         } else {
                           a.onClick(row);
                         }
-                      }}>{a.label}</button>
+                      }}>{a.icon}{a.resolvedLabel}</button>
                     ))}
                   </div></td>
                 )}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
         </div>
         <div className={s.mobileCards}>
-          {filtered.map((row) => (
+          {filtered.map((row) => {
+            const rowActions = visibleActionsForRow(actions, row);
+            return (
             <div key={row.id} className={s.mobileCard}>
               {selectable && (
                 <label className={s.mobileSelect}>
@@ -341,23 +364,24 @@ export default function DataTable({
               )}
               {actions && (
                 <div className={s.mobileActions}>
-                  {actions?.map((a, i) => (
-                    <button key={i} className={`${s.actBtn} ${a.danger?s.actBtnDanger:''}`} onClick={() => {
+                  {rowActions.map((a, i) => (
+                    <button key={i} className={actionButtonClass(a)} onClick={() => {
                       if (a.danger) {
                         setConfirm({
-                          title: `${a.label} Record`,
-                          message: `Are you sure you want to ${a.label.toLowerCase()} this record? This action cannot be undone.`,
+                          title: `${a.resolvedLabel} Record`,
+                          message: `Are you sure you want to ${a.resolvedLabel.toLowerCase()} this record? This action cannot be undone.`,
                           onConfirm: () => a.onClick(row)
                         });
                       } else {
                         a.onClick(row);
                       }
-                    }}>{a.label}</button>
+                    }}>{a.icon}{a.resolvedLabel}</button>
                   ))}
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
         </>
       )}
