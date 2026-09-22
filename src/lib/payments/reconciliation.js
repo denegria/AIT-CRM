@@ -176,7 +176,11 @@ function succeededValidation(request, statusResult, expectedMerchantId) {
 function allocationPlan(request) {
   const metadata = json(value(request, 'metadata_json', 'metadataJson'));
   const registration = metadata.registrationResult || {};
-  const plan = Array.isArray(registration.allocationPlan) ? registration.allocationPlan : null;
+  const plan = Array.isArray(metadata.paymentIntent?.allocationPlan)
+    ? metadata.paymentIntent.allocationPlan
+    : Array.isArray(registration.allocationPlan)
+      ? registration.allocationPlan
+      : null;
   if (!plan) {
     const chargeId = value(request, 'charge_id', 'chargeId');
     if (!chargeId) {
@@ -304,6 +308,17 @@ function receiptNumber(providerTransactionId) {
 function receiptItems(request) {
   const metadata = json(value(request, 'metadata_json', 'metadataJson'));
   const quoteLines = metadata.registrationResult?.quote?.lines;
+  const paymentIntent = metadata.paymentIntent;
+  if (paymentIntent?.label && Array.isArray(paymentIntent.allocationPlan)) {
+    return paymentIntent.allocationPlan.map((entry) => ({
+      code: String(entry.itemCode || entry.treatment || 'payment').slice(0, 80),
+      desc: String(paymentIntent.label).slice(0, 160),
+      qty: 1,
+      rate: Number(entry.amount),
+      amount: Number(entry.amount),
+      ledgerTreatment: entry.treatment,
+    }));
+  }
   if (!Array.isArray(quoteLines) || !quoteLines.length) {
     return [{ desc: 'Verified payment', qty: 1, rate: Number(value(request, 'requested_amount', 'requestedAmount')), amount: Number(value(request, 'requested_amount', 'requestedAmount')) }];
   }

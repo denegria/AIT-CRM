@@ -7,9 +7,11 @@ import { PERMISSIONS, requirePermission } from '@/lib/auth.js';
 import { isAitUsaBusinessUnit } from '@/lib/attendance/policy.js';
 import {
   createHostedCollectionLink,
+  createStaffPaymentRequest,
   loadCollectionsQueue,
   loadCollectionsSetup,
   recordManualCollectionPayment,
+  recordManualPaymentRequest,
 } from '@/lib/collections/service.js';
 import {
   initiateSpinCollectionPayment,
@@ -41,7 +43,7 @@ async function resolveAitUsaScope(session, requestedId) {
     ))
     .limit(1);
   if (!businessUnit || !isAitUsaBusinessUnit(businessUnit.name)) {
-    throw createCrmError('Collections is limited to AIT USA.', 403);
+    throw createCrmError('Payments is limited to AIT USA.', 403);
   }
   return businessUnitId;
 }
@@ -76,7 +78,11 @@ export async function GET(request) {
       page: searchParams.get('page'),
       pageSize: searchParams.get('pageSize'),
     });
-    const setup = await loadCollectionsSetup(client, scope);
+    const setup = await loadCollectionsSetup(client, {
+      ...scope,
+      contactSearch: searchParams.get('contactSearch'),
+      paymentContactId: searchParams.get('paymentContactId'),
+    });
     const terminalHealth = dejavooSpinConfigHealth({ environment: providerEnvironment() });
     return NextResponse.json({
       queue,
@@ -120,6 +126,20 @@ export async function POST(request) {
         headers: { 'Cache-Control': 'private, no-store' },
       });
     }
+    if (body.action === 'create_payment_request') {
+      const sourceReference = body.sourceReference === 'contact-detail'
+        ? 'contact-detail'
+        : 'payments-workspace';
+      const result = await createStaffPaymentRequest(client, {
+        ...body.payment,
+        ...scope,
+        sourceReference,
+      });
+      return NextResponse.json({ result }, {
+        status: result.duplicate ? 200 : 201,
+        headers: { 'Cache-Control': 'private, no-store' },
+      });
+    }
     if (body.action === 'create_hosted_link') {
       const result = await createHostedCollectionLink(client, {
         ...scope,
@@ -152,8 +172,20 @@ export async function POST(request) {
     }
     if (body.action === 'record_manual_payment') {
       const result = await recordManualCollectionPayment(client, {
-        ...scope,
         ...body.payment,
+        ...scope,
+        actorUserId: session.user.id,
+      });
+      return NextResponse.json({ result }, {
+        status: result.duplicate ? 200 : 201,
+        headers: { 'Cache-Control': 'private, no-store' },
+      });
+    }
+    if (body.action === 'record_manual_payment_request') {
+      const result = await recordManualPaymentRequest(client, {
+        ...body.payment,
+        ...scope,
+        paymentRequestId: body.paymentRequestId,
         actorUserId: session.user.id,
       });
       return NextResponse.json({ result }, {

@@ -13,9 +13,9 @@ test('AIT USA Receipts is conditional on actual receipt history', () => {
 
 test('AIT USA Contact Detail is a read-only receipt archive', () => {
   assert.match(source, /Receipt history/);
-  assert.match(source, /Payments and checkouts are managed in Collections/);
-  assert.match(source, /href="\/collections"/);
-  assert.match(source, /Open Collections/);
+  assert.match(source, /New transactions are managed in Payments/);
+  assert.match(source, /href={`\/payments\?flow=take-payment&contactId=\$\{encodeURIComponent\(contact\.id\)\}`}/);
+  assert.match(source, /Take payment/);
   assert.match(source, /Download PDF/);
   assert.match(styles, /\.receiptArchiveHeader/);
   assert.doesNotMatch(source, /Generate Student Receipt/);

@@ -23,7 +23,7 @@ test('division title is restored after route navigation even when the division i
   assert.match(source, /return \(\) => observer\.disconnect\(\)/);
 });
 
-test('collections is limited to AIT USA staff with financial read access', () => {
-  assert.match(source, /href: '\/collections', label: 'Collections'/);
-  assert.match(source, /href === '\/collections' && \(!isAitUsaScope \|\| !access\.canReadFinancials\)/);
+test('payments is limited to AIT USA staff with financial read access', () => {
+  assert.match(source, /href: '\/payments', label: 'Payments'/);
+  assert.match(source, /href === '\/payments' && \(!isAitUsaScope \|\| !access\.canReadFinancials\)/);
 });

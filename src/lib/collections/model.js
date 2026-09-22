@@ -1,5 +1,6 @@
 const QUEUE_STATES = new Set(['due', 'partially_paid', 'overdue']);
 const MANUAL_METHODS = new Set(['cash', 'check', 'bank_transfer', 'money_order', 'zelle', 'other']);
+const PAYMENT_INTENTS = new Set(['charge', 'account_credit']);
 const SAFE_KEY = /^[A-Za-z0-9._:-]{12,160}$/;
 
 export class CollectionsError extends Error {
@@ -74,6 +75,36 @@ export function normalizeManualPayment(input = {}) {
   });
 }
 
+export function normalizeStaffPaymentRequest(input = {}) {
+  const intent = text(input.intent, 40).toLowerCase();
+  if (!PAYMENT_INTENTS.has(intent)) {
+    throw new CollectionsError('payment_intent_invalid', 'Payment must cover an existing charge or account credit.');
+  }
+  const studentContactId = text(input.studentContactId, 80);
+  if (!studentContactId) throw new CollectionsError('student_required', 'Student is required.');
+  const payerContactId = text(input.payerContactId, 80) || studentContactId;
+  const chargeId = text(input.chargeId, 80) || null;
+  if (intent === 'charge' && !chargeId) {
+    throw new CollectionsError('charge_required', 'Choose the balance or future installment this payment covers.');
+  }
+  if (intent === 'account_credit' && chargeId) {
+    throw new CollectionsError('credit_charge_conflict', 'Account credit cannot name a charge.');
+  }
+  const idempotencyKey = text(input.idempotencyKey, 160);
+  if (!SAFE_KEY.test(idempotencyKey)) {
+    throw new CollectionsError('idempotency_key_invalid', 'A safe idempotency key is required.');
+  }
+  return Object.freeze({
+    intent,
+    studentContactId,
+    payerContactId,
+    chargeId,
+    amountCents: moneyToCents(input.amount),
+    note: text(input.note, 1000) || null,
+    idempotencyKey,
+  });
+}
+
 export function normalizeHostedLinkInput(input = {}) {
   const paymentRequestId = text(input.paymentRequestId, 80);
   const idempotencyKey = text(input.idempotencyKey, 160);
@@ -86,3 +117,4 @@ export function normalizeHostedLinkInput(input = {}) {
 
 export const COLLECTION_QUEUE_STATES = Object.freeze([...QUEUE_STATES]);
 export const COLLECTION_MANUAL_METHODS = Object.freeze([...MANUAL_METHODS]);
+export const COLLECTION_PAYMENT_INTENTS = Object.freeze([...PAYMENT_INTENTS]);

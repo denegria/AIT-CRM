@@ -336,6 +336,35 @@ test('verified payment reconciles transaction, charge, receipt, activity, and un
   assert.equal(client.state.fulfillment.provider_transaction_id, first.transactionId);
 });
 
+test('staff account credit uses an explicit unapplied allocation and produces an auditable receipt', async () => {
+  const client = fakeReconciliationClient();
+  Object.assign(client.state.request, {
+    enrollment_id: null,
+    charge_id: null,
+    requested_amount: '200.00',
+    source_reference: 'payments-workspace',
+    metadata_json: {
+      paymentIntent: {
+        kind: 'account_credit',
+        label: 'Account credit',
+        allocationPlan: [
+          { treatment: 'unapplied_credit', chargeId: null, itemCode: 'account-credit', amount: '200.00' },
+        ],
+      },
+    },
+  });
+  const result = await reconcileDejavooPayment(client, {
+    ...baseInput,
+    statusResult: verifiedStatus({ amount: { currency: 'USD', minorUnits: 20000, totalMinorUnits: 20000 } }),
+  });
+  assert.equal(result.outcome, 'completed');
+  assert.equal(result.unappliedCreditAmount, '200.00');
+  assert.equal(result.allocatedChargeCount, 0);
+  assert.equal(client.state.allocations.length, 0);
+  assert.equal(client.state.documents[0].items_json[0].desc, 'Account credit');
+  assert.equal(client.state.activities[0].metadata_json.unappliedCreditAmount, '200.00');
+});
+
 test('SPIn verification records the provider surface while reusing the same ledger invariants', async () => {
   const client = fakeReconciliationClient();
   const result = await reconcileDejavooPayment(client, {

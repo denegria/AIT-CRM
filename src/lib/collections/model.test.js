@@ -8,6 +8,7 @@ import {
   normalizeManualPayment,
   normalizeQueuePage,
   normalizeQueueState,
+  normalizeStaffPaymentRequest,
 } from './model.js';
 
 test('collection queue accepts only operational balance states', () => {
@@ -44,4 +45,45 @@ test('hosted links require safe idempotency keys', () => {
     paymentRequestId: 'request-1', idempotencyKey: 'collections:hpp:123',
   }), { paymentRequestId: 'request-1', idempotencyKey: 'collections:hpp:123' });
   assert.throws(() => normalizeHostedLinkInput({ paymentRequestId: 'request-1', idempotencyKey: 'short' }), /safe idempotency/);
+});
+
+test('staff payment requests keep payment intent separate from method', () => {
+  assert.deepEqual(normalizeStaffPaymentRequest({
+    intent: 'charge',
+    studentContactId: 'student-1',
+    payerContactId: 'payer-1',
+    chargeId: 'charge-1',
+    amount: '50.25',
+    note: 'Front desk partial payment',
+    idempotencyKey: 'payments:request:fixture-1',
+  }), {
+    intent: 'charge',
+    studentContactId: 'student-1',
+    payerContactId: 'payer-1',
+    chargeId: 'charge-1',
+    amountCents: 5025,
+    note: 'Front desk partial payment',
+    idempotencyKey: 'payments:request:fixture-1',
+  });
+  assert.deepEqual(normalizeStaffPaymentRequest({
+    intent: 'account_credit',
+    studentContactId: 'student-1',
+    amount: '200',
+    idempotencyKey: 'payments:request:fixture-2',
+  }), {
+    intent: 'account_credit',
+    studentContactId: 'student-1',
+    payerContactId: 'student-1',
+    chargeId: null,
+    amountCents: 20000,
+    note: null,
+    idempotencyKey: 'payments:request:fixture-2',
+  });
+  assert.throws(() => normalizeStaffPaymentRequest({
+    intent: 'charge', studentContactId: 'student-1', amount: '10', idempotencyKey: 'payments:request:fixture-3',
+  }), /Choose the balance/);
+  assert.throws(() => normalizeStaffPaymentRequest({
+    intent: 'account_credit', studentContactId: 'student-1', chargeId: 'charge-1', amount: '10',
+    idempotencyKey: 'payments:request:fixture-4',
+  }), /cannot name a charge/);
 });

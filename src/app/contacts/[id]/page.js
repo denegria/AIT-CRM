@@ -2302,6 +2302,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
       {access.canWriteCrm && (
         <div className={s.contactProfileActions}>
+          {access.canWriteFinancials && (
+            <Link className="btn btn-primary btn-block" href={`/payments?flow=take-payment&contactId=${encodeURIComponent(contact.id)}`}>
+              <DollarSign size={16} /> Take payment
+            </Link>
+          )}
           <button className={`${s.editProfileButton} btn btn-block`} type="button" onClick={openEditModal}>
             <Edit3 size={16} /> Edit profile
           </button>
@@ -2371,6 +2376,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           </div>
           {access.canWriteCrm && (
             <div className={s.mobileContextActions}>
+              {access.canWriteFinancials && (
+                <Link className="btn btn-primary" href={`/payments?flow=take-payment&contactId=${encodeURIComponent(contact.id)}`}>
+                  <DollarSign size={15} /> Take payment
+                </Link>
+              )}
               <button className="btn" type="button" onClick={openEditModal}>
                 <Edit3 size={15} /> Edit profile
               </button>
@@ -3151,11 +3161,11 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                   <div className={s.receiptArchiveHeader}>
                     <div className={s.commandCopy}>
                       <div className={s.commandTitle}>Receipt history</div>
-                      <p>Verified receipts for this contact. Payments and checkouts are managed in Collections.</p>
+                      <p>Verified receipts for this contact. New transactions are managed in Payments.</p>
                     </div>
                     {access.canReadFinancials && (
-                      <Link className="btn" href="/collections">
-                        <DollarSign size={16} /> Open Collections
+                      <Link className="btn" href={`/payments?flow=take-payment&contactId=${encodeURIComponent(contact.id)}`}>
+                        <DollarSign size={16} /> Take payment
                       </Link>
                     )}
                   </div>

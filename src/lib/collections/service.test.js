@@ -2,7 +2,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 
-import { createHostedCollectionLink, recordManualCollectionPayment } from './service.js';
+import {
+  createHostedCollectionLink,
+  createStaffPaymentRequest,
+  loadCollectionsSetup,
+  recordManualCollectionPayment,
+  recordManualPaymentRequest,
+} from './service.js';
 
 const scope = { organizationId: 'org-1', businessUnitId: 'bu-usa' };
 const serviceSource = fs.readFileSync(new URL('./service.js', import.meta.url), 'utf8');
@@ -214,3 +220,233 @@ test('manual non-card payment uses verified transaction and allocation invariant
 test('a verified full manual payment can close a final non-payment provider request', () => {
   assert.match(serviceSource, /status in \('created', 'pending', 'failed', 'canceled', 'expired'\)/);
 });
+
+function paymentRequestClient({ allocated = '25.00', chargeStatus = 'partially_paid' } = {}) {
+  const calls = [];
+  const charge = {
+    id: 'charge-1', organization_id: 'org-1', business_unit_id: 'bu-usa',
+    student_contact_id: 'student-1', payer_contact_id: 'payer-1', enrollment_id: 'enrollment-1',
+    class_section_id: null, amount: '100.00', allocated, currency: 'USD', status: chargeStatus,
+    charge_type: 'tuition', description: 'October tuition', original_due_date: '2026-10-01',
+  };
+  return {
+    calls,
+    async query(sql, params = []) {
+      const statement = String(sql).replace(/\s+/g, ' ').trim();
+      calls.push({ sql: statement, params });
+      if (statement.includes('from student_charges sc') && statement.includes('for update')) return { rows: [charge] };
+      if (statement.startsWith('select id from contacts')) {
+        return { rows: ['student-1', 'payer-1'].includes(params[0]) ? [{ id: params[0] }] : [] };
+      }
+      if (statement.startsWith('insert into payment_requests')) return { rows: [{
+        id: 'request-1', requested_amount: params[7], charge_id: params[6],
+        student_contact_id: params[2], payer_contact_id: params[3], metadata_json: JSON.parse(params[18]),
+      }] };
+      return { rows: [] };
+    },
+  };
+}
+
+test('staff charge request accepts a partial amount without changing the original due date', async () => {
+  const client = paymentRequestClient();
+  const result = await createStaffPaymentRequest(client, {
+    ...scope,
+    intent: 'charge',
+    studentContactId: 'student-1',
+    payerContactId: 'payer-1',
+    chargeId: 'charge-1',
+    amount: '50.00',
+    idempotencyKey: 'payments:request:fixture-1',
+  });
+  assert.equal(result.paymentRequest.requested_amount, '50.00');
+  assert.equal(result.paymentRequest.charge_id, 'charge-1');
+  assert.deepEqual(result.allocationPlan, [{
+    treatment: 'charge', chargeId: 'charge-1', itemCode: 'tuition', amount: '50.00',
+  }]);
+  assert.equal(client.calls.some((call) => /update student_charges/i.test(call.sql)), false);
+});
+
+test('staff charge request rejects an amount above the verified remaining balance', async () => {
+  const client = paymentRequestClient();
+  await assert.rejects(() => createStaffPaymentRequest(client, {
+    ...scope,
+    intent: 'charge',
+    studentContactId: 'student-1',
+    chargeId: 'charge-1',
+    amount: '75.01',
+    idempotencyKey: 'payments:request:fixture-2',
+  }), (error) => error.code === 'amount_exceeds_balance' && error.details.balance === '75.00');
+  assert.equal(client.calls.some((call) => call.sql.startsWith('insert into payment_requests')), false);
+});
+
+test('staff account credit creates a request without a fake charge', async () => {
+  const client = paymentRequestClient();
+  const result = await createStaffPaymentRequest(client, {
+    ...scope,
+    intent: 'account_credit',
+    studentContactId: 'student-1',
+    amount: '200.00',
+    idempotencyKey: 'payments:request:fixture-3',
+  });
+  assert.equal(result.paymentRequest.charge_id, null);
+  assert.equal(result.paymentRequest.payer_contact_id, 'student-1');
+  assert.equal(result.paymentRequest.metadata_json.paymentIntent.kind, 'account_credit');
+  assert.deepEqual(result.allocationPlan, [{
+    treatment: 'unapplied_credit', chargeId: null, itemCode: 'account-credit', amount: '200.00',
+  }]);
+});
+
+test('available account credit subtracts verified refunds and their reversed allocations', async () => {
+  const calls = [];
+  const client = {
+    async query(sql) {
+      const statement = String(sql).replace(/\s+/g, ' ').trim();
+      calls.push(statement);
+      if (statement.startsWith('select id, name, email, phone from contacts') && statement.includes('id::text = $1')) {
+        return { rows: [{ id: 'student-1', name: 'Student One' }] };
+      }
+      if (statement.includes('as balance') && statement.includes('from provider_transactions pt')) {
+        return { rows: [{ balance: '75.00' }] };
+      }
+      return { rows: [] };
+    },
+  };
+  const result = await loadCollectionsSetup(client, {
+    ...scope,
+    paymentContactId: 'student-1',
+  });
+  assert.equal(result.paymentStudent.accountCredit, '75.00');
+  const creditQuery = calls.find((statement) => statement.includes('as balance') && statement.includes('from provider_transactions pt'));
+  assert.match(creditQuery, /case when pt\.transaction_kind = 'refund' then -pt\.amount else pt\.amount end/);
+  assert.match(creditQuery, /case when pt\.transaction_kind = 'refund' then -allocated\.amount else allocated\.amount end/);
+  assert.match(creditQuery, /pt\.transaction_kind in \('payment', 'refund'\)/);
+});
+
+test('manual account credit completes the reviewed request without inventing an allocation', async () => {
+  const request = {
+    id: 'request-credit', organization_id: 'org-1', business_unit_id: 'bu-usa',
+    student_contact_id: 'student-1', payer_contact_id: 'student-1', requested_amount: '200.00',
+    currency: 'USD', status: 'created', merchant_reference: 'PAY_CREDIT',
+    metadata_json: { paymentIntent: {
+      kind: 'account_credit', label: 'Account credit', allocationPlan: [
+        { treatment: 'unapplied_credit', chargeId: null, itemCode: 'account-credit', amount: '200.00' },
+      ],
+    } },
+  };
+  const transaction = {
+    id: 'transaction-credit', provider_transaction_id: 'manual_credit', status: 'verified',
+    transaction_kind: 'payment', amount: '200.00', currency: 'USD', receipt_document_id: null,
+  };
+  const calls = [];
+  const client = {
+    calls,
+    async query(sql, params = []) {
+      const statement = String(sql).replace(/\s+/g, ' ').trim();
+      calls.push({ sql: statement, params });
+      if (statement.startsWith('select * from payment_requests') && statement.includes('for update')) return { rows: [request] };
+      if (statement.startsWith('select id from contacts')) return { rows: [{ id: params[0] }] };
+      if (statement.startsWith('insert into provider_transactions')) return { rows: [transaction] };
+      if (statement.startsWith('insert into financial_documents')) return { rows: [{ id: 'receipt-credit' }] };
+      return { rows: [] };
+    },
+  };
+  const result = await recordManualPaymentRequest(client, {
+    ...scope,
+    paymentRequestId: 'request-credit',
+    amount: '200.00',
+    method: 'cash',
+    note: 'Prepaid next month at front desk',
+    idempotencyKey: 'payments:manual:credit-fixture',
+    actorUserId: 'user-1',
+    now: new Date('2026-09-21T12:00:00Z'),
+  });
+  assert.equal(result.receiptDocumentId, 'receipt-credit');
+  assert.equal(result.unappliedCreditAmount, '200.00');
+  assert.deepEqual(result.allocationIds, []);
+  assert.equal(calls.some((call) => call.sql.startsWith('insert into payment_allocations')), false);
+  assert.ok(calls.some((call) => call.sql.includes("update payment_requests set status = 'completed'")));
+});
+
+function manualPaymentReplayClient({ status = 'completed', replayKey = '', receiptDocumentId = null } = {}) {
+  const request = {
+    id: 'request-credit', organization_id: 'org-1', business_unit_id: 'bu-usa',
+    student_contact_id: 'student-1', payer_contact_id: 'student-1', requested_amount: '200.00',
+    currency: 'USD', status, merchant_reference: 'PAY_CREDIT',
+    metadata_json: { paymentIntent: {
+      kind: 'account_credit', label: 'Account credit', allocationPlan: [
+        { treatment: 'unapplied_credit', chargeId: null, itemCode: 'account-credit', amount: '200.00' },
+      ],
+    } },
+  };
+  const transaction = {
+    id: 'transaction-credit', payment_request_id: request.id,
+    provider_transaction_id: 'manual_credit', status: 'verified',
+    transaction_kind: 'payment', amount: '200.00', currency: 'USD',
+    receipt_document_id: receiptDocumentId, idempotency_key: replayKey,
+  };
+  const calls = [];
+  return {
+    calls,
+    async query(sql, params = []) {
+      const statement = String(sql).replace(/\s+/g, ' ').trim();
+      calls.push({ sql: statement, params });
+      if (statement.startsWith('select * from payment_requests') && statement.includes('for update')) return { rows: [request] };
+      if (statement.startsWith('select * from provider_transactions') && statement.includes('payment_request_id = $3')) {
+        return { rows: replayKey === params[3] ? [transaction] : [] };
+      }
+      if (statement.startsWith('select * from provider_transactions') && statement.includes('idempotency_key = $3')) {
+        return { rows: replayKey === params[2] ? [transaction] : [] };
+      }
+      if (statement.startsWith('select id from contacts')) return { rows: [{ id: params[0] }] };
+      if (statement.startsWith('insert into provider_transactions')) return { rows: replayKey ? [] : [transaction] };
+      return { rows: [] };
+    },
+  };
+}
+
+test('manual payment retry returns the completed transaction for the same idempotency key', async () => {
+  const replayKey = 'manual:request-transaction:payments:manual:credit-fixture';
+  const client = manualPaymentReplayClient({ replayKey, receiptDocumentId: 'receipt-credit' });
+  const result = await recordManualPaymentRequest(client, {
+    ...scope,
+    paymentRequestId: 'request-credit',
+    amount: '200.00',
+    method: 'cash',
+    idempotencyKey: 'payments:manual:credit-fixture',
+    actorUserId: 'user-1',
+    now: new Date('2026-09-21T12:00:00Z'),
+  });
+  assert.equal(result.duplicate, true);
+  assert.equal(result.transactionId, 'transaction-credit');
+  assert.equal(result.receiptDocumentId, 'receipt-credit');
+  assert.equal(client.calls.some((call) => call.sql.startsWith('insert into financial_documents')), false);
+});
+
+test('completed payment request rejects a manual retry with a different idempotency key', async () => {
+  const client = manualPaymentReplayClient({
+    replayKey: 'manual:request-transaction:payments:manual:first-attempt',
+    receiptDocumentId: 'receipt-credit',
+  });
+  await assert.rejects(() => recordManualPaymentRequest(client, {
+    ...scope,
+    paymentRequestId: 'request-credit',
+    amount: '200.00',
+    method: 'cash',
+    idempotencyKey: 'payments:manual:different-attempt',
+  }), (error) => error.code === 'payment_request_completed' && error.status === 409);
+  assert.equal(client.calls.some((call) => call.sql.startsWith('insert into provider_transactions')), false);
+});
+
+for (const status of ['pending', 'failed', 'canceled', 'expired']) {
+  test(`manual payment rejects a ${status} request instead of reviving it`, async () => {
+    const client = manualPaymentReplayClient({ status });
+    await assert.rejects(() => recordManualPaymentRequest(client, {
+      ...scope,
+      paymentRequestId: 'request-credit',
+      amount: '200.00',
+      method: 'cash',
+      idempotencyKey: `payments:manual:${status}`,
+    }), (error) => error.code === 'payment_request_not_payable' && error.status === 409);
+    assert.equal(client.calls.some((call) => call.sql.startsWith('insert into provider_transactions')), false);
+  });
+}

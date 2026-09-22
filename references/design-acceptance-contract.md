@@ -598,3 +598,107 @@
   source path.
 - Do not redesign Activity records, Conversations, Enrollments, Receipts, Edit
   Profile, or the global mobile navigation in this slice.
+
+# MIS-426 Payments Workspace Acceptance Contract
+
+## Workflow and problem
+
+- The employee-facing workspace is named **Payments**. `Collections` describes
+  only overdue follow-up, not registration payments, ordinary balances,
+  prepayments, account credit, portal self-pay, terminal payments, receipts,
+  and reconciliation.
+- One authoritative payment pipeline serves every entry point and channel:
+  student/payer -> charge or allocation -> payment method -> provider/manual
+  confirmation -> ledger -> receipt.
+- A front-desk employee may start **Take payment** from Payments by finding the
+  student, or from Contact Detail with the student preselected. Both paths use
+  the same server actions and accounting invariants.
+
+## Interaction model and visual direction
+
+- Product-native CRM styling is the visual authority; the approved staging
+  audit screenshots are used in inspiration mode, not as a faithful reference.
+- Payments exposes two primary intents: **Take payment** and **New
+  registration**. Open balances, Overdue, Recent payments, and Reconciliation
+  remain operational views below those entry points.
+- A sequential composer is justified because money movement is consequential:
+  **Student & payer**, **What this payment covers**, **Payment method**, then
+  **Review & confirm**. Contact Detail deep links skip already-known student
+  selection without creating a second workflow.
+- Payment intent and payment method remain separate. Existing balance, a real
+  future installment, account credit, or registration/book purchase may use a
+  secure link, physical terminal, or supported non-card method.
+- On compact screens, the composer, queue, and detail are mutually exclusive
+  workspaces rather than one long stack. Search occupies its own row and no
+  lane, identity, or reference may widen the page.
+
+### Visual consistency polish
+
+- The existing CRM shell, tokens, typography scale, and eight-pixel surface
+  radius are the visual authority. Payments must read as another operational
+  CRM workspace rather than a separately branded mini-product.
+- `Take payment` is the single filled-blue launch action. `New registration`
+  remains an outlined secondary action, while the green provider-security card
+  remains visible as a durable trust guarantee.
+- Selected Payments workspaces use the theme-aware CRM accent instead of a
+  hard-coded near-black treatment. Semantic success, warning, and danger colors
+  remain reserved for their existing financial states.
+- The page uses the standard CRM title scale without a decorative money-
+  operations eyebrow. Refresh belongs to the workspace toolbar, not the global
+  page header.
+- Launch actions disappear while the sequential payment composer is active so
+  the current financial task owns the viewport. Empty states use content-sized
+  spacing rather than a tall blank panel.
+- On mobile, the workspace rail keeps its horizontal behavior but exposes a
+  visible overflow cue, and the refresh label may collapse while retaining an
+  accessible name.
+
+## Locked financial behavior and permissions
+
+- Financial read/write permissions and exact AIT USA business-unit scope remain
+  server enforced. AIT Signs and portal payment authorization are unchanged.
+- Existing or future charges may receive a full or partial amount no greater
+  than their verified remaining balance. A future installment is selectable
+  only when a real future-dated charge exists; the UI never invents a schedule.
+- Account credit is an explicit unapplied allocation with a durable payment
+  request, verified transaction, receipt, and activity trail. It is never
+  represented as a fake charge.
+- Payer may differ from student, but both contacts must resolve inside the same
+  organization and business unit.
+- Hosted-link and terminal attempts remain mutually exclusive. Unknown terminal
+  outcomes lock another payment attempt until bounded recovery resolves them.
+- Card data never enters CRM. Manual collection is limited to supported
+  non-card methods and requires the existing audit/reference rules.
+- Refunds, reversals, chargebacks, voiding, and split-tender orchestration remain
+  read-only/escalation states until a dedicated allocation policy is approved.
+
+## Responsive and accessibility acceptance
+
+- Primary viewport: `1440x1000`; regression viewports: `1024x768` and
+  `390x844`.
+- The guided flow exposes current step, completed context, validation errors,
+  disabled/pending actions, terminal readiness, and unknown/recovery states in
+  text as well as color.
+- Searchable student selection is keyboard operable, labels remain explicit,
+  conditional content is announced, and focus moves to the first invalid field
+  or the next step heading.
+- Long names, emails, references, and descriptions wrap or truncate inside
+  their containers with zero horizontal page overflow.
+
+## Required evidence
+
+- Focused tests cover payment-intent normalization, charge/balance validation,
+  account-credit allocation, payer scope, idempotency, portal/provider
+  regression, direct Contact Detail entry, and responsive source contracts.
+- Run the selected `ui` and `schema-api` validation profiles plus the webpack
+  production build fallback for the known worktree/Turbopack limitation.
+- Capture matched desktop and mobile states using authenticated staging-backed
+  identities without submitting CRM or provider writes. Populated financial
+  states that staging lacks remain explicitly test-backed acceptance debt.
+
+## Non-goals
+
+- New installment scheduling, refund allocation, chargeback operations,
+  split-tender settlement, production provider execution, or production deploy.
+- Changing portal self-pay authorization, Dejavoo credentials, receipt PDF
+  branding, Book Fulfillment policy, or AIT Signs financial workflows.
