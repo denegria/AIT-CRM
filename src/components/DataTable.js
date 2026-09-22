@@ -302,7 +302,7 @@ export default function DataTable({
                 {actions && (
                   <td className={s.actionCell}><div className={s.actions}>
                     {rowActions.map((a,i) => (
-                      <button key={i} className={actionButtonClass(a)} onClick={()=>{
+                      <button key={i} className={actionButtonClass(a)} style={a.buttonWidth ? { width: a.buttonWidth } : undefined} onClick={()=>{
                         if (a.danger) {
                           setConfirm({
                             title: `${a.resolvedLabel} Record`,
@@ -365,7 +365,7 @@ export default function DataTable({
               {actions && (
                 <div className={s.mobileActions}>
                   {rowActions.map((a, i) => (
-                    <button key={i} className={actionButtonClass(a)} onClick={() => {
+                    <button key={i} className={actionButtonClass(a)} style={a.buttonWidth ? { width: a.buttonWidth } : undefined} onClick={() => {
                       if (a.danger) {
                         setConfirm({
                           title: `${a.resolvedLabel} Record`,

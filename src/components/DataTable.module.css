@@ -175,8 +175,8 @@
 .table tr:hover td { background:color-mix(in srgb, var(--bg-hover) 86%, var(--bg-secondary)); color:var(--text-primary); }
 .table tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .table tr { transition: background var(--transition-fast); }
-.actions { display:flex; gap:6px; flex-wrap:nowrap; justify-content:flex-end; align-items:center; }
-.table th.actionHeader { text-align:left; padding-left:15px; }
+.actions { display:flex; gap:4px; flex-wrap:nowrap; justify-content:flex-end; align-items:center; }
+.table th.actionHeader { text-align:left; padding-left:12px; }
 .actionCell { text-align:right; white-space:normal; max-width:220px; }
 .actBtn {
   min-height:28px;
