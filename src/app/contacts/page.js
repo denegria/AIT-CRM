@@ -1522,7 +1522,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           fixedLayout={columnMode === 'ait_usa'}
           stickyHeader={columnMode === 'ait_usa'}
           comfortableRows={columnMode === 'ait_usa'}
-          actionColumnWidth={columnMode === 'ait_usa' ? '16%' : undefined}
+          actionColumnWidth={columnMode === 'ait_usa' ? '208px' : undefined}
           mobileBadges={['status']}
           mobileFields={mobileFieldKeys}
         />
