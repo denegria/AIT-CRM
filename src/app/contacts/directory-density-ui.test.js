@@ -23,10 +23,30 @@ test('AIT USA rows own navigation and remove redundant View and Edit actions', (
   assert.match(tableSource, /\['Enter', ' '\]\.includes\(event\.key\)/);
   assert.match(tableSource, /event\.target\.closest\('a, button, input, select, textarea, summary, label'\)/);
   assert.match(tableStyles, /\.clickableRow:focus-visible/);
+  assert.match(contactsSource, /<ChevronRight className="contacts-row-chevron"/);
+  assert.match(contactsSource, /rowEnd=\{columnMode === 'ait_usa'/);
+  assert.match(tableSource, /\{rowEnd && <td className=\{s\.rowEndCell\}>\{rowEnd\(row\)\}<\/td>\}/);
 });
 
 test('mobile keeps only the high-value contact fields and conditional outreach action', () => {
   assert.match(contactsSource, /\? \['assignedLabel', 'directoryNextStep', 'lastTouch'\]/);
   assert.match(contactsSource, /nextStep\.action === 'log_follow_up'/);
   assert.match(contactsSource, /\{nextStep\.actionLabel\}/);
+  assert.match(tableSource, /\{rowEnd\?\.\(row\)\}/);
+});
+
+test('large desktop directory uses intentional widths, a sticky header, and a trailing action rail', () => {
+  assert.match(contactsSource, /desktopWidth: '24%'/);
+  assert.match(contactsSource, /desktopWidth: '28%'/);
+  assert.match(contactsSource, /desktopWidth: '240px'/);
+  assert.match(contactsSource, /fixedLayout=\{columnMode === 'ait_usa'\}/);
+  assert.match(contactsSource, /stickyHeader=\{columnMode === 'ait_usa'\}/);
+  assert.match(tableStyles, /\.tableFixed \{ min-width:0; table-layout:fixed; \}/);
+  assert.match(tableStyles, /\.tableStickyHeader thead th/);
+  assert.match(tableStyles, /\.rowEndColumn \{ width:156px; \}/);
+  assert.match(tableSource, /visibleColumns\.every\(\(column\) => defaultLayoutKeys\.has\(column\.key\)\)/);
+});
+
+test('closed rows do not repeat the enrollment reason in Next Step', () => {
+  assert.match(contactsSource, /nextStep\.label === 'No active work' && nextStep\.detail === row\.enrollmentStage/);
 });

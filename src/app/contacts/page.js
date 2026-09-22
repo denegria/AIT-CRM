@@ -68,7 +68,7 @@ import TimeframeFilterPanel from '@/components/TimeframeFilterPanel';
 import { ContactDialogInitialTimelineNote } from '@/components/ContactTimelineNoteFields';
 import ContactTerminalStatusReasonField from '@/components/ContactTerminalStatusReasonField';
 import { contactDirectoryNextStep } from '@/lib/contact-directory-next-step.js';
-import { Activity, AlertCircle, BadgeDollarSign, Check, ClipboardCheck, Clock3, ListFilter, PhoneOff, RotateCcw, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { Activity, AlertCircle, BadgeDollarSign, Check, ChevronRight, ClipboardCheck, Clock3, ListFilter, PhoneOff, RotateCcw, UserRoundCheck, UsersRound, X } from 'lucide-react';
 
 const empty = {
   name: '',
@@ -349,14 +349,25 @@ function ContactIdentityCell({ row, href }) {
   );
 }
 
-function DirectoryNextStepCell({ row, onLogFollowUp }) {
+function DirectoryNextStepCell({ row }) {
   const nextStep = row.directoryNextStepModel || contactDirectoryNextStep(row);
+  const detail = nextStep.label === 'No active work' && nextStep.detail === row.enrollmentStage
+    ? ''
+    : nextStep.detail;
   return (
     <div className="contacts-next-step-cell">
       <div>
         <strong>{nextStep.label}</strong>
-        <span>{nextStep.detail}</span>
+        {detail && <span>{detail}</span>}
       </div>
+    </div>
+  );
+}
+
+function DirectoryRowEnd({ row, onLogFollowUp }) {
+  const nextStep = row.directoryNextStepModel || contactDirectoryNextStep(row);
+  return (
+    <div className="contacts-directory-row-end">
       {nextStep.action === 'log_follow_up' && onLogFollowUp && (
         <button
           type="button"
@@ -370,6 +381,7 @@ function DirectoryNextStepCell({ row, onLogFollowUp }) {
           {nextStep.actionLabel}
         </button>
       )}
+      <ChevronRight className="contacts-row-chevron" size={17} aria-hidden="true" />
     </div>
   );
 }
@@ -748,20 +760,22 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       key: 'name',
       label: 'Contact',
       sortable: true,
+      desktopWidth: '24%',
       render: (row) => <ContactIdentityCell row={row} href={`${routeBase}/${encodeURIComponent(row.id)}`} />,
     },
     { key: 'email', label: 'Email', sortable: true },
     { key: 'phone', label: 'Phone', sortable: true },
-    { key: 'enrollmentStage', label: 'Enrollment', sortable: true, render: (row) => <CompactEnrollmentCell row={row} /> },
-    { key: 'assignedLabel', label: 'Owner', sortable: true },
+    { key: 'enrollmentStage', label: 'Enrollment', sortable: true, desktopWidth: '160px', render: (row) => <CompactEnrollmentCell row={row} /> },
+    { key: 'assignedLabel', label: 'Owner', sortable: true, desktopWidth: '150px' },
     {
       key: 'directoryNextStep',
       label: 'Next Step',
       sortable: false,
-      render: (row) => <DirectoryNextStepCell row={row} onLogFollowUp={canWrite ? openLogFollowUp : undefined} />,
+      desktopWidth: '28%',
+      render: (row) => <DirectoryNextStepCell row={row} />,
     },
-    { key: 'lastTouch', label: 'Last Touch', sortable: true },
-    { key: 'inquirySource', label: 'Source', sortable: true, render: (row) => <EnrollmentSourceCell row={row} /> },
+    { key: 'lastTouch', label: 'Last Touch', sortable: true, desktopWidth: '140px' },
+    { key: 'inquirySource', label: 'Source', sortable: true, desktopWidth: '240px', render: (row) => <EnrollmentSourceCell row={row} /> },
     { key: 'studentLocation', label: 'Student Location', sortable: true },
     { key: 'schoolLocation', label: 'Learning Location', sortable: true },
     { key: 'lastEdited', label: 'Last Edited', sortable: true },
@@ -1507,8 +1521,14 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
             'inquirySource',
           ] : undefined}
           wideSearch={columnMode === 'ait_usa'}
+          fixedLayout={columnMode === 'ait_usa'}
+          stickyHeader={columnMode === 'ait_usa'}
           onRowClick={columnMode === 'ait_usa' ? openContact : undefined}
           rowLabel={columnMode === 'ait_usa' ? (row) => `Open ${row.name || 'contact'} contact details` : undefined}
+          rowEnd={columnMode === 'ait_usa' ? (row) => (
+            <DirectoryRowEnd row={row} onLogFollowUp={canWrite ? openLogFollowUp : undefined} />
+          ) : undefined}
+          rowEndLabel={columnMode === 'ait_usa' ? 'Action' : undefined}
           mobileBadges={['status']}
           mobileFields={mobileFieldKeys}
         />

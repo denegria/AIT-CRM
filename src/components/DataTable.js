@@ -34,8 +34,12 @@ export default function DataTable({
   mobileBadges,
   defaultVisibleColumnKeys,
   wideSearch = false,
+  fixedLayout = false,
+  stickyHeader = false,
   onRowClick,
   rowLabel,
+  rowEnd,
+  rowEndLabel = 'Action',
   sortKey: controlledSortKey,
   sortDirection: controlledSortDirection,
   onSortChange,
@@ -68,6 +72,10 @@ export default function DataTable({
     const nextColumns = columns.filter((column) => visibleSet.has(column.key));
     return nextColumns.length ? nextColumns : columns.slice(0, 1);
   }, [columns, effectiveVisibleColumnKeys]);
+  const defaultLayoutKeys = useMemo(() => new Set(defaultVisibleColumnKeys || []), [defaultVisibleColumnKeys]);
+  const useFixedLayout = fixedLayout && (
+    defaultLayoutKeys.size === 0 || visibleColumns.every((column) => defaultLayoutKeys.has(column.key))
+  );
 
   const filtered = useMemo(() => {
     let rows = data;
@@ -226,8 +234,18 @@ export default function DataTable({
         )
       ) : (
         <>
-        <div className={s.tableScroller}>
-        <table className={s.table}>
+        <div className={`${s.tableScroller} ${useFixedLayout ? s.fixedScroller : ''}`}>
+        <table className={`${s.table} ${useFixedLayout ? s.tableFixed : ''} ${stickyHeader ? s.tableStickyHeader : ''}`}>
+          {(useFixedLayout || rowEnd) && (
+            <colgroup>
+              {selectable && <col style={{ width: 40 }} />}
+              {visibleColumns.map((column) => (
+                <col key={column.key} style={column.desktopWidth ? { width: column.desktopWidth } : undefined} />
+              ))}
+              {actions && <col />}
+              {rowEnd && <col className={s.rowEndColumn} />}
+            </colgroup>
+          )}
           <thead><tr>
             {selectable && (
               <th style={{ width: 40, textAlign: 'center' }}>
@@ -256,6 +274,7 @@ export default function DataTable({
               </th>
             ))}
             {actions && <th className={s.actionHeader}>Actions</th>}
+            {rowEnd && <th className={s.rowEndHeader}>{rowEndLabel}</th>}
           </tr></thead>
           <tbody>
             {filtered.map(row => (
@@ -298,6 +317,7 @@ export default function DataTable({
                     ))}
                   </div></td>
                 )}
+                {rowEnd && <td className={s.rowEndCell}>{rowEnd(row)}</td>}
               </tr>
             ))}
           </tbody>
@@ -348,9 +368,10 @@ export default function DataTable({
                   ))}
                 </div>
               )}
-              {actions && (
+              {(actions || rowEnd) && (
                 <div className={s.mobileActions}>
-                  {actions.map((a, i) => (
+                  {rowEnd?.(row)}
+                  {actions?.map((a, i) => (
                     <button key={i} className={`${s.actBtn} ${a.danger?s.actBtnDanger:''}`} onClick={() => {
                       if (a.danger) {
                         setConfirm({
