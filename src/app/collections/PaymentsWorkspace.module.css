@@ -161,12 +161,6 @@
   padding: 17px 20px;
   border-bottom: 1px solid var(--border-subtle);
 }
-.flowTopbar > div {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.flowTopbar span,
 .panelHead span,
 .studentHead > div > span {
   color: var(--accent);
@@ -641,11 +635,6 @@
   border-top: 0;
   background: var(--bg-elevated);
 }
-.searchRow > span {
-  margin-left: auto;
-  color: var(--text-secondary);
-  font-size: 11px;
-}
 .balanceToggles {
   display: flex;
   gap: 5px;
@@ -1081,9 +1070,6 @@
   .searchRow {
     align-items: stretch;
     flex-direction: column;
-  }
-  .searchRow > span {
-    margin-left: 0;
   }
   .queueSearch {
     min-width: 0;

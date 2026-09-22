@@ -623,10 +623,12 @@ export default function PaymentsWorkspace() {
       <header className={s.header}>
         <div>
           <h1>Payments</h1>
-          <p>
-            Take a payment, start a registration, and resolve open balances
-            through one verified ledger and receipt trail.
-          </p>
+          {!flow.mode && (
+            <p>
+              Take a payment, start a registration, and resolve open balances
+              through one verified ledger and receipt trail.
+            </p>
+          )}
         </div>
       </header>
 
@@ -697,12 +699,9 @@ export default function PaymentsWorkspace() {
           }
         >
           <div className={s.flowTopbar}>
-            <div>
-              <span>
-                {flow.mode === 'payment' ? 'Take payment' : 'New registration'}
-              </span>
-              <strong>{FLOW_STEPS[flow.step]}</strong>
-            </div>
+            <strong>
+              {flow.mode === 'payment' ? 'Take payment' : 'New registration'}
+            </strong>
             <button className="btn" type="button" onClick={closeFlow}>
               Close
             </button>
@@ -1538,9 +1537,6 @@ export default function PaymentsWorkspace() {
                 />
               </label>
             )}
-            <span>
-              {currentBusinessUnit?.name} · Card details never enter CRM
-            </span>
           </div>
 
           {(view === 'balances' || view === 'overdue') &&
@@ -1549,11 +1545,7 @@ export default function PaymentsWorkspace() {
                 <div className={s.empty}>
                   <CheckCircle2 size={30} />
                   <h3>This workspace is clear</h3>
-                  <p>
-                    No balances match the selected state and search. Use Take
-                    payment for a student payment or New registration for a new
-                    enrollment.
-                  </p>
+                  <p>No balances match the selected state and search.</p>
                 </div>
               </section>
             )}

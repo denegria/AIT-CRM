@@ -21,10 +21,8 @@ test('payments presents balances, overdue, recent, and reconciliation workspaces
 
 test('an empty balance lane renders one page-level state instead of a split empty workspace', () => {
   assert.match(source, /!payload\?\.queue\?\.total/);
-  assert.match(
-    source,
-    /Use Take\s+payment for a student payment or New registration/,
-  );
+  assert.match(source, /No balances match the selected state and search/);
+  assert.doesNotMatch(source, /Use Take\s+payment for a student payment/);
 });
 
 test('payments distinguishes every commerce identity and record type', () => {
@@ -112,4 +110,17 @@ test('payments polish preserves CRM hierarchy and focuses the active transaction
   assert.match(source, /scrollCue/);
   assert.match(styles, /\.scrollCue/);
   assert.doesNotMatch(styles, /#17212b/i);
+});
+
+test('payments gives repeated context one canonical home', () => {
+  assert.match(source, /!flow\.mode\s*&&\s*\(\s*<p>/);
+  assert.doesNotMatch(source, /Card details never enter CRM/);
+  assert.match(
+    source,
+    /className=\{s\.flowTopbar\}[\s\S]*?<strong>[\s\S]*?Take payment[\s\S]*?New registration[\s\S]*?<\/strong>/,
+  );
+  assert.doesNotMatch(
+    source,
+    /className=\{s\.flowTopbar\}[\s\S]*?<strong>\{FLOW_STEPS\[flow\.step\]\}<\/strong>/,
+  );
 });
