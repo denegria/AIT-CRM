@@ -32,25 +32,25 @@ test('mobile keeps only the high-value contact fields and contextual actions bes
   assert.match(contactsSource, /visible: \(row\) => canWrite && directoryNextStepFor\(row\)\.action === 'log_follow_up'/);
   assert.match(tableSource, /visibleActionsForRow\(actions, row\)/);
   assert.match(tableSource, /action\.primary \? s\.actBtnPrimary/);
-  assert.match(tableStyles, /\.actions \{ display:flex; gap:8px;/);
+  assert.match(tableStyles, /\.actions \{ display:flex; gap:6px;/);
 });
 
 test('large desktop directory uses intentional widths, comfortable rows, and a sticky header', () => {
-  assert.match(contactsSource, /desktopWidth: '20%'/);
-  assert.match(contactsSource, /desktopWidth: '14%'/);
-  assert.match(contactsSource, /desktopWidth: '10%'/);
-  assert.doesNotMatch(contactsSource, /key: 'directoryNextStep',[\s\S]*?desktopWidth:/);
-  assert.match(contactsSource, /key: 'directoryNextStep',[\s\S]*?headerAlign: 'right'/);
+  assert.match(contactsSource, /desktopWidth: '29%'/);
+  assert.match(contactsSource, /desktopWidth: '21%'/);
+  assert.match(contactsSource, /desktopWidth: '11%'/);
+  assert.match(contactsSource, /key: 'directoryNextStep',[\s\S]*?desktopWidth: '16%'/);
+  assert.doesNotMatch(contactsSource, /headerAlign:/);
   assert.match(contactsSource, /fixedLayout=\{columnMode === 'ait_usa'\}/);
   assert.match(contactsSource, /stickyHeader=\{columnMode === 'ait_usa'\}/);
   assert.match(contactsSource, /comfortableRows=\{columnMode === 'ait_usa'\}/);
-  assert.match(contactsSource, /actionColumnWidth=\{columnMode === 'ait_usa' \? '188px' : undefined\}/);
+  assert.match(contactsSource, /actionColumnWidth=\{columnMode === 'ait_usa' \? '184px' : undefined\}/);
   assert.match(tableStyles, /\.tableFixed \{ min-width:0; table-layout:fixed; \}/);
   assert.match(tableStyles, /\.tableStickyHeader thead th/);
   assert.match(tableStyles, /\.tableComfortable td \{ padding-top:14px; padding-bottom:14px; \}/);
-  assert.match(tableSource, /justifyContent:c\.headerAlign === 'right' \? 'flex-end' : undefined/);
-  assert.match(tableStyles, /\.table th\.actionHeader \{ text-align:left; padding-left:17px; \}/);
-  assert.match(fs.readFileSync(new URL('../globals.css', import.meta.url), 'utf8'), /\.contacts-next-step-cell \{[\s\S]*?justify-content:flex-end;[\s\S]*?text-align:right;/);
+  assert.doesNotMatch(tableSource, /headerAlign/);
+  assert.match(tableStyles, /\.table th\.actionHeader \{ text-align:left; padding-left:15px; \}/);
+  assert.match(fs.readFileSync(new URL('../globals.css', import.meta.url), 'utf8'), /\.contacts-next-step-cell \{[\s\S]*?justify-content:flex-start;[\s\S]*?text-align:left;/);
   assert.match(tableSource, /visibleColumns\.every\(\(column\) => defaultLayoutKeys\.has\(column\.key\)\)/);
 });
 

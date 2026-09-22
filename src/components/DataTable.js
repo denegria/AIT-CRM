@@ -272,7 +272,7 @@ export default function DataTable({
                   toggleSort(c.key);
                 }}
               >
-                <div style={{display:'flex', alignItems:'center', gap:4, justifyContent:c.headerAlign === 'right' ? 'flex-end' : undefined}}>
+                <div style={{display:'flex', alignItems:'center', gap:4}}>
                   {c.label}
                   {sortKey === c.key && (sortDirection === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />)}
                 </div>

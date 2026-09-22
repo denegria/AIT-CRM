@@ -749,20 +749,20 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       key: 'name',
       label: 'Contact',
       sortable: true,
-      desktopWidth: '20%',
+      desktopWidth: '29%',
       render: (row) => <ContactIdentityCell row={row} />,
     },
     { key: 'email', label: 'Email', sortable: true },
     { key: 'phone', label: 'Phone', sortable: true },
     { key: 'enrollmentStage', label: 'Stage', sortable: true, desktopWidth: '11%', render: (row) => <CompactEnrollmentCell row={row} /> },
-    { key: 'assignedLabel', label: 'Owner', sortable: true, desktopWidth: '11%' },
-    { key: 'inquirySource', label: 'Source', sortable: true, desktopWidth: '14%', render: (row) => <EnrollmentSourceCell row={row} /> },
-    { key: 'lastTouch', label: 'Last Touch', sortable: true, desktopWidth: '10%' },
+    { key: 'assignedLabel', label: 'Owner', sortable: true, desktopWidth: '12%' },
+    { key: 'inquirySource', label: 'Source', sortable: true, desktopWidth: '21%', render: (row) => <EnrollmentSourceCell row={row} /> },
+    { key: 'lastTouch', label: 'Last Touch', sortable: true, desktopWidth: '11%' },
     {
       key: 'directoryNextStep',
       label: 'Next Step',
       sortable: false,
-      headerAlign: 'right',
+      desktopWidth: '16%',
       render: (row) => <DirectoryNextStepCell row={row} />,
     },
     { key: 'studentLocation', label: 'Student Location', sortable: true },
@@ -1522,7 +1522,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           fixedLayout={columnMode === 'ait_usa'}
           stickyHeader={columnMode === 'ait_usa'}
           comfortableRows={columnMode === 'ait_usa'}
-          actionColumnWidth={columnMode === 'ait_usa' ? '188px' : undefined}
+          actionColumnWidth={columnMode === 'ait_usa' ? '184px' : undefined}
           mobileBadges={['status']}
           mobileFields={mobileFieldKeys}
         />
