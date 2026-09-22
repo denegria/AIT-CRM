@@ -43,7 +43,7 @@ test('large desktop directory uses intentional widths, comfortable rows, and a s
   assert.match(contactsSource, /fixedLayout=\{columnMode === 'ait_usa'\}/);
   assert.match(contactsSource, /stickyHeader=\{columnMode === 'ait_usa'\}/);
   assert.match(contactsSource, /comfortableRows=\{columnMode === 'ait_usa'\}/);
-  assert.match(contactsSource, /actionColumnWidth=\{columnMode === 'ait_usa' \? '208px' : undefined\}/);
+  assert.match(contactsSource, /actionColumnWidth=\{columnMode === 'ait_usa' \? '188px' : undefined\}/);
   assert.match(tableStyles, /\.tableFixed \{ min-width:0; table-layout:fixed; \}/);
   assert.match(tableStyles, /\.tableStickyHeader thead th/);
   assert.match(tableStyles, /\.tableComfortable td \{ padding-top:14px; padding-bottom:14px; \}/);
