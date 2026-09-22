@@ -331,9 +331,10 @@ function CompactEnrollmentCell({ row }) {
 }
 
 function EnrollmentSourceCell({ row }) {
+  const source = enrollmentSourceText(row);
   return (
-    <div className="contacts-source-cell" title={row.source || enrollmentSourceText(row)}>
-      {directorySourceText(row)}
+    <div className="contacts-source-cell" title={source}>
+      {source}
     </div>
   );
 }
