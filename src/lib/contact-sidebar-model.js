@@ -17,6 +17,10 @@ function taskHref(contactId = '') {
   return `/tasks?${params.toString()}`;
 }
 
+function logFollowUpHref(contactId = '') {
+  return `/contacts/${encodeURIComponent(clean(contactId))}?action=log-follow-up`;
+}
+
 function inquiryStatus(contact = {}) {
   return clean(contact.status || contact.currentStage) || 'Not recorded';
 }
@@ -113,7 +117,7 @@ export function buildContactSidebarNextStep({
       kind: 'missing_contact',
       stateLabel: 'Contact info needed',
       title: 'Add a phone number or email first',
-      detail: 'Outreach cannot be scheduled without a usable contact channel.',
+      detail: 'Outreach cannot be recorded without a usable contact channel.',
       actionLabel: 'Add contact info',
       actionType: 'edit',
       taskCount: openTasks.length,
@@ -169,10 +173,10 @@ export function buildContactSidebarNextStep({
     return {
       kind: 'first_outreach',
       stateLabel: 'Needs first outreach',
-      title: 'First outreach is not scheduled',
-      detail: 'Create the first outreach commitment for this inquiry.',
-      actionLabel: 'Create follow-up',
-      actionHref: reviewHref,
+      title: 'First outreach has not been recorded',
+      detail: 'Record the outreach attempt and its outcome.',
+      actionLabel: 'Log follow-up',
+      actionHref: logFollowUpHref(contact.id),
       taskCount: 0,
     };
   }
@@ -182,7 +186,7 @@ export function buildContactSidebarNextStep({
       kind: 'missing_inquiry',
       stateLabel: 'Data issue',
       title: 'Inquiry history unavailable',
-      detail: 'Review this record before scheduling outreach.',
+      detail: 'Review this record before recording outreach.',
       actionType: 'none',
       taskCount: 0,
     };
@@ -192,10 +196,10 @@ export function buildContactSidebarNextStep({
     return {
       kind: 'retargeting',
       stateLabel: 'Ready for retargeting',
-      title: 'No outreach scheduled',
-      detail: 'Schedule renewed outreach when this contact enters a retargeting effort.',
-      actionLabel: 'Schedule follow-up',
-      actionHref: reviewHref,
+      title: 'Renewed outreach may be recorded',
+      detail: 'Schedule only when the contact agrees to a specific future commitment.',
+      actionLabel: 'Log follow-up',
+      actionHref: logFollowUpHref(contact.id),
       taskCount: 0,
     };
   }
@@ -204,7 +208,7 @@ export function buildContactSidebarNextStep({
     return {
       kind: 'closed_blocked',
       stateLabel: 'Outreach closed',
-      title: 'No outreach scheduled',
+      title: 'Outreach is closed',
       detail: 'The last inquiry is marked Not Interested.',
       actionType: 'none',
       taskCount: 0,
@@ -217,7 +221,7 @@ export function buildContactSidebarNextStep({
       stateLabel: 'Inquiry closed',
       title: 'No action scheduled',
       detail: status === 'Not recorded'
-        ? 'Review the last inquiry history before scheduling new outreach.'
+        ? 'Review the last inquiry history before recording new outreach.'
         : `The last inquiry ended as ${status}.`,
       actionType: 'none',
       taskCount: 0,
@@ -226,13 +230,13 @@ export function buildContactSidebarNextStep({
 
   return {
     kind: 'empty',
-    stateLabel: 'Not scheduled',
-    title: canSeeAllTasks ? 'No follow-up scheduled' : 'No follow-up assigned to you',
+    stateLabel: 'No outreach recorded',
+    title: canSeeAllTasks ? 'No follow-up recorded' : 'No follow-up assigned to you',
     detail: canSeeAllTasks
-      ? 'Create the next commitment when outreach is needed.'
-      : 'Create one if you are responsible for the next outreach.',
-    actionLabel: 'Create follow-up',
-    actionHref: reviewHref,
+      ? 'Record the next outreach attempt and its outcome.'
+      : 'Record outreach if you are responsible for the next attempt.',
+    actionLabel: 'Log follow-up',
+    actionHref: logFollowUpHref(contact.id),
     taskCount: 0,
   };
 }

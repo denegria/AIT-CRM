@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import PageState from '@/components/PageState';
@@ -66,7 +67,8 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import TimeframeFilterPanel from '@/components/TimeframeFilterPanel';
 import { ContactDialogInitialTimelineNote } from '@/components/ContactTimelineNoteFields';
 import ContactTerminalStatusReasonField from '@/components/ContactTerminalStatusReasonField';
-import { Activity, AlertCircle, BadgeDollarSign, Check, Clock3, ListFilter, PhoneOff, RotateCcw, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { contactDirectoryNextStep } from '@/lib/contact-directory-next-step.js';
+import { Activity, AlertCircle, BadgeDollarSign, Check, ClipboardCheck, Clock3, ListFilter, PhoneOff, RotateCcw, UserRoundCheck, UsersRound, X } from 'lucide-react';
 
 const empty = {
   name: '',
@@ -319,13 +321,54 @@ function EnrollmentCell({ row }) {
   );
 }
 
+function CompactEnrollmentCell({ row }) {
+  return (
+    <div className="contacts-enrollment-cell">
+      <UserRoundCheck size={13} aria-hidden="true" />
+      <span>{enrollmentStageText(row)}</span>
+    </div>
+  );
+}
+
 function EnrollmentSourceCell({ row }) {
   return (
-    <div className="workflow-cell">
-      <div className="workflow-line">
-        <span>{enrollmentSourceText(row)}</span>
+    <div className="contacts-source-cell" title={row.source || enrollmentSourceText(row)}>
+      {directorySourceText(row)}
+    </div>
+  );
+}
+
+function ContactIdentityCell({ row, href }) {
+  const channels = [row.email, row.phone].filter(Boolean);
+  return (
+    <div className="contacts-contact-cell">
+      <Link className="contacts-contact-name" href={href}>{row.name || 'Unnamed contact'}</Link>
+      <span>{channels.length ? channels.join(' · ') : 'No contact details'}</span>
+    </div>
+  );
+}
+
+function DirectoryNextStepCell({ row, onLogFollowUp }) {
+  const nextStep = row.directoryNextStepModel || contactDirectoryNextStep(row);
+  return (
+    <div className="contacts-next-step-cell">
+      <div>
+        <strong>{nextStep.label}</strong>
+        <span>{nextStep.detail}</span>
       </div>
-      {row.latestCommentLabel && <div className="workflow-next">{row.latestCommentLabel}</div>}
+      {nextStep.action === 'log_follow_up' && onLogFollowUp && (
+        <button
+          type="button"
+          className="contacts-next-step-action"
+          onClick={(event) => {
+            event.stopPropagation();
+            onLogFollowUp(row);
+          }}
+        >
+          <ClipboardCheck size={13} />
+          {nextStep.actionLabel}
+        </button>
+      )}
     </div>
   );
 }
@@ -578,6 +621,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       Number(contact.relatedEstimateCount || 0) ? `${contact.relatedEstimateCount} estimates` : '',
       Number(contact.relatedPaymentCount || 0) ? `${contact.relatedPaymentCount} payments` : '',
     ].filter(Boolean).join(' · ');
+    const directoryNextStepModel = contactDirectoryNextStep(contact);
     return {
       ...contact,
       accountSnapshotText,
@@ -592,6 +636,8 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       sourceCategoryText: directorySourceText(contact),
       signalLabels,
       signalText: signalLabels.join(' '),
+      directoryNextStep: directoryNextStepModel.label,
+      directoryNextStepModel,
     };
   }), [contactRows, facetContext]);
   const openNew = () => {
@@ -615,6 +661,14 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     setForm({ ...row });
     setFormError('');
     setDrawer(row);
+  };
+  const openContact = (row) => {
+    if (!row?.id) return;
+    router.push(`${routeBase}/${encodeURIComponent(row.id)}`);
+  };
+  const openLogFollowUp = (row) => {
+    if (!row?.id || !canWrite) return;
+    router.push(`${routeBase}/${encodeURIComponent(row.id)}?action=log-follow-up`);
   };
   const close = () => { setDrawer(null); setFormError(''); };
   const requestDelete = () => {
@@ -688,7 +742,29 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
     }
   };
 
-  const columns = [
+  const columns = columnMode === 'ait_usa' ? [
+    {
+      key: 'name',
+      label: 'Contact',
+      sortable: true,
+      render: (row) => <ContactIdentityCell row={row} href={`${routeBase}/${encodeURIComponent(row.id)}`} />,
+    },
+    { key: 'email', label: 'Email', sortable: true },
+    { key: 'phone', label: 'Phone', sortable: true },
+    { key: 'enrollmentStage', label: 'Enrollment', sortable: true, render: (row) => <CompactEnrollmentCell row={row} /> },
+    { key: 'assignedLabel', label: 'Owner', sortable: true },
+    {
+      key: 'directoryNextStep',
+      label: 'Next Step',
+      sortable: false,
+      render: (row) => <DirectoryNextStepCell row={row} onLogFollowUp={canWrite ? openLogFollowUp : undefined} />,
+    },
+    { key: 'lastTouch', label: 'Last Touch', sortable: true },
+    { key: 'inquirySource', label: 'Source', sortable: true, render: (row) => <EnrollmentSourceCell row={row} /> },
+    { key: 'studentLocation', label: 'Student Location', sortable: true },
+    { key: 'schoolLocation', label: 'Learning Location', sortable: true },
+    { key: 'lastEdited', label: 'Last Edited', sortable: true },
+  ] : [
     { key: 'name', label: isClientsMode ? 'Client' : 'Name', sortable: true, editable: true },
     ...(columnMode !== 'ait_signs' ? [{ key: 'email', label: 'Email', sortable: true, editable: true }] : []),
     { key: 'phone', label: 'Phone', sortable: true, editable: true },
@@ -696,12 +772,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       { key: 'sourceCategoryText', label: 'Source', sortable: true, render: (row) => <SourceCell row={row} /> },
       { key: 'linkedPeopleSummary', label: 'People', sortable: true, render: (row) => <PeopleCell row={row} /> },
       { key: 'accountSnapshotText', label: 'Recent Work', sortable: false, render: (row) => <RecentWorkCell row={row} /> },
-    ] : []),
-    ...(columnMode === 'ait_usa' ? [
-      { key: 'enrollmentStage', label: 'Enrollment', sortable: true, render: (row) => <EnrollmentCell row={row} /> },
-      { key: 'studentLocation', label: 'Student Location', sortable: true },
-      { key: 'schoolLocation', label: 'Learning Location', sortable: true },
-      { key: 'inquirySource', label: 'Source', sortable: true, render: (row) => <EnrollmentSourceCell row={row} /> },
     ] : []),
     ...(columnMode !== 'ait_usa' ? [{ key: 'status', label: columnMode === 'ait_signs' ? 'Stage' : 'Status', type: 'badge', sortable: true }] : []),
     ...(columnMode === 'contacts' ? [{ key: 'lifecycleBucket', label: 'Activity', sortable: false, render: (row) => <BucketCell row={row} /> }] : []),
@@ -982,7 +1052,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const mobileFieldKeys = columnMode === 'ait_signs'
     ? ['phone', 'sourceCategoryText', 'linkedPeopleSummary', 'accountSnapshotText', 'assignedLabel', 'lastTouch', 'lastEdited']
     : columnMode === 'ait_usa'
-      ? ['phone', 'enrollmentStage', 'inquirySource', 'assignedLabel', 'lastTouch', 'lastEdited']
+      ? ['assignedLabel', 'directoryNextStep', 'lastTouch']
       : ['phone', 'workflow', 'signalText', 'assignedLabel', 'divisionLabel', 'lastTouch', 'lastEdited'];
   const directoryScopeName = directoryBusinessUnit?.name || `all ${scopeLabel.toLowerCase()}`;
   const summaryNoun = pluralLabel.toLowerCase();
@@ -1031,6 +1101,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
 
       <div className="card contacts-table-card" style={{padding:16}}>
         <DataTable
+          key={`contacts-directory-${columnMode}`}
           columns={columns}
           data={filteredContacts}
           searchPlaceholder={`Search ${pluralLabel.toLowerCase()} by name, phone, source, location, or course`}
@@ -1414,7 +1485,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
           toolbarExtra={canWrite ? (
             <button className="btn btn-primary contacts-table-add-button" onClick={openNew}>+ Add {singularLabel}</button>
           ) : null}
-          onEdit={canWrite ? (id, u) => {
+          onEdit={canWrite && columnMode !== 'ait_usa' ? (id, u) => {
             updateContact(id, u)
               .then(() => {
                 toast('Field updated');
@@ -1422,12 +1493,21 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
               })
               .catch((error) => toast(error?.message || 'Update failed.', 'error'));
           } : undefined}
-          actions={[
+          actions={columnMode === 'ait_usa' ? undefined : [
             { label: 'View', onClick: (r) => router.push(`${routeBase}/${r.id}`) },
-            ...(canWrite ? [
-              { label: 'Edit', onClick: openEdit },
-            ] : []),
+            ...(canWrite ? [{ label: 'Edit', onClick: openEdit }] : []),
           ]}
+          defaultVisibleColumnKeys={columnMode === 'ait_usa' ? [
+            'name',
+            'enrollmentStage',
+            'assignedLabel',
+            'directoryNextStep',
+            'lastTouch',
+            'inquirySource',
+          ] : undefined}
+          wideSearch={columnMode === 'ait_usa'}
+          onRowClick={columnMode === 'ait_usa' ? openContact : undefined}
+          rowLabel={columnMode === 'ait_usa' ? (row) => `Open ${row.name || 'contact'} contact details` : undefined}
           mobileBadges={['status']}
           mobileFields={mobileFieldKeys}
         />

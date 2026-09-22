@@ -32,6 +32,10 @@ export default function DataTable({
   onSelect,
   mobileFields,
   mobileBadges,
+  defaultVisibleColumnKeys,
+  wideSearch = false,
+  onRowClick,
+  rowLabel,
   sortKey: controlledSortKey,
   sortDirection: controlledSortDirection,
   onSortChange,
@@ -47,7 +51,11 @@ export default function DataTable({
   const [editCell, setEditCell] = useState(null); // {rowId, key}
   const [editVal, setEditVal] = useState('');
   const [confirm, setConfirm] = useState(null); // { title, message, onConfirm }
-  const [visibleColumnKeys, setVisibleColumnKeys] = useState(() => columns.map((column) => column.key));
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState(() => {
+    const availableKeys = new Set(columns.map((column) => column.key));
+    const requestedKeys = (defaultVisibleColumnKeys || []).filter((key) => availableKeys.has(key));
+    return requestedKeys.length ? requestedKeys : columns.map((column) => column.key);
+  });
   const columnSignature = columns.map((column) => column.key).join('|');
   const columnKeys = useMemo(() => (columnSignature ? columnSignature.split('|') : []), [columnSignature]);
   const effectiveVisibleColumnKeys = useMemo(() => {
@@ -128,6 +136,15 @@ export default function DataTable({
       return columns.some((column) => column.key === key) ? [...nextCurrent, key] : nextCurrent;
     });
   };
+  const handleRowClick = (event, row) => {
+    if (!onRowClick || event.target.closest('a, button, input, select, textarea, summary, label')) return;
+    onRowClick(row);
+  };
+  const handleRowKeyDown = (event, row) => {
+    if (!onRowClick || event.target !== event.currentTarget || !['Enter', ' '].includes(event.key)) return;
+    event.preventDefault();
+    onRowClick(row);
+  };
 
   const mobilePrimary = visibleColumns[0];
   const mobileSecondary = visibleColumns[1];
@@ -146,7 +163,7 @@ export default function DataTable({
     <div className={s.wrap}>
       <div className={s.toolbar}>
         <div className={s.toolbarLead}>
-          <div className={s.searchWrap}>
+          <div className={`${s.searchWrap} ${wideSearch ? s.searchWrapWide : ''}`}>
             <Search className={s.searchIcon} size={16} />
             <input className={s.search} placeholder={searchPlaceholder||'Search...'} value={search} onChange={e=>setSearch(e.target.value)} />
           </div>
@@ -242,7 +259,14 @@ export default function DataTable({
           </tr></thead>
           <tbody>
             {filtered.map(row => (
-              <tr key={row.id}>
+              <tr
+                key={row.id}
+                className={onRowClick ? s.clickableRow : undefined}
+                tabIndex={onRowClick ? 0 : undefined}
+                aria-label={onRowClick ? (rowLabel?.(row) || `Open ${row.name || 'record'}`) : undefined}
+                onClick={(event) => handleRowClick(event, row)}
+                onKeyDown={(event) => handleRowKeyDown(event, row)}
+              >
                 {selectable && (
                   <td style={{ textAlign: 'center' }}>
                     <input type="checkbox"
@@ -281,7 +305,14 @@ export default function DataTable({
         </div>
         <div className={s.mobileCards}>
           {filtered.map((row) => (
-            <div key={row.id} className={s.mobileCard}>
+            <div
+              key={row.id}
+              className={`${s.mobileCard} ${onRowClick ? s.clickableMobileCard : ''}`}
+              tabIndex={onRowClick ? 0 : undefined}
+              aria-label={onRowClick ? (rowLabel?.(row) || `Open ${row.name || 'record'}`) : undefined}
+              onClick={(event) => handleRowClick(event, row)}
+              onKeyDown={(event) => handleRowKeyDown(event, row)}
+            >
               {selectable && (
                 <label className={s.mobileSelect}>
                   <input

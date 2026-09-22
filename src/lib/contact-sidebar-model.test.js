@@ -29,20 +29,21 @@ const task = Object.freeze({
 test('sidebar next step makes empty task scope explicit without overstating global truth', () => {
   const privileged = buildContactSidebarNextStep({ contact, canSeeAllTasks: true });
   const regular = buildContactSidebarNextStep({ contact, canSeeAllTasks: false });
-  assert.equal(privileged.title, 'No follow-up scheduled');
+  assert.equal(privileged.title, 'No follow-up recorded');
   assert.equal(regular.title, 'No follow-up assigned to you');
-  assert.equal(privileged.actionLabel, 'Create follow-up');
+  assert.equal(privileged.actionLabel, 'Log follow-up');
 });
 
-test('sidebar next step treats first outreach as work to schedule, not inquiry status', () => {
+test('sidebar next step treats first outreach as work to record, not inquiry status', () => {
   const firstOutreach = buildContactSidebarNextStep({
     contact: { ...contact, needsFirstOutreach: true },
     canSeeAllTasks: true,
   });
   assert.equal(firstOutreach.kind, 'first_outreach');
   assert.equal(firstOutreach.stateLabel, 'Needs first outreach');
-  assert.equal(firstOutreach.title, 'First outreach is not scheduled');
-  assert.equal(firstOutreach.actionLabel, 'Create follow-up');
+  assert.equal(firstOutreach.title, 'First outreach has not been recorded');
+  assert.equal(firstOutreach.actionLabel, 'Log follow-up');
+  assert.equal(firstOutreach.actionHref, '/contacts/contact-1?action=log-follow-up');
 });
 
 test('sidebar next step exposes exact scheduled and overdue task actions', () => {
@@ -166,15 +167,16 @@ test('sidebar inquiry distinguishes the current inquiry from truthful closed his
   assert.equal(conflict.title, 'Multiple active inquiries');
 });
 
-test('sidebar next step makes Retargeting actionable without claiming outreach is due', () => {
+test('sidebar next step makes Retargeting actionable without requiring an individual schedule', () => {
   const retargeting = buildContactSidebarNextStep({
     contact: { ...contact, activeOpportunityCount: 0, status: 'Retargeting' },
     canSeeAllTasks: true,
   });
   assert.equal(retargeting.kind, 'retargeting');
   assert.equal(retargeting.stateLabel, 'Ready for retargeting');
-  assert.equal(retargeting.title, 'No outreach scheduled');
-  assert.equal(retargeting.actionLabel, 'Schedule follow-up');
+  assert.equal(retargeting.title, 'Renewed outreach may be recorded');
+  assert.equal(retargeting.actionLabel, 'Log follow-up');
+  assert.equal(retargeting.actionHref, '/contacts/contact-1?action=log-follow-up');
 
   const exactTask = buildContactSidebarNextStep({
     contact: { ...contact, activeOpportunityCount: 0, status: 'Retargeting' },

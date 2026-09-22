@@ -11,7 +11,7 @@ import { aitUsaAssigneeOptionLabel, isEligibleAitUsaAssignee } from '@/lib/crm/a
 import { generateInvoicePDF, generateEstimatePDF, generateReceiptPDF, generateAitUsaReceiptPDF } from '@/lib/pdf';
 import s from './ContactDetail.module.css';
 import {
-  AlertCircle, ArrowLeft, ArrowRight, Mail, Phone, MapPin, Calendar, CalendarPlus,
+  AlertCircle, ArrowLeft, ArrowRight, Mail, Phone, MapPin, Calendar,
   Plus, FileText, ClipboardList,
   MessageSquare, MessageSquarePlus, Edit3, Tag, Activity, CheckSquare, MessageCircle,
   Inbox, Send, DollarSign, Archive, BriefcaseBusiness, CheckCircle2, RefreshCw,
@@ -692,7 +692,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           ? CheckCircle2
           : CheckSquare;
   const NextStepActionIcon = ['first_outreach', 'retargeting', 'empty'].includes(sidebarNextStep.kind)
-    ? CalendarPlus
+    ? ClipboardCheck
     : ['scheduled', 'overdue'].includes(sidebarNextStep.kind)
       ? CheckCircle2
       : ['multiple', 'inquiry_conflict'].includes(sidebarNextStep.kind)

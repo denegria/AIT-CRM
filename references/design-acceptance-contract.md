@@ -1,3 +1,41 @@
+# MIS-426 Contacts Directory Acceptance Contract
+
+## Workflow and problem
+
+- AIT USA employees use Contacts to find a person, understand the current inquiry context, and decide whether outreach is needed.
+- The current directory behaves like a wide export: separate email and phone columns, usually-empty location columns, verbose source metadata, and equal View/Edit actions push the useful context off-screen.
+
+## Interaction model and visual direction
+
+- The row is the navigation target. Clicking the row, pressing Enter or Space while it is focused, or following the explicit contact-name link opens Contact Detail.
+- Standalone View and Edit actions are removed. Profile editing remains owned by Contact Detail.
+- The default AIT USA desktop hierarchy is `Name / Contact`, `Enrollment`, `Owner`, `Next step`, `Last touch`, and `Source`. Email, phone, locations, and Last edited remain available through Columns.
+- Next step is compact, truthful operational context. A conditional `Log follow-up` action opens the existing structured outreach flow only when outreach can safely be recorded.
+- `Start outreach` is not introduced as a separate action. Retargeting never defaults to scheduling; scheduling is an optional outcome after a specific future commitment is agreed.
+- The search field is widened because lookup is the directory's primary job. Existing filters, column selection, creation, sorting, and pagination remain available.
+
+## Locked behavior and state
+
+- Exact open dated commitments suppress the generic Log follow-up shortcut and render as scheduled work; existing task and Contact Detail flows remain authoritative.
+- New leads with no genuine interaction show `Needs first outreach`; active inquiries with prior interaction and no commitment show `Needs next follow-up`; eligible closed Retargeting records show `Ready for retargeting`.
+- Not Interested, Do Not Contact, wrong-number, missing-channel, inquiry-conflict, and neutral closed states do not receive a generic outreach shortcut.
+- The existing follow-up dialog records the attempt and outcome. A next due date is created only when the operator records an agreed future commitment.
+- AIT Signs and generic all-division directory modes retain their existing columns and actions in this slice.
+- No CRM business-data write, schema migration, campaign behavior, or lifecycle policy change is part of this presentation and navigation slice.
+
+## Responsive acceptance
+
+- Primary viewport: `1440 x 1000` CSS pixels at DPR 1.
+- Regression viewport: `390 x 844` CSS pixels at DPR 1.
+- Mobile keeps the same row/card navigation model, removes equal-width View/Edit actions, and limits the default card to identity/contact, enrollment, owner, next step, and last touch.
+- Matched before/after evidence must use the authenticated staging-backed Contacts route at the same viewport and comparable loaded state.
+
+## Non-goals
+
+- Turning Contacts into a second Pipeline, Tasks queue, or campaign workspace.
+- Adding per-contact drip-campaign scheduling, task creation, new outreach mutations, KPI cards, or a desktop card layout.
+- Redesigning AIT Signs Clients, Work Orders, Financials, or unrelated operator routes.
+
 # MIS-426 Contact Detail Review Context Acceptance Contract
 
 ## Workflow and problem
@@ -49,15 +87,15 @@
 
 ## Task-aware states
 
-- No open follow-up task: show No follow-up scheduled and Create follow-up.
-- A New Lead that still needs first outreach: show Needs first outreach in Next step with Create follow-up. This operational state must not replace Inquiry status.
+- No open follow-up task on an actionable active inquiry: show No follow-up recorded and Log follow-up.
+- A New Lead that still needs first outreach: show Needs first outreach in Next step with Log follow-up. This operational state must not replace Inquiry status.
 - One current task: show its title, due state, and owner with Open follow-up and a direct Log outcome action when permitted.
 - One overdue task: identify it as overdue and prioritize Log outcome.
 - Multiple open tasks: show the count and Review follow-ups instead of implying one canonical task.
 - Outreach blocked or a primary channel missing: show the exact restriction or missing-channel state. A hard Do Not Contact restriction remains non-actionable; a correctable channel problem routes to Update contact info or Add contact info.
 - Multiple active inquiries: show an inquiry-conflict state and Review inquiries in the exact pipeline search instead of presenting one inquiry as authoritative. A dedicated resolver remains outside this slice.
 - Any exact open follow-up task remains authoritative even when the latest inquiry is closed.
-- Retargeting with no open task: show Ready for retargeting and No outreach scheduled with Schedule follow-up. Retargeting indicates eligibility for renewed outreach, not that outreach is already due.
+- Retargeting with no open task: show Ready for retargeting with Log follow-up. Retargeting indicates eligibility for renewed outreach, not that outreach is already due or scheduled.
 - Not Interested or a hard Do Not Contact restriction: show outreach as closed or blocked with no scheduling action.
 - Dropped / Quit and Course Completed with no open task: show a neutral closed state with no primary action.
 - Icons reinforce these states, but text labels carry the meaning. Pills are reserved for true workflow states.
@@ -69,7 +107,7 @@
 - Inquiry owner includes a small avatar or initial for recognition. Core inquiry fields remain identifiable even when missing; genuinely optional secondary preferences disappear when empty.
 - Missing email or phone guidance is consolidated with the affected channel rather than repeated in a second warning card. A no-channel, DNC, or wrong-number condition may retain one explicit blocking notice.
 - Missing values remain visible but visually recede. Unassigned shows no fake avatar; owner initials are reserved for real employees.
-- Next-step state icons describe the state while CTA icons describe the action. Create or schedule follow-up uses a calendar-plus action icon instead of repeating the state icon.
+- Next-step state icons describe the state while CTA icons describe the action. Recording outreach uses the existing clipboard-check action icon instead of implying a scheduled commitment.
 - Compact uppercase labels remain legible at the desktop acceptance viewport; section and channel labels use an 11px floor without increasing sidebar density.
 - Dense records may include all preferences, multiple phone numbers, restrictions, an assigned inquiry, and an active task. Lower-priority preferences and alternate phones use progressive disclosure.
 

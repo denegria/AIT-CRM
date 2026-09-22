@@ -28,7 +28,7 @@ test('Contact sidebar renders current or last inquiry truth and suppresses close
 });
 
 test('Contact sidebar polish keeps missing data quiet and separates state from action cues', () => {
-  assert.match(detailSource, /CalendarPlus/);
+  assert.match(detailSource, /NextStepActionIcon = \['first_outreach', 'retargeting', 'empty'\][\s\S]*?\? ClipboardCheck/);
   assert.match(detailSource, /className=\{s\.placeholderValue\}>Not recorded/);
   assert.match(detailSource, /\{assignedEmployee && \(/);
   assert.match(detailSource, /!inlineContactabilityStatus/);
