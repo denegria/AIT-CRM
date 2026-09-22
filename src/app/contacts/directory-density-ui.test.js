@@ -52,7 +52,7 @@ test('large desktop directory uses intentional widths, comfortable rows, and a s
   assert.match(tableStyles, /\.tableComfortable td \{ padding-top:14px; padding-bottom:14px; \}/);
   assert.doesNotMatch(tableSource, /headerAlign/);
   assert.match(tableStyles, /\.table th\.actionHeader \{ text-align:left; padding-left:12px; \}/);
-  assert.match(fs.readFileSync(new URL('../globals.css', import.meta.url), 'utf8'), /\.contacts-contact-cell > span \{[\s\S]*?color:var\(--text-secondary\);[\s\S]*?font-size:var\(--text-sm\);/);
+  assert.match(fs.readFileSync(new URL('../globals.css', import.meta.url), 'utf8'), /\.contacts-contact-cell > span \{[\s\S]*?color:var\(--text-secondary\);[\s\S]*?font-size:12px;/);
   assert.match(fs.readFileSync(new URL('../globals.css', import.meta.url), 'utf8'), /\.contacts-source-cell \{[\s\S]*?font-weight:500;/);
   assert.match(fs.readFileSync(new URL('../globals.css', import.meta.url), 'utf8'), /\.contacts-next-step-cell \{[\s\S]*?justify-content:flex-start;[\s\S]*?text-align:left;/);
   assert.match(tableSource, /visibleColumns\.every\(\(column\) => defaultLayoutKeys\.has\(column\.key\)\)/);
