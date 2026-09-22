@@ -14,36 +14,35 @@ test('AIT USA directory defaults to the accepted lookup hierarchy', () => {
   assert.match(contactsSource, /label: 'Last Touch'/);
   assert.match(contactsSource, /label: 'Source'/);
   assert.match(contactsSource, /defaultVisibleColumnKeys=\{columnMode === 'ait_usa' \? \[/);
-  assert.match(contactsSource, /'name',\s*'enrollmentStage',\s*'assignedLabel',\s*'directoryNextStep',\s*'lastTouch',\s*'inquirySource'/s);
+  assert.match(contactsSource, /'name',\s*'enrollmentStage',\s*'assignedLabel',\s*'lastTouch',\s*'inquirySource',\s*'directoryNextStep'/s);
 });
 
-test('AIT USA rows own navigation and remove redundant View and Edit actions', () => {
-  assert.match(contactsSource, /onRowClick=\{columnMode === 'ait_usa' \? openContact : undefined\}/);
-  assert.match(contactsSource, /actions=\{columnMode === 'ait_usa' \? undefined : \[/);
-  assert.match(tableSource, /\['Enter', ' '\]\.includes\(event\.key\)/);
-  assert.match(tableSource, /event\.target\.closest\('a, button, input, select, textarea, summary, label'\)/);
-  assert.match(tableStyles, /\.clickableRow:focus-visible/);
-  assert.match(contactsSource, /<ChevronRight className="contacts-row-chevron"/);
-  assert.match(contactsSource, /rowEnd=\{columnMode === 'ait_usa'/);
-  assert.match(tableSource, /\{rowEnd && <td className=\{s\.rowEndCell\}>\{rowEnd\(row\)\}<\/td>\}/);
+test('AIT USA rows use explicit View navigation without row-wide handlers or Edit', () => {
+  assert.doesNotMatch(contactsSource, /onRowClick=/);
+  assert.doesNotMatch(tableSource, /handleRowClick|handleRowKeyDown|clickableRow/);
+  assert.match(contactsSource, /\{ label: 'View', onClick: openContact \}/);
+  assert.match(contactsSource, /columnMode !== 'ait_usa' \|\| action\.label === 'View'/);
+  assert.doesNotMatch(contactsSource, /ChevronRight|DirectoryRowEnd/);
 });
 
-test('mobile keeps only the high-value contact fields and conditional outreach action', () => {
+test('mobile keeps only the high-value contact fields and explicit View action', () => {
   assert.match(contactsSource, /\? \['assignedLabel', 'directoryNextStep', 'lastTouch'\]/);
   assert.match(contactsSource, /nextStep\.action === 'log_follow_up'/);
   assert.match(contactsSource, /\{nextStep\.actionLabel\}/);
-  assert.match(tableSource, /\{rowEnd\?\.\(row\)\}/);
+  assert.match(tableSource, /\{actions\?\.map/);
 });
 
-test('large desktop directory uses intentional widths, a sticky header, and a trailing action rail', () => {
-  assert.match(contactsSource, /desktopWidth: '24%'/);
-  assert.match(contactsSource, /desktopWidth: '28%'/);
-  assert.match(contactsSource, /desktopWidth: '240px'/);
+test('large desktop directory uses intentional widths, comfortable rows, and a sticky header', () => {
+  assert.match(contactsSource, /desktopWidth: '22%'/);
+  assert.match(contactsSource, /desktopWidth: '16%'/);
+  assert.match(contactsSource, /desktopWidth: '10%'/);
   assert.match(contactsSource, /fixedLayout=\{columnMode === 'ait_usa'\}/);
   assert.match(contactsSource, /stickyHeader=\{columnMode === 'ait_usa'\}/);
+  assert.match(contactsSource, /comfortableRows=\{columnMode === 'ait_usa'\}/);
+  assert.match(contactsSource, /actionColumnWidth=\{columnMode === 'ait_usa' \? '6%' : undefined\}/);
   assert.match(tableStyles, /\.tableFixed \{ min-width:0; table-layout:fixed; \}/);
   assert.match(tableStyles, /\.tableStickyHeader thead th/);
-  assert.match(tableStyles, /\.rowEndColumn \{ width:156px; \}/);
+  assert.match(tableStyles, /\.tableComfortable td \{ padding-top:14px; padding-bottom:14px; \}/);
   assert.match(tableSource, /visibleColumns\.every\(\(column\) => defaultLayoutKeys\.has\(column\.key\)\)/);
 });
 

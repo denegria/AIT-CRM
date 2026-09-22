@@ -1,6 +1,5 @@
 'use client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCRM } from '@/lib/store';
 import PageState from '@/components/PageState';
@@ -68,7 +67,7 @@ import TimeframeFilterPanel from '@/components/TimeframeFilterPanel';
 import { ContactDialogInitialTimelineNote } from '@/components/ContactTimelineNoteFields';
 import ContactTerminalStatusReasonField from '@/components/ContactTerminalStatusReasonField';
 import { contactDirectoryNextStep } from '@/lib/contact-directory-next-step.js';
-import { Activity, AlertCircle, BadgeDollarSign, Check, ChevronRight, ClipboardCheck, Clock3, ListFilter, PhoneOff, RotateCcw, UserRoundCheck, UsersRound, X } from 'lucide-react';
+import { Activity, AlertCircle, BadgeDollarSign, Check, ClipboardCheck, Clock3, ListFilter, PhoneOff, RotateCcw, UserRoundCheck, UsersRound, X } from 'lucide-react';
 
 const empty = {
   name: '',
@@ -339,49 +338,37 @@ function EnrollmentSourceCell({ row }) {
   );
 }
 
-function ContactIdentityCell({ row, href }) {
+function ContactIdentityCell({ row }) {
   const channels = [row.email, row.phone].filter(Boolean);
   return (
     <div className="contacts-contact-cell">
-      <Link className="contacts-contact-name" href={href}>{row.name || 'Unnamed contact'}</Link>
+      <strong className="contacts-contact-name">{row.name || 'Unnamed contact'}</strong>
       <span>{channels.length ? channels.join(' · ') : 'No contact details'}</span>
     </div>
   );
 }
 
-function DirectoryNextStepCell({ row }) {
+function DirectoryNextStepCell({ row, onLogFollowUp }) {
   const nextStep = row.directoryNextStepModel || contactDirectoryNextStep(row);
   const detail = nextStep.label === 'No active work' && nextStep.detail === row.enrollmentStage
     ? ''
     : nextStep.detail;
   return (
     <div className="contacts-next-step-cell">
-      <div>
+      <div className="contacts-next-step-copy">
         <strong>{nextStep.label}</strong>
         {detail && <span>{detail}</span>}
       </div>
-    </div>
-  );
-}
-
-function DirectoryRowEnd({ row, onLogFollowUp }) {
-  const nextStep = row.directoryNextStepModel || contactDirectoryNextStep(row);
-  return (
-    <div className="contacts-directory-row-end">
       {nextStep.action === 'log_follow_up' && onLogFollowUp && (
         <button
           type="button"
           className="contacts-next-step-action"
-          onClick={(event) => {
-            event.stopPropagation();
-            onLogFollowUp(row);
-          }}
+          onClick={() => onLogFollowUp(row)}
         >
           <ClipboardCheck size={13} />
           {nextStep.actionLabel}
         </button>
       )}
-      <ChevronRight className="contacts-row-chevron" size={17} aria-hidden="true" />
     </div>
   );
 }
@@ -760,22 +747,22 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       key: 'name',
       label: 'Contact',
       sortable: true,
-      desktopWidth: '24%',
-      render: (row) => <ContactIdentityCell row={row} href={`${routeBase}/${encodeURIComponent(row.id)}`} />,
+      desktopWidth: '22%',
+      render: (row) => <ContactIdentityCell row={row} />,
     },
     { key: 'email', label: 'Email', sortable: true },
     { key: 'phone', label: 'Phone', sortable: true },
-    { key: 'enrollmentStage', label: 'Enrollment', sortable: true, desktopWidth: '160px', render: (row) => <CompactEnrollmentCell row={row} /> },
-    { key: 'assignedLabel', label: 'Owner', sortable: true, desktopWidth: '150px' },
+    { key: 'enrollmentStage', label: 'Enrollment', sortable: true, desktopWidth: '12%', render: (row) => <CompactEnrollmentCell row={row} /> },
+    { key: 'assignedLabel', label: 'Owner', sortable: true, desktopWidth: '12%' },
+    { key: 'lastTouch', label: 'Last Touch', sortable: true, desktopWidth: '10%' },
+    { key: 'inquirySource', label: 'Source', sortable: true, desktopWidth: '16%', render: (row) => <EnrollmentSourceCell row={row} /> },
     {
       key: 'directoryNextStep',
       label: 'Next Step',
       sortable: false,
-      desktopWidth: '28%',
-      render: (row) => <DirectoryNextStepCell row={row} />,
+      desktopWidth: '22%',
+      render: (row) => <DirectoryNextStepCell row={row} onLogFollowUp={canWrite ? openLogFollowUp : undefined} />,
     },
-    { key: 'lastTouch', label: 'Last Touch', sortable: true, desktopWidth: '140px' },
-    { key: 'inquirySource', label: 'Source', sortable: true, desktopWidth: '240px', render: (row) => <EnrollmentSourceCell row={row} /> },
     { key: 'studentLocation', label: 'Student Location', sortable: true },
     { key: 'schoolLocation', label: 'Learning Location', sortable: true },
     { key: 'lastEdited', label: 'Last Edited', sortable: true },
@@ -1508,27 +1495,23 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
               })
               .catch((error) => toast(error?.message || 'Update failed.', 'error'));
           } : undefined}
-          actions={columnMode === 'ait_usa' ? undefined : [
-            { label: 'View', onClick: (r) => router.push(`${routeBase}/${r.id}`) },
+          actions={[
+            { label: 'View', onClick: openContact },
             ...(canWrite ? [{ label: 'Edit', onClick: openEdit }] : []),
-          ]}
+          ].filter((action) => columnMode !== 'ait_usa' || action.label === 'View')}
           defaultVisibleColumnKeys={columnMode === 'ait_usa' ? [
             'name',
             'enrollmentStage',
             'assignedLabel',
-            'directoryNextStep',
             'lastTouch',
             'inquirySource',
+            'directoryNextStep',
           ] : undefined}
           wideSearch={columnMode === 'ait_usa'}
           fixedLayout={columnMode === 'ait_usa'}
           stickyHeader={columnMode === 'ait_usa'}
-          onRowClick={columnMode === 'ait_usa' ? openContact : undefined}
-          rowLabel={columnMode === 'ait_usa' ? (row) => `Open ${row.name || 'contact'} contact details` : undefined}
-          rowEnd={columnMode === 'ait_usa' ? (row) => (
-            <DirectoryRowEnd row={row} onLogFollowUp={canWrite ? openLogFollowUp : undefined} />
-          ) : undefined}
-          rowEndLabel={columnMode === 'ait_usa' ? 'Action' : undefined}
+          comfortableRows={columnMode === 'ait_usa'}
+          actionColumnWidth={columnMode === 'ait_usa' ? '6%' : undefined}
           mobileBadges={['status']}
           mobileFields={mobileFieldKeys}
         />

@@ -171,29 +171,13 @@
   background: color-mix(in srgb, var(--bg-secondary) 94%, var(--bg-tertiary));
   transition: background var(--transition-fast), color var(--transition-fast), box-shadow var(--transition-fast);
 }
+.tableComfortable td { padding-top:14px; padding-bottom:14px; }
 .table tr:hover td { background:color-mix(in srgb, var(--bg-hover) 86%, var(--bg-secondary)); color:var(--text-primary); }
 .table tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .table tr { transition: background var(--transition-fast); }
-.clickableRow { cursor:pointer; }
-.clickableRow:hover td { background:color-mix(in srgb, var(--accent-muted) 18%, var(--bg-hover)); }
-.clickableRow:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
-.clickableRow:focus-visible td { background:color-mix(in srgb, var(--accent-muted) 34%, var(--bg-secondary)); }
 .actions { display:flex; gap:4px; flex-wrap:wrap; justify-content:flex-end; }
 .actionHeader { text-align:right; }
 .actionCell { text-align:right; white-space:normal; max-width:220px; }
-.rowEndColumn { width:156px; }
-.rowEndHeader {
-  width:156px;
-  text-align:right !important;
-  cursor:default !important;
-}
-.rowEndCell {
-  width:156px;
-  max-width:none !important;
-  padding-left:8px !important;
-  text-align:right;
-  overflow:visible !important;
-}
 .actBtn {
   min-height:28px;
   display:inline-flex;

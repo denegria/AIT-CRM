@@ -36,10 +36,8 @@ export default function DataTable({
   wideSearch = false,
   fixedLayout = false,
   stickyHeader = false,
-  onRowClick,
-  rowLabel,
-  rowEnd,
-  rowEndLabel = 'Action',
+  comfortableRows = false,
+  actionColumnWidth,
   sortKey: controlledSortKey,
   sortDirection: controlledSortDirection,
   onSortChange,
@@ -144,16 +142,6 @@ export default function DataTable({
       return columns.some((column) => column.key === key) ? [...nextCurrent, key] : nextCurrent;
     });
   };
-  const handleRowClick = (event, row) => {
-    if (!onRowClick || event.target.closest('a, button, input, select, textarea, summary, label')) return;
-    onRowClick(row);
-  };
-  const handleRowKeyDown = (event, row) => {
-    if (!onRowClick || event.target !== event.currentTarget || !['Enter', ' '].includes(event.key)) return;
-    event.preventDefault();
-    onRowClick(row);
-  };
-
   const mobilePrimary = visibleColumns[0];
   const mobileSecondary = visibleColumns[1];
   const defaultBadgeColumns = visibleColumns.filter((column) => column.type === 'badge').slice(0, 2);
@@ -235,15 +223,14 @@ export default function DataTable({
       ) : (
         <>
         <div className={`${s.tableScroller} ${useFixedLayout ? s.fixedScroller : ''}`}>
-        <table className={`${s.table} ${useFixedLayout ? s.tableFixed : ''} ${stickyHeader ? s.tableStickyHeader : ''}`}>
-          {(useFixedLayout || rowEnd) && (
+        <table className={`${s.table} ${useFixedLayout ? s.tableFixed : ''} ${stickyHeader ? s.tableStickyHeader : ''} ${comfortableRows ? s.tableComfortable : ''}`}>
+          {useFixedLayout && (
             <colgroup>
               {selectable && <col style={{ width: 40 }} />}
               {visibleColumns.map((column) => (
                 <col key={column.key} style={column.desktopWidth ? { width: column.desktopWidth } : undefined} />
               ))}
-              {actions && <col />}
-              {rowEnd && <col className={s.rowEndColumn} />}
+              {actions && <col style={actionColumnWidth ? { width: actionColumnWidth } : undefined} />}
             </colgroup>
           )}
           <thead><tr>
@@ -274,18 +261,10 @@ export default function DataTable({
               </th>
             ))}
             {actions && <th className={s.actionHeader}>Actions</th>}
-            {rowEnd && <th className={s.rowEndHeader}>{rowEndLabel}</th>}
           </tr></thead>
           <tbody>
             {filtered.map(row => (
-              <tr
-                key={row.id}
-                className={onRowClick ? s.clickableRow : undefined}
-                tabIndex={onRowClick ? 0 : undefined}
-                aria-label={onRowClick ? (rowLabel?.(row) || `Open ${row.name || 'record'}`) : undefined}
-                onClick={(event) => handleRowClick(event, row)}
-                onKeyDown={(event) => handleRowKeyDown(event, row)}
-              >
+              <tr key={row.id}>
                 {selectable && (
                   <td style={{ textAlign: 'center' }}>
                     <input type="checkbox"
@@ -317,7 +296,6 @@ export default function DataTable({
                     ))}
                   </div></td>
                 )}
-                {rowEnd && <td className={s.rowEndCell}>{rowEnd(row)}</td>}
               </tr>
             ))}
           </tbody>
@@ -325,14 +303,7 @@ export default function DataTable({
         </div>
         <div className={s.mobileCards}>
           {filtered.map((row) => (
-            <div
-              key={row.id}
-              className={`${s.mobileCard} ${onRowClick ? s.clickableMobileCard : ''}`}
-              tabIndex={onRowClick ? 0 : undefined}
-              aria-label={onRowClick ? (rowLabel?.(row) || `Open ${row.name || 'record'}`) : undefined}
-              onClick={(event) => handleRowClick(event, row)}
-              onKeyDown={(event) => handleRowKeyDown(event, row)}
-            >
+            <div key={row.id} className={s.mobileCard}>
               {selectable && (
                 <label className={s.mobileSelect}>
                   <input
@@ -368,9 +339,8 @@ export default function DataTable({
                   ))}
                 </div>
               )}
-              {(actions || rowEnd) && (
+              {actions && (
                 <div className={s.mobileActions}>
-                  {rowEnd?.(row)}
                   {actions?.map((a, i) => (
                     <button key={i} className={`${s.actBtn} ${a.danger?s.actBtnDanger:''}`} onClick={() => {
                       if (a.danger) {
