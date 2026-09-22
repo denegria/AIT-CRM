@@ -12,7 +12,6 @@ import { contactDirectoryNextStep } from '@/lib/contact-directory-next-step.js';
 import s from './KanbanBoard.module.css';
 
 const DEFAULT_VISIBLE_CARDS = 24;
-const COMPACT_VISIBLE_CARDS = 32;
 
 function clean(value) {
   return String(value || '').trim();
@@ -160,7 +159,7 @@ export default function KanbanBoard({
   const [dragOverCol, setDragOverCol] = useState(null);
   const [visibleCardCounts, setVisibleCardCounts] = useState({});
   const selectedSet = new Set(selectedIds);
-  const pageSize = compact ? COMPACT_VISIBLE_CARDS : DEFAULT_VISIBLE_CARDS;
+  const pageSize = DEFAULT_VISIBLE_CARDS;
 
   const normalizedColumns = columns.map((column) => {
     if (typeof column === 'string') {

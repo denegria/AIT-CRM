@@ -9,6 +9,8 @@ const boardStyles = fs.readFileSync(new URL('../../components/KanbanBoard.module
 
 test('pipeline keeps a bounded independently scrolling active board', () => {
   assert.match(boardSource, /const DEFAULT_VISIBLE_CARDS = 24/);
+  assert.match(boardSource, /const pageSize = DEFAULT_VISIBLE_CARDS/);
+  assert.doesNotMatch(boardSource, /COMPACT_VISIBLE_CARDS/);
   assert.match(boardSource, /const visibleCards = columnCards\.slice\(0, visibleCount\)/);
   assert.match(boardSource, /Show \{Math\.min\(pageSize, remainingCount\)\} more/);
   assert.match(boardStyles, /\.fitColumns \.kanbanColumn \{[\s\S]*?height: clamp\(560px, calc\(100dvh - 200px\), 800px\)/);
