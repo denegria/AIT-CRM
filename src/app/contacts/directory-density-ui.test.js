@@ -37,9 +37,9 @@ test('mobile keeps only the high-value contact fields and contextual actions bes
 
 test('large desktop directory uses intentional widths, comfortable rows, and a sticky header', () => {
   assert.match(contactsSource, /desktopWidth: '20%'/);
-  assert.match(contactsSource, /desktopWidth: '18%'/);
   assert.match(contactsSource, /desktopWidth: '14%'/);
   assert.match(contactsSource, /desktopWidth: '10%'/);
+  assert.doesNotMatch(contactsSource, /key: 'directoryNextStep',[\s\S]*?desktopWidth:/);
   assert.match(contactsSource, /fixedLayout=\{columnMode === 'ait_usa'\}/);
   assert.match(contactsSource, /stickyHeader=\{columnMode === 'ait_usa'\}/);
   assert.match(contactsSource, /comfortableRows=\{columnMode === 'ait_usa'\}/);

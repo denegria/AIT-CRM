@@ -762,7 +762,6 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
       key: 'directoryNextStep',
       label: 'Next Step',
       sortable: false,
-      desktopWidth: '18%',
       render: (row) => <DirectoryNextStepCell row={row} />,
     },
     { key: 'studentLocation', label: 'Student Location', sortable: true },
