@@ -1195,7 +1195,6 @@ export default function PipelinePage() {
                   >
                     <div>
                       <strong>{column.label}</strong>
-                      <span>Drop to mark closed</span>
                     </div>
                     <em>{closedOutcomeCounts.get(column.id) || 0}</em>
                   </div>

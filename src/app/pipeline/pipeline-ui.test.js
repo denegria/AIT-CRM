@@ -50,4 +50,17 @@ test('desktop cards expose a keyboard-operable move control without repeating th
   assert.match(boardSource, /aria-label=\{`Move \$\{item\.name\} to another stage`\}/);
   assert.match(boardSource, /<option value="" disabled>Move…<\/option>/);
   assert.match(boardSource, /normalizedColumns\.filter\(\(column\) => column\.id !== item\.status\)/);
+  assert.match(boardStyles, /\.cardMoveDesktop \{[\s\S]*?opacity: 0;[\s\S]*?pointer-events: none;/);
+  assert.match(boardStyles, /\.kanbanCard:hover \.cardMoveDesktop,[\s\S]*?\.kanbanCard:focus-within \.cardMoveDesktop \{[\s\S]*?opacity: 1;[\s\S]*?pointer-events: auto;/);
+  assert.match(boardStyles, /@media \(hover: none\), \(pointer: coarse\) \{[\s\S]*?\.cardMoveDesktop \{[\s\S]*?opacity: 1;/);
+});
+
+test('pipeline cards remove repeated metadata without hiding operational context', () => {
+  assert.match(boardSource, /const DEFAULT_AIT_USA_SOURCE = 'AIT USA Seguimiento Central Workbook'/);
+  assert.match(boardSource, /normalized\(label\) === normalized\(DEFAULT_AIT_USA_SOURCE\)/);
+  assert.match(boardSource, /\{source && <span className=\{s\.cardSource\}>\{source\}<\/span>\}/);
+  assert.match(boardSource, /label: `Last touch · \$\{dateLabel\}`/);
+  assert.match(boardSource, /aria-label=\{lastTouch\.label\} title=\{lastTouch\.title\}/);
+  assert.match(boardSource, /isUnassigned \? <UserRound size=\{11\} \/> : assignedLabel\.charAt\(0\)/);
+  assert.doesNotMatch(pageSource, /Drop to mark closed/);
 });

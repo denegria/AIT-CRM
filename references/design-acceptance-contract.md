@@ -1,3 +1,30 @@
+# MIS-426 Pipeline Card Information Polish — 2026-09-23
+
+## Workflow and problem
+
+- Office employees scan the Pipeline at `1920 x 1080`; `1536 x 960` is the WFH regression viewport.
+- Pipeline structure, scrolling, performance, and primary actions are accepted. Remaining friction is repeated card metadata, an unlabeled Last Touch value, and an overexposed secondary stage control.
+
+## Interaction model and visual direction
+
+- Last Touch is visible text in the metadata row: `Last touch · Jun 1, 2026`. Missing activity remains `No touch recorded`; the source value is available as a tooltip.
+- Desktop Move remains the keyboard alternative to drag-and-drop but is disclosed only while a card is hovered or contains focus. Coarse-pointer and narrow layouts retain visible movement controls.
+- The known default `AIT USA Seguimiento Central Workbook` source is omitted from cards because the board is already scoped to that workflow. Exceptional sources such as `Website Form` remain visible.
+- Unassigned cards use the neutral user icon plus `Unassigned`; initials are reserved for named employees.
+- The close rail owns one instruction in its header. Individual outcome targets show only outcome and count.
+
+## Locked behavior and non-goals
+
+- Preserve Next Step, contextual `Log outreach` / `Log follow-up` actions, card click navigation, drag/drop, keyboard movement, permissions, bulk assignment, close outcomes, lane geometry, full-height close rail, fixed desktop shell, independent lane scrolling, and the 66-card initial render budget.
+- No backend, API, data, RBAC, lifecycle, mutation, mobile-workflow, or production changes.
+- No typography-scale, toolbar, column, card-density, or layout redesign.
+
+## Acceptance evidence
+
+- Primary: authenticated live staging at `1920 x 1080`.
+- Regression: authenticated live staging at `1536 x 960`.
+- Prove human-readable Last Touch labels, exceptional/default source behavior, desktop hover/focus Move disclosure, coarse-pointer/narrow safety, neutral Unassigned identity, single close instruction, zero overflow/browser errors, preserved 66-card budget, and GET-only QA.
+
 # MIS-426 Contacts Directory Acceptance Contract
 
 ## Typography normalization addendum — 2026-09-22

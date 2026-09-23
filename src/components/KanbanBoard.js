@@ -12,6 +12,13 @@ import { contactDirectoryNextStep } from '@/lib/contact-directory-next-step.js';
 import s from './KanbanBoard.module.css';
 
 const DEFAULT_VISIBLE_CARDS = 24;
+const DEFAULT_AIT_USA_SOURCE = 'AIT USA Seguimiento Central Workbook';
+const LAST_TOUCH_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
 
 function clean(value) {
   return String(value || '').trim();
@@ -62,6 +69,30 @@ function sourceLabel(item) {
   }
   if (isAitSigns(item)) return firstPresent([item.businessUnitName, item.workflowLabel, 'AIT Signs']);
   return item.source || item.workflowLabel || 'Pipeline';
+}
+
+function visibleSourceLabel(item) {
+  const label = sourceLabel(item);
+  if (isAitUsa(item) && normalized(label) === normalized(DEFAULT_AIT_USA_SOURCE)) return '';
+  return label;
+}
+
+function lastTouchPresentation(item) {
+  const value = firstPresent([item.lastTouch, item.lastContact]);
+  if (!value) {
+    return {
+      label: 'No touch recorded',
+      title: 'No touch recorded',
+    };
+  }
+
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const parsed = new Date(dateOnly ? `${value}T00:00:00.000Z` : value);
+  const dateLabel = Number.isNaN(parsed.getTime()) ? value : LAST_TOUCH_FORMATTER.format(parsed);
+  return {
+    label: `Last touch · ${dateLabel}`,
+    title: `Last touch: ${value}`,
+  };
 }
 
 function enrollmentLine(item) {
@@ -244,6 +275,10 @@ export default function KanbanBoard({
               {visibleCards.map(item => {
                 const nextStep = pipelineNextStep(item);
                 const nextStepDetail = usefulNextStepDetail(item, nextStep);
+                const source = visibleSourceLabel(item);
+                const lastTouch = lastTouchPresentation(item);
+                const assignedLabel = clean(item.assignedLabel);
+                const isUnassigned = !assignedLabel || normalized(assignedLabel) === 'unassigned';
                 return (
                   <div
                     key={item.id}
@@ -256,7 +291,7 @@ export default function KanbanBoard({
                     <div className={s.cardTop}>
                       <div className={s.cardIdentity}>
                         <div className={s.cardName}>{item.name}</div>
-                        <span className={s.cardSource}>{sourceLabel(item)}</span>
+                        {source && <span className={s.cardSource}>{source}</span>}
                       </div>
                       {onSelect && (
                         <input
@@ -297,12 +332,15 @@ export default function KanbanBoard({
                         {item.phone ? <Phone size={12} /> : <Mail size={12} />}
                         <span>{item.phone || item.email || 'No contact channel'}</span>
                       </div>
-                      <div className={s.metaItem}><CalendarCheck size={12} /> <span>{item.lastTouch || item.lastContact || 'No touch recorded'}</span></div>
+                      <div className={s.metaItem} aria-label={lastTouch.label} title={lastTouch.title}>
+                        <CalendarCheck size={12} />
+                        <span>{lastTouch.label}</span>
+                      </div>
                     </div>
                     <div className={s.cardFooter}>
                       <div className={s.cardUser}>
-                        <div className={s.userAvatar}>{item.assignedLabel?.charAt(0) || <UserRound size={11} />}</div>
-                        <span>{item.assignedLabel || 'Unassigned'}</span>
+                        <div className={s.userAvatar}>{isUnassigned ? <UserRound size={11} /> : assignedLabel.charAt(0)}</div>
+                        <span>{isUnassigned ? 'Unassigned' : assignedLabel}</span>
                       </div>
                       <div className={s.cardActions}>
                         {onMove && !showMobileMoveControls && (

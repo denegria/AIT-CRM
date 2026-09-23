@@ -298,6 +298,14 @@
 }
 .cardMoveDesktop {
   flex: 0 0 auto;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--transition-fast);
+}
+.kanbanCard:hover .cardMoveDesktop,
+.kanbanCard:focus-within .cardMoveDesktop {
+  opacity: 1;
+  pointer-events: auto;
 }
 .cardMoveDesktop select {
   width: 68px;
@@ -316,6 +324,13 @@
 .cardMoveDesktop select:focus-visible {
   border-color: color-mix(in srgb, var(--accent) 46%, var(--border-subtle));
   color: var(--text-primary);
+}
+
+@media (hover: none), (pointer: coarse) {
+  .cardMoveDesktop {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 .visuallyHidden {
   position: absolute;

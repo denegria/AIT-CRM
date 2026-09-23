@@ -1039,15 +1039,6 @@
   line-height: 1.2;
 }
 
-.closedDropZone span {
-  display: block;
-  margin-top: 4px;
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 650;
-  line-height: 1.25;
-}
-
 .closedDropZone em {
   min-width: 26px;
   min-height: 22px;
