@@ -30,6 +30,12 @@ test('directory next step offers outreach logging for actionable contacts', () =
   });
   assert.equal(nextFollowUp.label, 'Needs next follow-up');
   assert.equal(nextFollowUp.actionLabel, 'Log follow-up');
+
+  const unflaggedNewLead = contactDirectoryNextStep({
+    ...base,
+    followUpCoverage: {},
+  });
+  assert.equal(unflaggedNewLead.actionLabel, 'Log outreach');
 });
 
 test('retargeting is actionable without implying an individual schedule', () => {

@@ -69,7 +69,11 @@ export function contactDirectoryNextStep(contact = {}) {
     return actionable('Ready for retargeting', 'Outreach may be recorded now', 'Log outreach');
   }
 
-  if (['New Lead', 'Follow Up'].includes(status)) {
+  if (status === 'New Lead') {
+    return actionable('No follow-up recorded', 'Record the next outreach', 'Log outreach');
+  }
+
+  if (status === 'Follow Up') {
     return actionable('No follow-up recorded', 'Record the next outreach', 'Log follow-up');
   }
 
