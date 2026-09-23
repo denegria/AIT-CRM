@@ -720,7 +720,7 @@ export default function PipelinePage() {
   }
 
   return (
-    <div className="fade-in">
+    <div className={`fade-in ${s.pipelinePage}`}>
       <div className={`page-header ${s.pipelineHeader}`}>
         <div className={s.headerCopy}>
           <h1 className={`page-title ${s.pipelineTitle}`}>Pipeline</h1>

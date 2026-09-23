@@ -8,6 +8,9 @@ const boardSource = fs.readFileSync(new URL('../../components/KanbanBoard.js', i
 const boardStyles = fs.readFileSync(new URL('../../components/KanbanBoard.module.css', import.meta.url), 'utf8');
 
 test('pipeline keeps a bounded independently scrolling active board', () => {
+  assert.match(pageSource, /className=\{`fade-in \$\{s\.pipelinePage\}`\}/);
+  assert.match(pageStyles, /\.pipelinePage \{[\s\S]*?contain: paint;/);
+  assert.match(pageStyles, /@media \(max-width: 1100px\) \{[\s\S]*?\.pipelinePage \{[\s\S]*?contain: none;/);
   assert.match(boardSource, /const DEFAULT_VISIBLE_CARDS = 24/);
   assert.match(boardSource, /const pageSize = DEFAULT_VISIBLE_CARDS/);
   assert.doesNotMatch(boardSource, /COMPACT_VISIBLE_CARDS/);

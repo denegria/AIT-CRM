@@ -1,3 +1,7 @@
+.pipelinePage {
+  contain: paint;
+}
+
 .pipelineHeader {
   align-items: flex-start;
 }
@@ -1085,6 +1089,10 @@
 }
 
 @media (max-width: 1100px) {
+  .pipelinePage {
+    contain: none;
+  }
+
   .boardWithClosers {
     grid-template-columns: 1fr;
   }
