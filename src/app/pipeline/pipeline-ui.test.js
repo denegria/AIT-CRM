@@ -33,7 +33,9 @@ test('pipeline toolbar and close rail preserve the accepted desktop hierarchy', 
   assert.match(pageSource, /page-title \$\{s\.pipelineTitle\}/);
   assert.match(pageStyles, /\.pipelineTitle \{[\s\S]*?font-size: var\(--text-3xl\);/);
   assert.match(pageStyles, /\.boardWithClosers \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) 252px;/);
-  assert.match(pageStyles, /\.closedDropList \{[\s\S]*?grid-auto-rows: minmax\(84px, auto\);/);
+  assert.match(pageStyles, /\.boardWithClosers \{[\s\S]*?align-items: stretch;/);
+  assert.match(pageStyles, /\.closedDropList \{[\s\S]*?grid-template-rows: repeat\(var\(--closed-outcome-count, 1\), minmax\(84px, 1fr\)\);/);
+  assert.match(pageStyles, /\.closedDropList \{[\s\S]*?align-content: stretch;/);
   assert.equal((pageSource.match(/\sfitColumns\s/g) || []).length, 2);
 });
 
