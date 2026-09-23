@@ -1,5 +1,15 @@
 # MIS-426 Tasks Workflow Consolidation — 2026-09-23
 
+## Workload metric strip addendum — 2026-09-23
+
+- Problem: the four equal workload cards use saturated colored top borders that read like binder tabs or selectable navigation even though the metrics are read-only.
+- Visual direction: replace them with one compact neutral workload strip containing four label/value pairs separated by subtle dividers.
+- Semantic color is limited to a nonzero Overdue value. Zero values and all other metrics remain neutral.
+- The strip stays read-only with no pointer, hover, selected, focus, or filtering behavior. Metric-filter interaction remains a separate future decision.
+- Responsive behavior: four columns at desktop widths and a contained 2x2 grid at 760px and below.
+- Locked: metric values and labels, page header, alert, filters, rows, Task Detail, permissions, mutations, and all CRM data behavior.
+- Evidence: matched 1920x1080 before/after screenshots plus 1536x960 and narrow-layout overflow checks.
+
 ## Workflow and problem
 
 - Office employees scan Tasks at `1920 x 1080`; `1536 x 960` is the WFH regression viewport.

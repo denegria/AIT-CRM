@@ -76,6 +76,16 @@ test('task queue default chrome reflects only user-controlled filters', () => {
   assert.doesNotMatch(tasksSource, /className=\{s\.queueSubtitle\}/);
 });
 
+test('task workload metrics use one neutral read-only strip', () => {
+  assert.match(tasksSource, /<dl className=\{s\.summaryStrip\} aria-label="Task workload summary">/);
+  assert.match(tasksSource, /<dt className=\{s\.summaryLabel\}>Due Now<\/dt>/);
+  assert.match(tasksSource, /<dt className=\{s\.summaryLabel\}>Due Today<\/dt>/);
+  assert.match(tasksSource, /<dt className=\{s\.summaryLabel\}>Overdue<\/dt>/);
+  assert.match(tasksSource, /<dt className=\{s\.summaryLabel\}>Done Today<\/dt>/);
+  assert.match(tasksSource, /stats\.overdue > 0 \? s\.summaryValueOverdue : ''/);
+  assert.doesNotMatch(tasksSource, /summaryTile(Current|Today|Overdue|Completed)/);
+});
+
 test('Task Detail is outcome-first and keeps advanced controls deliberate', () => {
   assert.match(taskDetailSource, /function followUpHref\(task\)/);
   assert.match(taskDetailSource, /action: 'log-follow-up'/);

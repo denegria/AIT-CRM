@@ -1698,12 +1698,12 @@ export default function FollowUpQueuePage() {
         </form>
       </Modal>
 
-      <div className={s.summaryGrid} aria-label="Task workload summary">
-        <div className={`${s.summaryTile} ${s.summaryTileCurrent}`}><span className={s.summaryValue}>{stats.currentWork}</span><span className={s.summaryLabel}>Due Now</span></div>
-        <div className={`${s.summaryTile} ${s.summaryTileToday}`}><span className={s.summaryValue}>{stats.dueToday}</span><span className={s.summaryLabel}>Due Today</span></div>
-        <div className={`${s.summaryTile} ${s.summaryTileOverdue}`}><span className={s.summaryValue}>{stats.overdue}</span><span className={s.summaryLabel}>Overdue</span></div>
-        <div className={`${s.summaryTile} ${s.summaryTileCompleted}`}><span className={s.summaryValue}>{stats.completedToday}</span><span className={s.summaryLabel}>Done Today</span></div>
-      </div>
+      <dl className={s.summaryStrip} aria-label="Task workload summary">
+        <div className={s.summaryMetric}><dt className={s.summaryLabel}>Due Now</dt><dd className={s.summaryValue}>{stats.currentWork}</dd></div>
+        <div className={s.summaryMetric}><dt className={s.summaryLabel}>Due Today</dt><dd className={s.summaryValue}>{stats.dueToday}</dd></div>
+        <div className={s.summaryMetric}><dt className={s.summaryLabel}>Overdue</dt><dd className={`${s.summaryValue} ${stats.overdue > 0 ? s.summaryValueOverdue : ''}`}>{stats.overdue}</dd></div>
+        <div className={s.summaryMetric}><dt className={s.summaryLabel}>Done Today</dt><dd className={s.summaryValue}>{stats.completedToday}</dd></div>
+      </dl>
 
       <section className={`card ${s.queueSurface}`} aria-label="Task queue">
         {!coordinatorUiPolicy.ownerScoped && unassignedLeadFollowUps.length > 0 && (

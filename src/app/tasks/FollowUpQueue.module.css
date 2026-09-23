@@ -6,64 +6,49 @@
   font-size: 13px;
 }
 
-.summaryGrid {
+.summaryStrip {
   display: grid;
   grid-template-columns: repeat(4, minmax(132px, 1fr));
-  gap: 10px;
   margin-bottom: 14px;
-}
-
-.summaryTile {
-  min-height: 62px;
-  padding: 10px 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
 
-.summaryTileCurrent {
-  border-top: 3px solid var(--accent);
+.summaryMetric {
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 14px;
+  border-left: 1px solid var(--border-subtle);
 }
 
-.summaryTileToday {
-  border-top: 3px solid var(--warning);
+.summaryMetric:first-child {
+  border-left: 0;
 }
 
-.summaryTileOverdue {
-  border-top: 3px solid var(--danger);
-}
-
-.summaryTileCompleted {
-  border-top: 3px solid var(--success);
-}
-
-.summaryButton {
-  appearance: none;
-  width: 100%;
-  text-align: left;
-  cursor: pointer;
-  font-family: var(--font-sans);
-  color: inherit;
-}
-
-.summaryButton:hover {
-  border-color: var(--accent);
-  background: var(--bg-hover);
+.summaryLabel {
+  min-width: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-xs);
+  font-weight: 620;
+  line-height: 1.2;
 }
 
 .summaryValue {
-  display: block;
+  margin: 0;
+  color: var(--text-primary);
   font-size: var(--text-xl);
   font-weight: 760;
   line-height: 1;
 }
 
-.summaryLabel {
-  display: block;
-  margin-top: 6px;
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
+.summaryValueOverdue {
+  color: var(--danger);
 }
 
 .toolbar {
@@ -812,10 +797,6 @@
 }
 
 @media (max-width: 1120px) {
-  .summaryGrid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
   .toolbar {
     grid-template-columns: repeat(3, minmax(130px, 1fr)) auto;
   }
@@ -872,24 +853,22 @@
 }
 
 @media (max-width: 760px) {
-  .summaryGrid {
+  .summaryStrip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 8px;
     margin-bottom: 10px;
   }
 
-  .summaryTile {
-    min-height: 58px;
-    padding: 10px;
+  .summaryMetric {
+    min-height: 46px;
+    padding: 9px 10px;
   }
 
-  .summaryValue {
-    font-size: var(--text-xl);
+  .summaryMetric:nth-child(odd) {
+    border-left: 0;
   }
 
-  .summaryLabel {
-    margin-top: 4px;
-    line-height: 1.2;
+  .summaryMetric:nth-child(n + 3) {
+    border-top: 1px solid var(--border-subtle);
   }
 
   .queueHeader {
