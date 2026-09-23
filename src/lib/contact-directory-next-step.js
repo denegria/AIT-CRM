@@ -54,11 +54,11 @@ export function contactDirectoryNextStep(contact = {}) {
   }
 
   if (coverage.needsFirstContact || contact.needsFirstOutreach) {
-    return actionable('Needs first outreach', 'No outreach recorded', 'Start outreach');
+    return actionable('Needs first outreach', 'No outreach recorded', 'Log outreach');
   }
 
   if (coverage.needsNextFollowUp) {
-    return actionable('Needs next follow-up', 'No commitment on file', 'Record follow-up');
+    return actionable('Needs next follow-up', 'No commitment on file', 'Log follow-up');
   }
 
   if (!contact.hasLeadStatus) {
@@ -66,11 +66,11 @@ export function contactDirectoryNextStep(contact = {}) {
   }
 
   if (Number(contact.activeOpportunityCount || 0) === 0 && status === 'Retargeting') {
-    return actionable('Ready for retargeting', 'Outreach may be recorded now', 'Record outreach');
+    return actionable('Ready for retargeting', 'Outreach may be recorded now', 'Log outreach');
   }
 
   if (['New Lead', 'Follow Up'].includes(status)) {
-    return actionable('No follow-up recorded', 'Record the next outreach', 'Record follow-up');
+    return actionable('No follow-up recorded', 'Record the next outreach', 'Log follow-up');
   }
 
   if (['Dropped / Quit', 'Course Completed', 'Enrolled'].includes(status)) {

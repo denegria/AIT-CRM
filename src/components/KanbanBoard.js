@@ -100,9 +100,9 @@ function cardSummary(item) {
 
 function pipelineNextStep(item) {
   const actionLabel = item.needsFirstContact || item.needsFirstOutreach
-    ? 'Start outreach'
+    ? 'Log outreach'
     : item.needsNextFollowUp
-      ? 'Record follow-up'
+      ? 'Log follow-up'
       : '';
   const model = isAitUsa(item)
     ? (item.directoryNextStepModel || contactDirectoryNextStep(item))
@@ -325,7 +325,7 @@ export default function KanbanBoard({
                               onLogFollowUp(item);
                             }}
                           >
-                            {nextStep.actionLabel || 'Record outreach'}
+                            {nextStep.actionLabel || 'Log outreach'}
                           </button>
                         )}
                       </div>

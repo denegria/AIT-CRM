@@ -14,6 +14,7 @@ import {
   matchesPipelineQuickFilter,
 } from '@/lib/contact-workflow-buckets';
 import { mobilePipelineTriageItems } from '@/lib/pipeline-mobile-triage.js';
+import { contactDirectoryNextStep } from '@/lib/contact-directory-next-step.js';
 import {
   buildCourseFilterOptions,
   buildLocationFilterOptions,
@@ -1246,6 +1247,7 @@ export default function PipelinePage() {
         <div className={s.mobileCardList}>
           {mobileStageRows.map((contact) => {
             const isMoving = mobileMoveCardId === contact.id;
+            const mobileActionLabel = (contact.directoryNextStepModel || contactDirectoryNextStep(contact)).actionLabel;
             return (
               <article key={contact.id} className={s.mobilePipelineCard}>
                 {bulkAssignMode && (
@@ -1289,7 +1291,7 @@ export default function PipelinePage() {
                   <div className={s.mobileCardTools}>
                     {followUpCoverageLabel(contact) && (
                       <button className="btn btn-sm btn-primary" type="button" onClick={() => openLogFollowUp(contact)}>
-                        Log follow-up
+                        {mobileActionLabel || 'Log follow-up'}
                       </button>
                     )}
                     <button

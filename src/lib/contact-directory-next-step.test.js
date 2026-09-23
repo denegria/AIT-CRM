@@ -19,7 +19,7 @@ test('directory next step offers outreach logging for actionable contacts', () =
   }), {
     label: 'Needs first outreach',
     detail: 'No outreach recorded',
-    actionLabel: 'Start outreach',
+    actionLabel: 'Log outreach',
     action: 'log_follow_up',
   });
 
@@ -29,7 +29,7 @@ test('directory next step offers outreach logging for actionable contacts', () =
     followUpCoverage: { needsNextFollowUp: true },
   });
   assert.equal(nextFollowUp.label, 'Needs next follow-up');
-  assert.equal(nextFollowUp.actionLabel, 'Record follow-up');
+  assert.equal(nextFollowUp.actionLabel, 'Log follow-up');
 });
 
 test('retargeting is actionable without implying an individual schedule', () => {
@@ -39,7 +39,7 @@ test('retargeting is actionable without implying an individual schedule', () => 
     status: 'Retargeting',
   });
   assert.equal(result.label, 'Ready for retargeting');
-  assert.equal(result.actionLabel, 'Record outreach');
+  assert.equal(result.actionLabel, 'Log outreach');
   assert.doesNotMatch(`${result.label} ${result.detail}`, /schedul/i);
 });
 

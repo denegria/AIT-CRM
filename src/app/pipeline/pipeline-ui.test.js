@@ -23,9 +23,13 @@ test('pipeline keeps a bounded independently scrolling active board', () => {
 test('pipeline cards prioritize identity, next step, and contextual action', () => {
   assert.match(boardSource, /className=\{s\.cardIdentity\}/);
   assert.match(boardSource, /className=\{s\.cardNextStep\}/);
-  assert.match(boardSource, /\{nextStep\.actionLabel \|\| 'Record outreach'\}/);
+  assert.match(boardSource, /\? 'Log outreach'/);
+  assert.match(boardSource, /\? 'Log follow-up'/);
+  assert.match(boardSource, /\{nextStep\.actionLabel \|\| 'Log outreach'\}/);
+  assert.match(pageSource, /const mobileActionLabel = \(contact\.directoryNextStepModel \|\| contactDirectoryNextStep\(contact\)\)\.actionLabel/);
+  assert.match(pageSource, /\{mobileActionLabel \|\| 'Log follow-up'\}/);
   assert.doesNotMatch(boardSource, /className=\{s\.cardWorkflow\}/);
-  assert.doesNotMatch(boardSource, />Log follow-up<\/button>/);
+  assert.doesNotMatch(boardSource, /Start outreach|Record follow-up/);
   assert.match(boardStyles, /\.cardName \{[\s\S]*?font-size: 12px;/);
   assert.match(boardStyles, /\.cardSource \{[\s\S]*?font-size: 10px;[\s\S]*?font-weight: 500;/);
 });
