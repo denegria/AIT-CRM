@@ -54,7 +54,11 @@ export function contactDirectoryNextStep(contact = {}) {
   }
 
   if (coverage.needsFirstContact || contact.needsFirstOutreach) {
-    return actionable('Needs first outreach', 'No outreach recorded', 'Log outreach');
+    return actionable(
+      'Needs first outreach',
+      'No outreach recorded',
+      status === 'Follow Up' ? 'Log follow-up' : 'Log outreach',
+    );
   }
 
   if (coverage.needsNextFollowUp) {
