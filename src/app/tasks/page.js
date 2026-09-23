@@ -14,8 +14,8 @@ import {
   RefreshCcw,
   Repeat2,
   ShieldAlert,
+  SlidersHorizontal,
   X,
-  UserPlus,
 } from 'lucide-react';
 import { useCRM } from '@/lib/store';
 import { isAssignableEmployee } from '@/lib/crm/assignable-employees.js';
@@ -379,6 +379,7 @@ export default function FollowUpQueuePage() {
   const [editError, setEditError] = useState('');
   const [editDraft, setEditDraft] = useState(() => editDraftFromTask({}));
   const [actionPanelTaskId, setActionPanelTaskId] = useState('');
+  const [secondaryFiltersOpen, setSecondaryFiltersOpen] = useState(false);
   const [confirmTaskAction, setConfirmTaskAction] = useState(null);
   const [cancellationDraft, setCancellationDraft] = useState(null);
 
@@ -1435,7 +1436,7 @@ export default function FollowUpQueuePage() {
   if (!access.canReadCrm) {
     return (
       <div className="fade-in">
-        <div className="page-header">
+        <div className={`page-header ${s.pageHeader}`}>
           <div>
             <h1 className="page-title">Tasks</h1>
             <p className="page-subtitle">CRM read access is required.</p>
@@ -1453,7 +1454,7 @@ export default function FollowUpQueuePage() {
 
   return (
     <div className="fade-in">
-      <div className="page-header">
+      <div className={`page-header ${s.pageHeader}`}>
         <div>
           <h1 className="page-title">Tasks</h1>
           <p className="page-subtitle">
@@ -1684,16 +1685,10 @@ export default function FollowUpQueuePage() {
         </form>
       </Modal>
 
-      <div className={s.summaryGrid}>
+      <div className={s.summaryGrid} aria-label="Task workload summary">
         <div className={`${s.summaryTile} ${s.summaryTileCurrent}`}><span className={s.summaryValue}>{stats.currentWork}</span><span className={s.summaryLabel}>Due Now</span></div>
         <div className={`${s.summaryTile} ${s.summaryTileToday}`}><span className={s.summaryValue}>{stats.dueToday}</span><span className={s.summaryLabel}>Due Today</span></div>
         <div className={`${s.summaryTile} ${s.summaryTileOverdue}`}><span className={s.summaryValue}>{stats.overdue}</span><span className={s.summaryLabel}>Overdue</span></div>
-        {!coordinatorUiPolicy.ownerScoped && (
-          <button className={`${s.summaryTile} ${s.summaryButton}`} type="button" onClick={showUnassignedLeadFollowUps}>
-            <span className={s.summaryValue}>{stats.unassigned}</span>
-            <span className={s.summaryLabel}>Unassigned</span>
-          </button>
-        )}
         <div className={`${s.summaryTile} ${s.summaryTileCompleted}`}><span className={s.summaryValue}>{stats.completedToday}</span><span className={s.summaryLabel}>Done Today</span></div>
       </div>
 
@@ -1716,7 +1711,6 @@ export default function FollowUpQueuePage() {
         <div className={s.queueHeader}>
           <div>
             <span className={s.sectionEyebrow}>Work queue</span>
-            <h2 className={s.queueTitle}>Tasks</h2>
             <p className={s.queueSubtitle}>{activeTaskScope}</p>
           </div>
           <div className={s.queueHeaderActions}>
@@ -1765,31 +1759,48 @@ export default function FollowUpQueuePage() {
             </select>
           </label>
           <label className={s.filterGroup}>
-            <span className="form-label">{scopeLabel}</span>
-            <select className="select" value={filters.businessUnitId} onChange={(event) => setFilters((prev) => ({ ...prev, businessUnitId: event.target.value }))}>
-              <option value="all">All {scopeLabel}</option>
-              {accessibleBusinessUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
-            </select>
-          </label>
-          <label className={s.filterGroup}>
             <span className="form-label">Task Type</span>
             <select className="select" value={filters.taskType} onChange={(event) => setFilters((prev) => ({ ...prev, taskType: event.target.value }))}>
               {TASK_TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
-          <label className={s.filterGroup}>
-            <span className="form-label">Status</span>
-            <select className="select" value={filters.status} onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}>
-              {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-          </label>
-          <label className={s.filterGroup}>
-            <span className="form-label">Link</span>
-            <select className="select" value={filters.link} onChange={(event) => setFilters((prev) => ({ ...prev, link: event.target.value }))}>
-              {LINK_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-          </label>
+          <button
+            className={`btn ${s.filterToggle}`}
+            type="button"
+            aria-expanded={secondaryFiltersOpen}
+            aria-controls="secondary-task-filters"
+            onClick={() => setSecondaryFiltersOpen((open) => !open)}
+          >
+            <SlidersHorizontal size={14} />
+            Filters
+            {[filters.status !== 'all', filters.link !== 'all', filters.businessUnitId !== 'all'].filter(Boolean).length > 0 && (
+              <span className={s.filterCount}>{[filters.status !== 'all', filters.link !== 'all', filters.businessUnitId !== 'all'].filter(Boolean).length}</span>
+            )}
+          </button>
         </div>
+        {secondaryFiltersOpen && (
+          <div className={s.secondaryFilters} id="secondary-task-filters">
+            <label className={s.filterGroup}>
+              <span className="form-label">Status</span>
+              <select className="select" value={filters.status} onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}>
+                {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+            <label className={s.filterGroup}>
+              <span className="form-label">Link</span>
+              <select className="select" value={filters.link} onChange={(event) => setFilters((prev) => ({ ...prev, link: event.target.value }))}>
+                {LINK_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+            <label className={s.filterGroup}>
+              <span className="form-label">{scopeLabel}</span>
+              <select className="select" value={filters.businessUnitId} onChange={(event) => setFilters((prev) => ({ ...prev, businessUnitId: event.target.value }))}>
+                <option value="all">All {scopeLabel}</option>
+                {accessibleBusinessUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+              </select>
+            </label>
+          </div>
+        )}
 
         {error && (
           <PageState
@@ -1843,12 +1854,6 @@ export default function FollowUpQueuePage() {
             const removalApprovalPending = removalApproval?.decision === 'pending';
             const cancellationPolicy = task.cancellationPolicy || taskCancellationDecision({ session: { user: currentUser }, task });
             const cancellationNeedsApproval = cancellationPolicy.decision === TASK_CANCELLATION_DECISIONS.APPROVAL_REQUIRED;
-            const showAssignToMe = coordinatorUiPolicy.canManageCoordinatorAssignments &&
-              !isArchiveApprovalTask &&
-              !isTaskRemovalApprovalTask &&
-              !isTaskClosed(task) &&
-              currentUser?.id &&
-              task.ownerUserId !== currentUser.id;
             const showCancelAction = !isArchiveApprovalTask &&
               !isTaskRemovalApprovalTask &&
               !isTaskClosed(task) &&
@@ -1912,7 +1917,7 @@ export default function FollowUpQueuePage() {
                   )}
                   <div className={s.taskContext}>
                     <span className={s.compactLabel}>Contact</span>
-                    <span className={s.mutedText}>{task.contactName || 'No contact linked'}</span>
+                    <span className={s.mutedText}>{task.contactName || (task.contactId ? 'Linked contact' : 'No contact linked')}</span>
                   </div>
                 </div>
                 <div className={s.assigneeSelect}>
@@ -1968,10 +1973,6 @@ export default function FollowUpQueuePage() {
                       Log outcome
                     </button>
                   )}
-                  <Link className={`btn btn-sm ${(task.taskType === 'follow_up' && !isTaskClosed(task)) || isTaskRemovalApprovalTask ? '' : 'btn-primary'}`} href={`/tasks/${encodeURIComponent(task.id)}`}>
-                    <ListTodo size={14} />
-                    Review
-                  </Link>
                   {task.contactId && (
                     <Link className="btn btn-sm" href={`/contacts/${encodeURIComponent(task.contactId)}`}>
                       <ExternalLink size={14} />
@@ -1986,7 +1987,7 @@ export default function FollowUpQueuePage() {
                     aria-controls={`task-actions-${task.id}`}
                   >
                     <MoreHorizontal size={14} />
-                    Actions
+                    More
                   </button>
                 </div>
                 {actionPanelTaskId === task.id && (
@@ -2004,17 +2005,6 @@ export default function FollowUpQueuePage() {
                         <Pencil size={14} />
                         Edit
                       </button>
-                      {showAssignToMe && (
-                        <button
-                          className="btn btn-sm"
-                          type="button"
-                          disabled={!access.canWriteCrm || busyTaskId === task.id || !currentUser?.id}
-                          onClick={() => applyTaskAction(task, 'assign', { ownerUserId: currentUser.id })}
-                        >
-                          <UserPlus size={14} />
-                          Assign to me
-                        </button>
-                      )}
                       {isArchiveApprovalTask ? (
                         <>
                           <button

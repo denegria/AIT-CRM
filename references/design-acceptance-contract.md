@@ -1,3 +1,31 @@
+# MIS-426 Tasks Workflow Consolidation — 2026-09-23
+
+## Workflow and problem
+
+- Office employees scan Tasks at `1920 x 1080`; `1536 x 960` is the WFH regression viewport.
+- The current queue exposes five summary tiles, six simultaneous filters, repeated navigation, overlapping ownership actions, and four row actions for a small amount of work.
+- Task Detail visually promotes linked-record navigation while hiding the task-resolution workflow.
+
+## Interaction model and visual direction
+
+- The queue keeps four compact read-only workload metrics. The operational unassigned-lead alert owns the only unassigned shortcut.
+- Due, Owner, and Task Type remain visible. Status, Link, and Division move behind one explicit `Filters` disclosure without losing their values or behavior.
+- A standard follow-up row presents `Log outcome`, `Contact`, and `More`. The linked title remains the route to Task Detail; the duplicate `Review` action and duplicate `Assign to me` action are removed.
+- A linked task without a hydrated contact name says `Linked contact`, never `No contact linked`.
+- Task Detail promotes `Log outcome`, keeps Contact secondary, removes duplicate `Open Queue`, exposes owner assignment in Metadata, and moves cancellation into `More`.
+- Typography and control targets match the upgraded Contacts/Pipeline scale while preserving the information density needed at both desktop widths.
+
+## Locked behavior and non-goals
+
+- Preserve permissions, exact follow-up selection, structured outcome recording, assignment mutations, cancellation/approval semantics, edit/create flows, recurring tasks, task counts, filters, linked records, and task history.
+- No backend, API contract, RBAC, database, production, or CRM business-data changes.
+- No new task lifecycle, bulk workflow, mobile redesign, or performance architecture.
+
+## Acceptance evidence
+
+- Authenticated live staging at `1920 x 1080` and `1536 x 960`.
+- Prove the three-control row hierarchy, secondary-filter disclosure, truthful contact state, outcome-first Task Detail, owner assignment affordance, no overflow/browser errors, and GET-only visual QA.
+
 # MIS-426 Pipeline Card Information Polish — 2026-09-23
 
 ## Workflow and problem

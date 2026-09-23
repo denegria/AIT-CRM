@@ -1,13 +1,21 @@
+.pageHeader :global(.page-title) {
+  font-size: var(--text-3xl);
+}
+
+.pageHeader :global(.page-subtitle) {
+  font-size: 13px;
+}
+
 .summaryGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
+  grid-template-columns: repeat(4, minmax(132px, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .summaryTile {
-  min-height: 72px;
-  padding: 12px 14px;
+  min-height: 62px;
+  padding: 10px 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -46,7 +54,7 @@
 
 .summaryValue {
   display: block;
-  font-size: var(--text-2xl);
+  font-size: var(--text-xl);
   font-weight: 760;
   line-height: 1;
 }
@@ -60,11 +68,40 @@
 
 .toolbar {
   display: grid;
-  grid-template-columns: repeat(3, minmax(150px, 1fr));
+  grid-template-columns: repeat(3, minmax(170px, 1fr)) auto;
   gap: 10px;
   align-items: end;
   padding-top: 12px;
   border-top: 1px solid var(--border-subtle);
+}
+
+.filterToggle {
+  min-height: 36px;
+  align-self: end;
+}
+
+.filterCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent-muted);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 760;
+}
+
+.secondaryFilters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(170px, 1fr));
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-primary) 78%, var(--bg-secondary));
 }
 
 .filterGroup {
@@ -102,7 +139,7 @@
 }
 
 .queueSubtitle {
-  margin: 4px 0 0;
+  margin: 3px 0 0;
   color: var(--text-secondary);
   font-size: var(--text-sm);
   line-height: 1.35;
@@ -419,7 +456,7 @@
 
 .queueItem {
   display: grid;
-  grid-template-columns: minmax(180px, 1.35fr) minmax(120px, 0.72fr) minmax(140px, 0.85fr) minmax(220px, auto);
+  grid-template-columns: minmax(220px, 1.45fr) minmax(145px, 0.7fr) minmax(170px, 0.8fr) minmax(300px, auto);
   gap: 14px;
   align-items: center;
   min-height: 78px;
@@ -445,7 +482,7 @@
 }
 
 .taskTitle {
-  font-size: var(--text-md);
+  font-size: 12px;
   font-weight: 700;
   line-height: 1.25;
 }
@@ -462,7 +499,7 @@
 .taskDescription {
   margin-top: 4px;
   color: var(--text-secondary);
-  font-size: var(--text-xs);
+  font-size: 11px;
   line-height: 1.35;
 }
 
@@ -535,7 +572,7 @@
 
 .compactLabel {
   color: var(--text-muted);
-  font-size: var(--text-xs);
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0;
 }
@@ -543,7 +580,7 @@
 .dueText {
   margin-top: 4px;
   color: var(--text-primary);
-  font-size: var(--text-sm);
+  font-size: 11px;
   font-weight: 650;
 }
 
@@ -553,7 +590,7 @@
 
 .mutedText {
   color: var(--text-muted);
-  font-size: var(--text-xs);
+  font-size: 11px;
 }
 
 .taskSchedule {
@@ -587,6 +624,11 @@
   justify-content: flex-end;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.actions :global(.btn) {
+  min-height: 32px;
+  font-size: 10px;
 }
 
 .taskActionsPanel {
@@ -793,7 +835,7 @@
   }
 
   .toolbar {
-    grid-template-columns: repeat(3, minmax(130px, 1fr));
+    grid-template-columns: repeat(3, minmax(130px, 1fr)) auto;
   }
 
   .queueItem {
@@ -890,6 +932,10 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
     padding-top: 10px;
+  }
+
+  .secondaryFilters {
+    grid-template-columns: 1fr;
   }
 
   .filterGroup {

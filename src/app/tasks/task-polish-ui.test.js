@@ -50,3 +50,25 @@ test('generic task actions and the edit form submit the loaded task version', ()
   assert.match(tasksSource, /expectedUpdatedAt: editDraft\.expectedUpdatedAt/);
   assert.match(tasksSource, /expectedUpdatedAt: task\.updatedAt \|\| ''/);
 });
+
+test('task queue consolidates filters and row actions without removing workflow access', () => {
+  assert.match(tasksSource, /aria-controls="secondary-task-filters"/);
+  assert.match(tasksSource, /secondaryFiltersOpen && \(/);
+  assert.match(tasksSource, />\s*Filters\s*/);
+  assert.doesNotMatch(tasksSource, />\s*Review\s*</);
+  assert.doesNotMatch(tasksSource, />\s*Assign to me\s*</);
+  assert.match(tasksSource, /task\.contactName \|\| \(task\.contactId \? 'Linked contact' : 'No contact linked'\)/);
+  assert.match(tasksSource, />\s*Log outcome\s*</);
+  assert.match(tasksSource, />\s*Contact\s*</);
+  assert.match(tasksSource, />\s*More\s*</);
+});
+
+test('Task Detail is outcome-first and keeps advanced controls deliberate', () => {
+  assert.match(taskDetailSource, /function followUpHref\(task\)/);
+  assert.match(taskDetailSource, /action: 'log-follow-up'/);
+  assert.match(taskDetailSource, />\s*Log outcome\s*</);
+  assert.doesNotMatch(taskDetailSource, />\s*Open Queue\s*</);
+  assert.match(taskDetailSource, /<details className=\{s\.moreMenu\}>/);
+  assert.match(taskDetailSource, /aria-label="Task owner"/);
+  assert.match(taskDetailSource, /action: 'assign'/);
+});

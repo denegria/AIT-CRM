@@ -9,9 +9,9 @@ import {
   CalendarClock,
   CheckCircle2,
   CheckSquare,
-  ClipboardList,
   ExternalLink,
   History,
+  MoreHorizontal,
   ShieldAlert,
   User,
   X,
@@ -22,6 +22,8 @@ import { TaskCancellationDialog } from '@/components/TaskCancellationDialog';
 import { TaskRemovalDecisionDialog } from '@/components/TaskRemovalDecisionDialog';
 import { useToast } from '@/components/Toast';
 import { useCRM } from '@/lib/store';
+import { isAssignableEmployee } from '@/lib/crm/assignable-employees.js';
+import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import {
   TASK_CANCELLATION_DECISIONS,
   taskCancellationDecision,
@@ -102,12 +104,14 @@ function fallbackTaskDetail(task, contacts, employees, accessibleBusinessUnits) 
   };
 }
 
-function queueHref(task) {
-  const params = new URLSearchParams();
-  if (task.taskType) params.set('taskType', task.taskType);
-  if (task.status) params.set('status', task.status);
-  if (task.ownerUserId) params.set('ownerUserId', task.ownerUserId);
-  return `/tasks${params.toString() ? `?${params.toString()}` : ''}`;
+function followUpHref(task) {
+  const params = new URLSearchParams({
+    action: 'log-follow-up',
+    taskId: task.id,
+    contactId: task.contactId || '',
+    leadId: task.leadId || '',
+  });
+  return `/tasks?${params.toString()}`;
 }
 
 export default function TaskDetailPage() {
@@ -136,6 +140,7 @@ export default function TaskDetailPage() {
   const [removalDecisionReason, setRemovalDecisionReason] = useState('');
   const [removalDecisionBusy, setRemovalDecisionBusy] = useState(false);
   const [removalDecisionError, setRemovalDecisionError] = useState('');
+  const [assignmentBusy, setAssignmentBusy] = useState(false);
   const taskId = params.id;
   const visibleContacts = allContacts?.length ? allContacts : contacts;
 
@@ -187,6 +192,14 @@ export default function TaskDetailPage() {
 
   const task = detail?.task || null;
   const context = detail?.context || {};
+  const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
+  const assignableEmployees = useMemo(() => {
+    const options = (employees || []).filter(isAssignableEmployee);
+    if (!currentUser?.id || options.some((employee) => employee.id === currentUser.id) || !isAssignableEmployee(currentUser)) {
+      return options;
+    }
+    return [currentUser, ...options];
+  }, [currentUser, employees]);
   useRecordScopeRegistration(context.businessUnit, task?.id ? `task:${task.id}` : '');
   const events = detail?.events || [];
   const ownerLabel = context.owner?.name || context.owner?.email || (task?.ownerUserId === currentUser?.id ? 'Me' : 'Unassigned');
@@ -210,6 +223,11 @@ export default function TaskDetailPage() {
     task &&
     !cancellationPending &&
     cancellationPolicy?.decision !== TASK_CANCELLATION_DECISIONS.FORBIDDEN
+  );
+  const canLogOutcome = Boolean(
+    access.canWriteCrm &&
+    task?.taskType === 'follow_up' &&
+    ['open', 'in_progress', 'snoozed'].includes(task?.status)
   );
   const renderError = access.canReadCrm ? error : 'CRM read access is required.';
   const headerSubtitle = useMemo(() => {
@@ -242,6 +260,37 @@ export default function TaskDetailPage() {
       setCancellationError(err.message || 'Task cancellation failed.');
     } finally {
       setCancellationBusy(false);
+    }
+  }
+
+  async function assignTask(ownerUserId) {
+    if (!task?.id || !ownerUserId || assignmentBusy || !coordinatorUiPolicy.canManageCoordinatorAssignments) return;
+    setAssignmentBusy(true);
+    try {
+      const response = await fetch('/api/tasks', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: task.id,
+          action: 'assign',
+          ownerUserId,
+          expectedUpdatedAt: task.updatedAt,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Task assignment failed.');
+      const nextTask = payload.task || { ...task, ownerUserId };
+      const nextOwner = assignableEmployees.find((employee) => employee.id === nextTask.ownerUserId) || null;
+      setDetail((current) => current ? {
+        ...current,
+        task: nextTask,
+        context: { ...current.context, owner: nextOwner },
+      } : current);
+      toast('Task owner updated');
+    } catch (err) {
+      toast(err.message || 'Task assignment failed.');
+    } finally {
+      setAssignmentBusy(false);
     }
   }
 
@@ -318,29 +367,39 @@ export default function TaskDetailPage() {
               </button>
             </>
           )}
-          {canCancelTask && (
-            <button
-              className={`btn btn-sm ${cancellationNeedsApproval ? '' : 'btn-danger'}`}
-              type="button"
-              onClick={() => {
-                setCancellationError('');
-                setCancellationReason('');
-                setCancellationOpen(true);
-              }}
-            >
-              <X size={14} />
-              {cancellationNeedsApproval ? 'Request Cancel' : 'Cancel'}
-            </button>
+          {canLogOutcome && (
+            <Link className="btn btn-sm btn-primary" href={followUpHref(task)}>
+              <CheckCircle2 size={14} />
+              Log outcome
+            </Link>
           )}
-          <Link className="btn btn-sm" href={queueHref(task)}>
-            <ClipboardList size={14} />
-            Open Queue
-          </Link>
           {context.contact?.id && (
-            <Link className="btn btn-sm btn-primary" href={`/contacts/${encodeURIComponent(context.contact.id)}`}>
+            <Link className="btn btn-sm" href={`/contacts/${encodeURIComponent(context.contact.id)}`}>
               <ExternalLink size={14} />
               Contact
             </Link>
+          )}
+          {canCancelTask && (
+            <details className={s.moreMenu}>
+              <summary className="btn btn-sm">
+                <MoreHorizontal size={14} />
+                More
+              </summary>
+              <div className={s.moreMenuPanel}>
+                <button
+                  className={`btn btn-sm ${cancellationNeedsApproval ? '' : 'btn-danger'}`}
+                  type="button"
+                  onClick={() => {
+                    setCancellationError('');
+                    setCancellationReason('');
+                    setCancellationOpen(true);
+                  }}
+                >
+                  <X size={14} />
+                  {cancellationNeedsApproval ? 'Request Cancel' : 'Cancel task'}
+                </button>
+              </div>
+            </details>
           )}
         </div>
       </div>
@@ -452,7 +511,22 @@ export default function TaskDetailPage() {
               </div>
               <div className={s.metadataItem}>
                 <span className={s.metadataLabel}>Owner</span>
-                <span className={s.metadataValue}>{ownerLabel}</span>
+                {coordinatorUiPolicy.canManageCoordinatorAssignments && !isTaskRemovalApproval ? (
+                  <select
+                    className={`select ${s.ownerSelect}`}
+                    aria-label="Task owner"
+                    value={task.ownerUserId || ''}
+                    disabled={assignmentBusy || !access.canWriteCrm}
+                    onChange={(event) => assignTask(event.target.value)}
+                  >
+                    <option value="" disabled>Select owner</option>
+                    {assignableEmployees.map((employee) => (
+                      <option key={employee.id} value={employee.id}>{employee.name || employee.email}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className={s.metadataValue}>{ownerLabel}</span>
+                )}
               </div>
               <div className={s.metadataItem}>
                 <span className={s.metadataLabel}>Created By</span>
