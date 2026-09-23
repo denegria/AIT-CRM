@@ -993,3 +993,73 @@
 
 - Changes to workflow state derivation, scheduling policy, APIs, schemas,
   permissions, filters, toolbar behavior, mobile redesign, or production.
+
+# MIS-426 Tasks Unified Queue Composition Contract
+
+## Workflow and problem
+
+- Employees need one obvious work surface for scanning due work, understanding
+  ownership and contact context, and taking the next safe action.
+- The accepted Tasks features are individually correct, but the directory reads
+  as six similarly weighted bands: workload metrics, owner alert, queue label,
+  filters, bordered task cards, and completed history. Multiple filled-blue
+  actions and repeated borders fragment the page even though the major type
+  scale already matches Contacts and Pipeline.
+
+## Interaction model and visual direction
+
+- The queue becomes the dominant page surface. Its header owns the read-only
+  workload metrics, unassigned-owner context, approval entry point, and Reset.
+  Due, Owner, and Task Type remain directly beneath that header.
+- Active tasks render as divider-separated rows inside the queue surface, not
+  cards inside a card. Overdue meaning stays on the due value rather than a red
+  structural rail.
+- `New Task` is the only default filled-blue page action. `Log outcome` and
+  `View unassigned` are secondary outlined actions; approval decisions retain
+  their existing semantic treatment.
+- Default `Open` status is omitted because membership in the active queue
+  already communicates it. Non-default task states, priority, type, recurrence,
+  due date, contact context, and ownership remain visible.
+- Owner assignment stays inline for authorized coordinators, but uses the same
+  compact control scale as the row actions.
+- Reference mode: faithful consolidation of the accepted Tasks workflow using
+  the dominant-surface and row-divider patterns already established by upgraded
+  Contacts and Pipeline.
+
+## Locked behavior, permissions, and state
+
+- `Log outcome -> Contact -> More`, task title navigation, Task Detail,
+  cancellation approval, archive approval, edit/complete/cancel behavior,
+  filters, business-unit scope, RBAC, stale-write protection, API routes, and
+  mutation payloads remain unchanged.
+- Workload metrics remain read-only and do not become filters.
+- Unassigned follow-up eligibility and Facebook counts remain truthful; only
+  their presentation moves into the queue header.
+- Completed-today history remains available below active work.
+
+## Responsive and accessibility acceptance
+
+- Primary viewport: `1920 x 1080` CSS pixels. Regression viewport:
+  `1536 x 960`; `390 x 844` receives a contained reflow check.
+- Queue header content may wrap without overlap. Active rows preserve readable
+  source order and all controls remain keyboard reachable with no horizontal
+  page overflow.
+- The semantic workload `<dl>`, filter labels, task article boundaries, control
+  names, focus behavior, and live error messaging remain intact.
+
+## Evidence required
+
+- Focused tests cover integrated queue metrics/context, absence of standalone
+  alert and nested task-card treatments, conditional non-default status, and
+  secondary row actions while preserving existing workflow access.
+- Run repository contract, complete tests, the follow-up workflow suite, full
+  ESLint, and the webpack production build.
+- Capture matched immediate-before and canonical-staging after screenshots at
+  `1920 x 1080`, plus `1536 x 960` and narrow-layout regressions, without CRM
+  writes.
+
+## Non-goals
+
+- New task states, filters, metric interactions, bulk actions, sorting,
+  pagination, backend/schema/service changes, permission changes, Task Detail
+  redesign, production promotion, or CRM data writes.

@@ -1698,32 +1698,30 @@ export default function FollowUpQueuePage() {
         </form>
       </Modal>
 
-      <dl className={s.summaryStrip} aria-label="Task workload summary">
-        <div className={s.summaryMetric}><dt className={s.summaryLabel}>Due Now</dt><dd className={s.summaryValue}>{stats.currentWork}</dd></div>
-        <div className={s.summaryMetric}><dt className={s.summaryLabel}>Due Today</dt><dd className={s.summaryValue}>{stats.dueToday}</dd></div>
-        <div className={s.summaryMetric}><dt className={s.summaryLabel}>Overdue</dt><dd className={`${s.summaryValue} ${stats.overdue > 0 ? s.summaryValueOverdue : ''}`}>{stats.overdue}</dd></div>
-        <div className={s.summaryMetric}><dt className={s.summaryLabel}>Done Today</dt><dd className={s.summaryValue}>{stats.completedToday}</dd></div>
-      </dl>
-
       <section className={`card ${s.queueSurface}`} aria-label="Task queue">
-        {!coordinatorUiPolicy.ownerScoped && unassignedLeadFollowUps.length > 0 && (
-          <div className={s.intakeAlert}>
-            <div className={s.intakeAlertText}>
-              <span className={s.intakeAlertTitle}>New lead follow-ups need owners</span>
-              <span className={s.intakeAlertCopy}>
-                {unassignedLeadFollowUps.length} unassigned lead follow-up{unassignedLeadFollowUps.length === 1 ? '' : 's'}
-                {unassignedFacebookFollowUps.length ? ` · ${unassignedFacebookFollowUps.length} Facebook` : ''}.
-              </span>
-            </div>
-            <button className="btn btn-sm btn-primary" type="button" onClick={showUnassignedLeadFollowUps}>
-              <ListTodo size={14} />
-              View unassigned
-            </button>
-          </div>
-        )}
         <div className={s.queueHeader}>
-          <span className={s.sectionEyebrow}>Work queue</span>
+          <div className={s.queueHeaderMain}>
+            <span className={s.sectionEyebrow}>Work queue</span>
+            <dl className={s.queueMetrics} aria-label="Task workload summary">
+              <div className={s.summaryMetric}><dt className={s.summaryLabel}>Due Now</dt><dd className={s.summaryValue}>{stats.currentWork}</dd></div>
+              <div className={s.summaryMetric}><dt className={s.summaryLabel}>Due Today</dt><dd className={s.summaryValue}>{stats.dueToday}</dd></div>
+              <div className={s.summaryMetric}><dt className={s.summaryLabel}>Overdue</dt><dd className={`${s.summaryValue} ${stats.overdue > 0 ? s.summaryValueOverdue : ''}`}>{stats.overdue}</dd></div>
+              <div className={s.summaryMetric}><dt className={s.summaryLabel}>Done Today</dt><dd className={s.summaryValue}>{stats.completedToday}</dd></div>
+            </dl>
+          </div>
           <div className={s.queueHeaderActions}>
+            {!coordinatorUiPolicy.ownerScoped && unassignedLeadFollowUps.length > 0 && (
+              <div className={s.queueAlert}>
+                <span className={s.queueAlertCopy}>
+                  <strong>{unassignedLeadFollowUps.length}</strong> unassigned lead follow-up{unassignedLeadFollowUps.length === 1 ? '' : 's'}
+                  {unassignedFacebookFollowUps.length ? ` · ${unassignedFacebookFollowUps.length} Facebook` : ''}
+                </span>
+                <button className="btn btn-sm" type="button" onClick={showUnassignedLeadFollowUps}>
+                  <ListTodo size={14} />
+                  View unassigned
+                </button>
+              </div>
+            )}
             {canReviewTaskRemovalApprovalTasks && (
               <button
                 className={`btn btn-sm ${filters.taskType === 'task_removal_approval' ? 'btn-primary' : ''}`}
@@ -1858,7 +1856,6 @@ export default function FollowUpQueuePage() {
           {filteredTasks.map((task) => {
             const key = dateKey(task.dueAt);
             const isOverdue = key && key < todayKey() && !isTaskClosed(task);
-            const isToday = key === todayKey() && !isTaskClosed(task);
             const assignee = visibleAssignees.find((user) => user.id === task.ownerUserId);
             const isArchiveApprovalTask = task.taskType === 'archive_approval';
             const isTaskRemovalApprovalTask = task.taskType === 'task_removal_approval';
@@ -1873,7 +1870,7 @@ export default function FollowUpQueuePage() {
               !removalApprovalPending &&
               cancellationPolicy.decision !== TASK_CANCELLATION_DECISIONS.FORBIDDEN;
             return (
-              <article key={task.id} className={`${s.queueItem} ${isTaskRemovalApprovalTask ? s.queueItemApproval : ''} ${isOverdue ? s.queueItemOverdue : ''} ${isToday ? s.queueItemToday : ''}`}>
+              <article key={task.id} className={`${s.queueItem} ${isTaskRemovalApprovalTask ? s.queueItemApproval : ''}`}>
                 <div>
                   <Link className={`${s.taskTitle} ${s.taskTitleLink}`} href={`/tasks/${encodeURIComponent(task.id)}`}>
                     {task.title}
@@ -1889,7 +1886,9 @@ export default function FollowUpQueuePage() {
                     </div>
                   )}
                   <div className={s.metaLine}>
-                    <span className={`badge ${taskBadgeClass(task)}`}>{titleCase(task.status)}</span>
+                    {task.status !== 'open' && (
+                      <span className={`badge ${taskBadgeClass(task)}`}>{titleCase(task.status)}</span>
+                    )}
                     <span className={`badge badge-${task.priority}`}>{titleCase(task.priority)}</span>
                     <span className="badge badge-draft">{titleCase(task.taskType)}</span>
                     {task.recurrence && <span className="badge badge-pending">{recurrenceLabel(task.recurrence)}</span>}
@@ -1977,7 +1976,7 @@ export default function FollowUpQueuePage() {
                   )}
                   {task.taskType === 'follow_up' && !isTaskClosed(task) && (
                     <button
-                      className="btn btn-sm btn-primary"
+                      className={`btn btn-sm ${s.outcomeAction}`}
                       type="button"
                       disabled={!access.canWriteCrm || busyTaskId === task.id}
                       onClick={(event) => toggleFollowUpCompletion(task.id, event.currentTarget)}

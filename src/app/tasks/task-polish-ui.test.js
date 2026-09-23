@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const tasksSource = fs.readFileSync(new URL('./page.js', import.meta.url), 'utf8');
 const taskDetailSource = fs.readFileSync(new URL('./[id]/page.js', import.meta.url), 'utf8');
+const taskStyles = fs.readFileSync(new URL('./FollowUpQueue.module.css', import.meta.url), 'utf8');
 const globalStyles = fs.readFileSync(new URL('../globals.css', import.meta.url), 'utf8');
 
 test('Task Detail uses the shared notification safe area', () => {
@@ -76,14 +77,28 @@ test('task queue default chrome reflects only user-controlled filters', () => {
   assert.doesNotMatch(tasksSource, /className=\{s\.queueSubtitle\}/);
 });
 
-test('task workload metrics use one neutral read-only strip', () => {
-  assert.match(tasksSource, /<dl className=\{s\.summaryStrip\} aria-label="Task workload summary">/);
+test('task workload metrics are integrated into the queue header', () => {
+  assert.match(tasksSource, /<div className=\{s\.queueHeaderMain\}>[\s\S]*?<dl className=\{s\.queueMetrics\} aria-label="Task workload summary">/);
   assert.match(tasksSource, /<dt className=\{s\.summaryLabel\}>Due Now<\/dt>/);
   assert.match(tasksSource, /<dt className=\{s\.summaryLabel\}>Due Today<\/dt>/);
   assert.match(tasksSource, /<dt className=\{s\.summaryLabel\}>Overdue<\/dt>/);
   assert.match(tasksSource, /<dt className=\{s\.summaryLabel\}>Done Today<\/dt>/);
   assert.match(tasksSource, /stats\.overdue > 0 \? s\.summaryValueOverdue : ''/);
-  assert.doesNotMatch(tasksSource, /summaryTile(Current|Today|Overdue|Completed)/);
+  assert.doesNotMatch(tasksSource, /summaryStrip|summaryTile(Current|Today|Overdue|Completed)/);
+});
+
+test('task queue uses one flat work surface and secondary contextual actions', () => {
+  assert.match(tasksSource, /<div className=\{s\.queueAlert\}>/);
+  assert.match(tasksSource, /<button className="btn btn-sm" type="button" onClick=\{showUnassignedLeadFollowUps\}>/);
+  assert.doesNotMatch(tasksSource, /className=\{s\.intakeAlert\}/);
+  assert.match(tasksSource, /task\.status !== 'open' && \(/);
+  assert.match(tasksSource, /className=\{`btn btn-sm \$\{s\.outcomeAction\}`\}/);
+  assert.doesNotMatch(tasksSource, /className="btn btn-sm btn-primary"[\s\S]{0,180}Log outcome/);
+  assert.doesNotMatch(tasksSource, /queueItemOverdue|queueItemToday/);
+  assert.match(taskStyles, /\.queueShell\s*\{[^}]*margin: 0 -20px;[^}]*border-bottom:/s);
+  assert.match(taskStyles, /\.queueItem\s*\{[^}]*background: transparent;[^}]*border-top:/s);
+  assert.match(taskStyles, /\.outcomeAction\s*\{[^}]*color: var\(--accent\)/s);
+  assert.doesNotMatch(taskStyles, /\.queueItem(Overdue|Today)\b/);
 });
 
 test('Task Detail is outcome-first and keeps advanced controls deliberate', () => {
