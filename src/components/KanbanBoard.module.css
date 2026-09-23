@@ -326,7 +326,7 @@
   color: var(--text-primary);
 }
 
-@media (hover: none), (pointer: coarse) {
+@media (pointer: coarse) {
   .cardMoveDesktop {
     opacity: 1;
     pointer-events: auto;

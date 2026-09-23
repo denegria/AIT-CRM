@@ -52,7 +52,8 @@ test('desktop cards expose a keyboard-operable move control without repeating th
   assert.match(boardSource, /normalizedColumns\.filter\(\(column\) => column\.id !== item\.status\)/);
   assert.match(boardStyles, /\.cardMoveDesktop \{[\s\S]*?opacity: 0;[\s\S]*?pointer-events: none;/);
   assert.match(boardStyles, /\.kanbanCard:hover \.cardMoveDesktop,[\s\S]*?\.kanbanCard:focus-within \.cardMoveDesktop \{[\s\S]*?opacity: 1;[\s\S]*?pointer-events: auto;/);
-  assert.match(boardStyles, /@media \(hover: none\), \(pointer: coarse\) \{[\s\S]*?\.cardMoveDesktop \{[\s\S]*?opacity: 1;/);
+  assert.match(boardStyles, /@media \(pointer: coarse\) \{[\s\S]*?\.cardMoveDesktop \{[\s\S]*?opacity: 1;/);
+  assert.doesNotMatch(boardStyles, /@media \(hover: none\)/);
 });
 
 test('pipeline cards remove repeated metadata without hiding operational context', () => {
