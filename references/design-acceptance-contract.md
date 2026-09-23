@@ -26,6 +26,30 @@
 - Authenticated live staging at `1920 x 1080` and `1536 x 960`.
 - Prove the three-control row hierarchy, secondary-filter disclosure, truthful contact state, outcome-first Task Detail, owner assignment affordance, no overflow/browser errors, and GET-only visual QA.
 
+# MIS-426 Tasks Final Cleanup — 2026-09-23
+
+## Workflow and problem
+
+- The accepted Tasks workflow is functionally complete, but its default queue still looks filtered because the globally locked division counts toward the secondary-filter badge.
+- Result count and division scope repeat in the page and queue headers; Reset appears before any employee-controlled filter changes; and `Show queue` does not name the unassigned view it opens.
+
+## Interaction model and visual direction
+
+- The page header owns result count and division scope. The queue header identifies the work area without repeating them.
+- The Filters badge counts only Status, Link, and a business-unit choice when the global route is not already locked to one division.
+- A fixed route division is omitted from secondary filters. Reset appears only after a user-controlled filter differs from its default.
+- The unassigned alert action says `View unassigned`.
+
+## Locked behavior and non-goals
+
+- Preserve workload metrics, Due/Owner/Task Type filters, Status/Link behavior, all-division business-unit filtering, row actions, inline assignment, cancellation approvals, task counts, Task Detail, permissions, and mutations.
+- No backend, API, schema, RBAC, data, metric-tile interaction, row/detail redesign, or production change.
+
+## Acceptance evidence
+
+- Primary: authenticated live staging at `1920 x 1080`; regression: `1536 x 960`.
+- Prove no phantom default badge, no duplicate queue count/division copy, contextual Reset visibility, truthful `View unassigned`, zero overflow/browser errors, and GET-only QA.
+
 # MIS-426 Pipeline Card Information Polish — 2026-09-23
 
 ## Workflow and problem

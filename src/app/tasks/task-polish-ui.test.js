@@ -63,6 +63,19 @@ test('task queue consolidates filters and row actions without removing workflow 
   assert.match(tasksSource, />\s*More\s*</);
 });
 
+test('task queue default chrome reflects only user-controlled filters', () => {
+  assert.match(tasksSource, /const secondaryFilterCount = \[/);
+  assert.match(tasksSource, /const businessUnitFilterIsUserControlled = !currentBusinessUnitId/);
+  assert.match(tasksSource, /const hasUserControlledFilters = filters\.due !== 'open'/);
+  assert.match(tasksSource, /secondaryFilterCount > 0 && \(/);
+  assert.match(tasksSource, /!currentBusinessUnitId && \(/);
+  assert.match(tasksSource, /hasUserControlledFilters && \(\s*<button className="btn btn-sm"/s);
+  assert.match(tasksSource, />\s*View unassigned\s*</);
+  assert.doesNotMatch(tasksSource, />\s*Show queue\s*</);
+  assert.doesNotMatch(tasksSource, /className=\{s\.queueCount\}/);
+  assert.doesNotMatch(tasksSource, /className=\{s\.queueSubtitle\}/);
+});
+
 test('Task Detail is outcome-first and keeps advanced controls deliberate', () => {
   assert.match(taskDetailSource, /function followUpHref\(task\)/);
   assert.match(taskDetailSource, /action: 'log-follow-up'/);

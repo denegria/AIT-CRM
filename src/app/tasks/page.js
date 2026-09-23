@@ -1385,6 +1385,19 @@ export default function FollowUpQueuePage() {
     status: 'all',
     link: 'all',
   });
+  const defaultOwnerFilter = lockedTaskOwnerFilter || 'all';
+  const defaultBusinessUnitFilter = routeBusinessUnitFilterForGlobalScope(currentBusinessUnitId);
+  const businessUnitFilterIsUserControlled = !currentBusinessUnitId
+    && filters.businessUnitId !== defaultBusinessUnitFilter;
+  const secondaryFilterCount = [
+    filters.status !== 'all',
+    filters.link !== 'all',
+    businessUnitFilterIsUserControlled,
+  ].filter(Boolean).length;
+  const hasUserControlledFilters = filters.due !== 'open'
+    || filters.ownerUserId !== defaultOwnerFilter
+    || filters.taskType !== 'all'
+    || secondaryFilterCount > 0;
   const showCancellationApprovals = () => setFilters((current) => ({
     ...current,
     due: 'open',
@@ -1457,7 +1470,7 @@ export default function FollowUpQueuePage() {
       <div className={`page-header ${s.pageHeader}`}>
         <div>
           <h1 className="page-title">Tasks</h1>
-          <p className="page-subtitle">
+          <p className="page-subtitle" aria-live="polite">
             {currentBusinessUnit?.name || `All ${scopeLabel}`} · {filteredTasks.length} shown · {completedTodayTasks.length} done today
           </p>
         </div>
@@ -1704,17 +1717,13 @@ export default function FollowUpQueuePage() {
             </div>
             <button className="btn btn-sm btn-primary" type="button" onClick={showUnassignedLeadFollowUps}>
               <ListTodo size={14} />
-              Show queue
+              View unassigned
             </button>
           </div>
         )}
         <div className={s.queueHeader}>
-          <div>
-            <span className={s.sectionEyebrow}>Work queue</span>
-            <p className={s.queueSubtitle}>{activeTaskScope}</p>
-          </div>
+          <span className={s.sectionEyebrow}>Work queue</span>
           <div className={s.queueHeaderActions}>
-            <span className={s.queueCount} aria-live="polite">{loading ? 'Loading tasks' : `${filteredTasks.length} shown`}</span>
             {canReviewTaskRemovalApprovalTasks && (
               <button
                 className={`btn btn-sm ${filters.taskType === 'task_removal_approval' ? 'btn-primary' : ''}`}
@@ -1725,10 +1734,12 @@ export default function FollowUpQueuePage() {
                 Cancellation Approvals
               </button>
             )}
-            <button className="btn btn-sm" type="button" onClick={resetFilters}>
-              <FilterX size={14} />
-              Reset
-            </button>
+            {hasUserControlledFilters && (
+              <button className="btn btn-sm" type="button" onClick={resetFilters}>
+                <FilterX size={14} />
+                Reset
+              </button>
+            )}
           </div>
         </div>
         <div className={s.toolbar}>
@@ -1773,8 +1784,8 @@ export default function FollowUpQueuePage() {
           >
             <SlidersHorizontal size={14} />
             Filters
-            {[filters.status !== 'all', filters.link !== 'all', filters.businessUnitId !== 'all'].filter(Boolean).length > 0 && (
-              <span className={s.filterCount}>{[filters.status !== 'all', filters.link !== 'all', filters.businessUnitId !== 'all'].filter(Boolean).length}</span>
+            {secondaryFilterCount > 0 && (
+              <span className={s.filterCount}>{secondaryFilterCount}</span>
             )}
           </button>
         </div>
@@ -1792,13 +1803,15 @@ export default function FollowUpQueuePage() {
                 {LINK_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </label>
-            <label className={s.filterGroup}>
-              <span className="form-label">{scopeLabel}</span>
-              <select className="select" value={filters.businessUnitId} onChange={(event) => setFilters((prev) => ({ ...prev, businessUnitId: event.target.value }))}>
-                <option value="all">All {scopeLabel}</option>
-                {accessibleBusinessUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
-              </select>
-            </label>
+            {!currentBusinessUnitId && (
+              <label className={s.filterGroup}>
+                <span className="form-label">{scopeLabel}</span>
+                <select className="select" value={filters.businessUnitId} onChange={(event) => setFilters((prev) => ({ ...prev, businessUnitId: event.target.value }))}>
+                  <option value="all">All {scopeLabel}</option>
+                  {accessibleBusinessUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+                </select>
+              </label>
+            )}
           </div>
         )}
 
@@ -1823,7 +1836,7 @@ export default function FollowUpQueuePage() {
                 : `${activeTaskScope} is hiding every loaded task.`}
             </p>
             <div className={s.emptyActions}>
-              {queueTasks.length > 0 && (
+              {queueTasks.length > 0 && hasUserControlledFilters && (
                 <button className="btn btn-primary" type="button" onClick={resetFilters}>
                   <FilterX size={14} />
                   Reset Filters
