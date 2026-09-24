@@ -1,5 +1,14 @@
 # MIS-426 Tasks Workflow Consolidation — 2026-09-23
 
+## Final desktop and role clarity addendum — 2026-09-24
+
+- **Employee job:** scan the authorized task queue, recognize active due filters and ownership, then understand urgency before logging an outcome on Detail.
+- **Reference mode and direction:** inspiration from the accepted Tasks/Contacts/Pipeline design system. Retain the existing queue composition and focused Detail column; clarify state with compact control styling and plain language, not a new panel or filter row.
+- **Role/state contract:** regular coordinators see “My tasks” for their owner-scoped queue; seniors keep “Work queue” for their authorized division. Only senior assignment controls show “Unassigned” as their empty state. Due metrics count only tasks already returned by the scoped API. Existing assignment, cancellation, approval, and data-access policy is unchanged.
+- **Detail urgency:** an open task due before the current UTC date shows “Overdue by N day(s)” beside its exact due timestamp. Due-today, future, missing-date, and closed tasks show no overdue cue. Text, not color alone, carries the state.
+- **Viewports and invariants:** primary desktop 1536×960 CSS pixels; regressions 1920×1080 and 390×844. Keep the queue toolbar, reading order, 900px Detail width, typography family, spacing rhythm, and responsive stacking intact. Long owner names and dates must wrap without overflow.
+- **Evidence and non-goals:** focused visibility/role tests, lint and webpack build, plus authenticated read-only staging captures for both roles when available. No new permissions, task states, DB writes, production promotion, mobile queue redesign, or global page-inset change.
+
 ## Tasks follow-up addendum — 2026-09-24
 
 - **Employee job:** move from a scoped task queue into Task Detail, record a follow-up outcome or cancel, and return to the same division and useful queue filters without hunting for the task again.

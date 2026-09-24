@@ -9,6 +9,7 @@ import {
   isTaskUpcoming,
   taskMatchesDueView,
   taskDueKey,
+  taskOverdueAgeLabel,
 } from './visibility.js';
 
 const today = '2026-06-13';
@@ -18,6 +19,14 @@ test('current work includes open tasks due today or earlier', () => {
   assert.equal(isTaskCurrentWork({ status: 'in_progress', dueAt: '2026-06-12T09:00:00.000Z' }, today), true);
   assert.equal(isTaskDueToday({ status: 'open', dueDate: '2026-06-13' }, today), true);
   assert.equal(isTaskOverdue({ status: 'open', dueAt: '2026-06-12T09:00:00.000Z' }, today), true);
+});
+
+test('overdue age is explicit only for open overdue tasks', () => {
+  assert.equal(taskOverdueAgeLabel({ status: 'open', dueDate: '2026-06-12' }, today), 'Overdue by 1 day');
+  assert.equal(taskOverdueAgeLabel({ status: 'snoozed', dueDate: '2026-06-10' }, today), 'Overdue by 3 days');
+  assert.equal(taskOverdueAgeLabel({ status: 'open', dueDate: today }, today), '');
+  assert.equal(taskOverdueAgeLabel({ status: 'completed', dueDate: '2026-06-10' }, today), '');
+  assert.equal(taskOverdueAgeLabel({ status: 'open' }, today), '');
 });
 
 test('next recurring occurrence is upcoming, not current work', () => {

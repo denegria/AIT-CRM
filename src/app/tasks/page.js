@@ -1718,10 +1718,10 @@ export default function FollowUpQueuePage() {
         </form>
       </Modal>
 
-      <section className={`card ${s.queueSurface}`} aria-label="Task queue">
+      <section className={`card ${s.queueSurface}`} aria-label={coordinatorUiPolicy.ownerScoped ? 'My tasks' : 'Task queue'}>
         <div className={s.queueHeader}>
           <div className={s.queueHeaderMain}>
-            <span className={s.sectionEyebrow}>Work queue</span>
+            <span className={s.sectionEyebrow}>{coordinatorUiPolicy.ownerScoped ? 'My tasks' : 'Work queue'}</span>
             <div className={s.queueMetrics} aria-label="Task workload summary">
               {[
                 ['work', 'Due Now', stats.currentWork],
@@ -1987,7 +1987,7 @@ export default function FollowUpQueuePage() {
                       disabled={!access.canWriteCrm || busyTaskId === task.id}
                       onChange={(event) => applyTaskAction(task, 'assign', { ownerUserId: event.target.value || null })}
                     >
-                      <option value="" disabled>Select owner</option>
+                      <option value="" disabled>Unassigned</option>
                       {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
                     </select>
                   ) : (
@@ -2169,7 +2169,7 @@ export default function FollowUpQueuePage() {
                       <label>
                         <span className="form-label">Owner</span>
                         <select className="select" value={editDraft.ownerUserId} disabled={editBusy} onChange={(event) => updateEditDraft({ ownerUserId: event.target.value })}>
-                          <option value="" disabled>Select owner</option>
+                          <option value="" disabled>Unassigned</option>
                           {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
                         </select>
                       </label>

@@ -27,6 +27,7 @@ import {
 } from '@/lib/tasks/cancellation-policy.js';
 import { followUpTaskEntryHref } from '@/lib/tasks/follow-up-selection.js';
 import { taskQueueReturnHref } from '@/lib/tasks/queue-navigation.js';
+import { taskOverdueAgeLabel } from '@/lib/tasks/visibility.js';
 import {
   canReviewTaskRemovalApprovals,
   taskRemovalApprovalState,
@@ -169,6 +170,7 @@ export default function TaskDetailPage() {
   }, [access.canReadCrm, accessibleBusinessUnits, dataSource, employees, loaded, taskId, tasks, visibleContacts]);
 
   const task = detail?.task || null;
+  const overdueAgeLabel = task ? taskOverdueAgeLabel(task) : '';
   const returnTo = taskQueueReturnHref(searchParams.get('returnTo') || '', task?.businessUnitId || '');
   const alignTaskDivision = () => {
     if (task?.businessUnitId) setCurrentBusinessUnitId(task.businessUnitId);
@@ -491,7 +493,10 @@ export default function TaskDetailPage() {
             <div className={s.workFacts}>
               <div className={s.workFact}>
                 <span className={s.metadataLabel}>Due</span>
-                <span className={s.metadataValue}>{formatDateTime(task.dueAt)}</span>
+                <span className={s.dueValue}>
+                  <span className={s.metadataValue}>{formatDateTime(task.dueAt)}</span>
+                  {overdueAgeLabel && <span className={s.overdueCue}>{overdueAgeLabel}</span>}
+                </span>
               </div>
               <div className={s.workFact}>
                 <span className={s.metadataLabel}>Owner</span>
@@ -503,7 +508,7 @@ export default function TaskDetailPage() {
                     disabled={assignmentBusy || !access.canWriteCrm}
                     onChange={(event) => assignTask(event.target.value)}
                   >
-                    <option value="" disabled>Select owner</option>
+                    <option value="" disabled>Unassigned</option>
                     {assignableEmployees.map((employee) => (
                       <option key={employee.id} value={employee.id}>{employee.name || employee.email}</option>
                     ))}

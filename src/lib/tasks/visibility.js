@@ -37,6 +37,13 @@ export function isTaskOverdue(task = {}, today = taskDateKey(new Date())) {
   return isTaskOpen(task) && Boolean(due) && due < today;
 }
 
+export function taskOverdueAgeLabel(task = {}, today = taskDateKey(new Date())) {
+  if (!isTaskOverdue(task, today)) return '';
+  const days = Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${taskDueKey(task)}T00:00:00Z`)) / 86400000);
+  if (!Number.isFinite(days) || days < 1) return '';
+  return `Overdue by ${days} day${days === 1 ? '' : 's'}`;
+}
+
 export function isTaskUpcoming(task = {}, today = taskDateKey(new Date())) {
   const due = taskDueKey(task);
   return isTaskOpen(task) && Boolean(due) && due > today;

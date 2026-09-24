@@ -21,9 +21,9 @@
   width: 100%;
   min-height: 32px;
   padding: 0 12px;
-  border: 0;
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  background: transparent;
+  background: var(--bg-primary);
   text-align: left;
   cursor: pointer;
 }
@@ -31,6 +31,12 @@
 .summaryMetricButton:hover:not(:disabled),
 .summaryMetricButtonActive {
   background: var(--accent-muted);
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--border-subtle));
+}
+
+.summaryMetricButtonActive .summaryLabel,
+.summaryMetricButtonActive .summaryValue:not(.summaryValueOverdue) {
+  color: var(--accent);
 }
 
 .summaryMetricButton:focus-visible {
@@ -39,6 +45,8 @@
 }
 
 .summaryMetricButton:disabled {
+  border-color: transparent;
+  background: transparent;
   cursor: default;
 }
 
