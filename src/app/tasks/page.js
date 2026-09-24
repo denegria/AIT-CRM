@@ -1418,6 +1418,9 @@ export default function FollowUpQueuePage() {
     || filters.ownerUserId !== defaultOwnerFilter
     || filters.taskType !== 'all'
     || secondaryFilterCount > 0;
+  const closedOnlyDefaultView = queueTasks.length > 0
+    && !hasUserControlledFilters
+    && queueTasks.every(isTaskClosed);
   const showCancellationApprovals = () => setFilters((current) => ({
     ...current,
     due: 'open',
@@ -1446,6 +1449,15 @@ export default function FollowUpQueuePage() {
     if (filters.link !== 'all') parts.push(optionLabel(LINK_OPTIONS, filters.link));
     return parts.filter(Boolean).join(' · ');
   })();
+  let emptyQueueTitle = 'No tasks match the current filters';
+  let emptyQueueCopy = `${activeTaskScope} is hiding every loaded task.`;
+  if (closedOnlyDefaultView) {
+    emptyQueueTitle = coordinatorUiPolicy.ownerScoped ? 'No open tasks assigned to you' : 'No open tasks in this scope';
+    emptyQueueCopy = 'Choose All Tasks in Due to review closed tasks.';
+  } else if (queueTasks.length === 0) {
+    emptyQueueTitle = 'No tasks in this scope';
+    emptyQueueCopy = `There are no tasks available for ${activeTaskScope}.`;
+  }
   const archiveDecisionTaskId = Object.keys(archiveDecisionDrafts)[0] || '';
   const activeArchiveDecisionDraft = archiveDecisionTaskId ? archiveDecisionDrafts[archiveDecisionTaskId] : null;
   const activeArchiveDecisionTask = archiveDecisionTaskId
@@ -1872,12 +1884,10 @@ export default function FollowUpQueuePage() {
         {!loading && !error && filteredTasks.length === 0 && (
           <div className={`empty-state ${s.recoveryState}`}>
             <div className={s.emptyTitle}>
-              {queueTasks.length === 0 ? 'No tasks in this scope' : 'No tasks match the current filters'}
+              {emptyQueueTitle}
             </div>
             <p className={s.emptyCopy}>
-              {queueTasks.length === 0
-                ? `There are no tasks available for ${activeTaskScope}.`
-                : `${activeTaskScope} is hiding every loaded task.`}
+              {emptyQueueCopy}
             </p>
             <div className={s.emptyActions}>
               {queueTasks.length > 0 && hasUserControlledFilters && (
