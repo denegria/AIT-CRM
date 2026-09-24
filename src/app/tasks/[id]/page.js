@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
-  CalendarClock,
   CheckCircle2,
   CheckSquare,
   ExternalLink,
@@ -346,18 +345,6 @@ export default function TaskDetailPage() {
               </button>
             </>
           )}
-          {canLogOutcome && (
-            <Link className="btn btn-sm btn-primary" href={followUpTaskEntryHref(task, { returnTo })} onClick={alignTaskDivision}>
-              <CheckCircle2 size={14} />
-              Log outcome
-            </Link>
-          )}
-          {context.contact?.id && (
-            <Link className="btn btn-sm" href={`/contacts/${encodeURIComponent(context.contact.id)}`}>
-              <ExternalLink size={14} />
-              Contact
-            </Link>
-          )}
           {canCancelTask && (
             <details className={s.moreMenu}>
               <summary className="btn btn-sm">
@@ -392,8 +379,7 @@ export default function TaskDetailPage() {
         <p className={s.subtitle}>{headerSubtitle}</p>
       </div>
 
-      <div className={s.layout}>
-        <main className={s.mainStack}>
+      <main className={s.mainStack}>
           {!isTaskRemovalApproval && removalApproval && (
             <section className={`${s.statusPanel} ${cancellationPending ? s.statusPanelPending : ''}`}>
               <div className={s.statusIcon}><ShieldAlert size={20} /></div>
@@ -444,16 +430,16 @@ export default function TaskDetailPage() {
             </section>
           )}
 
-          <section className={s.panel}>
-            <h2 className={s.panelTitle}><CheckSquare size={17} /> What needs doing</h2>
+          <section className={s.panel} aria-labelledby="task-briefing-title">
+            <h2 className={s.panelTitle} id="task-briefing-title"><CheckSquare size={17} /> What needs doing</h2>
             {task.description ? (
               <p className={s.description}>{task.description}</p>
             ) : (
               <div className={s.empty}>No description has been added.</div>
             )}
-            <div className={s.workFacts}>
-              <div className={s.workFact}>
-                <span className={s.metadataLabel}>Contact</span>
+            <div className={s.contactRow}>
+              <span className={s.metadataLabel}>Who this concerns</span>
+              <div className={s.contactIdentity}>
                 {context.contact?.id ? (
                   <>
                     <Link className={s.workFactLink} href={`/contacts/${encodeURIComponent(context.contact.id)}`}>
@@ -465,71 +451,9 @@ export default function TaskDetailPage() {
                   <span className={s.metadataValue}>No contact linked</span>
                 )}
               </div>
-              <div className={s.workFact}>
-                <span className={s.metadataLabel}>Due</span>
-                <span className={s.metadataValue}>{formatDateTime(task.dueAt)}</span>
-              </div>
-              <div className={s.workFact}>
-                <span className={s.metadataLabel}>Owner</span>
-                {coordinatorUiPolicy.canManageCoordinatorAssignments && !isTaskRemovalApproval ? (
-                  <select
-                    className={`select ${s.ownerSelect}`}
-                    aria-label="Task owner"
-                    value={task.ownerUserId || ''}
-                    disabled={assignmentBusy || !access.canWriteCrm}
-                    onChange={(event) => assignTask(event.target.value)}
-                  >
-                    <option value="" disabled>Select owner</option>
-                    {assignableEmployees.map((employee) => (
-                      <option key={employee.id} value={employee.id}>{employee.name || employee.email}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <span className={s.metadataValue}>{ownerLabel}</span>
-                )}
-              </div>
             </div>
-          </section>
-
-          <section className={s.panel}>
-            <h2 className={s.panelTitle}><History size={17} /> History</h2>
-            {events.length ? (
-              <div className={s.timeline}>
-                {events.map((event) => (
-                  <div key={event.id} className={s.eventItem}>
-                    <span className={s.eventDot}><History size={14} /></span>
-                    <div className={s.eventBody}>
-                      <div className={s.eventTitle}>{event.message || titleCase(event.eventType)}</div>
-                      <div className={s.eventMeta}>
-                        {formatDateTime(event.occurredAt)}
-                        {event.actor?.name || event.actor?.email ? ` by ${event.actor.name || event.actor.email}` : ''}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className={s.empty}>No task events yet.</div>
-            )}
-          </section>
-        </main>
-
-        <aside className={s.sideStack}>
-          <section className={s.panel}>
-            <h2 className={s.panelTitle}><CalendarClock size={17} /> Details</h2>
-            <dl className={s.detailsList}>
-              <div><dt>Type</dt><dd>{titleCase(task.taskType)}</dd></div>
-              <div><dt>Source</dt><dd>{task.sourceLabel || task.sourceType || 'Manual'}</dd></div>
-              <div><dt>Created by</dt><dd>{createdByLabel}</dd></div>
-              <div><dt>Created</dt><dd>{formatDateTime(task.createdAt)}</dd></div>
-              <div><dt>Updated</dt><dd>{formatDateTime(task.updatedAt)}</dd></div>
-            </dl>
-          </section>
-
-          {(context.lead || context.workOrder || task.placementReviewLink) && (
-            <section className={s.panel}>
-              <h2 className={s.panelTitle}>Related work</h2>
-              <div className={s.contextGrid}>
+            {(context.lead || context.workOrder || task.placementReviewLink) && (
+              <div className={s.contextGrid} aria-label="Related work">
                 {context.lead && (
                   <div className={s.contextCard}>
                     <span className={s.contextTitle}>Lead</span>
@@ -563,10 +487,73 @@ export default function TaskDetailPage() {
                   </div>
                 )}
               </div>
-            </section>
-          )}
-        </aside>
-      </div>
+            )}
+            <div className={s.workFacts}>
+              <div className={s.workFact}>
+                <span className={s.metadataLabel}>Due</span>
+                <span className={s.metadataValue}>{formatDateTime(task.dueAt)}</span>
+              </div>
+              <div className={s.workFact}>
+                <span className={s.metadataLabel}>Owner</span>
+                {coordinatorUiPolicy.canManageCoordinatorAssignments && !isTaskRemovalApproval ? (
+                  <select
+                    className={`select ${s.ownerSelect}`}
+                    aria-label="Task owner"
+                    value={task.ownerUserId || ''}
+                    disabled={assignmentBusy || !access.canWriteCrm}
+                    onChange={(event) => assignTask(event.target.value)}
+                  >
+                    <option value="" disabled>Select owner</option>
+                    {assignableEmployees.map((employee) => (
+                      <option key={employee.id} value={employee.id}>{employee.name || employee.email}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className={s.metadataValue}>{ownerLabel}</span>
+                )}
+              </div>
+            </div>
+            {canLogOutcome && (
+              <div className={s.actionBand}>
+                <Link className="btn btn-primary" href={followUpTaskEntryHref(task, { returnTo })} onClick={alignTaskDivision}>
+                  <CheckCircle2 size={16} /> Log outcome
+                </Link>
+              </div>
+            )}
+          </section>
+
+          <section className={s.panel}>
+            <h2 className={s.panelTitle}><History size={17} /> History</h2>
+            {events.length ? (
+              <div className={s.timeline}>
+                {events.map((event) => (
+                  <div key={event.id} className={s.eventItem}>
+                    <span className={s.eventDot}><History size={14} /></span>
+                    <div className={s.eventBody}>
+                      <div className={s.eventTitle}>{event.message || titleCase(event.eventType)}</div>
+                      <div className={s.eventMeta}>
+                        {formatDateTime(event.occurredAt)}
+                        {event.actor?.name || event.actor?.email ? ` by ${event.actor.name || event.actor.email}` : ''}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className={s.empty}>No task events yet.</div>
+            )}
+          </section>
+          <details className={s.recordDetails}>
+            <summary>Record details</summary>
+            <dl className={s.detailsList}>
+              <div><dt>Type</dt><dd>{titleCase(task.taskType)}</dd></div>
+              <div><dt>Source</dt><dd>{task.sourceLabel || task.sourceType || 'Manual'}</dd></div>
+              <div><dt>Created by</dt><dd>{createdByLabel}</dd></div>
+              <div><dt>Created</dt><dd>{formatDateTime(task.createdAt)}</dd></div>
+              <div><dt>Updated</dt><dd>{formatDateTime(task.updatedAt)}</dd></div>
+            </dl>
+          </details>
+      </main>
 
       <TaskCancellationDialog
         open={cancellationOpen && canCancelTask}

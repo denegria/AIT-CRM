@@ -98,22 +98,15 @@
   justify-content: flex-start;
 }
 
-.layout {
+.mainStack {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 340px;
   gap: 16px;
-  align-items: start;
-}
-
-.mainStack,
-.sideStack {
-  display: grid;
-  gap: 12px;
+  width: min(100%, 900px);
   min-width: 0;
 }
 
 .panel {
-  padding: 16px;
+  padding: 20px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
   background: var(--bg-secondary);
@@ -247,18 +240,35 @@
 
 .description {
   margin: 0;
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  line-height: 1.55;
+  color: var(--text-primary);
+  font-size: var(--text-md);
+  line-height: 1.6;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.contactRow {
+  display: grid;
+  grid-template-columns: 135px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.contactIdentity {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
 }
 
 .workFacts {
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14px;
-  margin-top: 18px;
-  padding-top: 14px;
+  margin-top: 22px;
+  padding-top: 18px;
   border-top: 1px solid var(--border-subtle);
 }
 
@@ -300,6 +310,37 @@
   overflow-wrap: anywhere;
 }
 
+.actionBand {
+  display: flex;
+  align-items: center;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.actionBand :global(.btn) {
+  min-height: 40px;
+}
+
+.recordDetails {
+  padding: 14px 20px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.recordDetails > summary {
+  cursor: pointer;
+  font-weight: 690;
+}
+
+.recordDetails[open] > summary {
+  margin-bottom: 14px;
+  color: var(--text-primary);
+}
+
 .detailsList {
   display: grid;
   gap: 0;
@@ -338,22 +379,6 @@
   overflow-wrap: anywhere;
 }
 
-.metadataGrid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-}
-
-.metadataItem {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  padding: 10px;
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--bg-primary) 78%, var(--bg-secondary));
-}
-
 .metadataLabel {
   color: var(--text-muted);
   font-size: var(--text-xs);
@@ -380,6 +405,7 @@
 .contextGrid {
   display: grid;
   gap: 10px;
+  margin-top: 16px;
 }
 
 .contextCard {
@@ -488,13 +514,16 @@
   color: var(--text-secondary);
 }
 
-@media (max-width: 960px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 620px) {
+  .panel {
+    padding: 16px;
+  }
+
+  .contactRow {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
   .workFacts {
     grid-template-columns: 1fr;
     gap: 10px;
@@ -505,10 +534,6 @@
     padding-left: 0;
     border-top: 1px solid var(--border-subtle);
     border-left: 0;
-  }
-
-  .metadataGrid {
-    grid-template-columns: 1fr;
   }
 
   .taskTitle {
