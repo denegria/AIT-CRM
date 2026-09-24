@@ -2,10 +2,9 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
-  BriefcaseBusiness,
   CalendarClock,
   CheckCircle2,
   CheckSquare,
@@ -13,7 +12,6 @@ import {
   History,
   MoreHorizontal,
   ShieldAlert,
-  User,
   X,
 } from 'lucide-react';
 import PageState, { PageStateAction } from '@/components/PageState';
@@ -28,7 +26,8 @@ import {
   TASK_CANCELLATION_DECISIONS,
   taskCancellationDecision,
 } from '@/lib/tasks/cancellation-policy.js';
-import { taskDateKey } from '@/lib/tasks/visibility.js';
+import { followUpTaskEntryHref } from '@/lib/tasks/follow-up-selection.js';
+import { taskQueueReturnHref } from '@/lib/tasks/queue-navigation.js';
 import {
   canReviewTaskRemovalApprovals,
   taskRemovalApprovalState,
@@ -51,18 +50,6 @@ function formatDateTime(value) {
     year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  }).format(date);
-}
-
-function formatDate(value) {
-  const key = taskDateKey(value);
-  if (!key) return 'Not set';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return key;
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
   }).format(date);
 }
 
@@ -104,18 +91,9 @@ function fallbackTaskDetail(task, contacts, employees, accessibleBusinessUnits) 
   };
 }
 
-function followUpHref(task) {
-  const params = new URLSearchParams({
-    action: 'log-follow-up',
-    taskId: task.id,
-    contactId: task.contactId || '',
-    leadId: task.leadId || '',
-  });
-  return `/tasks?${params.toString()}`;
-}
-
 export default function TaskDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const {
     access,
     dataSource,
@@ -125,6 +103,7 @@ export default function TaskDetailPage() {
     employees,
     accessibleBusinessUnits,
     currentUser,
+    setCurrentBusinessUnitId,
     loaded,
     scopeLabel,
   } = useCRM();
@@ -191,6 +170,10 @@ export default function TaskDetailPage() {
   }, [access.canReadCrm, accessibleBusinessUnits, dataSource, employees, loaded, taskId, tasks, visibleContacts]);
 
   const task = detail?.task || null;
+  const returnTo = taskQueueReturnHref(searchParams.get('returnTo') || '', task?.businessUnitId || '');
+  const alignTaskDivision = () => {
+    if (task?.businessUnitId) setCurrentBusinessUnitId(task.businessUnitId);
+  };
   const context = detail?.context || {};
   const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
   const assignableEmployees = useMemo(() => {
@@ -232,12 +215,8 @@ export default function TaskDetailPage() {
   const renderError = access.canReadCrm ? error : 'CRM read access is required.';
   const headerSubtitle = useMemo(() => {
     if (!task) return '';
-    return [
-      context.businessUnit?.name || scopeLabel,
-      ownerLabel,
-      task.dueAt ? `Due ${formatDate(task.dueAt)}` : 'No due date',
-    ].filter(Boolean).join(' - ');
-  }, [context.businessUnit?.name, ownerLabel, scopeLabel, task]);
+    return context.businessUnit?.name || scopeLabel;
+  }, [context.businessUnit?.name, scopeLabel, task]);
 
   async function submitCancellation() {
     const reason = String(cancellationReason || '').trim();
@@ -355,7 +334,7 @@ export default function TaskDetailPage() {
   return (
     <div className={s.detailShell}>
       <div className={`${s.topBar} app-notification-safe`}>
-        <Link className={s.backLink} href="/tasks"><ArrowLeft size={16} /> Back to tasks</Link>
+        <Link className={s.backLink} href={returnTo} onClick={alignTaskDivision}><ArrowLeft size={16} /> Back to tasks</Link>
         <div className={s.actionRow}>
           {canReviewRemovalApproval && (
             <>
@@ -368,7 +347,7 @@ export default function TaskDetailPage() {
             </>
           )}
           {canLogOutcome && (
-            <Link className="btn btn-sm btn-primary" href={followUpHref(task)}>
+            <Link className="btn btn-sm btn-primary" href={followUpTaskEntryHref(task, { returnTo })} onClick={alignTaskDivision}>
               <CheckCircle2 size={14} />
               Log outcome
             </Link>
@@ -466,12 +445,50 @@ export default function TaskDetailPage() {
           )}
 
           <section className={s.panel}>
-            <h2 className={s.panelTitle}><CheckSquare size={17} /> Task</h2>
+            <h2 className={s.panelTitle}><CheckSquare size={17} /> What needs doing</h2>
             {task.description ? (
               <p className={s.description}>{task.description}</p>
             ) : (
               <div className={s.empty}>No description has been added.</div>
             )}
+            <div className={s.workFacts}>
+              <div className={s.workFact}>
+                <span className={s.metadataLabel}>Contact</span>
+                {context.contact?.id ? (
+                  <>
+                    <Link className={s.workFactLink} href={`/contacts/${encodeURIComponent(context.contact.id)}`}>
+                      {context.contact.name || 'Linked contact'} <ExternalLink size={13} />
+                    </Link>
+                    <span className={s.workFactHint}>{context.contact.phone || context.contact.email || 'No contact channel'}</span>
+                  </>
+                ) : (
+                  <span className={s.metadataValue}>No contact linked</span>
+                )}
+              </div>
+              <div className={s.workFact}>
+                <span className={s.metadataLabel}>Due</span>
+                <span className={s.metadataValue}>{formatDateTime(task.dueAt)}</span>
+              </div>
+              <div className={s.workFact}>
+                <span className={s.metadataLabel}>Owner</span>
+                {coordinatorUiPolicy.canManageCoordinatorAssignments && !isTaskRemovalApproval ? (
+                  <select
+                    className={`select ${s.ownerSelect}`}
+                    aria-label="Task owner"
+                    value={task.ownerUserId || ''}
+                    disabled={assignmentBusy || !access.canWriteCrm}
+                    onChange={(event) => assignTask(event.target.value)}
+                  >
+                    <option value="" disabled>Select owner</option>
+                    {assignableEmployees.map((employee) => (
+                      <option key={employee.id} value={employee.id}>{employee.name || employee.email}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className={s.metadataValue}>{ownerLabel}</span>
+                )}
+              </div>
+            </div>
           </section>
 
           <section className={s.panel}>
@@ -499,119 +516,55 @@ export default function TaskDetailPage() {
 
         <aside className={s.sideStack}>
           <section className={s.panel}>
-            <h2 className={s.panelTitle}><CalendarClock size={17} /> Metadata</h2>
-            <div className={s.metadataGrid}>
-              <div className={s.metadataItem}>
-                <span className={s.metadataLabel}>Type</span>
-                <span className={s.metadataValue}>{titleCase(task.taskType)}</span>
-              </div>
-              <div className={s.metadataItem}>
-                <span className={s.metadataLabel}>Due</span>
-                <span className={s.metadataValue}>{formatDateTime(task.dueAt)}</span>
-              </div>
-              <div className={s.metadataItem}>
-                <span className={s.metadataLabel}>Owner</span>
-                {coordinatorUiPolicy.canManageCoordinatorAssignments && !isTaskRemovalApproval ? (
-                  <select
-                    className={`select ${s.ownerSelect}`}
-                    aria-label="Task owner"
-                    value={task.ownerUserId || ''}
-                    disabled={assignmentBusy || !access.canWriteCrm}
-                    onChange={(event) => assignTask(event.target.value)}
-                  >
-                    <option value="" disabled>Select owner</option>
-                    {assignableEmployees.map((employee) => (
-                      <option key={employee.id} value={employee.id}>{employee.name || employee.email}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <span className={s.metadataValue}>{ownerLabel}</span>
+            <h2 className={s.panelTitle}><CalendarClock size={17} /> Details</h2>
+            <dl className={s.detailsList}>
+              <div><dt>Type</dt><dd>{titleCase(task.taskType)}</dd></div>
+              <div><dt>Source</dt><dd>{task.sourceLabel || task.sourceType || 'Manual'}</dd></div>
+              <div><dt>Created by</dt><dd>{createdByLabel}</dd></div>
+              <div><dt>Created</dt><dd>{formatDateTime(task.createdAt)}</dd></div>
+              <div><dt>Updated</dt><dd>{formatDateTime(task.updatedAt)}</dd></div>
+            </dl>
+          </section>
+
+          {(context.lead || context.workOrder || task.placementReviewLink) && (
+            <section className={s.panel}>
+              <h2 className={s.panelTitle}>Related work</h2>
+              <div className={s.contextGrid}>
+                {context.lead && (
+                  <div className={s.contextCard}>
+                    <span className={s.contextTitle}>Lead</span>
+                    <span className={s.contextText}>
+                      {contextText([context.lead.currentStage || context.lead.status, context.lead.sourceName || context.lead.sourceType])}
+                    </span>
+                  </div>
+                )}
+                {context.workOrder && (
+                  <div className={s.contextCard}>
+                    <div className={s.contextHeader}>
+                      <span className={s.contextTitle}>{context.workOrder.title || context.workOrder.workOrderNumber || 'Work order'}</span>
+                      {context.workOrder.canOpen && (
+                        <Link className={s.contextLink} href={`/work-orders/${encodeURIComponent(context.workOrder.id)}`}>
+                          Open <ExternalLink size={12} />
+                        </Link>
+                      )}
+                    </div>
+                    <span className={s.contextText}>{titleCase(context.workOrder.status)}</span>
+                  </div>
+                )}
+                {task.placementReviewLink && (
+                  <div className={s.contextCard}>
+                    <div className={s.contextHeader}>
+                      <span className={s.contextTitle}>AIT USA placement review</span>
+                      <a className={s.contextLink} href={task.placementReviewLink} target="_blank" rel="noreferrer">
+                        Open AIT USA review <ExternalLink size={12} />
+                      </a>
+                    </div>
+                    <span className={s.contextText}>Opens the authorized AIT USA employee queue.</span>
+                  </div>
                 )}
               </div>
-              <div className={s.metadataItem}>
-                <span className={s.metadataLabel}>Created By</span>
-                <span className={s.metadataValue}>{createdByLabel}</span>
-              </div>
-              <div className={s.metadataItem}>
-                <span className={s.metadataLabel}>{scopeLabel}</span>
-                <span className={s.metadataValue}>{context.businessUnit?.name || 'Not set'}</span>
-              </div>
-              <div className={s.metadataItem}>
-                <span className={s.metadataLabel}>Updated</span>
-                <span className={s.metadataValue}>{formatDateTime(task.updatedAt)}</span>
-              </div>
-            </div>
-          </section>
-
-          <section className={s.panel}>
-            <h2 className={s.panelTitle}><BriefcaseBusiness size={17} /> Linked Context</h2>
-            <div className={s.contextGrid}>
-              {context.contact ? (
-                <div className={s.contextCard}>
-                  <div className={s.contextHeader}>
-                    <span className={s.contextTitle}>{context.contact.name || 'Contact'}</span>
-                    <Link className={s.contextLink} href={`/contacts/${encodeURIComponent(context.contact.id)}`}>
-                      Open <ExternalLink size={12} />
-                    </Link>
-                  </div>
-                  <span className={s.contextText}>
-                    {contextText([context.contact.phone || context.contact.email || 'No channel', context.contact.sourceLabel])}
-                  </span>
-                </div>
-              ) : (
-                <div className={s.empty}>No contact linked.</div>
-              )}
-
-              {context.lead && (
-                <div className={s.contextCard}>
-                  <span className={s.contextTitle}>Lead</span>
-                  <span className={s.contextText}>
-                    {contextText([context.lead.currentStage || context.lead.status, context.lead.sourceName || context.lead.sourceType])}
-                  </span>
-                </div>
-              )}
-
-              {context.workOrder && (
-                <div className={s.contextCard}>
-                  <div className={s.contextHeader}>
-                    <span className={s.contextTitle}>{context.workOrder.title || context.workOrder.workOrderNumber || 'Work order'}</span>
-                    {context.workOrder.canOpen && (
-                      <Link className={s.contextLink} href={`/work-orders/${encodeURIComponent(context.workOrder.id)}`}>
-                        Open <ExternalLink size={12} />
-                      </Link>
-                    )}
-                  </div>
-                  <span className={s.contextText}>{titleCase(context.workOrder.status)}</span>
-                </div>
-              )}
-
-              {task.placementReviewLink && (
-                <div className={s.contextCard}>
-                  <div className={s.contextHeader}>
-                    <span className={s.contextTitle}>AIT USA placement review</span>
-                    <a className={s.contextLink} href={task.placementReviewLink} target="_blank" rel="noreferrer">
-                      Open AIT USA review <ExternalLink size={12} />
-                    </a>
-                  </div>
-                  <span className={s.contextText}>Opens the authorized AIT USA employee queue.</span>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className={s.panel}>
-            <h2 className={s.panelTitle}><User size={17} /> Source</h2>
-            <div className={s.metadataGrid}>
-              <div className={s.metadataItem}>
-                <span className={s.metadataLabel}>Source</span>
-                <span className={s.metadataValue}>{task.sourceLabel || task.sourceType || 'Manual'}</span>
-              </div>
-              <div className={s.metadataItem}>
-                <span className={s.metadataLabel}>Created</span>
-                <span className={s.metadataValue}>{formatDateTime(task.createdAt)}</span>
-              </div>
-            </div>
-          </section>
+            </section>
+          )}
         </aside>
       </div>
 

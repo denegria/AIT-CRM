@@ -1,5 +1,16 @@
 # MIS-426 Tasks Workflow Consolidation — 2026-09-23
 
+## Tasks follow-up addendum — 2026-09-24
+
+- **Employee job:** move from a scoped task queue into Task Detail, record a follow-up outcome or cancel, and return to the same division and useful queue filters without hunting for the task again.
+- **Reference mode:** inspiration from the accepted Contacts/Pipeline work-surface grammar and the live Tasks audit in `audits/ait-crm-tasks-review-2026-09-24/`; this is a focused refinement, not a faithful visual clone.
+- **Chosen interaction model:** Task Detail keeps the outcome-first action. The active task description, named contact, due time, and owner form one primary work block; low-frequency provenance sits in a secondary Details list. Queue rows keep priority/type as quiet text, with due state and contact more prominent.
+- **Navigation state:** task links carry safe queue filters. Detail → Log outcome and Detail → Back align the global division to the authorized task division. Cancel and outcome completion retain that division and queue context. No auth, RBAC, mutation, schema, or provider behavior changes.
+- **Metric interaction override:** Alvaro approved making Due Now, Due Today, and Overdue direct filter buttons after the 2026-09-23 read-only-metric contract. Selected state and keyboard focus must be visible; Done Today jumps to the existing completed section. No second filter band is added.
+- **Viewport contract:** primary `1920 × 1080` CSS pixels; regression `1536 × 960` and narrow `390 × 844`. The fact group may stack on mobile, but the employee reading order stays task → contact/due/owner → history → secondary related work.
+- **Content and evidence:** allow long names, task descriptions, and empty contact/due states without clipping. Verify the scoped handoff and Cancel path in authenticated staging without submitting CRM data; capture desktop/mobile evidence, check overflow and console errors, and run focused tests plus `npm run validate`.
+- **Non-goals:** queue redesign, new task states, data backfill, new filters beyond the agreed clickable metrics, production promotion, or any CRM data write.
+
 ## Workload metric strip addendum — 2026-09-23
 
 - Problem: the four equal workload cards use saturated colored top borders that read like binder tabs or selectable navigation even though the metrics are read-only.

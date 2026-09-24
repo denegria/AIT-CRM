@@ -1,4 +1,5 @@
 import { TASK_STATUSES, TASK_TYPES } from './constants.js';
+import { taskQueueReturnHref } from './queue-navigation.js';
 
 export const FOLLOW_UP_SELECTION_ERROR_CODES = Object.freeze({
   AMBIGUOUS: 'follow_up_task_ambiguous',
@@ -111,13 +112,16 @@ export function followUpSubmissionTaskId({ requestedTaskId = '', task = null } =
   return task?.id || String(requestedTaskId || '') || null;
 }
 
-export function followUpTaskEntryHref(task = {}) {
+export function followUpTaskEntryHref(task = {}, { returnTo = '' } = {}) {
   const params = new URLSearchParams({
     action: 'log-follow-up',
     taskId: String(task.id || ''),
     contactId: String(task.contactId || ''),
     leadId: String(task.leadId || ''),
   });
+  const returnHref = taskQueueReturnHref(returnTo, task.businessUnitId || '');
+  const returnParams = new URL(returnHref, 'https://crm.local').searchParams;
+  for (const [key, value] of returnParams) params.set(key, value);
   return `/tasks?${params.toString()}`;
 }
 

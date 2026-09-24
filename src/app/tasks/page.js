@@ -57,6 +57,7 @@ import {
   clearedFollowUpTaskEntryHref,
 } from '@/lib/tasks/follow-up-selection.js';
 import { initialFollowUpDraftFields } from '@/lib/tasks/follow-up-draft.js';
+import { taskDetailHref, taskQueueHref } from '@/lib/tasks/queue-navigation.js';
 import s from './FollowUpQueue.module.css';
 
 const TASK_TYPE_OPTIONS = [
@@ -313,6 +314,7 @@ export default function FollowUpQueuePage() {
     accessibleBusinessUnits,
     currentBusinessUnitId,
     currentBusinessUnit,
+    setCurrentBusinessUnitId,
     currentUser,
     access,
     dataSource,
@@ -649,6 +651,19 @@ export default function FollowUpQueuePage() {
     return () => controller.abort();
   }, [leanShellIsDeferred, searchParams, taskContacts]);
 
+  useEffect(() => {
+    if (searchParams.get('action') !== 'log-follow-up') return;
+    const selectedTask = queueTasks.find((task) => task.id === searchParams.get('taskId'));
+    const taskBusinessUnitId = selectedTask?.businessUnitId;
+    if (
+      taskBusinessUnitId &&
+      taskBusinessUnitId !== currentBusinessUnitId &&
+      accessibleBusinessUnits.some((unit) => unit.id === taskBusinessUnitId)
+    ) {
+      setCurrentBusinessUnitId(taskBusinessUnitId);
+    }
+  }, [accessibleBusinessUnits, currentBusinessUnitId, queueTasks, searchParams, setCurrentBusinessUnitId]);
+
   const filteredTasks = useMemo(() => {
     return queueTasks
       .filter((task) => taskMatchesDue(task, filters.due))
@@ -714,6 +729,11 @@ export default function FollowUpQueuePage() {
     taskType: 'follow_up',
     status: 'open',
     link: 'contact',
+  }));
+
+  const selectWorkloadDue = (due) => setFilters((prev) => ({
+    ...prev,
+    due: prev.due === due ? 'open' : due,
   }));
 
   async function applyTaskAction(task, action, payload = {}) {
@@ -1702,12 +1722,38 @@ export default function FollowUpQueuePage() {
         <div className={s.queueHeader}>
           <div className={s.queueHeaderMain}>
             <span className={s.sectionEyebrow}>Work queue</span>
-            <dl className={s.queueMetrics} aria-label="Task workload summary">
-              <div className={s.summaryMetric}><dt className={s.summaryLabel}>Due Now</dt><dd className={s.summaryValue}>{stats.currentWork}</dd></div>
-              <div className={s.summaryMetric}><dt className={s.summaryLabel}>Due Today</dt><dd className={s.summaryValue}>{stats.dueToday}</dd></div>
-              <div className={s.summaryMetric}><dt className={s.summaryLabel}>Overdue</dt><dd className={`${s.summaryValue} ${stats.overdue > 0 ? s.summaryValueOverdue : ''}`}>{stats.overdue}</dd></div>
-              <div className={s.summaryMetric}><dt className={s.summaryLabel}>Done Today</dt><dd className={s.summaryValue}>{stats.completedToday}</dd></div>
-            </dl>
+            <div className={s.queueMetrics} aria-label="Task workload summary">
+              {[
+                ['work', 'Due Now', stats.currentWork],
+                ['today', 'Due Today', stats.dueToday],
+                ['overdue', 'Overdue', stats.overdue],
+              ].map(([due, label, count]) => (
+                <div className={s.summaryMetric} key={due}>
+                  <button
+                    className={`${s.summaryMetricButton} ${filters.due === due ? s.summaryMetricButtonActive : ''}`}
+                    type="button"
+                    aria-pressed={filters.due === due}
+                    aria-label={`${filters.due === due ? 'Clear' : 'Show'} ${label.toLowerCase()} task filter, ${count} task${count === 1 ? '' : 's'}`}
+                    onClick={() => selectWorkloadDue(due)}
+                  >
+                    <span className={s.summaryLabel}>{label}</span>
+                    <span className={`${s.summaryValue} ${due === 'overdue' && count > 0 ? s.summaryValueOverdue : ''}`}>{count}</span>
+                  </button>
+                </div>
+              ))}
+              <div className={s.summaryMetric}>
+                <button
+                  className={s.summaryMetricButton}
+                  type="button"
+                  disabled={stats.completedToday === 0}
+                  aria-label={`Jump to ${stats.completedToday} completed task${stats.completedToday === 1 ? '' : 's'} today`}
+                  onClick={() => document.getElementById('completed-tasks-today')?.focus()}
+                >
+                  <span className={s.summaryLabel}>Done Today</span>
+                  <span className={s.summaryValue}>{stats.completedToday}</span>
+                </button>
+              </div>
+            </div>
           </div>
           <div className={s.queueHeaderActions}>
             {!coordinatorUiPolicy.ownerScoped && unassignedLeadFollowUps.length > 0 && (
@@ -1872,7 +1918,7 @@ export default function FollowUpQueuePage() {
             return (
               <article key={task.id} className={`${s.queueItem} ${isTaskRemovalApprovalTask ? s.queueItemApproval : ''}`}>
                 <div>
-                  <Link className={`${s.taskTitle} ${s.taskTitleLink}`} href={`/tasks/${encodeURIComponent(task.id)}`}>
+                  <Link className={`${s.taskTitle} ${s.taskTitleLink}`} href={taskDetailHref(task.id, taskQueueHref(filters, task.businessUnitId || currentBusinessUnitId))}>
                     {task.title}
                   </Link>
                   {task.description && <div className={s.taskDescription}>{task.description}</div>}
@@ -1889,8 +1935,8 @@ export default function FollowUpQueuePage() {
                     {task.status !== 'open' && (
                       <span className={`badge ${taskBadgeClass(task)}`}>{titleCase(task.status)}</span>
                     )}
-                    <span className={`badge badge-${task.priority}`}>{titleCase(task.priority)}</span>
-                    <span className="badge badge-draft">{titleCase(task.taskType)}</span>
+                    <span className={`${s.metaText} ${['high', 'urgent'].includes(task.priority) ? s.metaTextPriority : ''}`}>{titleCase(task.priority)}</span>
+                    <span className={s.metaText}>{titleCase(task.taskType)}</span>
                     {task.recurrence && <span className="badge badge-pending">{recurrenceLabel(task.recurrence)}</span>}
                   </div>
                   {isTaskRemovalApprovalTask && (
@@ -2176,7 +2222,7 @@ export default function FollowUpQueuePage() {
         </div>
 
         {completedTodayTasks.length > 0 && (
-          <section className={s.completedBacklog} aria-label="Completed tasks today">
+          <section className={s.completedBacklog} id="completed-tasks-today" tabIndex={-1} aria-label="Completed tasks today">
             <div className={s.completedBacklogHeader}>
               <div>
                 <h2 className={s.completedTitle}>Done today</h2>
@@ -2190,13 +2236,13 @@ export default function FollowUpQueuePage() {
                 return (
                   <article key={`completed-${task.id}`} className={s.completedItem}>
                     <div>
-                      <Link className={`${s.taskTitle} ${s.taskTitleLink}`} href={`/tasks/${encodeURIComponent(task.id)}`}>
+                      <Link className={`${s.taskTitle} ${s.taskTitleLink}`} href={taskDetailHref(task.id, taskQueueHref(filters, task.businessUnitId || currentBusinessUnitId))}>
                         {task.title}
                       </Link>
                       <div className={s.metaLine}>
                         <span className="badge badge-completed">Completed</span>
-                        <span className={`badge badge-${task.priority}`}>{titleCase(task.priority)}</span>
-                        <span className="badge badge-draft">{titleCase(task.taskType)}</span>
+                        <span className={`${s.metaText} ${['high', 'urgent'].includes(task.priority) ? s.metaTextPriority : ''}`}>{titleCase(task.priority)}</span>
+                        <span className={s.metaText}>{titleCase(task.taskType)}</span>
                         {task.recurrence && <span className="badge badge-pending">{recurrenceLabel(task.recurrence)}</span>}
                       </div>
                     </div>

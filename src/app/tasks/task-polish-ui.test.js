@@ -78,12 +78,13 @@ test('task queue default chrome reflects only user-controlled filters', () => {
 });
 
 test('task workload metrics are integrated into the queue header', () => {
-  assert.match(tasksSource, /<div className=\{s\.queueHeaderMain\}>[\s\S]*?<dl className=\{s\.queueMetrics\} aria-label="Task workload summary">/);
-  assert.match(tasksSource, /<dt className=\{s\.summaryLabel\}>Due Now<\/dt>/);
-  assert.match(tasksSource, /<dt className=\{s\.summaryLabel\}>Due Today<\/dt>/);
-  assert.match(tasksSource, /<dt className=\{s\.summaryLabel\}>Overdue<\/dt>/);
-  assert.match(tasksSource, /<dt className=\{s\.summaryLabel\}>Done Today<\/dt>/);
-  assert.match(tasksSource, /stats\.overdue > 0 \? s\.summaryValueOverdue : ''/);
+  assert.match(tasksSource, /<div className=\{s\.queueHeaderMain\}>[\s\S]*?<div className=\{s\.queueMetrics\} aria-label="Task workload summary">/);
+  assert.match(tasksSource, /\['work', 'Due Now', stats\.currentWork\]/);
+  assert.match(tasksSource, /\['today', 'Due Today', stats\.dueToday\]/);
+  assert.match(tasksSource, /\['overdue', 'Overdue', stats\.overdue\]/);
+  assert.match(tasksSource, /selectWorkloadDue\(due\)/);
+  assert.match(tasksSource, /aria-pressed=\{filters\.due === due\}/);
+  assert.match(tasksSource, /stats\.completedToday/);
   assert.doesNotMatch(tasksSource, /summaryStrip|summaryTile(Current|Today|Overdue|Completed)/);
 });
 
@@ -102,8 +103,8 @@ test('task queue uses one flat work surface and secondary contextual actions', (
 });
 
 test('Task Detail is outcome-first and keeps advanced controls deliberate', () => {
-  assert.match(taskDetailSource, /function followUpHref\(task\)/);
-  assert.match(taskDetailSource, /action: 'log-follow-up'/);
+  assert.match(taskDetailSource, /followUpTaskEntryHref\(task, \{ returnTo \}\)/);
+  assert.match(taskDetailSource, /taskQueueReturnHref\(searchParams\.get\('returnTo'\) \|\| '', task\?\.businessUnitId \|\| ''\)/);
   assert.match(taskDetailSource, />\s*Log outcome\s*</);
   assert.doesNotMatch(taskDetailSource, />\s*Open Queue\s*</);
   assert.match(taskDetailSource, /<details className=\{s\.moreMenu\}>/);

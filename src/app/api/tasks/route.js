@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
 import {
   businessUnits,
@@ -418,10 +418,20 @@ export async function GET(request) {
       ? rows
       : rows.filter((row) => row.taskType !== TASK_TYPES.TASK_REMOVAL_APPROVAL);
     const taskContactIds = visibleRows.map((row) => row.contactId).filter(Boolean);
-    const [assignableUsers, taskContacts, previousFollowUps] = await Promise.all([
+    const [assignableUsers, taskContacts, taskContactNames, previousFollowUps] = await Promise.all([
       listAssignableUsers(db, session),
       taskContactIds.length
         ? loadTaskContactOptions({ db, session, contactIds: taskContactIds })
+        : Promise.resolve([]),
+      // A visible task may reference an archived contact. Keep its name in the
+      // queue, as Task Detail already does, without offering it as a picker option.
+      taskContactIds.length
+        ? db.select({ id: contacts.id, name: contacts.name })
+            .from(contacts)
+            .where(and(
+              eq(contacts.organizationId, session.user.organizationId),
+              inArray(contacts.id, taskContactIds),
+            ))
         : Promise.resolve([]),
       filters.taskType === TASK_TYPES.FOLLOW_UP
         ? loadLatestFollowUpOutcomePreviews({
@@ -432,7 +442,7 @@ export async function GET(request) {
           })
         : Promise.resolve(new Map()),
     ]);
-    const contactNameById = new Map(taskContacts.map((contact) => [contact.id, contact.name]));
+    const contactNameById = new Map(taskContactNames.map((contact) => [contact.id, contact.name]));
     return NextResponse.json({
       tasks: visibleRows.map((row) => toTaskPayload({
         ...row,
