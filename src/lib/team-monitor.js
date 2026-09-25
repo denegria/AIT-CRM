@@ -485,7 +485,7 @@ export function buildTeamMonitorPageModel({
     ...finalizedUnassignedMetrics,
     signal: unassignedSignal.label,
     signalTone: unassignedSignal.tone,
-    taskHref: '/tasks?unassigned=true',
+    taskHref: '/tasks?ownerUserId=unassigned',
     contactHref: '/contacts?owner=unassigned',
   };
   const summary = buildTeamMonitorSummary({ roster, unassigned });

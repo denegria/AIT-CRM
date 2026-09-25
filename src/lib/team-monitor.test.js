@@ -164,6 +164,7 @@ test('team monitor page metrics reconcile employee rows with the explicit unassi
   assert.equal(viewModel.summary.enrollments, 1);
   assert.equal(viewModel.summary.cancellations, 1);
   assert.equal(viewModel.unassigned.unattributedTasks, 1);
+  assert.equal(viewModel.unassigned.taskHref, '/tasks?ownerUserId=unassigned');
   assert.equal(sofia.contactsWithoutNextFollowUp, 1);
   assert.equal(sofia.taskProgressTotal, 3);
   assert.equal(sofia.contactHref, '/contacts?owner=u-one');
