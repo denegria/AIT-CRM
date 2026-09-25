@@ -480,7 +480,7 @@ export function buildTeamMonitorPageModel({
   const unassigned = {
     id: 'unassigned',
     name: 'Unassigned work',
-    roleLabel: 'Tasks and active contacts without an eligible owner',
+    roleLabel: 'Ownerless or outside this roster',
     isUnassignedBucket: true,
     ...finalizedUnassignedMetrics,
     signal: unassignedSignal.label,
@@ -506,7 +506,7 @@ export function buildTeamMonitorPageModel({
       enrollments: summary.enrollments,
       cancellations: summary.cancellations,
     },
-    metricNote: 'Task progress is completed in the selected period divided by those completions plus currently open tasks. Assigned contacts are current CRM ownership across lifecycle states. A valid next follow-up is an open follow-up task with a due date. Enrollment and cancellation movement require explicit dated CRM evidence.',
+    metricNote: 'Backlog and follow-up coverage are current; task completions and dated enrollment movement use the selected period. A follow-up gap means an active-stage contact has no open follow-up task with a due date.',
     updatedLabel: 'Scoped CRM records',
   };
 }

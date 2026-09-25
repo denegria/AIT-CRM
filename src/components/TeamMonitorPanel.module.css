@@ -722,6 +722,8 @@
   font-size: var(--text-sm);
 }
 
+.moreTasks { color: var(--text-muted); font-size: var(--text-xs); margin-top: 6px; }
+
 .emptyCell {
   padding: 18px !important;
   text-align: center !important;

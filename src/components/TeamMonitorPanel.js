@@ -143,7 +143,7 @@ function PreviewEmployeeList({ roster }) {
   );
 }
 
-function MonitorSummary({ summary, period, periodLabel, onPeriodChange }) {
+function MonitorSummary({ summary, period, onPeriodChange }) {
   const risks = [
     { key: 'overdue', value: summary.overdue, label: 'Overdue tasks', hint: 'Open work past due', tone: 'danger' },
     { key: 'dueToday', value: summary.dueToday, label: 'Due today', hint: 'Open tasks due today', tone: 'warning' },
@@ -175,7 +175,7 @@ function MonitorSummary({ summary, period, periodLabel, onPeriodChange }) {
         <span><strong>{summary.completedTasks}</strong> tasks completed</span>
         <span><strong>{summary.enrollments}</strong> enrollments</span>
         <span><strong>{summary.cancellations}</strong> cancellations</span>
-        <small>in {periodLabel.toLowerCase()}</small>
+        <small>CRM-recorded movement</small>
       </div>
     </section>
   );
@@ -227,23 +227,25 @@ function EmployeeDetail({ employee, periodLabel }) {
       <p className={s.detailContext}>{employee.isUnassignedBucket ? 'Review ownership before routing this work.' : `${employee.completedTasks} tasks completed, ${employee.enrollments} enrollments and ${employee.cancellations} cancellations ${periodLabel.toLowerCase()}.`}</p>
       <div className={s.detailSection}>
         <div className={s.detailTitle}>Overdue tasks <span>{employee.overdue}</span></div>
-        {employee.overdueTasks.length ? employee.overdueTasks.map((task) => (
+        {employee.overdueTasks.length ? employee.overdueTasks.slice(0, 5).map((task) => (
           <Link key={task.id} className={s.detailTask} href={`/tasks/${encodeURIComponent(task.id)}`} title={task.title || 'Untitled task'}>
             <Clock3 size={14} />
             <span>{task.title || 'Untitled task'}</span>
             <small>{taskDateLabel(task.dueAt || task.dueDate)}</small>
           </Link>
         )) : <div className={s.emptyDetail}>No overdue tasks.</div>}
+        {employee.overdueTasks.length > 5 && <div className={s.moreTasks}>+{employee.overdueTasks.length - 5} more in Tasks</div>}
       </div>
       <div className={s.detailSection}>
         <div className={s.detailTitle}>Due today <span>{employee.dueToday}</span></div>
-        {employee.dueTodayTasks.length ? employee.dueTodayTasks.map((task) => (
+        {employee.dueTodayTasks.length ? employee.dueTodayTasks.slice(0, 5).map((task) => (
           <Link key={task.id} className={s.detailTask} href={`/tasks/${encodeURIComponent(task.id)}`} title={task.title || 'Untitled task'}>
             <CheckSquare size={14} />
             <span>{task.title || 'Untitled task'}</span>
             <small>{taskDateLabel(task.dueAt || task.dueDate)}</small>
           </Link>
         )) : <div className={s.emptyDetail}>No tasks due today.</div>}
+        {employee.dueTodayTasks.length > 5 && <div className={s.moreTasks}>+{employee.dueTodayTasks.length - 5} more in Tasks</div>}
       </div>
       <div className={s.detailActions}>
         <Link className="btn btn-sm" href={employee.taskHref}>
@@ -388,7 +390,7 @@ export function TeamMonitorPageSurface({ employees, tasks, contacts, currentUser
           <p className="page-subtitle">Spot uncovered work, review coordinators, and open the right queue.</p>
         </div>
       </div>
-      <MonitorSummary summary={viewModel.summary} period={period} periodLabel={viewModel.period.label} onPeriodChange={setPeriod} />
+      <MonitorSummary summary={viewModel.summary} period={period} onPeriodChange={setPeriod} />
       <div className={s.fullLayout}>
         <section className={s.rosterCard}>
           <MonitorControls attention={attention} onAttentionChange={setAttention} />
