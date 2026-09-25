@@ -173,6 +173,35 @@ test('team monitor page metrics reconcile employee rows with the explicit unassi
   assert.equal(viewModel.reconciliation.completedTasks, viewModel.summary.completedTasks);
 });
 
+test('follow-up coverage excludes terminal AIT USA stages and enrolled contacts', () => {
+  const stages = [
+    'New Lead', 'Needs First Outreach', 'Follow Up',
+    'Retargeting', 'Not Interested', 'Course Completed', 'Dropped / Quit', 'Enrolled',
+  ];
+  const model = buildTeamMonitorPageModel({
+    currentUser: { id: 'u-admin', primaryRoleKey: 'admin' },
+    contacts: stages.map((status, index) => ({
+      id: `contact-${index}`, workflowKey: 'ait_usa', currentStage: status, status,
+    })),
+  });
+  assert.equal(model.unassigned.unassignedActiveContacts, 3);
+  assert.equal(model.summary.contactsWithoutNextFollowUp, 3);
+});
+
+test('monitor coverage follows the active stages of other CRM workflows', () => {
+  const model = buildTeamMonitorPageModel({
+    currentUser: { id: 'u-admin', primaryRoleKey: 'admin' },
+    contacts: [
+      { id: 'signs-active', workflowKey: 'ait_signs', status: 'Work Order' },
+      { id: 'signs-closed', workflowKey: 'ait_signs', status: 'Invoice / Payment' },
+      { id: 'default-active', workflowKey: 'default', status: 'Qualified' },
+      { id: 'default-closed', workflowKey: 'default', status: 'Lost' },
+    ],
+  });
+  assert.equal(model.summary.unassignedActiveContacts, 2);
+  assert.equal(model.summary.contactsWithoutNextFollowUp, 2);
+});
+
 test('team monitor period changes completed, follow-up, and enrollment measures without changing current due state', () => {
   const args = {
     employees: employees.slice(1),

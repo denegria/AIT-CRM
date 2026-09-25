@@ -6,7 +6,12 @@ import {
   taskDateKey,
 } from './tasks/visibility.js';
 import { ROLE_KEYS, roleKeysForUser } from './crm/coordinator-policy.js';
-import { WORKFLOW_KEYS, normalizeLifecycleStatus } from './crm/lifecycle.js';
+import {
+  WORKFLOW_KEYS,
+  isNoFurtherProspectingLifecycleStatus,
+  lifecycleWorkflowForKey,
+  normalizeLifecycleStatus,
+} from './crm/lifecycle.js';
 
 const TEAM_MONITOR_ROLE_KEYS = new Set([
   ROLE_KEYS.ADMIN,
@@ -309,8 +314,11 @@ function emptyMonitorMetrics() {
 }
 
 function isActiveMonitorContact(contact = {}) {
-  const status = contactStatus(contact).toLowerCase();
-  return Boolean(contact?.id) && !['enrolled', 'dropped / quit', 'lost', 'archived'].includes(status);
+  const status = contactStatus(contact);
+  const workflow = lifecycleWorkflowForKey(contact.workflowKey);
+  return Boolean(contact?.id) &&
+    workflow.activeStatuses.includes(status) &&
+    !isNoFurtherProspectingLifecycleStatus(status, { workflowKey: workflow.key });
 }
 
 function hasValidNextFollowUp(task = {}) {
