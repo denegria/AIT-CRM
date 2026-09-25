@@ -282,6 +282,20 @@ test('attention filters never append an empty or contradictory unassigned bucket
   assert.equal(noWorkRows.some((row) => row.isUnassignedBucket), false);
 });
 
+test('all-work roster puts urgent reconciliation ahead of quiet coordinators', () => {
+  const rows = filterTeamMonitorRows({
+    roster: [
+      { id: 'quiet', name: 'Quiet', signal: 'No active workload', overdue: 0, contactsWithoutNextFollowUp: 0 },
+      { id: 'staff-risk', name: 'Staff risk', signal: 'Needs attention', overdue: 1, contactsWithoutNextFollowUp: 0 },
+    ],
+    unassigned: {
+      id: 'unassigned', name: 'Unassigned work', isUnassignedBucket: true,
+      signal: 'Needs attention', overdue: 3, contactsWithoutNextFollowUp: 7,
+    },
+  });
+  assert.deepEqual(rows.map((row) => row.id), ['unassigned', 'staff-risk', 'quiet']);
+});
+
 test('unattributed allowed-division tasks reconcile without exposing or treating an outside owner as unassigned', () => {
   const model = buildTeamMonitorPageModel({
     employees: employees.slice(1),

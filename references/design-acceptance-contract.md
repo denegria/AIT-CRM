@@ -1108,3 +1108,31 @@
 
 - Primary viewport: 1536×960 CSS. Regression: 1920×1080 and 390×844 CSS. Empty state is compact and readable with no horizontal overflow. Populated class workspace is unchanged except stale-result handling.
 - Focused tests cover authorized next-date derivation across week/year boundaries and unscheduled sections. Run attendance tests, lint, webpack build, and authenticated read-only staging QA. No production promotion or CRM data writes.
+# Team Monitor Senior Workspace — 2026-09-25
+
+## Workflow and problem
+
+- An AIT USA senior coordinator must identify uncovered work first, compare regular coordinators second, then open the relevant Tasks or Contacts queue. The prior page buried urgent unassigned work beneath quiet staff, treated all eight counters equally, and repeated the table in the detail rail.
+
+## Interaction model and visual direction
+
+- Reference mode: inspiration from the upgraded CRM workspaces' restrained typography, blue selected states, light bounded surfaces, and compact row rhythm. This is an attention-first team review, not a Payments-style work-state queue.
+- Put current coverage risks above the roster: overdue tasks, due-today tasks, and active contacts without an open dated follow-up. Put period movement in a quieter strip. The reporting-period control governs only movement, never current backlog.
+- Sort actionable rows ahead of no-active-workload rows, including the unassigned/outside-roster reconciliation bucket. Keep all-work, needs-attention, and no-active-workload filters and keyboard row selection.
+- Make the employee table about active portfolio, open/done tasks, overdue, follow-up gaps, and dated outcomes. The selected-person panel shows a short context summary and actionable task links, not a second wall of the same metrics.
+
+## Locked behavior, permissions, and state
+
+- Existing senior/admin route access, division scope, Tasks/Contacts filter URLs, and read-only nature remain. Regular coordinators do not gain this page or cross-employee data.
+- The follow-up-gap count keeps its existing denominator: contacts in CRM stages considered active, with no open follow-up task bearing a due date. It is coverage to review, not employee performance or proof that all 1,811 contacts need immediate outreach.
+- The unassigned bucket includes ownerless records and owners outside the eligible roster; its active-contact display must use both relevant active fields rather than the assigned-contact field alone. Do not change lifecycle definitions or task/contact ownership data.
+
+## Responsive and evidence acceptance
+
+- Primary CSS viewport: 1536×960. Regression: 1920×1080 and 390×844. No page-level overflow, table/rail collision, stacked scrollbars, or large stretched blank table when a filter returns one row.
+- Preserve readable hierarchy and navigation as names/counts grow. Task titles may truncate but their full meaning remains accessible through link text/title; counts can reach four digits.
+- Compare matched before/after staging screenshots at 1536×960. Run focused model/role/component tests, full lint, webpack production build, and authenticated senior staging QA for filters, row selection, action links, and responsive states. Production and CRM records remain unchanged.
+
+## Non-goals
+
+- Changing workflow stages, follow-up policy, metric eligibility, role policy, data schema, payments/fulfillment integration, or production deployment.

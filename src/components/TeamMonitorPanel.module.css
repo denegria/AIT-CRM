@@ -7,38 +7,45 @@
 
 .monitorMetricGrid {
   display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .monitorMetric {
-  align-items: center;
-  background: var(--bg-secondary);
+  align-items: flex-start;
+  background: var(--bg-tertiary);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
   display: flex;
-  gap: 9px;
-  min-height: 66px;
-  padding: 11px 13px;
+  gap: 11px;
+  min-height: 94px;
+  padding: 15px 16px;
 }
 
 .monitorMetric strong,
+.monitorMetric b,
 .monitorMetric small {
   display: block;
 }
 
 .monitorMetric strong {
   color: var(--text-primary);
-  font-size: var(--text-lg);
+  font-size: var(--text-2xl);
   line-height: 1;
 }
 
-.monitorMetric small {
-  color: var(--text-secondary);
-  font-size: var(--text-xs);
-  font-weight: 700;
+.monitorMetric b {
+  color: var(--text-primary);
+  font-size: var(--text-sm);
   line-height: 1.2;
-  margin-top: 5px;
+  margin-top: 6px;
+}
+
+.monitorMetric small {
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  margin-top: 3px;
 }
 
 .kpiCard,
@@ -314,6 +321,13 @@
   width: 100%;
 }
 
+.rosterTable th:first-child { width: 27%; }
+.rosterTable th:nth-child(2) { width: 15%; }
+.rosterTable th:nth-child(3) { width: 15%; }
+.rosterTable th:nth-child(4) { width: 11%; }
+.rosterTable th:nth-child(5) { width: 15%; }
+.rosterTable th:nth-child(6) { width: 17%; }
+
 .rosterTable th,
 .rosterTable td,
 .taskTable th,
@@ -376,6 +390,8 @@
   font-size: var(--text-sm);
   line-height: 1.2;
 }
+
+.employeeCell > span:last-child { min-width: 0; }
 
 .employeeCell small,
 .detailHeader small,
@@ -487,11 +503,73 @@
   gap: 18px;
 }
 
+.monitorOverview {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.overviewHeader {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 16px 18px 12px;
+}
+
+.overviewHeader h2 {
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+  margin: 0;
+}
+
+.overviewHeader p {
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  margin: 3px 0 0;
+}
+
+.overviewTotal {
+  background: var(--accent-muted);
+  border-radius: 999px;
+  color: var(--accent);
+  font-size: var(--text-xs);
+  font-weight: 800;
+  padding: 7px 11px;
+  white-space: nowrap;
+}
+
+.monitorOverview .monitorMetricGrid { padding: 0 18px 16px; }
+.monitorMetric .dot { margin-top: 5px; }
+
+.movementRow {
+  align-items: center;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  min-height: 58px;
+  padding: 10px 18px;
+}
+
+.movementIntro { align-items: center; display: flex; gap: 10px; margin-right: auto; }
+.movementIntro > span { color: var(--text-primary); font-size: var(--text-sm); font-weight: 800; }
+.movementRow > span { font-size: var(--text-sm); white-space: nowrap; }
+.movementRow > span strong { color: var(--text-primary); }
+.movementRow > small { color: var(--text-muted); font-size: var(--text-xs); }
+.movementIntro .pill, .movementIntro .activePill { padding: 5px 10px; }
+
 .fullLayout {
+  align-items: start;
   display: grid;
   gap: 16px;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 330px);
+  grid-template-columns: minmax(0, 1fr) minmax(310px, 350px);
 }
+
+.rosterCard { min-width: 0; }
 
 .filterRow {
   align-items: center;
@@ -514,6 +592,10 @@
   justify-content: space-between;
   padding: 14px 16px;
 }
+
+.rosterHeading strong, .rosterHeading small { display: block; }
+.rosterHeading strong { color: var(--text-primary); font-size: var(--text-sm); }
+.rosterHeading small { color: var(--text-muted); font-size: var(--text-xs); margin-top: 2px; }
 
 .controlGroup + .controlGroup {
   justify-content: flex-end;
@@ -562,6 +644,18 @@
   padding-bottom: 16px;
 }
 
+.detailSnapshot {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 5px;
+  padding: 16px 0 8px;
+}
+
+.detailSnapshot span + span { border-left: 1px solid var(--border-subtle); padding-left: 10px; }
+.detailSnapshot strong { color: var(--text-primary); display: block; font-size: var(--text-lg); line-height: 1; }
+.detailSnapshot small { color: var(--text-muted); display: block; font-size: var(--text-xs); line-height: 1.2; margin-top: 5px; }
+.detailContext { color: var(--text-secondary); font-size: var(--text-xs); line-height: 1.4; margin: 4px 0 0; }
+
 .detailSection {
   border-bottom: 1px solid var(--border-subtle);
   padding: 16px 0;
@@ -573,6 +667,8 @@
   font-weight: 800;
   margin-bottom: 10px;
 }
+
+.detailTitle span { color: var(--text-muted); font-weight: 650; margin-left: 4px; }
 
 .detailStats {
   display: grid;
@@ -605,7 +701,11 @@
   gap: 8px;
   justify-content: space-between;
   min-height: 32px;
+  text-decoration: none;
 }
+
+.detailTask:hover span, .detailTask:focus-visible span { color: var(--accent); text-decoration: underline; }
+.detailTask:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .detailTask span {
   color: var(--text-secondary);
@@ -752,7 +852,7 @@
   }
 
   .monitorMetricGrid {
-    grid-template-columns: repeat(2, minmax(150px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .dashboardLayout,
@@ -776,8 +876,15 @@
   }
 
   .monitorMetricGrid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
+
+  .monitorMetric { min-height: 0; padding: 11px 13px; }
+  .monitorMetric strong { font-size: var(--text-lg); }
+  .monitorOverview .monitorMetricGrid { padding: 0 12px 12px; }
+  .overviewHeader { align-items: flex-start; padding: 14px 12px; }
+  .movementRow { align-items: flex-start; flex-direction: column; gap: 8px; padding: 12px; }
+  .movementIntro { flex-wrap: wrap; }
 
   .teamPulse,
   .previewEmployee {

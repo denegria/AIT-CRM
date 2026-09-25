@@ -377,7 +377,15 @@ export function filterTeamMonitorRows({ roster = [], unassigned = emptyMonitorMe
   const includeUnassigned = attention !== 'no-work' &&
     hasTeamMonitorWork(unassigned) &&
     (attention !== 'attention' || unassigned.signal === 'Needs attention');
-  return includeUnassigned ? [...employees, unassigned] : employees;
+  const rows = includeUnassigned ? [...employees, unassigned] : employees;
+  const rank = (row) => row.signal === 'Needs attention' ? 0 : row.signal === 'On track' ? 1 : 2;
+  return rows.sort((left, right) => (
+    rank(left) - rank(right) ||
+    Number(right.overdue || 0) - Number(left.overdue || 0) ||
+    Number(right.contactsWithoutNextFollowUp || 0) - Number(left.contactsWithoutNextFollowUp || 0) ||
+    Number(right.dueToday || 0) - Number(left.dueToday || 0) ||
+    String(left.name || '').localeCompare(String(right.name || ''))
+  ));
 }
 
 export function buildTeamMonitorPageModel({
