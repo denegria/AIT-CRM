@@ -3,8 +3,6 @@ import { isTaskDueToday, isTaskOpen, isTaskOverdue, taskDueKey } from '../tasks/
 const CONTACT_FILTERS = Object.freeze({
   myNewLeads: Object.freeze({ leadDateScope: 'current', status: 'New Lead' }),
   myNeedsNextFollowUp: Object.freeze({ leadDateScope: 'all', facet: 'needs_next_follow_up' }),
-  teamNeedsFirstContact: Object.freeze({ leadDateScope: 'all', facet: 'needs_first_contact' }),
-  teamNeedsNextFollowUp: Object.freeze({ leadDateScope: 'all', facet: 'needs_next_follow_up' }),
 });
 
 export function dashboardContactFilter(kind, ownerUserId = '') {
@@ -23,6 +21,7 @@ export function dashboardTaskScope(tasks = [], ownerUserId = '', businessUnitId 
   const personalTasks = teamTasks.filter((task) => (task.ownerUserId || task.assignedTo) === ownerUserId);
   const personalOverdue = personalTasks.filter((task) => isTaskOverdue(task, today));
   const personalToday = personalTasks.filter((task) => isTaskDueToday(task, today));
+  const teamOverdue = teamTasks.filter((task) => isTaskOverdue(task, today));
   const urgentTasks = [...personalOverdue, ...personalToday]
     .sort((left, right) => taskDueKey(left).localeCompare(taskDueKey(right)) || String(left.title || '').localeCompare(String(right.title || '')));
 
@@ -32,7 +31,11 @@ export function dashboardTaskScope(tasks = [], ownerUserId = '', businessUnitId 
     personalOverdue,
     personalToday,
     urgentTasks,
-    teamOverdue: teamTasks.filter((task) => isTaskOverdue(task, today)),
+    teamOverdue,
+    teamOtherOwnedOverdue: teamOverdue.filter((task) => {
+      const assignedOwnerId = task.ownerUserId || task.assignedTo;
+      return assignedOwnerId && assignedOwnerId !== ownerUserId;
+    }),
     teamUnassigned: teamTasks.filter((task) => isTaskOpen(task) && !task.ownerUserId && !task.assignedTo),
   };
 }

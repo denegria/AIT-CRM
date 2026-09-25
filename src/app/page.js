@@ -498,30 +498,38 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="dashboard-kpi-grid" style={{marginBottom:20}}>
-        {dashboardKpiCards.map((card) => (
-          <KPICard
-            key={card.label}
-            label={card.label}
-            value={card.value}
-            change={card.change}
-            trend={card.trend}
-            href={card.href}
-          />
-        ))}
-      </div>
+      {!(isAitUsaDashboard && isSeniorView) && (
+        <div className="dashboard-kpi-grid" style={{marginBottom:20}}>
+          {dashboardKpiCards.map((card) => (
+            <KPICard
+              key={card.label}
+              label={card.label}
+              value={card.value}
+              change={card.change}
+              trend={card.trend}
+              href={card.href}
+            />
+          ))}
+        </div>
+      )}
 
       {isAitUsaDashboard && isSeniorView && (
         <section className={dashboardStyles.teamBand} aria-labelledby="dashboard-team-title">
           <div className={dashboardStyles.teamIntro}>
-            <span className={dashboardStyles.eyebrow}>Division oversight</span>
-            <h2 id="dashboard-team-title">Team needs attention</h2>
-            <p>Across AIT USA · your own work stays in the cards above.</p>
+            <span className={dashboardStyles.eyebrow}>AIT USA oversight</span>
+            <h2 id="dashboard-team-title">Team handoffs</h2>
+            <p>Immediate assignment and overdue work. Deeper coverage lives in Team Monitor.</p>
           </div>
-          <div className={dashboardStyles.teamMetrics}>
-            <div><strong>{taskWorkspace.teamUnassigned.length}</strong><span>Unassigned tasks</span></div>
-            <div><strong>{taskWorkspace.teamOverdue.length}</strong><span>Overdue team tasks</span></div>
-            <div><strong>{kpis.teamUsaFollowUpGaps ?? 0}</strong><span>Follow-up gaps</span></div>
+          <div className={dashboardStyles.handoffSummary}>
+            {taskWorkspace.teamUnassigned.length > 0 && (
+              <span><strong>{taskWorkspace.teamUnassigned.length}</strong> unassigned task{taskWorkspace.teamUnassigned.length === 1 ? '' : 's'}</span>
+            )}
+            {taskWorkspace.teamOtherOwnedOverdue.length > 0 && (
+              <span><strong>{taskWorkspace.teamOtherOwnedOverdue.length}</strong> overdue with other owners</span>
+            )}
+            {taskWorkspace.teamUnassigned.length === 0 && taskWorkspace.teamOtherOwnedOverdue.length === 0 && (
+              <span>No immediate task handoffs.</span>
+            )}
           </div>
           <div className={dashboardStyles.teamActions}>
             {taskWorkspace.teamUnassigned.length > 0 && (
@@ -578,6 +586,16 @@ export default function Dashboard() {
                 <p>{taskWorkspace.personalOverdue.length} overdue · {taskWorkspace.personalToday.length} due today</p>
               </div>
             </div>
+            {isSeniorView && ((kpis.myUsaNewLeads ?? 0) > 0 || (kpis.myUsaNeedsNextFollowUp ?? 0) > 0) && (
+              <div className={dashboardStyles.personalNudges} aria-label="My contact follow-ups">
+                {(kpis.myUsaNewLeads ?? 0) > 0 && (
+                  <Link href={dashboardContactHref('myNewLeads', currentUserId)}>{kpis.myUsaNewLeads} new lead{kpis.myUsaNewLeads === 1 ? '' : 's'} assigned to me</Link>
+                )}
+                {(kpis.myUsaNeedsNextFollowUp ?? 0) > 0 && (
+                  <Link href={dashboardContactHref('myNeedsNextFollowUp', currentUserId)}>{kpis.myUsaNeedsNextFollowUp} of my contacts need a next follow-up</Link>
+                )}
+              </div>
+            )}
             <TaskList
               tasks={taskWorkspace.urgentTasks.slice(0, 5)}
               onToggle={completeDashboardTask}

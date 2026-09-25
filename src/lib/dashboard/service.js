@@ -20,7 +20,6 @@ import {
 } from '@/lib/crm/access.js';
 import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from '@/lib/crm/lifecycle.js';
 import { sessionHasAdminRole } from '@/lib/auth/admin-policy.js';
-import { canUseTeamMonitorWorkspace } from '@/lib/crm/coordinator-policy.js';
 import { dashboardContactsForSession, summarizeAitUsaDashboardContacts } from '@/lib/dashboard/summary.js';
 import { dashboardContactFilter } from '@/lib/dashboard/workspace.js';
 
@@ -176,7 +175,6 @@ export async function loadDashboardSummary({ db, session, businessUnitId, employ
   }
 
   const workflowKey = workflowKeyForBusinessUnit(businessUnit);
-  const canSeeTeamCounts = canUseTeamMonitorWorkspace(session.user);
   const currentParams = directoryParams(businessUnitId, { leadDateScope: 'current' });
   const countRows = (values, options = {}) => countContactDirectoryRows({
     db,
@@ -230,8 +228,6 @@ export async function loadDashboardSummary({ db, session, businessUnitId, employ
       ? Promise.all([
           countRows(dashboardContactFilter('myNewLeads', session.user.id)),
           countRows(dashboardContactFilter('myNeedsNextFollowUp', session.user.id)),
-          canSeeTeamCounts ? countRows(dashboardContactFilter('teamNeedsFirstContact')) : 0,
-          canSeeTeamCounts ? countRows(dashboardContactFilter('teamNeedsNextFollowUp')) : 0,
         ])
       : null,
   ]);
@@ -286,7 +282,6 @@ export async function loadDashboardSummary({ db, session, businessUnitId, employ
     kpis.usaBadContactChannel = aitUsaSummary?.kpis.usaBadContactChannel ?? 0;
     kpis.myUsaNewLeads = aitUsaDirectoryCounts?.[0] ?? 0;
     kpis.myUsaNeedsNextFollowUp = aitUsaDirectoryCounts?.[1] ?? 0;
-    kpis.teamUsaFollowUpGaps = (aitUsaDirectoryCounts?.[2] ?? 0) + (aitUsaDirectoryCounts?.[3] ?? 0);
   } else if (workflowKey === WORKFLOW_KEYS.AIT_SIGNS) {
     [
       kpis.signsIntake,
