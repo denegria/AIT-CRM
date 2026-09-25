@@ -523,7 +523,12 @@ export default function Dashboard() {
             <div><strong>{taskWorkspace.teamOverdue.length}</strong><span>Overdue team tasks</span></div>
             <div><strong>{kpis.teamUsaFollowUpGaps ?? 0}</strong><span>Follow-up gaps</span></div>
           </div>
-          <Link className="btn btn-sm" href="/team-monitor">Open Team Monitor</Link>
+          <div className={dashboardStyles.teamActions}>
+            {taskWorkspace.teamUnassigned.length > 0 && (
+              <Link className="btn btn-sm" href="/tasks?ownerUserId=unassigned&status=open">Review unassigned tasks</Link>
+            )}
+            <Link className="btn btn-sm" href="/team-monitor">Open Team Monitor</Link>
+          </div>
         </section>
       )}
 
@@ -572,7 +577,6 @@ export default function Dashboard() {
                 <h2 id="dashboard-priority-title">Priority tasks</h2>
                 <p>{taskWorkspace.personalOverdue.length} overdue · {taskWorkspace.personalToday.length} due today</p>
               </div>
-              <Link className="btn btn-sm" href="/tasks?due=work&ownerUserId=__me">Open my tasks</Link>
             </div>
             <TaskList
               tasks={taskWorkspace.urgentTasks.slice(0, 5)}
@@ -584,6 +588,7 @@ export default function Dashboard() {
               fixedOwnerId={currentUser?.id || ''}
               ownerRequired
               showOwnerSelect={false}
+              fillHeight
               emptyText="Nothing overdue or due today. Your calendar and full task queue are still available."
             />
             {taskWorkspace.urgentTasks.length > 5 && (
@@ -592,6 +597,10 @@ export default function Dashboard() {
             {dashboardCompletedTodayTasks.length > 0 && (
               <p className={dashboardStyles.doneToday}>{dashboardCompletedTodayTasks.length} completed today</p>
             )}
+            <nav className={dashboardStyles.quickLinks} aria-label="My work shortcuts">
+              <Link className="btn btn-sm" href="/tasks?due=work&ownerUserId=__me">My task queue</Link>
+              <Link className="btn btn-sm" href={`/contacts?leadDateScope=all&owner=${encodeURIComponent(currentUserId)}`}>My contacts</Link>
+            </nav>
           </section>
           <section className={dashboardStyles.calendarCard} aria-labelledby="dashboard-calendar-title">
             <div className={dashboardStyles.sectionHead}>

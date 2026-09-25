@@ -18,6 +18,7 @@ export default function TaskList({
   showOwnerSelect = true,
   canToggle = true,
   emptyText = 'No tasks yet.',
+  fillHeight = false,
 }) {
   const [newTask, setNewTask] = useState('');
   const [dueDate, setDueDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -79,7 +80,7 @@ export default function TaskList({
   };
 
   return (
-    <div>
+    <div className={fillHeight ? s.fillHeight : undefined}>
       <div className={s.list}>
         {tasks.length === 0 && <div className={s.empty}>{emptyText}</div>}
         {tasks.map(t => {

@@ -2,7 +2,7 @@
   display: grid;
   grid-template-columns: minmax(350px, 0.82fr) minmax(0, 1.48fr);
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 
 .actionRail,
@@ -17,6 +17,19 @@
 
 .actionRail,
 .calendarCard { padding: 18px 20px; }
+
+.actionRail { display:flex; flex-direction:column; }
+
+.quickLinks {
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin-top:14px;
+  padding-top:14px;
+  border-top:1px solid var(--border-subtle);
+}
+
+.teamActions { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
 
 .sectionHead {
   display: flex;
@@ -108,10 +121,10 @@
 }
 
 @media (max-width: 760px) {
-  .workspace { grid-template-columns: 1fr; }
+  .workspace { grid-template-columns: 1fr; align-items:start; }
   .teamBand { grid-template-columns: 1fr; gap: 12px; }
   .teamMetrics { grid-column: 1; grid-row: auto; }
-  .teamBand > a { justify-self: start; }
+  .teamActions { justify-content:flex-start; }
 }
 
 @media (max-width: 520px) {

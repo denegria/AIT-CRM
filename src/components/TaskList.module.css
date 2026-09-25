@@ -1,4 +1,7 @@
 .list { display:flex; flex-direction:column; gap:2px; }
+.fillHeight { display:flex; flex:1; flex-direction:column; min-height:0; }
+.fillHeight .list { flex:1; }
+.fillHeight .empty { margin:auto 0; text-align:center; }
 .empty {
   padding: 10px;
   color: var(--text-muted);
