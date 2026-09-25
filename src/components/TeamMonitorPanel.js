@@ -175,7 +175,6 @@ function MonitorSummary({ summary, period, onPeriodChange }) {
         <span><strong>{summary.completedTasks}</strong> tasks completed</span>
         <span><strong>{summary.enrollments}</strong> enrollments</span>
         <span><strong>{summary.cancellations}</strong> cancellations</span>
-        <small>CRM-recorded movement</small>
       </div>
     </section>
   );
@@ -216,7 +215,6 @@ function EmployeeDetail({ employee, periodLabel }) {
         <span>
           <strong>{employee.name || employee.email || 'Unnamed user'}</strong>
           <small>{employee.roleLabel}</small>
-          {employee.isUnassignedBucket && <small>Ownerless or outside the eligible roster</small>}
         </span>
       </div>
       <div className={s.detailSnapshot}>
