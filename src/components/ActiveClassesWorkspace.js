@@ -410,7 +410,7 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null 
                   ? `The next scheduled class is ${formatLongDate(scheduleSummary.nextScheduledDate)}.`
                   : scheduleSummary.hasActiveSchedules
                     ? 'Choose another date to find a scheduled class.'
-                    : 'No class schedules are active in your AIT USA scope yet.'}
+                    : 'AIT USA Institute has no active class schedules yet.'}
             </p>
           </div>
           {locationIsEmpty ? (
