@@ -1126,6 +1126,7 @@
 - Existing senior/admin route access, division scope, Tasks/Contacts filter URLs, and read-only nature remain. Regular coordinators do not gain this page or cross-employee data.
 - The follow-up-gap count keeps its existing denominator: contacts in CRM stages considered active, with no open follow-up task bearing a due date. It is coverage to review, not employee performance or proof that all 1,811 contacts need immediate outreach.
 - The unassigned bucket includes ownerless records and owners outside the eligible roster; its active-contact display must use both relevant active fields rather than the assigned-contact field alone. Do not change lifecycle definitions or task/contact ownership data.
+- Its Tasks/Contacts queue links explicitly identify the ownerless subset, because those destination filters cannot include outside-roster owners. Outside-roster counts remain visible in the detail context, and individual exception tasks can open directly.
 
 ## Responsive and evidence acceptance
 

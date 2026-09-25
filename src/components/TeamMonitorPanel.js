@@ -222,7 +222,9 @@ function EmployeeDetail({ employee, periodLabel }) {
         <span><strong>{Number(employee.activeAssignedContacts || 0) + Number(employee.unassignedActiveContacts || 0)}</strong><small>active contacts</small></span>
         <span><strong>{employee.contactsWithoutNextFollowUp}</strong><small>follow-up gaps</small></span>
       </div>
-      <p className={s.detailContext}>{employee.isUnassignedBucket ? 'Review ownership before routing this work.' : `${employee.completedTasks} tasks completed, ${employee.enrollments} enrollments and ${employee.cancellations} cancellations ${periodLabel.toLowerCase()}.`}</p>
+      <p className={s.detailContext}>{employee.isUnassignedBucket
+        ? `${employee.unattributedTasks + employee.unattributedContacts} record${employee.unattributedTasks + employee.unattributedContacts === 1 ? '' : 's'} have owners outside this roster. Queue links below show ownerless work; individual tasks above open directly.`
+        : `${employee.completedTasks} tasks completed, ${employee.enrollments} enrollments and ${employee.cancellations} cancellations ${periodLabel.toLowerCase()}.`}</p>
       <div className={s.detailSection}>
         <div className={s.detailTitle}>Overdue tasks <span>{employee.overdue}</span></div>
         {employee.overdueTasks.length ? employee.overdueTasks.slice(0, 5).map((task) => (
@@ -247,10 +249,10 @@ function EmployeeDetail({ employee, periodLabel }) {
       </div>
       <div className={s.detailActions}>
         <Link className="btn btn-sm" href={employee.taskHref}>
-          View tasks
+          {employee.isUnassignedBucket ? 'Unassigned tasks' : 'View tasks'}
         </Link>
         <Link className="btn btn-sm" href={employee.contactHref}>
-          View contacts
+          {employee.isUnassignedBucket ? 'Unassigned contacts' : 'View contacts'}
         </Link>
       </div>
     </aside>
