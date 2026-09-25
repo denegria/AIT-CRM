@@ -29,6 +29,7 @@ import {
   canLinkAttendanceContacts,
   deriveAttendanceState,
   isAitUsaBusinessUnit,
+  nextScheduledClassDate,
   normalizeAttendanceMarks,
   normalizeExpectedRevision,
   normalizeSessionNote,
@@ -244,12 +245,14 @@ export async function listAttendanceClasses({ db, session, date = todayInAttenda
     ))
     .orderBy(asc(courseClassSections.startTime), asc(courseClassSections.courseName));
 
-  const sections = rows.filter((row) => (
+  const accessibleSections = rows.filter((row) => (
     isAitUsaBusinessUnit(row.businessUnitName)
     && canAccessBusinessUnit(session, row.businessUnitId)
-    && canonicalScheduleDays(row.scheduleDaysJson).includes(weekday)
   ));
-  if (!sections.length) return { date, classes: [] };
+  const sections = accessibleSections.filter((row) => canonicalScheduleDays(row.scheduleDaysJson).includes(weekday));
+  const nextScheduledDate = nextScheduledClassDate(accessibleSections.map((row) => row.scheduleDaysJson), date);
+  const hasActiveSchedules = accessibleSections.some((row) => canonicalScheduleDays(row.scheduleDaysJson).length > 0);
+  if (!sections.length) return { date, classes: [], hasActiveSchedules, nextScheduledDate };
 
   const sectionIds = sections.map((row) => row.id);
   const [enrollments, sessions] = await Promise.all([
@@ -283,6 +286,8 @@ export async function listAttendanceClasses({ db, session, date = todayInAttenda
 
   return {
     date,
+    hasActiveSchedules,
+    nextScheduledDate,
     classes: sections.map((section) => {
       const classSession = sessionBySection.get(section.id);
       return {

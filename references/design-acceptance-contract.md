@@ -1084,3 +1084,27 @@
 - New task states, filters, metric interactions, bulk actions, sorting,
   pagination, backend/schema/service changes, permission changes, Task Detail
   redesign, production promotion, or CRM data writes.
+
+# Active Classes Empty-Day Contract — 2026-09-25
+
+## Workflow and problem
+
+- AIT USA coordinators choose a day and location, then select a scheduled class to review the roster or record attendance. When no class matches, the current full-height split workspace repeats an empty message and leaves employees searching dates one day at a time.
+
+## Interaction model and visual direction
+
+- Reference mode: inspiration from the upgraded Payments and Book Fulfillment compact, conclusive empty states. Preserve Active Classes' own date-first attendance interaction and styling.
+- When the authorized day has no classes, replace the split rail/workspace with one compact full-width state: explain whether no active schedules exist or merely no class meets on the selected day. If another scheduled day exists, show its date and a one-click `View next class` action.
+- When a location filter hides classes on an otherwise populated day, state that explicitly and provide a clear-filter action. Do not call it an empty schedule.
+- When classes exist, preserve the existing two-column class rail, Overview/Roster/Attendance tabs, and action hierarchy. Loading and errors never display stale class cards as current-day results.
+
+## Locked behavior, permissions, and state
+
+- Class results and next-date guidance are derived only from active AIT USA sections the employee is authorized to access. No enrollment, payment, fulfillment, registration, or attendance policy changes.
+- Manual planned-to-active enrollment handoff remains intentional. Payment and fulfillment statuses stay in their dedicated workspaces.
+- Date controls and location filter remain available; changing date may retain a location only when that location appears on the new day's classes.
+
+## Responsive and evidence acceptance
+
+- Primary viewport: 1536×960 CSS. Regression: 1920×1080 and 390×844 CSS. Empty state is compact and readable with no horizontal overflow. Populated class workspace is unchanged except stale-result handling.
+- Focused tests cover authorized next-date derivation across week/year boundaries and unscheduled sections. Run attendance tests, lint, webpack build, and authenticated read-only staging QA. No production promotion or CRM data writes.
