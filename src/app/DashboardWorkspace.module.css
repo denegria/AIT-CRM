@@ -19,6 +19,8 @@
 
 .actionRail { display:flex; flex-direction:column; }
 
+.headerActions { display:flex; align-items:center; gap:8px; }
+
 .quickLinks {
   display:flex;
   flex-wrap:wrap;
@@ -101,6 +103,7 @@
 }
 
 @media (max-width: 520px) {
+  .headerActions { align-self:flex-start; flex-wrap:wrap; }
   .actionRail,
   .calendarCard { padding: 14px 12px; }
   .sectionHead { align-items: flex-start; }

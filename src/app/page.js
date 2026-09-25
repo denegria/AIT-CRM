@@ -434,14 +434,16 @@ export default function Dashboard() {
             {' '}· {currentBusinessUnit?.name || `All ${scopeLabel}`}
           </p>
         </div>
-        <div className="flex-gap">
-          {isAitUsaDashboard && isSeniorView && (
+        {isAitUsaDashboard && isSeniorView ? (
+          <div className={dashboardStyles.headerActions}>
             <Link className="btn btn-sm" href={`/team-monitor?businessUnitId=${encodeURIComponent(currentBusinessUnit.id)}`}>Team Monitor</Link>
-          )}
+            <span className="badge badge-contacted" style={{fontSize:'var(--text-sm)',padding:'4px 12px'}}>Senior Coordinator</span>
+          </div>
+        ) : (
           <span className={`badge ${isAdminView ? 'badge-won' : 'badge-contacted'}`} style={{fontSize:'var(--text-sm)',padding:'4px 12px'}}>
-            {isAdminView ? 'Admin View' : isAitUsaDashboard ? (isSeniorView ? 'Senior Coordinator' : 'My day') : 'Employee View'}
+            {isAdminView ? 'Admin View' : isAitUsaDashboard ? 'My day' : 'Employee View'}
           </span>
-        </div>
+        )}
       </div>
 
       {dataSource === 'postgres' && access.canReadImportReview && importStaging?.latestBatch && (
