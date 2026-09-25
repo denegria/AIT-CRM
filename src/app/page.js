@@ -589,7 +589,8 @@ export default function Dashboard() {
               ownerRequired
               showOwnerSelect={false}
               fillHeight
-              emptyText="Nothing overdue or due today. Your calendar and full task queue are still available."
+              emptyTitle="No urgent tasks"
+              emptyText="Nothing overdue or due today. Upcoming work remains on your calendar."
             />
             {taskWorkspace.urgentTasks.length > 5 && (
               <p className={dashboardStyles.moreWork}>Showing five priority tasks · open My tasks for the rest.</p>

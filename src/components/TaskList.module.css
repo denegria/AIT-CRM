@@ -1,7 +1,8 @@
 .list { display:flex; flex-direction:column; gap:2px; }
 .fillHeight { display:flex; flex:1; flex-direction:column; min-height:0; }
 .fillHeight .list { flex:1; }
-.fillHeight .empty { margin:auto 0; text-align:center; }
+.fillHeight .empty { display:flex; flex-direction:column; gap:5px; margin:auto; max-width:300px; text-align:center; }
+.emptyTitle { color:var(--text-primary); font-size:var(--text-md); font-weight:700; }
 .empty {
   padding: 10px;
   color: var(--text-muted);
