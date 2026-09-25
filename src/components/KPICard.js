@@ -10,8 +10,8 @@ export default function KPICard({ label, value, change, trend, href }) {
       <span className={s.label}>{label}</span>
       <span className={s.value}>{value}</span>
       {change && (
-        <span className={`${s.change} ${trend === 'up' ? s.up : s.down}`}>
-          {trend === 'up' ? <TrendingUp size={14} /> : <TrendingDown size={14} />} {change}
+        <span className={`${s.change} ${trend === 'up' ? s.up : trend === 'down' ? s.down : s.neutral}`}>
+          {trend === 'up' ? <TrendingUp size={14} /> : trend === 'down' ? <TrendingDown size={14} /> : null} {change}
         </span>
       )}
     </>

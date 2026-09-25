@@ -225,20 +225,20 @@ export default function Dashboard() {
       return [
         {
           label: 'My overdue tasks', value: taskWorkspace.personalOverdue.length,
-          change: 'Past due', trend: taskWorkspace.personalOverdue.length ? 'down' : 'up',
+          change: 'Past due', trend: 'neutral',
           href: '/tasks?due=overdue&ownerUserId=__me',
         },
         {
           label: 'My tasks today', value: taskWorkspace.personalToday.length,
-          change: 'Due today', trend: 'up', href: '/tasks?due=today&ownerUserId=__me',
+          change: 'Due today', trend: 'neutral', href: '/tasks?due=today&ownerUserId=__me',
         },
         {
           label: 'My new leads', value: kpis.myUsaNewLeads ?? 0,
-          change: 'Current-year leads', trend: 'up', href: dashboardContactHref('myNewLeads', currentUserId),
+          change: 'Current-year leads', trend: 'neutral', href: dashboardContactHref('myNewLeads', currentUserId),
         },
         {
           label: 'Needs next follow-up', value: kpis.myUsaNeedsNextFollowUp ?? 0,
-          change: 'My contacts without a dated next step', trend: kpis.myUsaNeedsNextFollowUp ? 'down' : 'up',
+          change: 'My contacts without a dated next step', trend: 'neutral',
           href: dashboardContactHref('myNeedsNextFollowUp', currentUserId),
         },
       ];
