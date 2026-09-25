@@ -535,7 +535,7 @@ export default function Dashboard() {
             {taskWorkspace.teamUnassigned.length > 0 && (
               <Link className="btn btn-sm" href="/tasks?ownerUserId=unassigned&status=open">Review unassigned tasks</Link>
             )}
-            <Link className="btn btn-sm" href="/team-monitor">Open Team Monitor</Link>
+            <Link className="btn btn-sm" href={`/team-monitor?businessUnitId=${encodeURIComponent(currentBusinessUnit.id)}`}>Open Team Monitor</Link>
           </div>
         </section>
       )}
