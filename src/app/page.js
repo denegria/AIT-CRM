@@ -434,9 +434,14 @@ export default function Dashboard() {
             {' '}· {currentBusinessUnit?.name || `All ${scopeLabel}`}
           </p>
         </div>
-        <span className={`badge ${isAdminView ? 'badge-won' : 'badge-contacted'}`} style={{fontSize:'var(--text-sm)',padding:'4px 12px'}}>
-          {isAdminView ? 'Admin View' : isAitUsaDashboard ? (isSeniorView ? 'Senior Coordinator' : 'My day') : 'Employee View'}
-        </span>
+        <div className="flex-gap">
+          {isAitUsaDashboard && isSeniorView && (
+            <Link className="btn btn-sm" href={`/team-monitor?businessUnitId=${encodeURIComponent(currentBusinessUnit.id)}`}>Team Monitor</Link>
+          )}
+          <span className={`badge ${isAdminView ? 'badge-won' : 'badge-contacted'}`} style={{fontSize:'var(--text-sm)',padding:'4px 12px'}}>
+            {isAdminView ? 'Admin View' : isAitUsaDashboard ? (isSeniorView ? 'Senior Coordinator' : 'My day') : 'Employee View'}
+          </span>
+        </div>
       </div>
 
       {dataSource === 'postgres' && access.canReadImportReview && importStaging?.latestBatch && (
@@ -514,29 +519,10 @@ export default function Dashboard() {
       )}
 
       {isAitUsaDashboard && isSeniorView && (
-        <section className={dashboardStyles.teamBand} aria-labelledby="dashboard-team-title">
-          <div className={dashboardStyles.teamIntro}>
-            <span className={dashboardStyles.eyebrow}>AIT USA oversight</span>
-            <h2 id="dashboard-team-title">Team handoffs</h2>
-            <p>Immediate assignment and overdue work. Deeper coverage lives in Team Monitor.</p>
-          </div>
-          <div className={dashboardStyles.handoffSummary}>
-            {taskWorkspace.teamUnassigned.length > 0 && (
-              <span><strong>{taskWorkspace.teamUnassigned.length}</strong> unassigned task{taskWorkspace.teamUnassigned.length === 1 ? '' : 's'}</span>
-            )}
-            {taskWorkspace.teamOtherOwnedOverdue.length > 0 && (
-              <span><strong>{taskWorkspace.teamOtherOwnedOverdue.length}</strong> overdue with other owners</span>
-            )}
-            {taskWorkspace.teamUnassigned.length === 0 && taskWorkspace.teamOtherOwnedOverdue.length === 0 && (
-              <span>No immediate task handoffs.</span>
-            )}
-          </div>
-          <div className={dashboardStyles.teamActions}>
-            {taskWorkspace.teamUnassigned.length > 0 && (
-              <Link className="btn btn-sm" href="/tasks?ownerUserId=unassigned&status=open">Review unassigned tasks</Link>
-            )}
-            <Link className="btn btn-sm" href={`/team-monitor?businessUnitId=${encodeURIComponent(currentBusinessUnit.id)}`}>Open Team Monitor</Link>
-          </div>
+        <section className={dashboardStyles.seniorMetrics} aria-label="Dashboard task overview">
+          <KPICard label="My overdue tasks" value={taskWorkspace.personalOverdue.length} href="/tasks?due=overdue&ownerUserId=__me" />
+          <KPICard label="My tasks today" value={taskWorkspace.personalToday.length} href="/tasks?due=today&ownerUserId=__me" />
+          <KPICard label="Unassigned tasks" value={taskWorkspace.teamUnassigned.length} href="/tasks?ownerUserId=unassigned&status=open" />
         </section>
       )}
 
@@ -581,18 +567,18 @@ export default function Dashboard() {
           <section className={dashboardStyles.actionRail} aria-labelledby="dashboard-priority-title">
             <div className={dashboardStyles.sectionHead}>
               <div>
-                <span className={dashboardStyles.eyebrow}>My work</span>
-                <h2 id="dashboard-priority-title">Priority tasks</h2>
-                <p>{taskWorkspace.personalOverdue.length} overdue · {taskWorkspace.personalToday.length} due today</p>
+                {!isSeniorView && <span className={dashboardStyles.eyebrow}>My work</span>}
+                <h2 id="dashboard-priority-title">{isSeniorView ? 'My tasks' : 'Priority tasks'}</h2>
+                {!isSeniorView && <p>{taskWorkspace.personalOverdue.length} overdue · {taskWorkspace.personalToday.length} due today</p>}
               </div>
             </div>
             {isSeniorView && ((kpis.myUsaNewLeads ?? 0) > 0 || (kpis.myUsaNeedsNextFollowUp ?? 0) > 0) && (
               <div className={dashboardStyles.personalNudges} aria-label="My contact follow-ups">
                 {(kpis.myUsaNewLeads ?? 0) > 0 && (
-                  <Link href={dashboardContactHref('myNewLeads', currentUserId)}>{kpis.myUsaNewLeads} new lead{kpis.myUsaNewLeads === 1 ? '' : 's'} assigned to me</Link>
+                  <Link href={dashboardContactHref('myNewLeads', currentUserId)}>{kpis.myUsaNewLeads} new lead{kpis.myUsaNewLeads === 1 ? '' : 's'}</Link>
                 )}
                 {(kpis.myUsaNeedsNextFollowUp ?? 0) > 0 && (
-                  <Link href={dashboardContactHref('myNeedsNextFollowUp', currentUserId)}>{kpis.myUsaNeedsNextFollowUp} of my contacts need a next follow-up</Link>
+                  <Link href={dashboardContactHref('myNeedsNextFollowUp', currentUserId)}>{kpis.myUsaNeedsNextFollowUp} need follow-up</Link>
                 )}
               </div>
             )}
@@ -608,7 +594,7 @@ export default function Dashboard() {
               showOwnerSelect={false}
               fillHeight
               emptyTitle="No urgent tasks"
-              emptyText="Nothing overdue or due today. Upcoming work remains on your calendar."
+              emptyText={isSeniorView ? '' : 'Nothing overdue or due today. Upcoming work remains on your calendar.'}
             />
             {taskWorkspace.urgentTasks.length > 5 && (
               <p className={dashboardStyles.moreWork}>Showing five priority tasks · open My tasks for the rest.</p>
@@ -621,13 +607,7 @@ export default function Dashboard() {
               <Link className="btn btn-sm" href={`/contacts?leadDateScope=all&owner=${encodeURIComponent(currentUserId)}`}>My contacts</Link>
             </nav>
           </section>
-          <section className={dashboardStyles.calendarCard} aria-labelledby="dashboard-calendar-title">
-            <div className={dashboardStyles.sectionHead}>
-              <div>
-                <span className={dashboardStyles.eyebrow}>Plan ahead</span>
-                <h2 id="dashboard-calendar-title">Calendar</h2>
-              </div>
-            </div>
+          <section className={dashboardStyles.calendarCard} aria-label="Calendar">
             <Calendar events={dashboardCalendarEvents} />
           </section>
         </div>

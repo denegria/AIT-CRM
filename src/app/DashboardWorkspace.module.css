@@ -6,8 +6,7 @@
 }
 
 .actionRail,
-.calendarCard,
-.teamBand {
+.calendarCard {
   min-width: 0;
   background: var(--bg-secondary);
   border: 1px solid var(--border-subtle);
@@ -29,7 +28,12 @@
   border-top:1px solid var(--border-subtle);
 }
 
-.teamActions { display:flex; flex-wrap:wrap; gap:8px; justify-content:flex-end; }
+.seniorMetrics {
+  display:grid;
+  grid-template-columns:repeat(3, minmax(0, 1fr));
+  gap:16px;
+  margin-bottom:16px;
+}
 
 .sectionHead {
   display: flex;
@@ -39,8 +43,7 @@
   margin-bottom: 14px;
 }
 
-.sectionHead h2,
-.teamIntro h2 {
+.sectionHead h2 {
   margin: 3px 0 0;
   color: var(--text-primary);
   font-size: var(--text-lg);
@@ -49,7 +52,6 @@
 }
 
 .sectionHead p,
-.teamIntro p,
 .moreWork,
 .doneToday {
   margin: 5px 0 0;
@@ -75,35 +77,6 @@
 
 .moreWork { margin-top: 10px; }
 
-.teamBand {
-  display: grid;
-  grid-template-columns: minmax(270px, 1.2fr) minmax(0, 0.85fr) auto;
-  gap: 20px;
-  align-items: center;
-  padding: 14px 18px;
-  margin-bottom: 16px;
-}
-
-.teamIntro p { font-size: var(--text-xs); }
-
-.handoffSummary {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px 18px;
-  padding-left: 18px;
-  border-left: 1px solid var(--border-subtle);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-}
-
-.handoffSummary strong {
-  color: var(--text-primary);
-  font-size: var(--text-lg);
-  font-weight: 730;
-}
-
 .personalNudges {
   display: flex;
   flex-wrap: wrap;
@@ -120,15 +93,11 @@
 
 @media (max-width: 1100px) {
   .workspace { grid-template-columns: minmax(300px, 0.9fr) minmax(0, 1.1fr); }
-  .teamBand { grid-template-columns: 1fr auto; }
-  .handoffSummary { grid-column: 1 / -1; grid-row: 2; }
 }
 
 @media (max-width: 760px) {
   .workspace { grid-template-columns: 1fr; align-items:start; }
-  .teamBand { grid-template-columns: 1fr; gap: 12px; }
-  .handoffSummary { grid-column: 1; grid-row: auto; padding-left: 0; border-left: 0; }
-  .teamActions { justify-content:flex-start; }
+  .seniorMetrics { gap:10px; }
 }
 
 @media (max-width: 520px) {
@@ -136,6 +105,5 @@
   .calendarCard { padding: 14px 12px; }
   .sectionHead { align-items: flex-start; }
   .sectionHead > a { white-space: nowrap; }
-  .teamBand { padding: 14px 12px; }
-  .handoffSummary { gap: 4px 10px; }
+  .seniorMetrics { gap:8px; }
 }
