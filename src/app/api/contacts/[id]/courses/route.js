@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { and, desc, eq } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
-import { contactCourseRecords, contacts, courseClassSections } from '@/db/schema.js';
+import { businessUnits, contactCourseRecords, contacts, courseClassSections } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
 import { assertCanAccessContactLead, resolveContactById } from '@/lib/crm/access.js';
 import { crmErrorResponse } from '@/lib/crm/errors.js';
@@ -15,6 +15,11 @@ import {
 import { isUuid } from '@/lib/crm/validation.js';
 import { latestLeadForContact } from '@/lib/crm/write-helpers.js';
 import { classSectionPayload, listClassSections } from '@/lib/crm/class-sections.js';
+import {
+  createCourseRecordWithEnrollmentLifecycle,
+  ENROLLMENT_WRITE_INTENTS,
+  normalizeEnrollmentWriteIntent,
+} from '@/lib/crm/enrollment-workflow.js';
 
 function cleanString(value) {
   return String(value || '').trim();
@@ -78,6 +83,19 @@ async function loadClassSection(db, session, businessUnitId, classSectionId) {
   return section;
 }
 
+async function loadBusinessUnit(db, session, businessUnitId) {
+  if (!businessUnitId) return null;
+  const [businessUnit] = await db
+    .select({ id: businessUnits.id, name: businessUnits.name, label: businessUnits.label })
+    .from(businessUnits)
+    .where(and(
+      eq(businessUnits.id, businessUnitId),
+      eq(businessUnits.organizationId, session.user.organizationId),
+    ))
+    .limit(1);
+  return businessUnit || null;
+}
+
 function applyClassSection(input, section) {
   if (!section) return input;
   return {
@@ -135,8 +153,20 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'Course records need a business unit.' }, { status: 400 });
     }
 
+    const enrollmentIntent = body.enrollmentIntent
+      ? normalizeEnrollmentWriteIntent(body.enrollmentIntent)
+      : '';
     let input = courseRecordInputFromPayload(body);
-    input.status ||= 'active';
+    input.status ||= enrollmentIntent === ENROLLMENT_WRITE_INTENTS.PAST ? 'completed' : 'active';
+    if (enrollmentIntent === ENROLLMENT_WRITE_INTENTS.START && input.status !== 'active') {
+      return NextResponse.json({ error: 'Starting an enrollment requires a current enrollment record.' }, { status: 400 });
+    }
+    if (
+      enrollmentIntent === ENROLLMENT_WRITE_INTENTS.PAST &&
+      !['completed', 'dropped', 'cancelled', 'transferred'].includes(input.status)
+    ) {
+      return NextResponse.json({ error: 'Past enrollments must use an ended status.' }, { status: 400 });
+    }
     const section = await loadClassSection(db, session, businessUnitId, input.classSectionId);
     if (section?.status !== 'active' && input.status === 'active') {
       return NextResponse.json({ error: 'Inactive class sections cannot accept new active enrollments.' }, { status: 400 });
@@ -145,16 +175,43 @@ export async function POST(request, { params }) {
     const existingRecords = await listCourseRecords(db, session, contact.id);
     validateCourseRecordInput(input, { existingRecords });
 
-    await db.transaction(async (tx) => {
-      await tx.insert(contactCourseRecords).values(courseRecordValuesFromInput(input, {
-        organizationId: session.user.organizationId,
-        businessUnitId,
-        contactId: contact.id,
-        leadId: lead?.id || null,
-        status: 'active',
-      }));
+    const courseValues = courseRecordValuesFromInput(input, {
+      organizationId: session.user.organizationId,
+      businessUnitId,
+      contactId: contact.id,
+      leadId: lead?.id || null,
+      status: input.status,
     });
-    return NextResponse.json(await courseResponseContext(db, session, contact, lead), { status: 201 });
+    let writeResult = null;
+    if (enrollmentIntent) {
+      const businessUnit = await loadBusinessUnit(db, session, businessUnitId);
+      if (!businessUnit) {
+        return NextResponse.json({ error: 'Enrollment business unit was not found.' }, { status: 404 });
+      }
+      writeResult = await createCourseRecordWithEnrollmentLifecycle({
+        db,
+        organizationId: session.user.organizationId,
+        actorUserId: session.user.id,
+        businessUnit,
+        contact,
+        expectedOpportunityId: cleanString(body.opportunityId || lead?.id),
+        courseValues,
+        intent: enrollmentIntent,
+        authorize: ({ opportunity }) => assertCanAccessContactLead(session, opportunity, contact),
+      });
+    } else {
+      await db.transaction(async (tx) => {
+        await tx.insert(contactCourseRecords).values(courseValues);
+      });
+    }
+    return NextResponse.json({
+      ...(await courseResponseContext(db, session, contact, writeResult?.opportunity || lead)),
+      opportunity: writeResult?.opportunity ? {
+        id: writeResult.opportunity.id,
+        status: writeResult.opportunity.status,
+        currentStage: writeResult.opportunity.currentStage || writeResult.opportunity.status,
+      } : null,
+    }, { status: 201 });
   } catch (err) {
     return err?.status
       ? crmErrorResponse(err)

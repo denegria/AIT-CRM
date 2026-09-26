@@ -13,6 +13,24 @@ function badgeClass(val) {
   return map[v] || 'badge-new';
 }
 
+function visibleActionsForRow(actions, row) {
+  return (actions || [])
+    .filter((action) => typeof action.visible !== 'function' || action.visible(row))
+    .map((action) => ({
+      ...action,
+      resolvedLabel: typeof action.label === 'function' ? action.label(row) : action.label,
+    }))
+    .filter((action) => action.resolvedLabel);
+}
+
+function actionButtonClass(action) {
+  return [
+    s.actBtn,
+    action.primary ? s.actBtnPrimary : '',
+    action.danger ? s.actBtnDanger : '',
+  ].filter(Boolean).join(' ');
+}
+
 export default function DataTable({
   columns,
   data,
@@ -32,6 +50,13 @@ export default function DataTable({
   onSelect,
   mobileFields,
   mobileBadges,
+  defaultVisibleColumnKeys,
+  wideSearch = false,
+  fixedLayout = false,
+  stickyHeader = false,
+  comfortableRows = false,
+  readableTypography = false,
+  actionColumnWidth,
   sortKey: controlledSortKey,
   sortDirection: controlledSortDirection,
   onSortChange,
@@ -47,7 +72,11 @@ export default function DataTable({
   const [editCell, setEditCell] = useState(null); // {rowId, key}
   const [editVal, setEditVal] = useState('');
   const [confirm, setConfirm] = useState(null); // { title, message, onConfirm }
-  const [visibleColumnKeys, setVisibleColumnKeys] = useState(() => columns.map((column) => column.key));
+  const [visibleColumnKeys, setVisibleColumnKeys] = useState(() => {
+    const availableKeys = new Set(columns.map((column) => column.key));
+    const requestedKeys = (defaultVisibleColumnKeys || []).filter((key) => availableKeys.has(key));
+    return requestedKeys.length ? requestedKeys : columns.map((column) => column.key);
+  });
   const columnSignature = columns.map((column) => column.key).join('|');
   const columnKeys = useMemo(() => (columnSignature ? columnSignature.split('|') : []), [columnSignature]);
   const effectiveVisibleColumnKeys = useMemo(() => {
@@ -60,6 +89,10 @@ export default function DataTable({
     const nextColumns = columns.filter((column) => visibleSet.has(column.key));
     return nextColumns.length ? nextColumns : columns.slice(0, 1);
   }, [columns, effectiveVisibleColumnKeys]);
+  const defaultLayoutKeys = useMemo(() => new Set(defaultVisibleColumnKeys || []), [defaultVisibleColumnKeys]);
+  const useFixedLayout = fixedLayout && (
+    defaultLayoutKeys.size === 0 || visibleColumns.every((column) => defaultLayoutKeys.has(column.key))
+  );
 
   const filtered = useMemo(() => {
     let rows = data;
@@ -128,7 +161,6 @@ export default function DataTable({
       return columns.some((column) => column.key === key) ? [...nextCurrent, key] : nextCurrent;
     });
   };
-
   const mobilePrimary = visibleColumns[0];
   const mobileSecondary = visibleColumns[1];
   const defaultBadgeColumns = visibleColumns.filter((column) => column.type === 'badge').slice(0, 2);
@@ -146,7 +178,7 @@ export default function DataTable({
     <div className={s.wrap}>
       <div className={s.toolbar}>
         <div className={s.toolbarLead}>
-          <div className={s.searchWrap}>
+          <div className={`${s.searchWrap} ${wideSearch ? s.searchWrapWide : ''}`}>
             <Search className={s.searchIcon} size={16} />
             <input className={s.search} placeholder={searchPlaceholder||'Search...'} value={search} onChange={e=>setSearch(e.target.value)} />
           </div>
@@ -209,8 +241,17 @@ export default function DataTable({
         )
       ) : (
         <>
-        <div className={s.tableScroller}>
-        <table className={s.table}>
+        <div className={`${s.tableScroller} ${useFixedLayout ? s.fixedScroller : ''}`}>
+        <table className={`${s.table} ${useFixedLayout ? s.tableFixed : ''} ${stickyHeader ? s.tableStickyHeader : ''} ${comfortableRows ? s.tableComfortable : ''} ${readableTypography ? s.tableReadable : ''}`}>
+          {useFixedLayout && (
+            <colgroup>
+              {selectable && <col style={{ width: 40 }} />}
+              {visibleColumns.map((column) => (
+                <col key={column.key} style={column.desktopWidth ? { width: column.desktopWidth } : undefined} />
+              ))}
+              {actions && <col style={actionColumnWidth ? { width: actionColumnWidth } : undefined} />}
+            </colgroup>
+          )}
           <thead><tr>
             {selectable && (
               <th style={{ width: 40, textAlign: 'center' }}>
@@ -241,7 +282,9 @@ export default function DataTable({
             {actions && <th className={s.actionHeader}>Actions</th>}
           </tr></thead>
           <tbody>
-            {filtered.map(row => (
+            {filtered.map(row => {
+              const rowActions = visibleActionsForRow(actions, row);
+              return (
               <tr key={row.id}>
                 {selectable && (
                   <td style={{ textAlign: 'center' }}>
@@ -259,28 +302,31 @@ export default function DataTable({
                 ))}
                 {actions && (
                   <td className={s.actionCell}><div className={s.actions}>
-                    {actions.map((a,i) => (
-                      <button key={i} className={`${s.actBtn} ${a.danger?s.actBtnDanger:''}`} onClick={()=>{
+                    {rowActions.map((a,i) => (
+                      <button key={i} className={actionButtonClass(a)} style={a.buttonWidth ? { width: a.buttonWidth } : undefined} onClick={()=>{
                         if (a.danger) {
                           setConfirm({
-                            title: `${a.label} Record`,
-                            message: `Are you sure you want to ${a.label.toLowerCase()} this record? This action cannot be undone.`,
+                            title: `${a.resolvedLabel} Record`,
+                            message: `Are you sure you want to ${a.resolvedLabel.toLowerCase()} this record? This action cannot be undone.`,
                             onConfirm: () => a.onClick(row)
                           });
                         } else {
                           a.onClick(row);
                         }
-                      }}>{a.label}</button>
+                      }}>{a.icon}{a.resolvedLabel}</button>
                     ))}
                   </div></td>
                 )}
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
         </div>
         <div className={s.mobileCards}>
-          {filtered.map((row) => (
+          {filtered.map((row) => {
+            const rowActions = visibleActionsForRow(actions, row);
+            return (
             <div key={row.id} className={s.mobileCard}>
               {selectable && (
                 <label className={s.mobileSelect}>
@@ -319,23 +365,24 @@ export default function DataTable({
               )}
               {actions && (
                 <div className={s.mobileActions}>
-                  {actions.map((a, i) => (
-                    <button key={i} className={`${s.actBtn} ${a.danger?s.actBtnDanger:''}`} onClick={() => {
+                  {rowActions.map((a, i) => (
+                    <button key={i} className={actionButtonClass(a)} style={a.buttonWidth ? { width: a.buttonWidth } : undefined} onClick={() => {
                       if (a.danger) {
                         setConfirm({
-                          title: `${a.label} Record`,
-                          message: `Are you sure you want to ${a.label.toLowerCase()} this record? This action cannot be undone.`,
+                          title: `${a.resolvedLabel} Record`,
+                          message: `Are you sure you want to ${a.resolvedLabel.toLowerCase()} this record? This action cannot be undone.`,
                           onConfirm: () => a.onClick(row)
                         });
                       } else {
                         a.onClick(row);
                       }
-                    }}>{a.label}</button>
+                    }}>{a.icon}{a.resolvedLabel}</button>
                   ))}
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
         </>
       )}

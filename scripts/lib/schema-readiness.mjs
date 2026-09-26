@@ -21,6 +21,11 @@ select
     from information_schema.columns
     where table_schema = 'public'
   ) as column_catalog_md5,
+  (
+    select md5(string_agg(concat_ws('|', table_name, column_name, data_type, udt_name, is_nullable, coalesce(column_default, '')), E'\\n' order by table_name, column_name))
+    from information_schema.columns
+    where table_schema = 'public'
+  ) as logical_column_catalog_md5,
   (select count(*)::integer from pg_indexes where schemaname = 'public') as index_count,
   (
     select md5(string_agg(concat_ws('|', tablename, indexname, indexdef), E'\\n' order by tablename, indexname))
@@ -244,6 +249,7 @@ export async function verifyRepositoryBaseline({
   rootDir = defaultRootDir,
   manifest,
   exportRunner = runDrizzleExport,
+  verifyCurrentSchema = true,
 } = {}) {
   const resolvedManifest = manifest || await loadSchemaManifest(rootDir);
   const checks = [];
@@ -302,7 +308,7 @@ export async function verifyRepositoryBaseline({
   });
 
   const fileEntries = [
-    resolvedManifest.repository.schema,
+    ...(verifyCurrentSchema ? [resolvedManifest.repository.schema] : []),
     resolvedManifest.repository.journal,
     ...tracked.flatMap((entry) => [entry, entry.snapshot]),
     ...unjournaled,
@@ -364,28 +370,36 @@ export async function verifyRepositoryBaseline({
 
   const exportErrors = [];
   let rawExport = Buffer.alloc(0);
-  try {
-    rawExport = await exportRunner(rootDir);
-    if (!Buffer.isBuffer(rawExport)) rawExport = Buffer.from(rawExport);
-    compareValue('Drizzle raw stdout sha256', resolvedManifest.repository.drizzleExport.rawStdoutSha256, sha256(rawExport), exportErrors);
-  } catch (error) {
-    exportErrors.push(error.message);
+  if (verifyCurrentSchema) {
+    try {
+      rawExport = await exportRunner(rootDir);
+      if (!Buffer.isBuffer(rawExport)) rawExport = Buffer.from(rawExport);
+      compareValue('Drizzle raw stdout sha256', resolvedManifest.repository.drizzleExport.rawStdoutSha256, sha256(rawExport), exportErrors);
+    } catch (error) {
+      exportErrors.push(error.message);
+    }
   }
   checks.push({
     name: 'Drizzle schema-from-empty export reproduces the raw stdout fingerprint',
     ok: exportErrors.length === 0,
-    detail: formatErrors(exportErrors, resolvedManifest.repository.drizzleExport.rawStdoutSha256),
+    detail: verifyCurrentSchema
+      ? formatErrors(exportErrors, resolvedManifest.repository.drizzleExport.rawStdoutSha256)
+      : 'current schema/export verification delegated to the pinned forward-lineage manifest',
   });
 
   const structureErrors = [];
   const exportShape = analyzeDrizzleExport(rawExport);
-  for (const [key, expected] of Object.entries(resolvedManifest.repository.drizzleExport.structure)) {
-    compareValue(`Drizzle export ${key}`, expected, exportShape[key], structureErrors);
+  if (verifyCurrentSchema) {
+    for (const [key, expected] of Object.entries(resolvedManifest.repository.drizzleExport.structure)) {
+      compareValue(`Drizzle export ${key}`, expected, exportShape[key], structureErrors);
+    }
   }
   checks.push({
     name: 'Drizzle export structure matches the expected schema declaration',
     ok: structureErrors.length === 0,
-    detail: formatErrors(structureErrors, Object.entries(exportShape).map(([key, value]) => `${key}=${value}`).join(', ')),
+    detail: verifyCurrentSchema
+      ? formatErrors(structureErrors, Object.entries(exportShape).map(([key, value]) => `${key}=${value}`).join(', '))
+      : 'current schema/export verification delegated to the pinned forward-lineage manifest',
   });
 
   const sqlOnlyErrors = [];
@@ -423,6 +437,7 @@ function normalizedCatalogRow(row = {}) {
     tableNameMd5: row.table_name_md5,
     columnCount: Number(row.column_count),
     columnCatalogMd5: row.column_catalog_md5,
+    logicalColumnCatalogMd5: row.logical_column_catalog_md5,
     indexCount: Number(row.index_count),
     indexCatalogMd5: row.index_catalog_md5,
     constraintCount: Number(row.constraint_count),

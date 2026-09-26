@@ -4,6 +4,7 @@ import test from 'node:test';
 
 const tasksSource = fs.readFileSync(new URL('./page.js', import.meta.url), 'utf8');
 const taskDetailSource = fs.readFileSync(new URL('./[id]/page.js', import.meta.url), 'utf8');
+const taskStyles = fs.readFileSync(new URL('./FollowUpQueue.module.css', import.meta.url), 'utf8');
 const globalStyles = fs.readFileSync(new URL('../globals.css', import.meta.url), 'utf8');
 
 test('Task Detail uses the shared notification safe area', () => {
@@ -49,4 +50,64 @@ test('generic task actions and the edit form submit the loaded task version', ()
   assert.match(tasksSource, /expectedUpdatedAt: task\.updatedAt/);
   assert.match(tasksSource, /expectedUpdatedAt: editDraft\.expectedUpdatedAt/);
   assert.match(tasksSource, /expectedUpdatedAt: task\.updatedAt \|\| ''/);
+});
+
+test('task queue consolidates filters and row actions without removing workflow access', () => {
+  assert.match(tasksSource, /aria-controls="secondary-task-filters"/);
+  assert.match(tasksSource, /secondaryFiltersOpen && \(/);
+  assert.match(tasksSource, />\s*Filters\s*/);
+  assert.doesNotMatch(tasksSource, />\s*Review\s*</);
+  assert.doesNotMatch(tasksSource, />\s*Assign to me\s*</);
+  assert.match(tasksSource, /task\.contactName \|\| \(task\.contactId \? 'Linked contact' : 'No contact linked'\)/);
+  assert.match(tasksSource, />\s*Log outcome\s*</);
+  assert.match(tasksSource, />\s*Contact\s*</);
+  assert.match(tasksSource, />\s*More\s*</);
+});
+
+test('task queue default chrome reflects only user-controlled filters', () => {
+  assert.match(tasksSource, /const secondaryFilterCount = \[/);
+  assert.match(tasksSource, /const businessUnitFilterIsUserControlled = !currentBusinessUnitId/);
+  assert.match(tasksSource, /const hasUserControlledFilters = filters\.due !== 'open'/);
+  assert.match(tasksSource, /secondaryFilterCount > 0 && \(/);
+  assert.match(tasksSource, /!currentBusinessUnitId && \(/);
+  assert.match(tasksSource, /hasUserControlledFilters && \(\s*<button className="btn btn-sm"/s);
+  assert.match(tasksSource, />\s*View unassigned\s*</);
+  assert.doesNotMatch(tasksSource, />\s*Show queue\s*</);
+  assert.doesNotMatch(tasksSource, /className=\{s\.queueCount\}/);
+  assert.doesNotMatch(tasksSource, /className=\{s\.queueSubtitle\}/);
+});
+
+test('task workload metrics are integrated into the queue header', () => {
+  assert.match(tasksSource, /<div className=\{s\.queueHeaderMain\}>[\s\S]*?<div className=\{s\.queueMetrics\} aria-label="Task workload summary">/);
+  assert.match(tasksSource, /\['work', 'Due Now', stats\.currentWork\]/);
+  assert.match(tasksSource, /\['today', 'Due Today', stats\.dueToday\]/);
+  assert.match(tasksSource, /\['overdue', 'Overdue', stats\.overdue\]/);
+  assert.match(tasksSource, /selectWorkloadDue\(due\)/);
+  assert.match(tasksSource, /aria-pressed=\{filters\.due === due\}/);
+  assert.match(tasksSource, /stats\.completedToday/);
+  assert.doesNotMatch(tasksSource, /summaryStrip|summaryTile(Current|Today|Overdue|Completed)/);
+});
+
+test('task queue uses one flat work surface and secondary contextual actions', () => {
+  assert.match(tasksSource, /<div className=\{s\.queueAlert\}>/);
+  assert.match(tasksSource, /<button className="btn btn-sm" type="button" onClick=\{showUnassignedLeadFollowUps\}>/);
+  assert.doesNotMatch(tasksSource, /className=\{s\.intakeAlert\}/);
+  assert.match(tasksSource, /task\.status !== 'open' && \(/);
+  assert.match(tasksSource, /className=\{`btn btn-sm \$\{s\.outcomeAction\}`\}/);
+  assert.doesNotMatch(tasksSource, /className="btn btn-sm btn-primary"[\s\S]{0,180}Log outcome/);
+  assert.doesNotMatch(tasksSource, /queueItemOverdue|queueItemToday/);
+  assert.match(taskStyles, /\.queueShell\s*\{[^}]*margin: 0 -20px;[^}]*border-bottom:/s);
+  assert.match(taskStyles, /\.queueItem\s*\{[^}]*background: transparent;[^}]*border-top:/s);
+  assert.match(taskStyles, /\.outcomeAction\s*\{[^}]*color: var\(--accent\)/s);
+  assert.doesNotMatch(taskStyles, /\.queueItem(Overdue|Today)\b/);
+});
+
+test('Task Detail is outcome-first and keeps advanced controls deliberate', () => {
+  assert.match(taskDetailSource, /followUpTaskEntryHref\(task, \{ returnTo \}\)/);
+  assert.match(taskDetailSource, /taskQueueReturnHref\(searchParams\.get\('returnTo'\) \|\| '', task\?\.businessUnitId \|\| ''\)/);
+  assert.match(taskDetailSource, />\s*Log outcome\s*</);
+  assert.doesNotMatch(taskDetailSource, />\s*Open Queue\s*</);
+  assert.match(taskDetailSource, /<details className=\{s\.moreMenu\}>/);
+  assert.match(taskDetailSource, /aria-label="Task owner"/);
+  assert.match(taskDetailSource, /action: 'assign'/);
 });

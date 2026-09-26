@@ -12,6 +12,7 @@ import {
   users,
   workOrders,
 } from '../../db/schema.js';
+import { normalizeLifecycleStatus, WORKFLOW_KEYS } from '../crm/lifecycle.js';
 
 export const TIMELINE_TYPES = {
   ACTIVITY: 'activity',
@@ -57,6 +58,20 @@ const EVENT_TITLE_OVERRIDES = {
   'contact.note_added': 'Note added',
 };
 
+const AIT_USA_SYSTEM_EVENT_TITLES = {
+  'aitusa.placement_started': 'Placement assessment started',
+  'aitusa.placement_completed': 'Placement assessment completed',
+  'aitusa.result_claimed': 'Placement result claimed',
+  'aitusa.portal_account_activated': 'Portal account activated',
+  'aitusa.advisor_handoff_requested': 'Advisor handoff requested',
+  'aitusa.placement_review_created': 'Placement review created',
+  'aitusa.placement_review_started': 'Placement review started',
+  'aitusa.placement_review_confirmed': 'Placement review confirmed',
+  'aitusa.placement_review_adjusted': 'Placement review adjusted',
+  'aitusa.placement_review_additional_review_required': 'Additional placement review required',
+  'lead_profile.updated': 'Inquiry profile updated',
+};
+
 const TIMELINE_CATEGORIES = {
   ESTIMATE: 'estimate',
   FOLLOW_UP: 'follow_up',
@@ -65,6 +80,7 @@ const TIMELINE_CATEGORIES = {
   MESSAGE: 'message',
   NOTE: 'note',
   PAYMENT: 'payment',
+  SYSTEM: 'system',
   TASK: 'task',
   WORK: 'work',
 };
@@ -77,6 +93,7 @@ const TIMELINE_CATEGORY_LABELS = {
   [TIMELINE_CATEGORIES.MESSAGE]: 'Message',
   [TIMELINE_CATEGORIES.NOTE]: 'Note',
   [TIMELINE_CATEGORIES.PAYMENT]: 'Payment',
+  [TIMELINE_CATEGORIES.SYSTEM]: 'System',
   [TIMELINE_CATEGORIES.TASK]: 'Task',
   [TIMELINE_CATEGORIES.WORK]: 'Work',
 };
@@ -160,6 +177,34 @@ function sourceKey(sourceSheet, sourceRow) {
   return `${sourceSheet}::${sourceRow}`;
 }
 
+function stableSubmissionKeysFromObject(value = {}) {
+  const keys = [
+    'externalId',
+    'external_id',
+    'leadgenId',
+    'leadgen_id',
+    'submissionId',
+    'submission_id',
+    'sourceRowId',
+    'source_row_id',
+  ];
+  return new Set(keys.map((key) => readableLine(value?.[key])).filter(Boolean));
+}
+
+function matchingWebsiteLeadCapture(event = {}, leadRows = []) {
+  const eventType = String(event.eventType || '').toLowerCase();
+  if (eventType !== 'website_lead_captured' && eventType !== 'facebook_lead_captured') return false;
+  if (event.leadId && leadRows.some((lead) => lead.id === event.leadId && websiteLeadRecordPayload(lead))) return true;
+  const eventKeys = stableSubmissionKeysFromObject(event.metadataJson || {});
+  if (!eventKeys.size) return false;
+  return leadRows.some((lead) => {
+    if (!websiteLeadRecordPayload(lead)) return false;
+    const leadFields = parsePipeKeyValues(lead.originalNotes);
+    const leadKeys = stableSubmissionKeysFromObject(leadFields);
+    return [...eventKeys].some((key) => leadKeys.has(key));
+  });
+}
+
 function timelineGroupKey(row = {}) {
   return row.leadId || row.contactId || '';
 }
@@ -227,6 +272,179 @@ function statusLabel(value = '') {
   return status
     .replaceAll('_', ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function compactDateLabel(value) {
+  const timestamp = isoTimestamp(value);
+  if (!timestamp) return '';
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(timestamp));
+}
+
+function compactDateTimeLabel(value) {
+  const timestamp = isoTimestamp(value);
+  if (!timestamp) return '';
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  }).format(new Date(timestamp));
+}
+
+function isAitUsaTimelineEntry(entry = {}) {
+  const businessUnitName = `${entry.businessUnit?.name || ''} ${entry.businessUnit?.label || ''}`.toLowerCase();
+  const eventType = String(entry.eventType || '').toLowerCase();
+  return businessUnitName.includes('ait usa') || eventType.startsWith('aitusa.');
+}
+
+function isAitUsaSystemEvent(eventType = '') {
+  const type = String(eventType || '').toLowerCase();
+  return type.startsWith('aitusa.') || type === 'lead_profile.updated';
+}
+
+function normalizedInquiryStatus(value = '') {
+  return normalizeLifecycleStatus(value, { workflowKey: WORKFLOW_KEYS.AIT_USA }) || '';
+}
+
+function verifiedProgramInterest(lead = {}, fields = {}) {
+  const explicit = readableLine(lead.programInterest);
+  if (explicit) return explicit;
+  const legacy = readableLine(fields.service);
+  if (!legacy) return '';
+  if (/(wix|facebook|wordpress|website|historical lead|lead form)/i.test(legacy)) return '';
+  return legacy;
+}
+
+function taskEventLabel(eventType = '') {
+  const labels = {
+    created: 'Created',
+    completed: 'Completed',
+    canceled: 'Canceled',
+    cancelled: 'Canceled',
+    reassigned: 'Reassigned',
+    assigned: 'Assigned',
+    rescheduled: 'Rescheduled',
+    reopened: 'Reopened',
+    updated: 'Updated',
+  };
+  const normalized = String(eventType || '').toLowerCase().replace(/^task\./, '');
+  return labels[normalized] || statusLabel(normalized);
+}
+
+function systemEventTitle(eventType = '') {
+  const normalized = String(eventType || '').toLowerCase();
+  return AIT_USA_SYSTEM_EVENT_TITLES[normalized] || titleCaseEventType(normalized.replace(/^aitusa\./, ''));
+}
+
+function systemEventMeta(metadata = {}) {
+  const placement = metadata.placement || {};
+  return compactArray([
+    fieldChip('Level', placement.finalLevel || placement.recommendedLevelLabel || placement.recommendedLevelKey),
+    fieldChip('Review', statusLabel(placement.reviewStatus || placement.state)),
+    fieldChip('Contact', statusLabel(placement.communicationPreference)),
+  ]).slice(0, 4);
+}
+
+function entryTemplate(category = '') {
+  const templates = {
+    [TIMELINE_CATEGORIES.LEAD]: 'inquiry',
+    [TIMELINE_CATEGORIES.FOLLOW_UP]: 'outreach',
+    [TIMELINE_CATEGORIES.NOTE]: 'note',
+    [TIMELINE_CATEGORIES.TASK]: 'task',
+    [TIMELINE_CATEGORIES.SYSTEM]: 'system',
+    [TIMELINE_CATEGORIES.IMPORT]: 'import',
+  };
+  return templates[category] || 'activity';
+}
+
+function aitUsaCategoryLabel(category = '') {
+  if (category === TIMELINE_CATEGORIES.LEAD) return 'Inquiry';
+  if (category === TIMELINE_CATEGORIES.FOLLOW_UP) return 'Outreach';
+  if (category === TIMELINE_CATEGORIES.NOTE) return 'Internal note';
+  return TIMELINE_CATEGORY_LABELS[category] || 'Activity';
+}
+
+function inquiryCaptureTitle(entry = {}) {
+  const source = String(entry.record?.title || entry.source?.label || entry.title || '').toLowerCase();
+  if (source.includes('facebook')) return 'Facebook inquiry received';
+  if (source.includes('wix') || source.includes('website') || source.includes('wordpress')) return 'Website inquiry received';
+  return 'Inquiry captured';
+}
+
+function primaryMetaForTimelineEntry(entry = {}, category = '') {
+  const metadata = entry.metadataJson || {};
+  if (category === TIMELINE_CATEGORIES.FOLLOW_UP) {
+    return compactArray([
+      fieldChip('Channel', statusLabel(metadata.channel || metadata.contactMethod)),
+      entry.actor?.name ? `By ${entry.actor.name}` : '',
+      metadata.nextDueAt ? `Next ${compactDateTimeLabel(metadata.nextDueAt)}` : '',
+    ]).slice(0, 4);
+  }
+  if (category === TIMELINE_CATEGORIES.LEAD) {
+    if (entry.leadStatus) {
+      return compactArray([
+        entry.leadStatus.from ? `From ${entry.leadStatus.from}` : '',
+        entry.actor?.name ? `By ${entry.actor.name}` : '',
+      ]);
+    }
+    return compactArray(entry.record?.primaryMeta || []).slice(0, 4);
+  }
+  if (category === TIMELINE_CATEGORIES.NOTE) {
+    return compactArray([entry.actor?.name ? `By ${entry.actor.name}` : '']);
+  }
+  if (category === TIMELINE_CATEGORIES.TASK) {
+    const task = entry.task || {};
+    const statusChange = entry.taskStatus?.from && entry.taskStatus?.to
+      ? `Status ${statusLabel(entry.taskStatus.from)} -> ${statusLabel(entry.taskStatus.to)}`
+      : '';
+    const ownerChange = entry.ownerChange?.from?.name && entry.ownerChange?.to?.name
+      ? `Owner ${entry.ownerChange.from.name} -> ${entry.ownerChange.to.name}`
+      : '';
+    const dueChange = entry.dueChange?.from && entry.dueChange?.to
+      ? `Due ${compactDateLabel(entry.dueChange.from)} -> ${compactDateLabel(entry.dueChange.to)}`
+      : '';
+    return compactArray([
+      statusChange || (task.status ? fieldChip('Status', statusLabel(task.status)) : ''),
+      ownerChange || (task.owner?.name ? fieldChip('Owner', task.owner.name) : ''),
+      dueChange || (task.dueAt ? fieldChip('Due', compactDateLabel(task.dueAt)) : ''),
+      task.priority && normalizedStatus(task.priority) !== 'medium'
+        ? fieldChip('Priority', statusLabel(task.priority))
+        : '',
+    ]).slice(0, 4);
+  }
+  if (category === TIMELINE_CATEGORIES.SYSTEM) return systemEventMeta(metadata);
+  return [];
+}
+
+function statusForTimelineEntry(entry = {}, category = '') {
+  if (category === TIMELINE_CATEGORIES.FOLLOW_UP) {
+    return readableLine(entry.metadataJson?.outcomeLabel) || '';
+  }
+  if (category === TIMELINE_CATEGORIES.LEAD) {
+    return entry.leadStatus?.to || entry.record?.canonicalStatus || entry.inquiryStatus || '';
+  }
+  if (category === TIMELINE_CATEGORIES.TASK) {
+    if (entry.dueChange?.from && entry.dueChange?.to) return 'Rescheduled';
+    if (entry.ownerChange?.from?.name && entry.ownerChange?.to?.name) return 'Reassigned';
+    return taskEventLabel(entry.eventType);
+  }
+  return '';
+}
+
+function titleForTimelineEntry(entry = {}, category = '') {
+  if (category === TIMELINE_CATEGORIES.LEAD) {
+    if (entry.leadStatus?.to) return `Inquiry moved to ${entry.leadStatus.to}`;
+    if (entry.record?.kind === 'website_lead') return inquiryCaptureTitle(entry);
+  }
+  if (category === TIMELINE_CATEGORIES.SYSTEM) return systemEventTitle(entry.eventType);
+  return entry.title || TIMELINE_CATEGORY_LABELS[category] || 'Activity';
 }
 
 function isCompletedStage(status = '', source = {}) {
@@ -381,10 +599,16 @@ function websiteLeadForWhom(fields = {}) {
 function websiteLeadRecordPayload(lead) {
   const sourceType = String(lead?.sourceType || '').toLowerCase();
   const sourceName = String(lead?.sourceName || '');
-  if (sourceType !== 'website_form' && !sourceName.toLowerCase().includes('wix')) return null;
+  const sourceLooksLikeInboundForm = sourceName.toLowerCase().includes('wix')
+    || sourceName.toLowerCase().includes('facebook');
+  if (sourceType !== 'website_form' && !sourceLooksLikeInboundForm) return null;
   const fields = parsePipeKeyValues(lead.originalNotes);
   const stage = readableLine(fields.current_stage || lead.currentStage || lead.status || 'New Lead');
+  const canonicalStatus = normalizedInquiryStatus(lead.status || lead.currentStage) || readableLine(lead.status || lead.currentStage);
   const forWhom = websiteLeadForWhom(fields);
+  const programInterest = verifiedProgramInterest(lead, fields);
+  const location = readableLine(lead.locationPreference || fields.address);
+  const age = readableLine(fields.age);
   const meta = compactArray([
     stage ? fieldChip('Stage', stage) : '',
     forWhom ? fieldChip('For', forWhom.replace(/^For\s+/i, '')) : '',
@@ -401,7 +625,14 @@ function websiteLeadRecordPayload(lead) {
     title: sourceName || 'Website form lead',
     status: lead.status,
     stageLabel: stage,
+    canonicalStatus,
     meta,
+    primaryMeta: compactArray([
+      programInterest ? fieldChip('Program', programInterest) : '',
+      forWhom,
+      location ? fieldChip('Location', location) : '',
+      age ? fieldChip('Age', age) : '',
+    ]),
     fields,
   });
 }
@@ -416,7 +647,8 @@ function websiteLeadText(lead, record) {
   if (isWixWebsiteLead(lead, record)) return '';
   const message = readableLine(record?.fields?.message || lead.originalNotes);
   if (looksLikeForWhom(message)) return '';
-  if (message && !message.includes('external_id=') && !message.includes('source_key=')) return message;
+  if (workbookLikeText(message)) return '';
+  if (message && !/\b(?:external|leadgen|source_row|submission)_id=/i.test(message) && !message.includes('source_key=')) return message;
   return 'Website lead submitted.';
 }
 
@@ -653,10 +885,12 @@ export function presentationForTimelineEntry(entry) {
   const hint = entry.presentationHint || {};
   const isImport = eventType.includes('import') || hasSource;
   const isFollowUp = eventType.includes('follow_up') || text.includes('volver a llamar') || text.includes('llamar de nuevo');
+  const isSystem = isAitUsaSystemEvent(eventType);
   const hasProvenance = Boolean(isImport || hasSource || hint.sourceKind || hint.rawText || hint.sourceGroupLabel);
 
   let category = TIMELINE_CATEGORIES.IMPORT;
-  if (isFollowUp) category = TIMELINE_CATEGORIES.FOLLOW_UP;
+  if (isSystem) category = TIMELINE_CATEGORIES.SYSTEM;
+  else if (isFollowUp) category = TIMELINE_CATEGORIES.FOLLOW_UP;
   else if (eventType.includes('payment') || linkedTypes.has('payment')) category = TIMELINE_CATEGORIES.PAYMENT;
   else if (eventType.includes('estimate') || linkedTypes.has('estimate')) category = TIMELINE_CATEGORIES.ESTIMATE;
   else if (eventType.includes('work_order') || linkedTypes.has('work_order') || entry.type === TIMELINE_TYPES.WORK_ORDER) category = TIMELINE_CATEGORIES.WORK;
@@ -680,14 +914,28 @@ export function presentationForTimelineEntry(entry) {
   const priorityOverride = hint.priority || '';
   const importedOverride = hint.isImported || false;
   const finalCategory = categoryOverride || category;
+  const finalImported = importedOverride || isImport;
+  const aitUsaEntry = isAitUsaTimelineEntry(entry);
+  const finalTitle = titleForTimelineEntry(entry, finalCategory);
+  const finalStatus = statusForTimelineEntry(entry, finalCategory);
+  const finalMeta = primaryMetaForTimelineEntry(entry, finalCategory);
 
   const presentation = {
     category: finalCategory,
-    categoryLabel: categoryLabelOverride || TIMELINE_CATEGORY_LABELS[finalCategory],
+    categoryLabel: categoryLabelOverride || (aitUsaEntry ? aitUsaCategoryLabel(finalCategory) : TIMELINE_CATEGORY_LABELS[finalCategory]),
     priority: priorityOverride || (finalCategory === TIMELINE_CATEGORIES.IMPORT ? 'secondary' : 'primary'),
     provenance: Object.keys(provenance).length ? provenance : null,
-    isImported: importedOverride || isImport,
+    isImported: finalImported,
+    facets: finalImported ? [TIMELINE_CATEGORIES.IMPORT] : [],
+    template: entryTemplate(finalCategory),
+    title: finalTitle,
+    statusLabel: finalStatus,
+    meta: finalMeta,
   };
+  if ((finalImported || (aitUsaEntry && finalCategory === TIMELINE_CATEGORIES.NOTE))
+    && isDateOnlyMidnight(entry.timestamp || entry.date)) {
+    presentation.timestampPrecision = 'date';
+  }
   if (hint.sourceGroupLabel) presentation.sourceGroupLabel = hint.sourceGroupLabel;
   return presentation;
 }
@@ -799,11 +1047,7 @@ export function buildContactTimeline({
     ) {
       continue;
     }
-    if (
-      String(event.eventType || '').toLowerCase() === 'website_lead_captured' &&
-      event.leadId &&
-      websiteFormLeadIds.has(event.leadId)
-    ) {
+    if (matchingWebsiteLeadCapture(event, leadRows)) {
       continue;
     }
     const entryType = timelineTypeForEvent(event.eventType);
@@ -825,6 +1069,7 @@ export function buildContactTimeline({
       ? event.message || ''
       : '';
     const importedWorkbookNote = eventTypeLower === 'import_promoted_note' && workbookLikeText(rawImportedText);
+    const systemEvent = isAitUsaSystemEvent(eventTypeLower);
     const eventSourceKey = sourceKey(event.sourceSheet, event.sourceRow);
     const sourceGroupCount = eventSourceKey ? importedSourceCounts.get(eventSourceKey) || 0 : 0;
     const eventPresentationHint = compactObject({
@@ -839,10 +1084,12 @@ export function buildContactTimeline({
       type: entryType,
       typeLabel: TIMELINE_TYPE_LABELS[entryType],
       eventType: event.eventType,
-      title: firstManualFollowUpIds.has(event.id)
+      title: systemEvent
+        ? systemEventTitle(event.eventType)
+        : firstManualFollowUpIds.has(event.id)
         ? 'First outreach attempt'
         : record?.title || (importedWorkbookNote ? 'Imported workbook note' : titleCaseEventType(event.eventType)),
-      text: interpretedImportText(event, record),
+      text: systemEvent ? '' : interpretedImportText(event, record),
       rawText: eventPresentationHint.rawText || '',
       timestamp: isoTimestamp(event.occurredAt || event.createdAt),
       date: isoDate(event.occurredAt || event.createdAt),
@@ -858,18 +1105,30 @@ export function buildContactTimeline({
 
   for (const taskEvent of taskEventRows) {
     const task = taskLookup.get(taskEvent.taskId);
+    const businessUnit = businessUnitPayload(taskEvent.businessUnitId, businessUnitLookup);
+    const isAitUsaTask = isAitUsaTimelineEntry({ businessUnit });
+    const linkedRecords = linkedRecordPayload({ ...taskEvent, contactId: task?.contactId, leadId: task?.leadId, workOrderId: task?.workOrderId }, task);
     entries.push(withPresentation({
       id: `task:${taskEvent.id}`,
       type: TIMELINE_TYPES.TASK,
       typeLabel: TIMELINE_TYPE_LABELS[TIMELINE_TYPES.TASK],
       eventType: `task.${taskEvent.eventType}`,
       title: task?.title || titleCaseEventType(taskEvent.eventType),
-      text: taskEvent.message || titleCaseEventType(taskEvent.eventType),
+      text: isAitUsaTask ? '' : (taskEvent.message || titleCaseEventType(taskEvent.eventType)),
       timestamp: isoTimestamp(taskEvent.occurredAt || taskEvent.createdAt),
       date: isoDate(taskEvent.occurredAt || taskEvent.createdAt),
       actor: userPayload(taskEvent.actorUserId, userLookup),
-      businessUnit: businessUnitPayload(taskEvent.businessUnitId, businessUnitLookup),
-      linkedRecords: linkedRecordPayload({ ...taskEvent, contactId: task?.contactId, leadId: task?.leadId, workOrderId: task?.workOrderId }, task),
+      businessUnit,
+      linkedRecords: isAitUsaTask ? linkedRecords.filter((record) => record.type !== 'task') : linkedRecords,
+      task: task ? compactObject({
+        id: task.id,
+        title: task.title,
+        status: task.status,
+        priority: task.priority,
+        dueAt: isoTimestamp(task.dueAt),
+        owner: userPayload(task.ownerUserId, userLookup),
+        taskType: task.taskType,
+      }) : null,
       taskStatus: compactObject({
         from: taskEvent.fromStatus,
         to: taskEvent.toStatus,
@@ -878,23 +1137,29 @@ export function buildContactTimeline({
         from: userPayload(taskEvent.fromOwnerUserId, userLookup),
         to: userPayload(taskEvent.toOwnerUserId, userLookup),
       }),
+      dueChange: compactObject({
+        from: isoTimestamp(taskEvent.fromDueAt),
+        to: isoTimestamp(taskEvent.toDueAt),
+      }),
     }));
   }
 
   for (const statusEvent of leadStatusRows) {
+    const businessUnit = businessUnitPayload(statusEvent.businessUnitId, businessUnitLookup);
+    const isAitUsaStatus = isAitUsaTimelineEntry({ businessUnit });
     entries.push(withPresentation({
       id: `lead_status:${statusEvent.id}`,
       type: TIMELINE_TYPES.LEAD,
       typeLabel: TIMELINE_TYPE_LABELS[TIMELINE_TYPES.LEAD],
       eventType: 'lead.status_changed',
-      title: 'Lead status changed',
-      text: statusEvent.fromStatus
+      title: isAitUsaStatus ? `Inquiry moved to ${statusEvent.toStatus}` : 'Lead status changed',
+      text: isAitUsaStatus ? '' : (statusEvent.fromStatus
         ? `Lead status changed from ${statusEvent.fromStatus} to ${statusEvent.toStatus}.`
-        : `Lead status set to ${statusEvent.toStatus}.`,
+        : `Lead status set to ${statusEvent.toStatus}.`),
       timestamp: isoTimestamp(statusEvent.occurredAt || statusEvent.createdAt),
       date: isoDate(statusEvent.occurredAt || statusEvent.createdAt),
       actor: userPayload(statusEvent.actorUserId, userLookup),
-      businessUnit: businessUnitPayload(statusEvent.businessUnitId, businessUnitLookup),
+      businessUnit,
       linkedRecords: linkedRecordPayload(statusEvent),
       leadStatus: compactObject({
         from: statusEvent.fromStatus,
@@ -905,6 +1170,8 @@ export function buildContactTimeline({
 
   for (const lead of leadRows) {
     const record = websiteLeadRecordPayload(lead);
+    const businessUnit = businessUnitPayload(lead.businessUnitId, businessUnitLookup);
+    const isAitUsaLead = isAitUsaTimelineEntry({ businessUnit });
     if (record?.kind === 'website_lead') {
       const groupKey = [
         record.fields?.source_key || lead.sourceName || lead.sourceType || '',
@@ -915,22 +1182,26 @@ export function buildContactTimeline({
       if (seenWebsiteLeadGroups.has(groupKey)) continue;
       seenWebsiteLeadGroups.add(groupKey);
     }
-    const rawImportedText = record && lead.originalNotes ? lead.originalNotes : '';
+    const machineImportedText = isAitUsaLead && workbookLikeText(lead.originalNotes);
+    const rawImportedText = (record || machineImportedText) && lead.originalNotes ? lead.originalNotes : '';
     entries.push(withPresentation({
       id: `lead:${lead.id}`,
       type: TIMELINE_TYPES.LEAD,
       typeLabel: TIMELINE_TYPE_LABELS[TIMELINE_TYPES.LEAD],
       eventType: 'lead.created',
       title: record?.title || lead.sourceName || titleCaseEventType(lead.sourceType || 'lead'),
-      text: record ? websiteLeadText(lead, record) : (lead.originalNotes || `Lead status: ${lead.status || 'New Lead'}`),
+      text: record
+        ? websiteLeadText(lead, record)
+        : (machineImportedText ? '' : (lead.originalNotes || `Lead status: ${lead.status || 'New Lead'}`)),
       rawText: rawImportedText,
       timestamp: isoTimestamp(lead.createdAt),
       date: isoDate(lead.createdAt),
       actor: record?.kind === 'website_lead' ? null : userPayload(lead.assignedUserId, userLookup),
       source: sourcePayload(lead, lead.sourceName || lead.sourceType || 'Lead'),
-      businessUnit: businessUnitPayload(lead.businessUnitId, businessUnitLookup),
+      businessUnit,
       linkedRecords: linkedRecordPayload(lead),
       record,
+      inquiryStatus: normalizedInquiryStatus(lead.status || lead.currentStage),
       presentationHint: rawImportedText ? {
         rawText: rawImportedText,
         isImported: true,
@@ -1014,8 +1285,8 @@ export async function listContactTimeline({
     : [];
 
   const userIds = uniqueIds(
-    [...noteRows, ...activityRows, ...leadRows, ...taskEventRows, ...leadStatusRows],
-    ['authorUserId', 'actorUserId', 'assignedUserId', 'fromOwnerUserId', 'toOwnerUserId'],
+    [...noteRows, ...activityRows, ...leadRows, ...taskRows, ...taskEventRows, ...leadStatusRows],
+    ['authorUserId', 'actorUserId', 'assignedUserId', 'ownerUserId', 'createdByUserId', 'fromOwnerUserId', 'toOwnerUserId'],
   );
   const businessUnitLookupIds = uniqueIds(
     [...noteRows, ...activityRows, ...leadRows, ...taskRows, ...taskEventRows, ...leadStatusRows],

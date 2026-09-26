@@ -18,6 +18,8 @@ Object.defineProperty(globalThis, 'navigator', {
   value: dom.window.navigator,
 });
 globalThis.HTMLElement = dom.window.HTMLElement;
+globalThis.HTMLElement.prototype.attachEvent = () => {};
+globalThis.HTMLElement.prototype.detachEvent = () => {};
 globalThis.Node = dom.window.Node;
 globalThis.Event = dom.window.Event;
 globalThis.MouseEvent = dom.window.MouseEvent;
@@ -31,7 +33,7 @@ globalThis.window.cancelAnimationFrame = () => {};
 
 test.after(() => dom.window.close());
 
-function Harness({ initialDraft, onSubmit, surface }) {
+function Harness({ initialDraft, onSubmit, surface, componentProps = {} }) {
   const [draft, setDraft] = useState(initialDraft);
   return createElement(FollowUpOutcomeDialog, {
     open: true,
@@ -43,10 +45,12 @@ function Harness({ initialDraft, onSubmit, surface }) {
     },
     title: surface === 'Tasks queue' ? 'Log follow-up outcome' : 'Record outreach',
     taskMatchText: surface === 'Tasks queue' ? 'Completes this exact task.' : 'Records outreach for this Contact.',
+    isTaskCompletion: surface === 'Tasks queue',
+    ...componentProps,
   });
 }
 
-function renderSurface(surface) {
+function renderSurface(surface, { initialDraft = {}, componentProps = {} } = {}) {
   let submitCalls = 0;
   const container = document.createElement('div');
   document.body.append(container);
@@ -59,7 +63,9 @@ function renderSurface(surface) {
         note: 'Typed note survives correction.',
         nextOwnerUserId: '',
         leadProfile: {},
+        ...initialDraft,
       },
+      componentProps,
       onSubmit() { submitCalls += 1; },
     }));
   });
@@ -72,6 +78,88 @@ function renderSurface(surface) {
     },
   };
 }
+
+test('AIT USA hides direct enrollment and uses an explicit Record outreach commit label', () => {
+  const view = renderSurface('Contact detail', { componentProps: { isAitUsa: true } });
+  try {
+    const optionLabels = [...fields(view).outcome.options].map((option) => option.textContent);
+    assert.equal(optionLabels.includes('Enrolled / won'), false);
+    assert.equal(fields(view).save.textContent.trim(), 'Record outreach');
+  } finally {
+    view.cleanup();
+  }
+});
+
+test('appointment scheduled requires and focuses a date and time before completing follow-up', () => {
+  const view = renderSurface('Tasks queue', {
+    initialDraft: {
+      outcome: 'appointment_scheduled',
+      channel: 'in_person',
+    },
+  });
+  try {
+    const appointment = view.container.querySelector('input[type="datetime-local"]');
+    assert.ok(appointment);
+    assert.equal(appointment.required, true);
+    assert.equal(view.container.querySelector('[id$="contact-target"]'), null);
+    assert.equal(fields(view).save.textContent.trim(), 'Complete follow-up');
+
+    click(fields(view).save);
+    assert.equal(view.submitCalls, 0);
+    assert.equal(document.activeElement, appointment);
+    assert.match(view.container.querySelector('[role="alert"]').textContent, /appointment date and time/i);
+
+    assert.match(view.container.querySelector('.follow-up-impact').textContent, /creates an appointment task/i);
+  } finally {
+    view.cleanup();
+  }
+
+  const valid = renderSurface('Tasks queue', {
+    initialDraft: {
+      outcome: 'appointment_scheduled',
+      channel: 'in_person',
+      appointmentAt: '2026-09-22T14:30',
+    },
+  });
+  try {
+    click(fields(valid).save);
+    assert.equal(valid.submitCalls, 1);
+  } finally {
+    valid.cleanup();
+  }
+});
+
+test('required note is announced and inquiry preferences stay scoped to conversation outcomes', () => {
+  const view = renderSurface('Contact detail', {
+    initialDraft: {
+      outcome: 'do_not_contact',
+      channel: 'phone',
+      note: '',
+    },
+    componentProps: { isAitUsa: true, showProfile: true },
+  });
+  try {
+    assert.equal(view.container.querySelector('.follow-up-profile-disclosure'), null);
+    assert.match(view.container.querySelector('.follow-up-impact').textContent, /Blocks contact/i);
+    click(fields(view).save);
+    assert.equal(view.submitCalls, 0);
+    assert.equal(document.activeElement, fields(view).note);
+    assert.equal(fields(view).note.getAttribute('aria-required'), 'true');
+  } finally {
+    view.cleanup();
+  }
+
+  const interested = renderSurface('Contact detail', {
+    initialDraft: { outcome: 'reached_interested', channel: 'phone' },
+    componentProps: { isAitUsa: true, showProfile: true },
+  });
+  try {
+    assert.match(interested.container.querySelector('.follow-up-profile-disclosure').textContent, /Update inquiry preferences/);
+    assert.match(interested.container.querySelector('.follow-up-secondary-preferences').textContent, /Additional preferences/);
+  } finally {
+    interested.cleanup();
+  }
+});
 
 function fields(view) {
   const outcome = view.container.querySelector('select[data-autofocus]');
@@ -93,7 +181,10 @@ function click(element) {
 
 function change(element, value) {
   act(() => {
-    element.value = value;
+    const valueSetter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(element), 'value')?.set;
+    if (valueSetter) valueSetter.call(element, value);
+    else element.value = value;
+    element.dispatchEvent(new Event('input', { bubbles: true }));
     element.dispatchEvent(new Event('change', { bubbles: true }));
   });
 }

@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertTriangle, CalendarClock, ChevronLeft, ChevronRight, RefreshCw, UserRoundCheck } from 'lucide-react';
+import { AlertTriangle, ArrowUpRight, CalendarClock, ChevronLeft, ChevronRight, RefreshCw, UserRoundCheck } from 'lucide-react';
 import PageState from '@/components/PageState';
+import { canManageAitUsaAssignments } from '@/lib/crm/ait-usa-assignment-policy.js';
 import { useCRM } from '@/lib/store';
 import s from './RecoveryQueuePage.module.css';
 
@@ -25,21 +26,19 @@ function formatDateTime(value) {
 
 function ageLabel(item) {
   if (item.lane === 'overdue') return `${item.ageDays} day${item.ageDays === 1 ? '' : 's'} overdue`;
+  if (item.lane === 'duplicate_follow_up') return `${item.relatedTaskCount} open tasks`;
   return `${item.ageDays} day${item.ageDays === 1 ? '' : 's'} old`;
 }
 
 function itemHref(item) {
-  if (item.lane === 'duplicate_follow_up') {
-    return `/tasks?contactId=${encodeURIComponent(item.contact.id)}&taskType=follow_up&status=open`;
-  }
-  if (item.task?.id) return `/tasks/${encodeURIComponent(item.task.id)}`;
+  if (item.lane === 'unassigned') return `/contacts/${encodeURIComponent(item.contact.id)}?action=assign-inquiry-owner`;
+  if (item.lane === 'overdue' && item.task?.id) return `/tasks/${encodeURIComponent(item.task.id)}`;
   return `/contacts/${encodeURIComponent(item.contact.id)}`;
 }
 
 function itemActionLabel(item) {
-  if (item.lane === 'duplicate_follow_up') return 'Review exact tasks';
   if (item.lane === 'unassigned') return 'Assign owner';
-  if (item.task?.id) return 'Open commitment';
+  if (item.lane === 'overdue') return 'Open task';
   return 'Open contact';
 }
 
@@ -55,9 +54,11 @@ export default function RecoveryQueuePage() {
   const {
     currentBusinessUnitId,
     currentBusinessUnit,
+    currentUser,
     loaded,
   } = useCRM();
-  const requestedLane = searchParams.get('lane') || 'first_contact';
+  const seniorQueue = canManageAitUsaAssignments({ user: currentUser });
+  const requestedLane = searchParams.get('lane') || (seniorQueue ? 'overdue' : 'first_contact');
   const requestedPage = Math.max(1, Number.parseInt(searchParams.get('page') || '1', 10) || 1);
   const urlBusinessUnitId = searchParams.get('businessUnitId') || '';
   const scopedBusinessUnitId = urlBusinessUnitId || (
@@ -106,6 +107,8 @@ export default function RecoveryQueuePage() {
     () => queue?.lanes?.find((lane) => lane.key === queue.lane),
     [queue],
   );
+  const personalQueue = Boolean(queue?.scope?.ownerUserId);
+  const noAssignedWork = personalQueue && queue?.lanes?.every((lane) => lane.count === 0);
 
   if (!loaded || (loading && !queue)) {
     return <PageState tone="loading" title="Loading Recovery Queue" copy="Reconciling current Opportunities and commitments…" />;
@@ -127,11 +130,7 @@ export default function RecoveryQueuePage() {
       <header className={s.header}>
         <div>
           <p className={s.eyebrow}>Daily operations</p>
-          <h1>Recovery Queue</h1>
-          <p className={s.intro}>
-            Deterministic work that needs attention now. Every item links back to the existing Contact,
-            Opportunity, or exact task—this queue does not create a second workflow.
-          </p>
+          <h1>{personalQueue ? 'My Recovery Queue' : 'Recovery Queue'}</h1>
         </div>
         <button className="btn" type="button" onClick={loadQueue} disabled={loading}>
           <RefreshCw size={16} className={loading ? s.spinning : ''} />
@@ -140,9 +139,9 @@ export default function RecoveryQueuePage() {
       </header>
 
       <div className={s.scopeLine}>
-        <span>Scope</span>
         <strong>{currentBusinessUnit?.name || 'Accessible AIT USA divisions'}</strong>
-        {queue?.generatedAt && <span>Reconciled {formatDateTime(queue.generatedAt)}</span>}
+        {queue?.generatedAt && <span>Updated {formatDateTime(queue.generatedAt)}</span>}
+        <span>Views may overlap</span>
       </div>
 
       {error && (
@@ -152,19 +151,29 @@ export default function RecoveryQueuePage() {
         </div>
       )}
 
-      <nav className={s.lanes} aria-label="Recovery Queue lanes">
-        {queue?.lanes?.map((lane) => (
-          <Link
-            key={lane.key}
-            href={queueUrl({ lane: lane.key, businessUnitId: scopedBusinessUnitId })}
-            className={`${s.lane} ${queue.lane === lane.key ? s.laneActive : ''}`}
-            aria-current={queue.lane === lane.key ? 'page' : undefined}
-          >
-            <span>{lane.label}</span>
-            <strong>{lane.count}</strong>
-          </Link>
+      <div className={s.laneGroups}>
+        {[
+          { key: 'immediate', label: 'Immediate' },
+          { key: 'backlog', label: 'Backlog' },
+        ].map((group) => (
+          <div key={group.key} className={s.laneGroup}>
+            <span className={s.laneGroupLabel}>{group.label}</span>
+            <nav className={s.lanes} aria-label={`${group.label} recovery views`}>
+              {queue?.lanes?.filter((lane) => lane.group === group.key).map((lane) => (
+                <Link
+                  key={lane.key}
+                  href={queueUrl({ lane: lane.key, businessUnitId: scopedBusinessUnitId })}
+                  className={`${s.lane} ${queue.lane === lane.key ? s.laneActive : ''}`}
+                  aria-current={queue.lane === lane.key ? 'page' : undefined}
+                >
+                  <span>{lane.label}</span>
+                  <strong>{lane.count}</strong>
+                </Link>
+              ))}
+            </nav>
+          </div>
         ))}
-      </nav>
+      </div>
 
       <section className={s.queuePanel} aria-busy={loading}>
         <div className={s.panelHeader}>
@@ -184,7 +193,7 @@ export default function RecoveryQueuePage() {
                     <h3>{item.contact.name}</h3>
                     <span className={`${s.urgency} ${s[`urgency_${item.urgency}`] || ''}`}>{ageLabel(item)}</span>
                   </div>
-                  <p className={s.reason}>{item.reason}</p>
+                  {item.lane === 'overdue' && <p className={s.taskTitle}>{item.task?.title || 'Untitled task'}</p>}
                   <div className={s.meta}>
                     {item.opportunity?.status && <span>{item.opportunity.status}</span>}
                     {item.opportunity?.source && <span>{item.opportunity.source}</span>}
@@ -192,22 +201,32 @@ export default function RecoveryQueuePage() {
                       ? <span><UserRoundCheck size={14} /> {item.opportunity.assignedUserName}</span>
                       : item.lane === 'unassigned' && <span className={s.unassigned}>Unassigned</span>}
                     {item.task?.dueAt && <span><CalendarClock size={14} /> {formatDateTime(item.task.dueAt)}</span>}
-                    {item.relatedTaskCount > 1 && <span>{item.relatedTaskCount} open follow-ups</span>}
                   </div>
                   <div className={s.contactMeta}>
                     {item.contact.phone && <span>{item.contact.phone}</span>}
                     {item.contact.email && <span>{item.contact.email}</span>}
                   </div>
+                  {item.lane === 'duplicate_follow_up' && (
+                    <div className={s.relatedTasks} aria-label={`Open follow-up tasks for ${item.contact.name}`}>
+                      {item.relatedTasks.map((task) => (
+                        <Link key={task.id} className={s.relatedTask} href={`/tasks/${encodeURIComponent(task.id)}`} prefetch={false}>
+                          <span>{task.title}</span>
+                          <span className={s.relatedTaskMeta}>{task.dueAt ? formatDateTime(task.dueAt) : 'No due date'} <ArrowUpRight size={14} /></span>
+                        </Link>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <Link className="btn btn-primary" href={itemHref(item)} prefetch={false}>{itemActionLabel(item)}</Link>
+                {(item.lane !== 'duplicate_follow_up' || item.relatedTasks.length === 0) && (
+                  <Link className="btn btn-primary" href={itemHref(item)} prefetch={false}>{itemActionLabel(item)}</Link>
+                )}
               </article>
             ))}
           </div>
         ) : (
           <div className={s.empty}>
             <UserRoundCheck size={28} />
-            <h3>No work in this lane</h3>
-            <p>The current filtered list reconciles to zero.</p>
+            <h3>{noAssignedWork ? 'No recovery work assigned' : `No ${activeLane?.label?.toLowerCase() || 'recovery work'}`}</h3>
           </div>
         )}
 

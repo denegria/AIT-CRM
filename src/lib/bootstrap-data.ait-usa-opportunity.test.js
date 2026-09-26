@@ -30,6 +30,32 @@ test('bootstrap Contact payload binds active-older AIT USA Opportunity over clos
   assert.equal(payload.activeOpportunityCount, 1);
 });
 
+test('bootstrap Contact payload keeps explicit Lead profile truth separate from legacy source notes', () => {
+  const [payload] = mapContacts(
+    [contact],
+    [{
+      id: 'active-profile',
+      contactId: contact.id,
+      businessUnitId: aitUsa.id,
+      status: 'New Lead',
+      currentStage: 'Needs First Outreach',
+      originalNotes: 'service=Wix historical lead',
+      programInterest: '',
+      locationPreference: 'New Jersey',
+      createdAt: new Date('2026-08-14T12:00:00Z'),
+    }],
+    [],
+    [],
+    [aitUsa],
+  );
+  assert.equal(payload.status, 'New Lead');
+  assert.equal(payload.currentStage, 'New Lead');
+  assert.equal(payload.programInterest, '');
+  assert.equal(payload.leadProfile.programInterest, '');
+  assert.equal(payload.leadProfile.locationPreference, 'New Jersey');
+  assert.equal(payload.enrollmentSignals.inquiry.programInterest, 'Wix historical lead');
+});
+
 test('bootstrap Contact payload marks multiple active AIT USA Opportunities as a conflict', () => {
   const [payload] = mapContacts(
     [contact],

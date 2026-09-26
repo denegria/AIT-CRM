@@ -45,11 +45,15 @@ export const users = pgTable('users', {
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   email: text('email').unique(),
+  workosUserId: text('workos_user_id'),
+  authMigratedAt: timestamp('auth_migrated_at', { withTimezone: true }),
   phone: text('phone'),
   isActive: boolean('is_active').notNull().default(true),
   createdAt,
   updatedAt,
-});
+}, (table) => ({
+  workosUserIdx: uniqueIndex('users_workos_user_id_idx').on(table.workosUserId),
+}));
 
 export const userPasswordCredentials = pgTable('user_password_credentials', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -127,6 +131,81 @@ export const businessUnitMemberships = pgTable('business_unit_memberships', {
   membershipIdx: uniqueIndex('business_unit_memberships_unique_idx').on(table.businessUnitId, table.userId),
 }));
 
+export const employeeAuthInvitations = pgTable('employee_auth_invitations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  intendedEmail: text('intended_email').notNull(),
+  intendedName: text('intended_name').notNull(),
+  roleId: uuid('role_id').notNull().references(() => roles.id, { onDelete: 'restrict' }),
+  providerInvitationId: text('provider_invitation_id'),
+  status: text('status').notNull().default('pending'),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  lastSentAt: timestamp('last_sent_at', { withTimezone: true }),
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  failedAt: timestamp('failed_at', { withTimezone: true }),
+  acceptedUserId: uuid('accepted_user_id').references(() => users.id, { onDelete: 'set null' }),
+  createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  replacedByInvitationId: uuid('replaced_by_invitation_id'),
+  failureCode: text('failure_code'),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  providerInvitationIdx: uniqueIndex('employee_auth_invitations_provider_idx').on(table.providerInvitationId),
+  pendingEmailIdx: uniqueIndex('employee_auth_invitations_pending_email_idx')
+    .on(table.organizationId, table.intendedEmail)
+    .where(sql`${table.status} = 'pending'`),
+  organizationStatusIdx: index('employee_auth_invitations_org_status_idx')
+    .on(table.organizationId, table.status, table.createdAt),
+  statusCheck: check(
+    'employee_auth_invitations_status_check',
+    sql`${table.status} in ('pending', 'accepted', 'revoked', 'expired', 'failed')`,
+  ),
+  emailCheck: check(
+    'employee_auth_invitations_email_check',
+    sql`${table.intendedEmail} = lower(btrim(${table.intendedEmail})) and length(${table.intendedEmail}) > 3`,
+  ),
+  nameCheck: check(
+    'employee_auth_invitations_name_check',
+    sql`length(btrim(${table.intendedName})) > 0`,
+  ),
+}));
+
+export const employeeAuthInvitationBusinessUnits = pgTable('employee_auth_invitation_business_units', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  invitationId: uuid('invitation_id').notNull().references(() => employeeAuthInvitations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'restrict' }),
+  isPrimary: boolean('is_primary').notNull().default(false),
+  createdAt,
+}, (table) => ({
+  invitationBusinessUnitIdx: uniqueIndex('employee_auth_invitation_business_units_unique_idx')
+    .on(table.invitationId, table.businessUnitId),
+}));
+
+export const employeeAuthEvents = pgTable('employee_auth_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  eventType: text('event_type').notNull(),
+  outcome: text('outcome').notNull().default('succeeded'),
+  actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+  subjectUserId: uuid('subject_user_id').references(() => users.id, { onDelete: 'set null' }),
+  invitationId: uuid('invitation_id').references(() => employeeAuthInvitations.id, { onDelete: 'set null' }),
+  providerReference: text('provider_reference'),
+  failureCode: text('failure_code'),
+  metadataJson: jsonb('metadata_json').notNull().default({}),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+  createdAt,
+}, (table) => ({
+  organizationOccurredIdx: index('employee_auth_events_org_occurred_idx')
+    .on(table.organizationId, table.occurredAt),
+  subjectOccurredIdx: index('employee_auth_events_subject_occurred_idx')
+    .on(table.subjectUserId, table.occurredAt),
+  outcomeCheck: check(
+    'employee_auth_events_outcome_check',
+    sql`${table.outcome} in ('succeeded', 'denied', 'failed')`,
+  ),
+}));
+
 export const contacts = pgTable('contacts', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
@@ -144,7 +223,13 @@ export const contacts = pgTable('contacts', {
   archiveReason: text('archive_reason'),
   createdAt,
   updatedAt,
-});
+}, (table) => ({
+  billingScopeIdx: uniqueIndex('contacts_billing_scope_idx').on(
+    table.id,
+    table.organizationId,
+    table.primaryBusinessUnitId,
+  ),
+}));
 
 export const contactPhoneNumbers = pgTable('contact_phone_numbers', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -365,6 +450,11 @@ export const contactCourseRecords = pgTable('contact_course_records', {
     table.organizationId,
     table.businessUnitId,
     table.classSectionId,
+  ),
+  billingScopeIdx: uniqueIndex('contact_course_records_billing_scope_idx').on(
+    table.id,
+    table.organizationId,
+    table.businessUnitId,
   ),
 }));
 
@@ -617,6 +707,455 @@ export const financialDocuments = pgTable('financial_documents', {
   contactIdx: index('financial_documents_contact_idx').on(table.contactId),
   workOrderIdx: index('financial_documents_work_order_idx').on(table.workOrderId),
   typeIdx: index('financial_documents_type_idx').on(table.documentType),
+  billingScopeIdx: uniqueIndex('financial_documents_billing_scope_idx').on(
+    table.id,
+    table.organizationId,
+    table.businessUnitId,
+  ),
+}));
+
+export const studentCharges = pgTable('student_charges', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
+  studentContactId: uuid('student_contact_id').notNull(),
+  payerContactId: uuid('payer_contact_id'),
+  enrollmentId: uuid('enrollment_id'),
+  classSectionId: uuid('class_section_id'),
+  chargeType: text('charge_type').notNull(),
+  description: text('description').notNull(),
+  amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+  currency: text('currency').notNull().default('USD'),
+  status: text('status').notNull().default('due'),
+  servicePeriodStart: date('service_period_start'),
+  servicePeriodEnd: date('service_period_end'),
+  originalDueDate: date('original_due_date'),
+  waivedAt: timestamp('waived_at', { withTimezone: true }),
+  voidedAt: timestamp('voided_at', { withTimezone: true }),
+  sourceType: text('source_type').notNull(),
+  sourceReference: text('source_reference'),
+  idempotencyKey: text('idempotency_key').notNull(),
+  metadataJson: jsonb('metadata_json').notNull().default({}),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  scopeIdx: uniqueIndex('student_charges_scope_idx').on(table.id, table.organizationId, table.businessUnitId),
+  idempotencyIdx: uniqueIndex('student_charges_idempotency_idx').on(
+    table.organizationId,
+    table.businessUnitId,
+    table.idempotencyKey,
+  ),
+  studentStatusIdx: index('student_charges_student_status_idx').on(
+    table.organizationId,
+    table.businessUnitId,
+    table.studentContactId,
+    table.status,
+  ),
+  dueIdx: index('student_charges_due_idx').on(table.businessUnitId, table.status, table.originalDueDate),
+  studentScopeFk: foreignKey({
+    columns: [table.studentContactId, table.organizationId, table.businessUnitId],
+    foreignColumns: [contacts.id, contacts.organizationId, contacts.primaryBusinessUnitId],
+    name: 'student_charges_student_scope_fk',
+  }).onDelete('restrict'),
+  payerScopeFk: foreignKey({
+    columns: [table.payerContactId, table.organizationId, table.businessUnitId],
+    foreignColumns: [contacts.id, contacts.organizationId, contacts.primaryBusinessUnitId],
+    name: 'student_charges_payer_scope_fk',
+  }).onDelete('restrict'),
+  enrollmentScopeFk: foreignKey({
+    columns: [table.enrollmentId, table.organizationId, table.businessUnitId],
+    foreignColumns: [contactCourseRecords.id, contactCourseRecords.organizationId, contactCourseRecords.businessUnitId],
+    name: 'student_charges_enrollment_scope_fk',
+  }).onDelete('restrict'),
+  sectionScopeFk: foreignKey({
+    columns: [table.classSectionId, table.organizationId, table.businessUnitId],
+    foreignColumns: [courseClassSections.id, courseClassSections.organizationId, courseClassSections.businessUnitId],
+    name: 'student_charges_section_scope_fk',
+  }).onDelete('restrict'),
+  amountCheck: check('student_charges_amount_check', sql`${table.amount} > 0`),
+  currencyCheck: check('student_charges_currency_check', sql`${table.currency} ~ '^[A-Z]{3}$'`),
+  statusCheck: check(
+    'student_charges_status_check',
+    sql`${table.status} in ('due', 'partially_paid', 'paid', 'overdue', 'waived', 'voided', 'refunded')`,
+  ),
+  periodCheck: check(
+    'student_charges_period_check',
+    sql`${table.servicePeriodStart} is null or ${table.servicePeriodEnd} is null or ${table.servicePeriodEnd} >= ${table.servicePeriodStart}`,
+  ),
+}));
+
+export const paymentRequests = pgTable('payment_requests', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
+  studentContactId: uuid('student_contact_id').notNull(),
+  payerContactId: uuid('payer_contact_id'),
+  enrollmentId: uuid('enrollment_id'),
+  classSectionId: uuid('class_section_id'),
+  chargeId: uuid('charge_id'),
+  requestedAmount: numeric('requested_amount', { precision: 12, scale: 2 }).notNull(),
+  currency: text('currency').notNull().default('USD'),
+  status: text('status').notNull().default('created'),
+  provider: text('provider'),
+  providerEnvironment: text('provider_environment'),
+  providerRequestId: text('provider_request_id'),
+  merchantReference: text('merchant_reference').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  sourceType: text('source_type').notNull(),
+  sourceReference: text('source_reference'),
+  idempotencyKey: text('idempotency_key').notNull(),
+  metadataJson: jsonb('metadata_json').notNull().default({}),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  scopeIdx: uniqueIndex('payment_requests_scope_idx').on(table.id, table.organizationId, table.businessUnitId),
+  idempotencyIdx: uniqueIndex('payment_requests_idempotency_idx').on(
+    table.organizationId,
+    table.businessUnitId,
+    table.idempotencyKey,
+  ),
+  merchantReferenceIdx: uniqueIndex('payment_requests_merchant_reference_idx').on(
+    table.organizationId,
+    table.businessUnitId,
+    table.merchantReference,
+  ),
+  providerRequestIdx: uniqueIndex('payment_requests_provider_request_idx')
+    .on(table.organizationId, table.provider, table.providerEnvironment, table.providerRequestId)
+    .where(sql`${table.providerRequestId} is not null`),
+  studentStatusIdx: index('payment_requests_student_status_idx').on(
+    table.organizationId,
+    table.businessUnitId,
+    table.studentContactId,
+    table.status,
+  ),
+  studentScopeFk: foreignKey({
+    columns: [table.studentContactId, table.organizationId, table.businessUnitId],
+    foreignColumns: [contacts.id, contacts.organizationId, contacts.primaryBusinessUnitId],
+    name: 'payment_requests_student_scope_fk',
+  }).onDelete('restrict'),
+  payerScopeFk: foreignKey({
+    columns: [table.payerContactId, table.organizationId, table.businessUnitId],
+    foreignColumns: [contacts.id, contacts.organizationId, contacts.primaryBusinessUnitId],
+    name: 'payment_requests_payer_scope_fk',
+  }).onDelete('restrict'),
+  chargeScopeFk: foreignKey({
+    columns: [table.chargeId, table.organizationId, table.businessUnitId],
+    foreignColumns: [studentCharges.id, studentCharges.organizationId, studentCharges.businessUnitId],
+    name: 'payment_requests_charge_scope_fk',
+  }).onDelete('restrict'),
+  enrollmentScopeFk: foreignKey({
+    columns: [table.enrollmentId, table.organizationId, table.businessUnitId],
+    foreignColumns: [contactCourseRecords.id, contactCourseRecords.organizationId, contactCourseRecords.businessUnitId],
+    name: 'payment_requests_enrollment_scope_fk',
+  }).onDelete('restrict'),
+  sectionScopeFk: foreignKey({
+    columns: [table.classSectionId, table.organizationId, table.businessUnitId],
+    foreignColumns: [courseClassSections.id, courseClassSections.organizationId, courseClassSections.businessUnitId],
+    name: 'payment_requests_section_scope_fk',
+  }).onDelete('restrict'),
+  amountCheck: check('payment_requests_amount_check', sql`${table.requestedAmount} > 0`),
+  currencyCheck: check('payment_requests_currency_check', sql`${table.currency} ~ '^[A-Z]{3}$'`),
+  statusCheck: check(
+    'payment_requests_status_check',
+    sql`${table.status} in ('created', 'pending', 'completed', 'failed', 'expired', 'canceled')`,
+  ),
+}));
+
+export const providerTransactions = pgTable('provider_transactions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
+  paymentRequestId: uuid('payment_request_id'),
+  studentContactId: uuid('student_contact_id').notNull(),
+  payerContactId: uuid('payer_contact_id'),
+  enrollmentId: uuid('enrollment_id'),
+  classSectionId: uuid('class_section_id'),
+  parentTransactionId: uuid('parent_transaction_id'),
+  receiptDocumentId: uuid('receipt_document_id'),
+  provider: text('provider').notNull(),
+  providerEnvironment: text('provider_environment').notNull(),
+  providerTransactionId: text('provider_transaction_id').notNull(),
+  merchantReference: text('merchant_reference').notNull(),
+  transactionKind: text('transaction_kind').notNull().default('payment'),
+  status: text('status').notNull().default('pending'),
+  amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+  currency: text('currency').notNull().default('USD'),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }),
+  verifiedAt: timestamp('verified_at', { withTimezone: true }),
+  sourceType: text('source_type').notNull(),
+  sourceReference: text('source_reference'),
+  idempotencyKey: text('idempotency_key').notNull(),
+  metadataJson: jsonb('metadata_json').notNull().default({}),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  scopeIdx: uniqueIndex('provider_transactions_scope_idx').on(table.id, table.organizationId, table.businessUnitId),
+  idempotencyIdx: uniqueIndex('provider_transactions_idempotency_idx').on(
+    table.organizationId,
+    table.businessUnitId,
+    table.idempotencyKey,
+  ),
+  providerTransactionIdx: uniqueIndex('provider_transactions_provider_transaction_idx').on(
+    table.organizationId,
+    table.provider,
+    table.providerEnvironment,
+    table.providerTransactionId,
+  ),
+  merchantReferenceIdx: index('provider_transactions_merchant_reference_idx').on(
+    table.businessUnitId,
+    table.provider,
+    table.merchantReference,
+  ),
+  studentStatusIdx: index('provider_transactions_student_status_idx').on(
+    table.organizationId,
+    table.businessUnitId,
+    table.studentContactId,
+    table.status,
+  ),
+  studentScopeFk: foreignKey({
+    columns: [table.studentContactId, table.organizationId, table.businessUnitId],
+    foreignColumns: [contacts.id, contacts.organizationId, contacts.primaryBusinessUnitId],
+    name: 'provider_transactions_student_scope_fk',
+  }).onDelete('restrict'),
+  payerScopeFk: foreignKey({
+    columns: [table.payerContactId, table.organizationId, table.businessUnitId],
+    foreignColumns: [contacts.id, contacts.organizationId, contacts.primaryBusinessUnitId],
+    name: 'provider_transactions_payer_scope_fk',
+  }).onDelete('restrict'),
+  receiptScopeFk: foreignKey({
+    columns: [table.receiptDocumentId, table.organizationId, table.businessUnitId],
+    foreignColumns: [financialDocuments.id, financialDocuments.organizationId, financialDocuments.businessUnitId],
+    name: 'provider_transactions_receipt_scope_fk',
+  }).onDelete('restrict'),
+  requestScopeFk: foreignKey({
+    columns: [table.paymentRequestId, table.organizationId, table.businessUnitId],
+    foreignColumns: [paymentRequests.id, paymentRequests.organizationId, paymentRequests.businessUnitId],
+    name: 'provider_transactions_request_scope_fk',
+  }).onDelete('restrict'),
+  parentScopeFk: foreignKey({
+    columns: [table.parentTransactionId, table.organizationId, table.businessUnitId],
+    foreignColumns: [table.id, table.organizationId, table.businessUnitId],
+    name: 'provider_transactions_parent_scope_fk',
+  }).onDelete('restrict'),
+  enrollmentScopeFk: foreignKey({
+    columns: [table.enrollmentId, table.organizationId, table.businessUnitId],
+    foreignColumns: [contactCourseRecords.id, contactCourseRecords.organizationId, contactCourseRecords.businessUnitId],
+    name: 'provider_transactions_enrollment_scope_fk',
+  }).onDelete('restrict'),
+  sectionScopeFk: foreignKey({
+    columns: [table.classSectionId, table.organizationId, table.businessUnitId],
+    foreignColumns: [courseClassSections.id, courseClassSections.organizationId, courseClassSections.businessUnitId],
+    name: 'provider_transactions_section_scope_fk',
+  }).onDelete('restrict'),
+  amountCheck: check('provider_transactions_amount_check', sql`${table.amount} > 0`),
+  currencyCheck: check('provider_transactions_currency_check', sql`${table.currency} ~ '^[A-Z]{3}$'`),
+  kindCheck: check('provider_transactions_kind_check', sql`${table.transactionKind} in ('payment', 'refund')`),
+  statusCheck: check(
+    'provider_transactions_status_check',
+    sql`${table.status} in ('pending', 'verified', 'failed', 'voided')`,
+  ),
+  verifiedCheck: check(
+    'provider_transactions_verified_check',
+    sql`${table.status} <> 'verified' or ${table.verifiedAt} is not null`,
+  ),
+}));
+
+export const paymentAllocations = pgTable('payment_allocations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
+  chargeId: uuid('charge_id').notNull(),
+  transactionId: uuid('transaction_id').notNull(),
+  amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+  idempotencyKey: text('idempotency_key').notNull(),
+  allocatedAt: timestamp('allocated_at', { withTimezone: true }).notNull().defaultNow(),
+  metadataJson: jsonb('metadata_json').notNull().default({}),
+  createdAt,
+}, (table) => ({
+  idempotencyIdx: uniqueIndex('payment_allocations_idempotency_idx').on(
+    table.organizationId,
+    table.businessUnitId,
+    table.idempotencyKey,
+  ),
+  chargeIdx: index('payment_allocations_charge_idx').on(table.chargeId, table.allocatedAt),
+  transactionIdx: index('payment_allocations_transaction_idx').on(table.transactionId, table.allocatedAt),
+  chargeScopeFk: foreignKey({
+    columns: [table.chargeId, table.organizationId, table.businessUnitId],
+    foreignColumns: [studentCharges.id, studentCharges.organizationId, studentCharges.businessUnitId],
+    name: 'payment_allocations_charge_scope_fk',
+  }).onDelete('restrict'),
+  transactionScopeFk: foreignKey({
+    columns: [table.transactionId, table.organizationId, table.businessUnitId],
+    foreignColumns: [providerTransactions.id, providerTransactions.organizationId, providerTransactions.businessUnitId],
+    name: 'payment_allocations_transaction_scope_fk',
+  }).onDelete('restrict'),
+  amountCheck: check('payment_allocations_amount_check', sql`${table.amount} > 0`),
+}));
+
+export const paymentProviderEvents = pgTable('payment_provider_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
+  paymentRequestId: uuid('payment_request_id'),
+  transactionId: uuid('transaction_id'),
+  studentContactId: uuid('student_contact_id').notNull(),
+  payerContactId: uuid('payer_contact_id'),
+  enrollmentId: uuid('enrollment_id'),
+  classSectionId: uuid('class_section_id'),
+  provider: text('provider').notNull(),
+  providerEnvironment: text('provider_environment').notNull(),
+  providerEventId: text('provider_event_id'),
+  eventType: text('event_type').notNull(),
+  processingStatus: text('processing_status').notNull().default('received'),
+  payloadSha256: text('payload_sha256').notNull(),
+  safePayloadJson: jsonb('safe_payload_json').notNull().default({}),
+  idempotencyKey: text('idempotency_key').notNull(),
+  occurredAt: timestamp('occurred_at', { withTimezone: true }),
+  processedAt: timestamp('processed_at', { withTimezone: true }),
+  errorCode: text('error_code'),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  idempotencyIdx: uniqueIndex('payment_provider_events_idempotency_idx').on(
+    table.organizationId,
+    table.businessUnitId,
+    table.idempotencyKey,
+  ),
+  providerEventIdx: uniqueIndex('payment_provider_events_provider_event_idx')
+    .on(table.organizationId, table.provider, table.providerEnvironment, table.providerEventId)
+    .where(sql`${table.providerEventId} is not null`),
+  requestOccurredIdx: index('payment_provider_events_request_occurred_idx').on(table.paymentRequestId, table.occurredAt),
+  transactionOccurredIdx: index('payment_provider_events_transaction_occurred_idx').on(table.transactionId, table.occurredAt),
+  studentScopeFk: foreignKey({
+    columns: [table.studentContactId, table.organizationId, table.businessUnitId],
+    foreignColumns: [contacts.id, contacts.organizationId, contacts.primaryBusinessUnitId],
+    name: 'payment_provider_events_student_scope_fk',
+  }).onDelete('restrict'),
+  payerScopeFk: foreignKey({
+    columns: [table.payerContactId, table.organizationId, table.businessUnitId],
+    foreignColumns: [contacts.id, contacts.organizationId, contacts.primaryBusinessUnitId],
+    name: 'payment_provider_events_payer_scope_fk',
+  }).onDelete('restrict'),
+  requestScopeFk: foreignKey({
+    columns: [table.paymentRequestId, table.organizationId, table.businessUnitId],
+    foreignColumns: [paymentRequests.id, paymentRequests.organizationId, paymentRequests.businessUnitId],
+    name: 'payment_provider_events_request_scope_fk',
+  }).onDelete('restrict'),
+  transactionScopeFk: foreignKey({
+    columns: [table.transactionId, table.organizationId, table.businessUnitId],
+    foreignColumns: [providerTransactions.id, providerTransactions.organizationId, providerTransactions.businessUnitId],
+    name: 'payment_provider_events_transaction_scope_fk',
+  }).onDelete('restrict'),
+  enrollmentScopeFk: foreignKey({
+    columns: [table.enrollmentId, table.organizationId, table.businessUnitId],
+    foreignColumns: [contactCourseRecords.id, contactCourseRecords.organizationId, contactCourseRecords.businessUnitId],
+    name: 'payment_provider_events_enrollment_scope_fk',
+  }).onDelete('restrict'),
+  sectionScopeFk: foreignKey({
+    columns: [table.classSectionId, table.organizationId, table.businessUnitId],
+    foreignColumns: [courseClassSections.id, courseClassSections.organizationId, courseClassSections.businessUnitId],
+    name: 'payment_provider_events_section_scope_fk',
+  }).onDelete('restrict'),
+  payloadHashCheck: check('payment_provider_events_payload_hash_check', sql`${table.payloadSha256} ~ '^[a-f0-9]{64}$'`),
+  statusCheck: check(
+    'payment_provider_events_status_check',
+    sql`${table.processingStatus} in ('received', 'processed', 'ignored', 'failed')`,
+  ),
+  linkCheck: check(
+    'payment_provider_events_link_check',
+    sql`${table.paymentRequestId} is not null or ${table.transactionId} is not null`,
+  ),
+}));
+
+export const bookFulfillments = pgTable('book_fulfillments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  businessUnitId: uuid('business_unit_id').notNull().references(() => businessUnits.id, { onDelete: 'cascade' }),
+  studentContactId: uuid('student_contact_id').notNull(),
+  enrollmentId: uuid('enrollment_id').notNull(),
+  paymentRequestId: uuid('payment_request_id').notNull(),
+  providerTransactionId: uuid('provider_transaction_id'),
+  deliveryMode: text('delivery_mode').notNull(),
+  status: text('status').notNull().default('payment_pending'),
+  digitalStatus: text('digital_status').notNull().default('not_required'),
+  physicalStatus: text('physical_status').notNull().default('not_required'),
+  shippingAddressSnapshotJson: jsonb('shipping_address_snapshot_json').notNull().default({}),
+  assignedUserId: uuid('assigned_user_id').references(() => users.id, { onDelete: 'set null' }),
+  carrier: text('carrier'),
+  trackingReference: text('tracking_reference'),
+  notes: text('notes'),
+  readyAt: timestamp('ready_at', { withTimezone: true }),
+  digitalSentAt: timestamp('digital_sent_at', { withTimezone: true }),
+  shippedAt: timestamp('shipped_at', { withTimezone: true }),
+  pickedUpAt: timestamp('picked_up_at', { withTimezone: true }),
+  idempotencyKey: text('idempotency_key').notNull(),
+  createdAt,
+  updatedAt,
+}, (table) => ({
+  scopeIdx: uniqueIndex('book_fulfillments_scope_idx').on(table.id, table.organizationId, table.businessUnitId),
+  idempotencyIdx: uniqueIndex('book_fulfillments_idempotency_idx').on(
+    table.organizationId,
+    table.businessUnitId,
+    table.idempotencyKey,
+  ),
+  paymentRequestIdx: uniqueIndex('book_fulfillments_payment_request_idx').on(
+    table.organizationId,
+    table.businessUnitId,
+    table.paymentRequestId,
+  ),
+  queueIdx: index('book_fulfillments_queue_idx').on(
+    table.organizationId,
+    table.businessUnitId,
+    table.status,
+    table.createdAt,
+  ),
+  studentScopeFk: foreignKey({
+    columns: [table.studentContactId, table.organizationId, table.businessUnitId],
+    foreignColumns: [contacts.id, contacts.organizationId, contacts.primaryBusinessUnitId],
+    name: 'book_fulfillments_student_scope_fk',
+  }).onDelete('restrict'),
+  enrollmentScopeFk: foreignKey({
+    columns: [table.enrollmentId, table.organizationId, table.businessUnitId],
+    foreignColumns: [contactCourseRecords.id, contactCourseRecords.organizationId, contactCourseRecords.businessUnitId],
+    name: 'book_fulfillments_enrollment_scope_fk',
+  }).onDelete('restrict'),
+  requestScopeFk: foreignKey({
+    columns: [table.paymentRequestId, table.organizationId, table.businessUnitId],
+    foreignColumns: [paymentRequests.id, paymentRequests.organizationId, paymentRequests.businessUnitId],
+    name: 'book_fulfillments_request_scope_fk',
+  }).onDelete('restrict'),
+  transactionScopeFk: foreignKey({
+    columns: [table.providerTransactionId, table.organizationId, table.businessUnitId],
+    foreignColumns: [providerTransactions.id, providerTransactions.organizationId, providerTransactions.businessUnitId],
+    name: 'book_fulfillments_transaction_scope_fk',
+  }).onDelete('restrict'),
+  modeCheck: check('book_fulfillments_mode_check', sql`${table.deliveryMode} in ('pickup', 'shipment', 'digital')`),
+  statusCheck: check(
+    'book_fulfillments_status_check',
+    sql`${table.status} in ('payment_pending', 'pending', 'in_progress', 'completed')`,
+  ),
+  digitalStatusCheck: check(
+    'book_fulfillments_digital_status_check',
+    sql`${table.digitalStatus} in ('not_required', 'pending', 'delivered')`,
+  ),
+  physicalStatusCheck: check(
+    'book_fulfillments_physical_status_check',
+    sql`${table.physicalStatus} in ('not_required', 'pending', 'ready', 'picked_up', 'shipped')`,
+  ),
+  componentCheck: check(
+    'book_fulfillments_component_check',
+    sql`(${table.deliveryMode} = 'pickup' and ${table.digitalStatus} = 'not_required' and ${table.physicalStatus} in ('pending', 'ready', 'picked_up'))
+      or (${table.deliveryMode} = 'shipment' and ${table.digitalStatus} in ('pending', 'delivered') and ${table.physicalStatus} in ('pending', 'shipped'))
+      or (${table.deliveryMode} = 'digital' and ${table.digitalStatus} in ('pending', 'delivered') and ${table.physicalStatus} = 'not_required')`,
+  ),
+  addressCheck: check(
+    'book_fulfillments_address_check',
+    sql`(${table.deliveryMode} = 'shipment'
+        and jsonb_typeof(${table.shippingAddressSnapshotJson}) = 'object'
+        and ${table.shippingAddressSnapshotJson} ?& array['recipientName', 'addressLine1', 'city', 'state', 'postalCode', 'countryCode']
+        and ${table.shippingAddressSnapshotJson}->>'countryCode' = 'US')
+      or (${table.deliveryMode} <> 'shipment' and ${table.shippingAddressSnapshotJson} = '{}'::jsonb)`,
+  ),
 }));
 
 export const paymentSnapshots = pgTable('payment_snapshots', {
@@ -1119,6 +1658,9 @@ export const allTables = {
   rolePermissions,
   userRoles,
   businessUnitMemberships,
+  employeeAuthInvitations,
+  employeeAuthInvitationBusinessUnits,
+  employeeAuthEvents,
   contacts,
   contactPhoneNumbers,
   contactChannelConsents,

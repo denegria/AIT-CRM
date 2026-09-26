@@ -149,6 +149,50 @@
   overflow: hidden;
 }
 
+.emptyWorkspace {
+  display: flex;
+  min-height: 230px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 32px 24px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xl);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-soft);
+  text-align: center;
+}
+
+.emptyIcon {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.emptyWorkspace h2 {
+  margin: 2px 0 8px;
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+  line-height: 1.25;
+}
+
+.emptyWorkspace p {
+  max-width: 500px;
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+}
+
+.emptyWorkspace button {
+  margin-top: 8px;
+}
+
 .classRail {
   min-width: 0;
   border-right: 1px solid var(--border-subtle);
@@ -280,7 +324,6 @@
 
 .railState,
 .railStateError,
-.railEmpty,
 .workspaceState,
 .workspaceStateError,
 .inlineEmpty {
@@ -301,18 +344,6 @@
 .railStateError,
 .workspaceStateError {
   color: var(--danger);
-}
-
-.railEmpty {
-  min-height: 210px;
-  flex-direction: column;
-  padding: 22px;
-  border: 1px dashed var(--border-default);
-  border-radius: var(--radius-lg);
-}
-
-.railEmpty strong {
-  color: var(--text-primary);
 }
 
 .classWorkspace {
@@ -934,6 +965,7 @@
 }
 
 @media (max-width: 720px) {
+  .emptyWorkspace { min-height: 200px; padding: 28px 18px; }
   .topBar { grid-template-columns: minmax(0, 1fr); padding-right: 44px; gap: 10px; }
   .locationSelect { grid-column: 1; grid-row: 3; justify-self: stretch; min-width: 0; }
   .dateControls { grid-row: 2; }
@@ -951,7 +983,6 @@
     scroll-snap-type: x proximity;
   }
   .classCard { scroll-snap-align: start; }
-  .railEmpty { min-height: 120px; }
   .classWorkspace { margin-top: 12px; border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: hidden; }
   .classHeader { padding: 18px 15px 14px; }
   .classMeta { gap: 8px 12px; }

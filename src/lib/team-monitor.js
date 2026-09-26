@@ -6,7 +6,12 @@ import {
   taskDateKey,
 } from './tasks/visibility.js';
 import { ROLE_KEYS, roleKeysForUser } from './crm/coordinator-policy.js';
-import { WORKFLOW_KEYS, normalizeLifecycleStatus } from './crm/lifecycle.js';
+import {
+  WORKFLOW_KEYS,
+  isNoFurtherProspectingLifecycleStatus,
+  lifecycleWorkflowForKey,
+  normalizeLifecycleStatus,
+} from './crm/lifecycle.js';
 
 const TEAM_MONITOR_ROLE_KEYS = new Set([
   ROLE_KEYS.ADMIN,
@@ -309,8 +314,11 @@ function emptyMonitorMetrics() {
 }
 
 function isActiveMonitorContact(contact = {}) {
-  const status = contactStatus(contact).toLowerCase();
-  return Boolean(contact?.id) && !['enrolled', 'dropped / quit', 'lost', 'archived'].includes(status);
+  const status = contactStatus(contact);
+  const workflow = lifecycleWorkflowForKey(contact.workflowKey);
+  return Boolean(contact?.id) &&
+    workflow.activeStatuses.includes(status) &&
+    !isNoFurtherProspectingLifecycleStatus(status, { workflowKey: workflow.key });
 }
 
 function hasValidNextFollowUp(task = {}) {
@@ -377,7 +385,15 @@ export function filterTeamMonitorRows({ roster = [], unassigned = emptyMonitorMe
   const includeUnassigned = attention !== 'no-work' &&
     hasTeamMonitorWork(unassigned) &&
     (attention !== 'attention' || unassigned.signal === 'Needs attention');
-  return includeUnassigned ? [...employees, unassigned] : employees;
+  const rows = includeUnassigned ? [...employees, unassigned] : employees;
+  const rank = (row) => row.signal === 'Needs attention' ? 0 : row.signal === 'On track' ? 1 : 2;
+  return rows.sort((left, right) => (
+    rank(left) - rank(right) ||
+    Number(right.overdue || 0) - Number(left.overdue || 0) ||
+    Number(right.contactsWithoutNextFollowUp || 0) - Number(left.contactsWithoutNextFollowUp || 0) ||
+    Number(right.dueToday || 0) - Number(left.dueToday || 0) ||
+    String(left.name || '').localeCompare(String(right.name || ''))
+  ));
 }
 
 export function buildTeamMonitorPageModel({
@@ -472,12 +488,12 @@ export function buildTeamMonitorPageModel({
   const unassigned = {
     id: 'unassigned',
     name: 'Unassigned work',
-    roleLabel: 'Tasks and active contacts without an eligible owner',
+    roleLabel: 'Ownerless or outside this roster',
     isUnassignedBucket: true,
     ...finalizedUnassignedMetrics,
     signal: unassignedSignal.label,
     signalTone: unassignedSignal.tone,
-    taskHref: '/tasks?unassigned=true',
+    taskHref: '/tasks?ownerUserId=unassigned',
     contactHref: '/contacts?owner=unassigned',
   };
   const summary = buildTeamMonitorSummary({ roster, unassigned });
@@ -498,7 +514,7 @@ export function buildTeamMonitorPageModel({
       enrollments: summary.enrollments,
       cancellations: summary.cancellations,
     },
-    metricNote: 'Task progress is completed in the selected period divided by those completions plus currently open tasks. Assigned contacts are current CRM ownership across lifecycle states. A valid next follow-up is an open follow-up task with a due date. Enrollment and cancellation movement require explicit dated CRM evidence.',
+    metricNote: 'Backlog and follow-up coverage are current; task completions and dated enrollment movement use the selected period. A follow-up gap means an active-stage contact has no open follow-up task with a due date.',
     updatedLabel: 'Scoped CRM records',
   };
 }

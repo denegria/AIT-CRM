@@ -4,6 +4,8 @@ import { getDb } from '@/db/index.js';
 import {
   businessUnitMemberships,
   businessUnits,
+  employeeAuthInvitationBusinessUnits,
+  employeeAuthInvitations,
   roles,
   userRoles,
   users,
@@ -25,7 +27,13 @@ import {
   provisionUserAccess,
   updateUserAccess,
 } from '@/lib/admin/user-management.js';
-import { PERMISSIONS, requirePermission } from '@/lib/auth';
+import {
+  PERMISSIONS,
+  createWorkOSEmployeeInvitation,
+  requirePermission,
+  revokeAllWorkOSUserSessions,
+  usesWorkOSAuth,
+} from '@/lib/auth';
 import { isUuid } from '@/lib/crm/validation.js';
 
 function httpError(message, status = 400) {
@@ -56,6 +64,7 @@ function toUserPayload(user, roleKeys, memberships) {
     id: user.id,
     name: user.name,
     email: user.email,
+    authLinked: Boolean(user.workosUserId),
     isActive: user.isActive,
     roleKeys: sortedRoleKeys,
     primaryRoleKey: sortedRoleKeys.includes('admin') ? 'admin' : sortedRoleKeys[0] || 'account_coordinator',
@@ -72,6 +81,7 @@ async function readUsersForOrganization(db, organizationId) {
       id: users.id,
       name: users.name,
       email: users.email,
+      workosUserId: users.workosUserId,
       isActive: users.isActive,
       createdAt: users.createdAt,
       updatedAt: users.updatedAt,
@@ -184,6 +194,7 @@ async function readOrganizationUserById(tx, organizationId, id) {
       organizationId: users.organizationId,
       name: users.name,
       email: users.email,
+      workosUserId: users.workosUserId,
       isActive: users.isActive,
     })
     .from(users)
@@ -233,10 +244,46 @@ async function countActiveAdmins(tx, organizationId) {
 
 async function readResponseUsers(db, organizationId, selectedUserId = null) {
   const records = await readUsersForOrganization(db, organizationId);
+  const invitationRows = usesWorkOSAuth() ? await db
+    .select({
+      id: employeeAuthInvitations.id,
+      email: employeeAuthInvitations.intendedEmail,
+      name: employeeAuthInvitations.intendedName,
+      status: employeeAuthInvitations.status,
+      expiresAt: employeeAuthInvitations.expiresAt,
+      lastSentAt: employeeAuthInvitations.lastSentAt,
+      roleKey: roles.key,
+      businessUnitId: employeeAuthInvitationBusinessUnits.businessUnitId,
+    })
+    .from(employeeAuthInvitations)
+    .innerJoin(roles, eq(employeeAuthInvitations.roleId, roles.id))
+    .leftJoin(
+      employeeAuthInvitationBusinessUnits,
+      eq(employeeAuthInvitationBusinessUnits.invitationId, employeeAuthInvitations.id),
+    )
+    .where(eq(employeeAuthInvitations.organizationId, organizationId))
+    .orderBy(desc(employeeAuthInvitations.createdAt)) : [];
+  const invitationsById = new Map();
+  for (const row of invitationRows) {
+    const invitation = invitationsById.get(row.id) || {
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      status: row.status,
+      expiresAt: row.expiresAt?.toISOString?.() || null,
+      lastSentAt: row.lastSentAt?.toISOString?.() || null,
+      roleKey: canonicalRoleKey(row.roleKey),
+      businessUnitIds: [],
+    };
+    if (row.businessUnitId) invitation.businessUnitIds.push(row.businessUnitId);
+    invitationsById.set(row.id, invitation);
+  }
   return {
     users: records,
     user: selectedUserId ? records.find((record) => record.id === selectedUserId) || null : null,
     roleOptions: MANAGED_ROLE_KEYS.map(toRoleOption),
+    authMode: usesWorkOSAuth() ? 'workos' : 'legacy',
+    invitations: [...invitationsById.values()],
   };
 }
 
@@ -264,7 +311,7 @@ export async function POST(request) {
     password,
     roleKey,
     businessUnitIds,
-    requirePassword: true,
+    requirePassword: !usesWorkOSAuth(),
   });
   if (!validation.ok) {
     return NextResponse.json({ error: validation.error }, { status: validation.status });
@@ -273,6 +320,31 @@ export async function POST(request) {
   const db = getDb();
 
   try {
+    if (usesWorkOSAuth()) {
+      let roleId = null;
+      await db.transaction(async (tx) => {
+        const { roleByKey } = await readManagedRoleContext(tx, session.user.organizationId);
+        if (requiresBusinessUnitMembership(roleKey)) {
+          await validateBusinessUnitMemberships(tx, session.user.organizationId, businessUnitIds);
+        }
+        const existingUser = await readExistingUserByEmail(tx, email);
+        if (existingUser) {
+          throw httpError('This employee already has a CRM user record. Edit that record instead.', 409);
+        }
+        roleId = roleByKey.get(roleKey).id;
+      });
+      const invitation = await createWorkOSEmployeeInvitation({
+        organizationId: session.user.organizationId,
+        actorUserId: session.user.id,
+        name,
+        email,
+        roleId,
+        businessUnitIds,
+      });
+      const response = await readResponseUsers(db, session.user.organizationId);
+      return NextResponse.json({ ...response, invitation: { id: invitation.id, status: 'pending' } }, { status: 201 });
+    }
+
     let savedUserId = null;
     await db.transaction(async (tx) => {
       const { roleByKey, managedRoleIds } = await readManagedRoleContext(tx, session.user.organizationId);
@@ -332,6 +404,7 @@ export async function PATCH(request) {
 
   try {
     let savedUserId = id;
+    let revokeProviderUserId = null;
     await db.transaction(async (tx) => {
       const existingUser = await readOrganizationUserById(tx, session.user.organizationId, id);
       if (!existingUser) throw httpError('User not found in this organization.', 404);
@@ -348,11 +421,13 @@ export async function PATCH(request) {
           throw httpError('At least one active administrator is required.', 400);
         }
         await deactivateUserAccount({ tx, userId: id });
+        revokeProviderUserId = existingUser.workosUserId || null;
         return;
       }
 
       const { roleByKey, managedRoleIds } = await readManagedRoleContext(tx, session.user.organizationId);
       const name = normalizeName(body.name);
+      const password = usesWorkOSAuth() ? '' : String(body.password || '');
       const roleKey = normalizeManagedRoleKey(body.roleKey);
       const isActive = Object.prototype.hasOwnProperty.call(body, 'isActive')
         ? Boolean(body.isActive)
@@ -360,7 +435,7 @@ export async function PATCH(request) {
       const businessUnitIds = roleKey === 'admin' ? [] : normalizeBusinessUnitIds(body.businessUnitIds);
       const validation = validateUserAccessDraft({
         name,
-        password: String(body.password || ''),
+        password,
         roleKey,
         businessUnitIds,
         requireEmail: false,
@@ -387,7 +462,7 @@ export async function PATCH(request) {
         existingUser,
         name,
         email: existingUser.email,
-        password: String(body.password || ''),
+        password,
         roleId: roleRow.id,
         managedRoleIds,
         businessUnitIds,
@@ -397,11 +472,21 @@ export async function PATCH(request) {
 
       if (!isActive) {
         await deactivateUserAccount({ tx, userId: id });
+        revokeProviderUserId = existingUser.workosUserId || null;
       }
     });
 
+    let providerRevocationPending = false;
+    if (usesWorkOSAuth() && revokeProviderUserId) {
+      try {
+        await revokeAllWorkOSUserSessions(revokeProviderUserId);
+      } catch {
+        providerRevocationPending = true;
+      }
+    }
+
     const response = await readResponseUsers(db, session.user.organizationId, savedUserId);
-    return NextResponse.json(response);
+    return NextResponse.json({ ...response, providerRevocationPending });
   } catch (txError) {
     return errorResponse(txError, 'User update failed.');
   }

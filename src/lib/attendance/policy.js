@@ -92,6 +92,20 @@ export function scheduledDatesForWeek(scheduleDays, weekOf) {
   });
 }
 
+export function nextScheduledClassDate(sectionSchedules, afterDate) {
+  const { date } = parseSessionDate(afterDate);
+  const scheduledDays = new Set(sectionSchedules.flatMap((days) => canonicalScheduleDays(days)));
+  if (!scheduledDays.size) return null;
+  for (let offset = 1; offset <= 7; offset += 1) {
+    const candidate = new Date(date);
+    candidate.setUTCDate(candidate.getUTCDate() + offset);
+    if (scheduledDays.has(CANONICAL_WEEKDAYS[(candidate.getUTCDay() + 6) % 7])) {
+      return dateTextFromDate(candidate);
+    }
+  }
+  return null;
+}
+
 export function assertScheduledSessionDate(section, sessionDate) {
   const weekday = weekdayForSessionDate(sessionDate);
   const days = canonicalScheduleDays(section?.scheduleDaysJson);

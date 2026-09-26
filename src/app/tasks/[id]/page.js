@@ -2,18 +2,15 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
-  BriefcaseBusiness,
-  CalendarClock,
   CheckCircle2,
   CheckSquare,
-  ClipboardList,
   ExternalLink,
   History,
+  MoreHorizontal,
   ShieldAlert,
-  User,
   X,
 } from 'lucide-react';
 import PageState, { PageStateAction } from '@/components/PageState';
@@ -22,11 +19,15 @@ import { TaskCancellationDialog } from '@/components/TaskCancellationDialog';
 import { TaskRemovalDecisionDialog } from '@/components/TaskRemovalDecisionDialog';
 import { useToast } from '@/components/Toast';
 import { useCRM } from '@/lib/store';
+import { isAssignableEmployee } from '@/lib/crm/assignable-employees.js';
+import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import {
   TASK_CANCELLATION_DECISIONS,
   taskCancellationDecision,
 } from '@/lib/tasks/cancellation-policy.js';
-import { taskDateKey } from '@/lib/tasks/visibility.js';
+import { followUpTaskEntryHref } from '@/lib/tasks/follow-up-selection.js';
+import { taskQueueReturnHref } from '@/lib/tasks/queue-navigation.js';
+import { taskOverdueAgeLabel } from '@/lib/tasks/visibility.js';
 import {
   canReviewTaskRemovalApprovals,
   taskRemovalApprovalState,
@@ -49,18 +50,6 @@ function formatDateTime(value) {
     year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  }).format(date);
-}
-
-function formatDate(value) {
-  const key = taskDateKey(value);
-  if (!key) return 'Not set';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return key;
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
   }).format(date);
 }
 
@@ -102,16 +91,9 @@ function fallbackTaskDetail(task, contacts, employees, accessibleBusinessUnits) 
   };
 }
 
-function queueHref(task) {
-  const params = new URLSearchParams();
-  if (task.taskType) params.set('taskType', task.taskType);
-  if (task.status) params.set('status', task.status);
-  if (task.ownerUserId) params.set('ownerUserId', task.ownerUserId);
-  return `/tasks${params.toString() ? `?${params.toString()}` : ''}`;
-}
-
 export default function TaskDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const {
     access,
     dataSource,
@@ -121,6 +103,7 @@ export default function TaskDetailPage() {
     employees,
     accessibleBusinessUnits,
     currentUser,
+    setCurrentBusinessUnitId,
     loaded,
     scopeLabel,
   } = useCRM();
@@ -136,6 +119,7 @@ export default function TaskDetailPage() {
   const [removalDecisionReason, setRemovalDecisionReason] = useState('');
   const [removalDecisionBusy, setRemovalDecisionBusy] = useState(false);
   const [removalDecisionError, setRemovalDecisionError] = useState('');
+  const [assignmentBusy, setAssignmentBusy] = useState(false);
   const taskId = params.id;
   const visibleContacts = allContacts?.length ? allContacts : contacts;
 
@@ -186,7 +170,20 @@ export default function TaskDetailPage() {
   }, [access.canReadCrm, accessibleBusinessUnits, dataSource, employees, loaded, taskId, tasks, visibleContacts]);
 
   const task = detail?.task || null;
+  const overdueAgeLabel = task ? taskOverdueAgeLabel(task) : '';
+  const returnTo = taskQueueReturnHref(searchParams.get('returnTo') || '', task?.businessUnitId || '');
+  const alignTaskDivision = () => {
+    if (task?.businessUnitId) setCurrentBusinessUnitId(task.businessUnitId);
+  };
   const context = detail?.context || {};
+  const coordinatorUiPolicy = useMemo(() => coordinatorUiPolicyForUser(currentUser), [currentUser]);
+  const assignableEmployees = useMemo(() => {
+    const options = (employees || []).filter(isAssignableEmployee);
+    if (!currentUser?.id || options.some((employee) => employee.id === currentUser.id) || !isAssignableEmployee(currentUser)) {
+      return options;
+    }
+    return [currentUser, ...options];
+  }, [currentUser, employees]);
   useRecordScopeRegistration(context.businessUnit, task?.id ? `task:${task.id}` : '');
   const events = detail?.events || [];
   const ownerLabel = context.owner?.name || context.owner?.email || (task?.ownerUserId === currentUser?.id ? 'Me' : 'Unassigned');
@@ -211,15 +208,16 @@ export default function TaskDetailPage() {
     !cancellationPending &&
     cancellationPolicy?.decision !== TASK_CANCELLATION_DECISIONS.FORBIDDEN
   );
+  const canLogOutcome = Boolean(
+    access.canWriteCrm &&
+    task?.taskType === 'follow_up' &&
+    ['open', 'in_progress', 'snoozed'].includes(task?.status)
+  );
   const renderError = access.canReadCrm ? error : 'CRM read access is required.';
   const headerSubtitle = useMemo(() => {
     if (!task) return '';
-    return [
-      context.businessUnit?.name || scopeLabel,
-      ownerLabel,
-      task.dueAt ? `Due ${formatDate(task.dueAt)}` : 'No due date',
-    ].filter(Boolean).join(' - ');
-  }, [context.businessUnit?.name, ownerLabel, scopeLabel, task]);
+    return context.businessUnit?.name || scopeLabel;
+  }, [context.businessUnit?.name, scopeLabel, task]);
 
   async function submitCancellation() {
     const reason = String(cancellationReason || '').trim();
@@ -242,6 +240,37 @@ export default function TaskDetailPage() {
       setCancellationError(err.message || 'Task cancellation failed.');
     } finally {
       setCancellationBusy(false);
+    }
+  }
+
+  async function assignTask(ownerUserId) {
+    if (!task?.id || !ownerUserId || assignmentBusy || !coordinatorUiPolicy.canManageCoordinatorAssignments) return;
+    setAssignmentBusy(true);
+    try {
+      const response = await fetch('/api/tasks', {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          id: task.id,
+          action: 'assign',
+          ownerUserId,
+          expectedUpdatedAt: task.updatedAt,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload.error || 'Task assignment failed.');
+      const nextTask = payload.task || { ...task, ownerUserId };
+      const nextOwner = assignableEmployees.find((employee) => employee.id === nextTask.ownerUserId) || null;
+      setDetail((current) => current ? {
+        ...current,
+        task: nextTask,
+        context: { ...current.context, owner: nextOwner },
+      } : current);
+      toast('Task owner updated');
+    } catch (err) {
+      toast(err.message || 'Task assignment failed.');
+    } finally {
+      setAssignmentBusy(false);
     }
   }
 
@@ -306,7 +335,7 @@ export default function TaskDetailPage() {
   return (
     <div className={s.detailShell}>
       <div className={`${s.topBar} app-notification-safe`}>
-        <Link className={s.backLink} href="/tasks"><ArrowLeft size={16} /> Back to tasks</Link>
+        <Link className={s.backLink} href={returnTo} onClick={alignTaskDivision}><ArrowLeft size={16} /> Back to tasks</Link>
         <div className={s.actionRow}>
           {canReviewRemovalApproval && (
             <>
@@ -319,28 +348,26 @@ export default function TaskDetailPage() {
             </>
           )}
           {canCancelTask && (
-            <button
-              className={`btn btn-sm ${cancellationNeedsApproval ? '' : 'btn-danger'}`}
-              type="button"
-              onClick={() => {
-                setCancellationError('');
-                setCancellationReason('');
-                setCancellationOpen(true);
-              }}
-            >
-              <X size={14} />
-              {cancellationNeedsApproval ? 'Request Cancel' : 'Cancel'}
-            </button>
-          )}
-          <Link className="btn btn-sm" href={queueHref(task)}>
-            <ClipboardList size={14} />
-            Open Queue
-          </Link>
-          {context.contact?.id && (
-            <Link className="btn btn-sm btn-primary" href={`/contacts/${encodeURIComponent(context.contact.id)}`}>
-              <ExternalLink size={14} />
-              Contact
-            </Link>
+            <details className={s.moreMenu}>
+              <summary className="btn btn-sm">
+                <MoreHorizontal size={14} />
+                More
+              </summary>
+              <div className={s.moreMenuPanel}>
+                <button
+                  className={`btn btn-sm ${cancellationNeedsApproval ? '' : 'btn-danger'}`}
+                  type="button"
+                  onClick={() => {
+                    setCancellationError('');
+                    setCancellationReason('');
+                    setCancellationOpen(true);
+                  }}
+                >
+                  <X size={14} />
+                  {cancellationNeedsApproval ? 'Request Cancel' : 'Cancel task'}
+                </button>
+              </div>
+            </details>
           )}
         </div>
       </div>
@@ -354,8 +381,7 @@ export default function TaskDetailPage() {
         <p className={s.subtitle}>{headerSubtitle}</p>
       </div>
 
-      <div className={s.layout}>
-        <main className={s.mainStack}>
+      <main className={s.mainStack}>
           {!isTaskRemovalApproval && removalApproval && (
             <section className={`${s.statusPanel} ${cancellationPending ? s.statusPanelPending : ''}`}>
               <div className={s.statusIcon}><ShieldAlert size={20} /></div>
@@ -406,12 +432,98 @@ export default function TaskDetailPage() {
             </section>
           )}
 
-          <section className={s.panel}>
-            <h2 className={s.panelTitle}><CheckSquare size={17} /> Task</h2>
+          <section className={s.panel} aria-labelledby="task-briefing-title">
+            <h2 className={s.panelTitle} id="task-briefing-title"><CheckSquare size={17} /> What needs doing</h2>
             {task.description ? (
               <p className={s.description}>{task.description}</p>
             ) : (
               <div className={s.empty}>No description has been added.</div>
+            )}
+            <div className={s.contactRow}>
+              <span className={s.metadataLabel}>Who this concerns</span>
+              <div className={s.contactIdentity}>
+                {context.contact?.id ? (
+                  <>
+                    <Link className={s.workFactLink} href={`/contacts/${encodeURIComponent(context.contact.id)}`}>
+                      {context.contact.name || 'Linked contact'} <ExternalLink size={13} />
+                    </Link>
+                    <span className={s.workFactHint}>{context.contact.phone || context.contact.email || 'No contact channel'}</span>
+                  </>
+                ) : (
+                  <span className={s.metadataValue}>No contact linked</span>
+                )}
+              </div>
+            </div>
+            {(context.lead || context.workOrder || task.placementReviewLink) && (
+              <div className={s.contextGrid} aria-label="Related work">
+                {context.lead && (
+                  <div className={s.contextCard}>
+                    <span className={s.contextTitle}>Lead</span>
+                    <span className={s.contextText}>
+                      {contextText([context.lead.currentStage || context.lead.status, context.lead.sourceName || context.lead.sourceType])}
+                    </span>
+                  </div>
+                )}
+                {context.workOrder && (
+                  <div className={s.contextCard}>
+                    <div className={s.contextHeader}>
+                      <span className={s.contextTitle}>{context.workOrder.title || context.workOrder.workOrderNumber || 'Work order'}</span>
+                      {context.workOrder.canOpen && (
+                        <Link className={s.contextLink} href={`/work-orders/${encodeURIComponent(context.workOrder.id)}`}>
+                          Open <ExternalLink size={12} />
+                        </Link>
+                      )}
+                    </div>
+                    <span className={s.contextText}>{titleCase(context.workOrder.status)}</span>
+                  </div>
+                )}
+                {task.placementReviewLink && (
+                  <div className={s.contextCard}>
+                    <div className={s.contextHeader}>
+                      <span className={s.contextTitle}>AIT USA placement review</span>
+                      <a className={s.contextLink} href={task.placementReviewLink} target="_blank" rel="noreferrer">
+                        Open AIT USA review <ExternalLink size={12} />
+                      </a>
+                    </div>
+                    <span className={s.contextText}>Opens the authorized AIT USA employee queue.</span>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className={s.workFacts}>
+              <div className={s.workFact}>
+                <span className={s.metadataLabel}>Due</span>
+                <span className={s.dueValue}>
+                  <span className={s.metadataValue}>{formatDateTime(task.dueAt)}</span>
+                  {overdueAgeLabel && <span className={s.overdueCue}>{overdueAgeLabel}</span>}
+                </span>
+              </div>
+              <div className={s.workFact}>
+                <span className={s.metadataLabel}>Owner</span>
+                {coordinatorUiPolicy.canManageCoordinatorAssignments && !isTaskRemovalApproval ? (
+                  <select
+                    className={`select ${s.ownerSelect}`}
+                    aria-label="Task owner"
+                    value={task.ownerUserId || ''}
+                    disabled={assignmentBusy || !access.canWriteCrm}
+                    onChange={(event) => assignTask(event.target.value)}
+                  >
+                    <option value="" disabled>Unassigned</option>
+                    {assignableEmployees.map((employee) => (
+                      <option key={employee.id} value={employee.id}>{employee.name || employee.email}</option>
+                    ))}
+                  </select>
+                ) : (
+                  <span className={s.metadataValue}>{ownerLabel}</span>
+                )}
+              </div>
+            </div>
+            {canLogOutcome && (
+              <div className={s.actionBand}>
+                <Link className="btn btn-primary" href={followUpTaskEntryHref(task, { returnTo })} onClick={alignTaskDivision}>
+                  <CheckCircle2 size={16} /> Log outcome
+                </Link>
+              </div>
             )}
           </section>
 
@@ -436,110 +548,17 @@ export default function TaskDetailPage() {
               <div className={s.empty}>No task events yet.</div>
             )}
           </section>
-        </main>
-
-        <aside className={s.sideStack}>
-          <section className={s.panel}>
-            <h2 className={s.panelTitle}><CalendarClock size={17} /> Metadata</h2>
-            <div className={s.metadataGrid}>
-              <div className={s.metadataItem}>
-                <span className={s.metadataLabel}>Type</span>
-                <span className={s.metadataValue}>{titleCase(task.taskType)}</span>
-              </div>
-              <div className={s.metadataItem}>
-                <span className={s.metadataLabel}>Due</span>
-                <span className={s.metadataValue}>{formatDateTime(task.dueAt)}</span>
-              </div>
-              <div className={s.metadataItem}>
-                <span className={s.metadataLabel}>Owner</span>
-                <span className={s.metadataValue}>{ownerLabel}</span>
-              </div>
-              <div className={s.metadataItem}>
-                <span className={s.metadataLabel}>Created By</span>
-                <span className={s.metadataValue}>{createdByLabel}</span>
-              </div>
-              <div className={s.metadataItem}>
-                <span className={s.metadataLabel}>{scopeLabel}</span>
-                <span className={s.metadataValue}>{context.businessUnit?.name || 'Not set'}</span>
-              </div>
-              <div className={s.metadataItem}>
-                <span className={s.metadataLabel}>Updated</span>
-                <span className={s.metadataValue}>{formatDateTime(task.updatedAt)}</span>
-              </div>
-            </div>
-          </section>
-
-          <section className={s.panel}>
-            <h2 className={s.panelTitle}><BriefcaseBusiness size={17} /> Linked Context</h2>
-            <div className={s.contextGrid}>
-              {context.contact ? (
-                <div className={s.contextCard}>
-                  <div className={s.contextHeader}>
-                    <span className={s.contextTitle}>{context.contact.name || 'Contact'}</span>
-                    <Link className={s.contextLink} href={`/contacts/${encodeURIComponent(context.contact.id)}`}>
-                      Open <ExternalLink size={12} />
-                    </Link>
-                  </div>
-                  <span className={s.contextText}>
-                    {contextText([context.contact.phone || context.contact.email || 'No channel', context.contact.sourceLabel])}
-                  </span>
-                </div>
-              ) : (
-                <div className={s.empty}>No contact linked.</div>
-              )}
-
-              {context.lead && (
-                <div className={s.contextCard}>
-                  <span className={s.contextTitle}>Lead</span>
-                  <span className={s.contextText}>
-                    {contextText([context.lead.currentStage || context.lead.status, context.lead.sourceName || context.lead.sourceType])}
-                  </span>
-                </div>
-              )}
-
-              {context.workOrder && (
-                <div className={s.contextCard}>
-                  <div className={s.contextHeader}>
-                    <span className={s.contextTitle}>{context.workOrder.title || context.workOrder.workOrderNumber || 'Work order'}</span>
-                    {context.workOrder.canOpen && (
-                      <Link className={s.contextLink} href={`/work-orders/${encodeURIComponent(context.workOrder.id)}`}>
-                        Open <ExternalLink size={12} />
-                      </Link>
-                    )}
-                  </div>
-                  <span className={s.contextText}>{titleCase(context.workOrder.status)}</span>
-                </div>
-              )}
-
-              {task.placementReviewLink && (
-                <div className={s.contextCard}>
-                  <div className={s.contextHeader}>
-                    <span className={s.contextTitle}>AIT USA placement review</span>
-                    <a className={s.contextLink} href={task.placementReviewLink} target="_blank" rel="noreferrer">
-                      Open AIT USA review <ExternalLink size={12} />
-                    </a>
-                  </div>
-                  <span className={s.contextText}>Opens the authorized AIT USA employee queue.</span>
-                </div>
-              )}
-            </div>
-          </section>
-
-          <section className={s.panel}>
-            <h2 className={s.panelTitle}><User size={17} /> Source</h2>
-            <div className={s.metadataGrid}>
-              <div className={s.metadataItem}>
-                <span className={s.metadataLabel}>Source</span>
-                <span className={s.metadataValue}>{task.sourceLabel || task.sourceType || 'Manual'}</span>
-              </div>
-              <div className={s.metadataItem}>
-                <span className={s.metadataLabel}>Created</span>
-                <span className={s.metadataValue}>{formatDateTime(task.createdAt)}</span>
-              </div>
-            </div>
-          </section>
-        </aside>
-      </div>
+          <details className={s.recordDetails}>
+            <summary>Record details</summary>
+            <dl className={s.detailsList}>
+              <div><dt>Type</dt><dd>{titleCase(task.taskType)}</dd></div>
+              <div><dt>Source</dt><dd>{task.sourceLabel || task.sourceType || 'Manual'}</dd></div>
+              <div><dt>Created by</dt><dd>{createdByLabel}</dd></div>
+              <div><dt>Created</dt><dd>{formatDateTime(task.createdAt)}</dd></div>
+              <div><dt>Updated</dt><dd>{formatDateTime(task.updatedAt)}</dd></div>
+            </dl>
+          </details>
+      </main>
 
       <TaskCancellationDialog
         open={cancellationOpen && canCancelTask}

@@ -164,12 +164,42 @@ test('team monitor page metrics reconcile employee rows with the explicit unassi
   assert.equal(viewModel.summary.enrollments, 1);
   assert.equal(viewModel.summary.cancellations, 1);
   assert.equal(viewModel.unassigned.unattributedTasks, 1);
+  assert.equal(viewModel.unassigned.taskHref, '/tasks?ownerUserId=unassigned');
   assert.equal(sofia.contactsWithoutNextFollowUp, 1);
   assert.equal(sofia.taskProgressTotal, 3);
   assert.equal(sofia.contactHref, '/contacts?owner=u-one');
   assert.equal(sofia.signal, 'Needs attention');
   assert.equal(viewModel.reconciliation.openTasks, 5);
   assert.equal(viewModel.reconciliation.completedTasks, viewModel.summary.completedTasks);
+});
+
+test('follow-up coverage excludes terminal AIT USA stages and enrolled contacts', () => {
+  const stages = [
+    'New Lead', 'Needs First Outreach', 'Follow Up',
+    'Retargeting', 'Not Interested', 'Course Completed', 'Dropped / Quit', 'Enrolled',
+  ];
+  const model = buildTeamMonitorPageModel({
+    currentUser: { id: 'u-admin', primaryRoleKey: 'admin' },
+    contacts: stages.map((status, index) => ({
+      id: `contact-${index}`, workflowKey: 'ait_usa', currentStage: status, status,
+    })),
+  });
+  assert.equal(model.unassigned.unassignedActiveContacts, 3);
+  assert.equal(model.summary.contactsWithoutNextFollowUp, 3);
+});
+
+test('monitor coverage follows the active stages of other CRM workflows', () => {
+  const model = buildTeamMonitorPageModel({
+    currentUser: { id: 'u-admin', primaryRoleKey: 'admin' },
+    contacts: [
+      { id: 'signs-active', workflowKey: 'ait_signs', status: 'Work Order' },
+      { id: 'signs-closed', workflowKey: 'ait_signs', status: 'Invoice / Payment' },
+      { id: 'default-active', workflowKey: 'default', status: 'Qualified' },
+      { id: 'default-closed', workflowKey: 'default', status: 'Lost' },
+    ],
+  });
+  assert.equal(model.summary.unassignedActiveContacts, 2);
+  assert.equal(model.summary.contactsWithoutNextFollowUp, 2);
 });
 
 test('team monitor period changes completed, follow-up, and enrollment measures without changing current due state', () => {
@@ -280,6 +310,20 @@ test('attention filters never append an empty or contradictory unassigned bucket
   assert.deepEqual(noWorkRows.map((row) => row.id), ['u-two']);
   assert.equal(attentionRows.some((row) => row.isUnassignedBucket), false);
   assert.equal(noWorkRows.some((row) => row.isUnassignedBucket), false);
+});
+
+test('all-work roster puts urgent reconciliation ahead of quiet coordinators', () => {
+  const rows = filterTeamMonitorRows({
+    roster: [
+      { id: 'quiet', name: 'Quiet', signal: 'No active workload', overdue: 0, contactsWithoutNextFollowUp: 0 },
+      { id: 'staff-risk', name: 'Staff risk', signal: 'Needs attention', overdue: 1, contactsWithoutNextFollowUp: 0 },
+    ],
+    unassigned: {
+      id: 'unassigned', name: 'Unassigned work', isUnassignedBucket: true,
+      signal: 'Needs attention', overdue: 3, contactsWithoutNextFollowUp: 7,
+    },
+  });
+  assert.deepEqual(rows.map((row) => row.id), ['unassigned', 'staff-risk', 'quiet']);
 });
 
 test('unattributed allowed-division tasks reconcile without exposing or treating an outside owner as unassigned', () => {

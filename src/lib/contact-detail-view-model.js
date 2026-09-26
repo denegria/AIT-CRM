@@ -123,6 +123,7 @@ const COMMON_FILTERS = {
   task: { value: 'task', label: 'Tasks', empty: 'No tasks recorded yet.' },
   message: { value: 'message', label: 'Messages', empty: 'No messages recorded yet.' },
   import: { value: 'import', label: 'Source details', empty: 'No standalone source details recorded yet.' },
+  system: { value: 'system', label: 'System history', empty: 'No system workflow history recorded yet.' },
 };
 
 const SIGNS_SNAPSHOT_ITEMS = [
@@ -159,14 +160,15 @@ function instituteFilters(counts = {}) {
     countFor(counts, 'payment') > 0 ? { ...COMMON_FILTERS.payment, label: 'Receipts', empty: 'No receipt history recorded yet.' } : null,
   ];
   return compactArray([
-    COMMON_FILTERS.all,
-    COMMON_FILTERS.lead,
-    COMMON_FILTERS.follow_up,
+    { ...COMMON_FILTERS.all, label: 'All activity' },
+    { ...COMMON_FILTERS.lead, label: 'Inquiries' },
+    { ...COMMON_FILTERS.follow_up, label: 'Outreach' },
     COMMON_FILTERS.message,
     COMMON_FILTERS.task,
     COMMON_FILTERS.note,
+    COMMON_FILTERS.system,
     ...optionalOperationalFilters,
-    COMMON_FILTERS.import,
+    { ...COMMON_FILTERS.import, label: 'Import history' },
   ]);
 }
 

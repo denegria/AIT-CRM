@@ -9,7 +9,7 @@ import {
   userRoles,
   users,
 } from '@/db/schema.js';
-import { createUserSession, hashPassword, setAuthCookie } from '@/lib/auth';
+import { createUserSession, hashPassword, setAuthCookie, usesWorkOSAuth } from '@/lib/auth';
 import { verifySignupInviteToken } from '@/lib/signup-invites';
 import {
   INVITE_ROLE_KEYS,
@@ -33,6 +33,9 @@ function normalizeBusinessUnitIds(input) {
 }
 
 export async function POST(request) {
+  if (usesWorkOSAuth()) {
+    return NextResponse.json({ error: 'Legacy employee signup is disabled.' }, { status: 410 });
+  }
   const body = await request.json().catch(() => ({}));
   const invite = verifySignupInviteToken(body.inviteToken);
   if (!invite.ok) {

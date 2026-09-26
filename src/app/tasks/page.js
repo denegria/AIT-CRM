@@ -14,8 +14,8 @@ import {
   RefreshCcw,
   Repeat2,
   ShieldAlert,
+  SlidersHorizontal,
   X,
-  UserPlus,
 } from 'lucide-react';
 import { useCRM } from '@/lib/store';
 import { isAssignableEmployee } from '@/lib/crm/assignable-employees.js';
@@ -57,6 +57,7 @@ import {
   clearedFollowUpTaskEntryHref,
 } from '@/lib/tasks/follow-up-selection.js';
 import { initialFollowUpDraftFields } from '@/lib/tasks/follow-up-draft.js';
+import { taskDetailHref, taskQueueHref } from '@/lib/tasks/queue-navigation.js';
 import s from './FollowUpQueue.module.css';
 
 const TASK_TYPE_OPTIONS = [
@@ -137,6 +138,13 @@ function todayKey() {
 function dateInputToIso(value) {
   if (!value) return null;
   const date = new Date(`${value}T09:00:00`);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function dateTimeInputToIso(value) {
+  if (!value) return null;
+  const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
   return date.toISOString();
 }
@@ -306,6 +314,7 @@ export default function FollowUpQueuePage() {
     accessibleBusinessUnits,
     currentBusinessUnitId,
     currentBusinessUnit,
+    setCurrentBusinessUnitId,
     currentUser,
     access,
     dataSource,
@@ -372,6 +381,7 @@ export default function FollowUpQueuePage() {
   const [editError, setEditError] = useState('');
   const [editDraft, setEditDraft] = useState(() => editDraftFromTask({}));
   const [actionPanelTaskId, setActionPanelTaskId] = useState('');
+  const [secondaryFiltersOpen, setSecondaryFiltersOpen] = useState(false);
   const [confirmTaskAction, setConfirmTaskAction] = useState(null);
   const [cancellationDraft, setCancellationDraft] = useState(null);
 
@@ -641,6 +651,19 @@ export default function FollowUpQueuePage() {
     return () => controller.abort();
   }, [leanShellIsDeferred, searchParams, taskContacts]);
 
+  useEffect(() => {
+    if (searchParams.get('action') !== 'log-follow-up') return;
+    const selectedTask = queueTasks.find((task) => task.id === searchParams.get('taskId'));
+    const taskBusinessUnitId = selectedTask?.businessUnitId;
+    if (
+      taskBusinessUnitId &&
+      taskBusinessUnitId !== currentBusinessUnitId &&
+      accessibleBusinessUnits.some((unit) => unit.id === taskBusinessUnitId)
+    ) {
+      setCurrentBusinessUnitId(taskBusinessUnitId);
+    }
+  }, [accessibleBusinessUnits, currentBusinessUnitId, queueTasks, searchParams, setCurrentBusinessUnitId]);
+
   const filteredTasks = useMemo(() => {
     return queueTasks
       .filter((task) => taskMatchesDue(task, filters.due))
@@ -706,6 +729,11 @@ export default function FollowUpQueuePage() {
     taskType: 'follow_up',
     status: 'open',
     link: 'contact',
+  }));
+
+  const selectWorkloadDue = (due) => setFilters((prev) => ({
+    ...prev,
+    due: prev.due === due ? 'open' : due,
   }));
 
   async function applyTaskAction(task, action, payload = {}) {
@@ -1211,6 +1239,7 @@ export default function FollowUpQueuePage() {
       note: draft.note,
       leadProfile: draft.leadProfile,
       nextDueAt: dateInputToIso(draft.nextDueDate),
+      appointmentAt: dateTimeInputToIso(draft.appointmentAt),
       nextOwnerUserId: draft.nextOwnerUserId || task.ownerUserId || null,
       ...(coordinatorUiPolicy.lockedOwnerUserId ? { nextOwnerUserId: coordinatorUiPolicy.lockedOwnerUserId } : {}),
     });
@@ -1376,6 +1405,22 @@ export default function FollowUpQueuePage() {
     status: 'all',
     link: 'all',
   });
+  const defaultOwnerFilter = lockedTaskOwnerFilter || 'all';
+  const defaultBusinessUnitFilter = routeBusinessUnitFilterForGlobalScope(currentBusinessUnitId);
+  const businessUnitFilterIsUserControlled = !currentBusinessUnitId
+    && filters.businessUnitId !== defaultBusinessUnitFilter;
+  const secondaryFilterCount = [
+    filters.status !== 'all',
+    filters.link !== 'all',
+    businessUnitFilterIsUserControlled,
+  ].filter(Boolean).length;
+  const hasUserControlledFilters = filters.due !== 'open'
+    || filters.ownerUserId !== defaultOwnerFilter
+    || filters.taskType !== 'all'
+    || secondaryFilterCount > 0;
+  const closedOnlyDefaultView = queueTasks.length > 0
+    && !hasUserControlledFilters
+    && queueTasks.every(isTaskClosed);
   const showCancellationApprovals = () => setFilters((current) => ({
     ...current,
     due: 'open',
@@ -1404,6 +1449,15 @@ export default function FollowUpQueuePage() {
     if (filters.link !== 'all') parts.push(optionLabel(LINK_OPTIONS, filters.link));
     return parts.filter(Boolean).join(' · ');
   })();
+  let emptyQueueTitle = 'No tasks match the current filters';
+  let emptyQueueCopy = `${activeTaskScope} is hiding every loaded task.`;
+  if (closedOnlyDefaultView) {
+    emptyQueueTitle = coordinatorUiPolicy.ownerScoped ? 'No open tasks assigned to you' : 'No open tasks in this scope';
+    emptyQueueCopy = 'Choose All Tasks in Due to review closed tasks.';
+  } else if (queueTasks.length === 0) {
+    emptyQueueTitle = 'No tasks in this scope';
+    emptyQueueCopy = `There are no tasks available for ${activeTaskScope}.`;
+  }
   const archiveDecisionTaskId = Object.keys(archiveDecisionDrafts)[0] || '';
   const activeArchiveDecisionDraft = archiveDecisionTaskId ? archiveDecisionDrafts[archiveDecisionTaskId] : null;
   const activeArchiveDecisionTask = archiveDecisionTaskId
@@ -1420,10 +1474,14 @@ export default function FollowUpQueuePage() {
   const activeFollowUpDraft = activeFollowUpTask
     ? followUpDraft(activeFollowUpTask.id, activeFollowUpTask)
     : null;
+  const activeFollowUpIsAitUsa = Boolean(
+    activeFollowUpTask &&
+    accessibleContacts.find((contact) => contact.id === activeFollowUpTask.contactId)?.workflowKey === 'ait_usa'
+  );
   if (!access.canReadCrm) {
     return (
       <div className="fade-in">
-        <div className="page-header">
+        <div className={`page-header ${s.pageHeader}`}>
           <div>
             <h1 className="page-title">Tasks</h1>
             <p className="page-subtitle">CRM read access is required.</p>
@@ -1441,10 +1499,10 @@ export default function FollowUpQueuePage() {
 
   return (
     <div className="fade-in">
-      <div className="page-header">
+      <div className={`page-header ${s.pageHeader}`}>
         <div>
           <h1 className="page-title">Tasks</h1>
-          <p className="page-subtitle">
+          <p className="page-subtitle" aria-live="polite">
             {currentBusinessUnit?.name || `All ${scopeLabel}`} · {filteredTasks.length} shown · {completedTodayTasks.length} done today
           </p>
         </div>
@@ -1672,43 +1730,56 @@ export default function FollowUpQueuePage() {
         </form>
       </Modal>
 
-      <div className={s.summaryGrid}>
-        <div className={`${s.summaryTile} ${s.summaryTileCurrent}`}><span className={s.summaryValue}>{stats.currentWork}</span><span className={s.summaryLabel}>Due Now</span></div>
-        <div className={`${s.summaryTile} ${s.summaryTileToday}`}><span className={s.summaryValue}>{stats.dueToday}</span><span className={s.summaryLabel}>Due Today</span></div>
-        <div className={`${s.summaryTile} ${s.summaryTileOverdue}`}><span className={s.summaryValue}>{stats.overdue}</span><span className={s.summaryLabel}>Overdue</span></div>
-        {!coordinatorUiPolicy.ownerScoped && (
-          <button className={`${s.summaryTile} ${s.summaryButton}`} type="button" onClick={showUnassignedLeadFollowUps}>
-            <span className={s.summaryValue}>{stats.unassigned}</span>
-            <span className={s.summaryLabel}>Unassigned</span>
-          </button>
-        )}
-        <div className={`${s.summaryTile} ${s.summaryTileCompleted}`}><span className={s.summaryValue}>{stats.completedToday}</span><span className={s.summaryLabel}>Done Today</span></div>
-      </div>
-
-      <section className={`card ${s.queueSurface}`} aria-label="Task queue">
-        {!coordinatorUiPolicy.ownerScoped && unassignedLeadFollowUps.length > 0 && (
-          <div className={s.intakeAlert}>
-            <div className={s.intakeAlertText}>
-              <span className={s.intakeAlertTitle}>New lead follow-ups need owners</span>
-              <span className={s.intakeAlertCopy}>
-                {unassignedLeadFollowUps.length} unassigned lead follow-up{unassignedLeadFollowUps.length === 1 ? '' : 's'}
-                {unassignedFacebookFollowUps.length ? ` · ${unassignedFacebookFollowUps.length} Facebook` : ''}.
-              </span>
-            </div>
-            <button className="btn btn-sm btn-primary" type="button" onClick={showUnassignedLeadFollowUps}>
-              <ListTodo size={14} />
-              Show queue
-            </button>
-          </div>
-        )}
+      <section className={`card ${s.queueSurface}`} aria-label={coordinatorUiPolicy.ownerScoped ? 'My tasks' : 'Task queue'}>
         <div className={s.queueHeader}>
-          <div>
-            <span className={s.sectionEyebrow}>Work queue</span>
-            <h2 className={s.queueTitle}>Tasks</h2>
-            <p className={s.queueSubtitle}>{activeTaskScope}</p>
+          <div className={s.queueHeaderMain}>
+            <span className={s.sectionEyebrow}>{coordinatorUiPolicy.ownerScoped ? 'My tasks' : 'Work queue'}</span>
+            <div className={s.queueMetrics} aria-label="Task workload summary">
+              {[
+                ['work', 'Due Now', stats.currentWork],
+                ['today', 'Due Today', stats.dueToday],
+                ['overdue', 'Overdue', stats.overdue],
+              ].map(([due, label, count]) => (
+                <div className={s.summaryMetric} key={due}>
+                  <button
+                    className={`${s.summaryMetricButton} ${filters.due === due ? s.summaryMetricButtonActive : ''}`}
+                    type="button"
+                    aria-pressed={filters.due === due}
+                    aria-label={`${filters.due === due ? 'Clear' : 'Show'} ${label.toLowerCase()} task filter, ${count} task${count === 1 ? '' : 's'}`}
+                    onClick={() => selectWorkloadDue(due)}
+                  >
+                    <span className={s.summaryLabel}>{label}</span>
+                    <span className={`${s.summaryValue} ${due === 'overdue' && count > 0 ? s.summaryValueOverdue : ''}`}>{count}</span>
+                  </button>
+                </div>
+              ))}
+              <div className={s.summaryMetric}>
+                <button
+                  className={s.summaryMetricButton}
+                  type="button"
+                  disabled={stats.completedToday === 0}
+                  aria-label={`Jump to ${stats.completedToday} completed task${stats.completedToday === 1 ? '' : 's'} today`}
+                  onClick={() => document.getElementById('completed-tasks-today')?.focus()}
+                >
+                  <span className={s.summaryLabel}>Done Today</span>
+                  <span className={s.summaryValue}>{stats.completedToday}</span>
+                </button>
+              </div>
+            </div>
           </div>
           <div className={s.queueHeaderActions}>
-            <span className={s.queueCount} aria-live="polite">{loading ? 'Loading tasks' : `${filteredTasks.length} shown`}</span>
+            {!coordinatorUiPolicy.ownerScoped && unassignedLeadFollowUps.length > 0 && (
+              <div className={s.queueAlert}>
+                <span className={s.queueAlertCopy}>
+                  <strong>{unassignedLeadFollowUps.length}</strong> unassigned lead follow-up{unassignedLeadFollowUps.length === 1 ? '' : 's'}
+                  {unassignedFacebookFollowUps.length ? ` · ${unassignedFacebookFollowUps.length} Facebook` : ''}
+                </span>
+                <button className="btn btn-sm" type="button" onClick={showUnassignedLeadFollowUps}>
+                  <ListTodo size={14} />
+                  View unassigned
+                </button>
+              </div>
+            )}
             {canReviewTaskRemovalApprovalTasks && (
               <button
                 className={`btn btn-sm ${filters.taskType === 'task_removal_approval' ? 'btn-primary' : ''}`}
@@ -1719,10 +1790,12 @@ export default function FollowUpQueuePage() {
                 Cancellation Approvals
               </button>
             )}
-            <button className="btn btn-sm" type="button" onClick={resetFilters}>
-              <FilterX size={14} />
-              Reset
-            </button>
+            {hasUserControlledFilters && (
+              <button className="btn btn-sm" type="button" onClick={resetFilters}>
+                <FilterX size={14} />
+                Reset
+              </button>
+            )}
           </div>
         </div>
         <div className={s.toolbar}>
@@ -1753,31 +1826,50 @@ export default function FollowUpQueuePage() {
             </select>
           </label>
           <label className={s.filterGroup}>
-            <span className="form-label">{scopeLabel}</span>
-            <select className="select" value={filters.businessUnitId} onChange={(event) => setFilters((prev) => ({ ...prev, businessUnitId: event.target.value }))}>
-              <option value="all">All {scopeLabel}</option>
-              {accessibleBusinessUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
-            </select>
-          </label>
-          <label className={s.filterGroup}>
             <span className="form-label">Task Type</span>
             <select className="select" value={filters.taskType} onChange={(event) => setFilters((prev) => ({ ...prev, taskType: event.target.value }))}>
               {TASK_TYPE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </label>
-          <label className={s.filterGroup}>
-            <span className="form-label">Status</span>
-            <select className="select" value={filters.status} onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}>
-              {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-          </label>
-          <label className={s.filterGroup}>
-            <span className="form-label">Link</span>
-            <select className="select" value={filters.link} onChange={(event) => setFilters((prev) => ({ ...prev, link: event.target.value }))}>
-              {LINK_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-            </select>
-          </label>
+          <button
+            className={`btn ${s.filterToggle}`}
+            type="button"
+            aria-expanded={secondaryFiltersOpen}
+            aria-controls="secondary-task-filters"
+            onClick={() => setSecondaryFiltersOpen((open) => !open)}
+          >
+            <SlidersHorizontal size={14} />
+            Filters
+            {secondaryFilterCount > 0 && (
+              <span className={s.filterCount}>{secondaryFilterCount}</span>
+            )}
+          </button>
         </div>
+        {secondaryFiltersOpen && (
+          <div className={s.secondaryFilters} id="secondary-task-filters">
+            <label className={s.filterGroup}>
+              <span className="form-label">Status</span>
+              <select className="select" value={filters.status} onChange={(event) => setFilters((prev) => ({ ...prev, status: event.target.value }))}>
+                {STATUS_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+            <label className={s.filterGroup}>
+              <span className="form-label">Link</span>
+              <select className="select" value={filters.link} onChange={(event) => setFilters((prev) => ({ ...prev, link: event.target.value }))}>
+                {LINK_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </label>
+            {!currentBusinessUnitId && (
+              <label className={s.filterGroup}>
+                <span className="form-label">{scopeLabel}</span>
+                <select className="select" value={filters.businessUnitId} onChange={(event) => setFilters((prev) => ({ ...prev, businessUnitId: event.target.value }))}>
+                  <option value="all">All {scopeLabel}</option>
+                  {accessibleBusinessUnits.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+                </select>
+              </label>
+            )}
+          </div>
+        )}
 
         {error && (
           <PageState
@@ -1792,15 +1884,13 @@ export default function FollowUpQueuePage() {
         {!loading && !error && filteredTasks.length === 0 && (
           <div className={`empty-state ${s.recoveryState}`}>
             <div className={s.emptyTitle}>
-              {queueTasks.length === 0 ? 'No tasks in this scope' : 'No tasks match the current filters'}
+              {emptyQueueTitle}
             </div>
             <p className={s.emptyCopy}>
-              {queueTasks.length === 0
-                ? `There are no tasks available for ${activeTaskScope}.`
-                : `${activeTaskScope} is hiding every loaded task.`}
+              {emptyQueueCopy}
             </p>
             <div className={s.emptyActions}>
-              {queueTasks.length > 0 && (
+              {queueTasks.length > 0 && hasUserControlledFilters && (
                 <button className="btn btn-primary" type="button" onClick={resetFilters}>
                   <FilterX size={14} />
                   Reset Filters
@@ -1822,7 +1912,6 @@ export default function FollowUpQueuePage() {
           {filteredTasks.map((task) => {
             const key = dateKey(task.dueAt);
             const isOverdue = key && key < todayKey() && !isTaskClosed(task);
-            const isToday = key === todayKey() && !isTaskClosed(task);
             const assignee = visibleAssignees.find((user) => user.id === task.ownerUserId);
             const isArchiveApprovalTask = task.taskType === 'archive_approval';
             const isTaskRemovalApprovalTask = task.taskType === 'task_removal_approval';
@@ -1831,21 +1920,15 @@ export default function FollowUpQueuePage() {
             const removalApprovalPending = removalApproval?.decision === 'pending';
             const cancellationPolicy = task.cancellationPolicy || taskCancellationDecision({ session: { user: currentUser }, task });
             const cancellationNeedsApproval = cancellationPolicy.decision === TASK_CANCELLATION_DECISIONS.APPROVAL_REQUIRED;
-            const showAssignToMe = coordinatorUiPolicy.canManageCoordinatorAssignments &&
-              !isArchiveApprovalTask &&
-              !isTaskRemovalApprovalTask &&
-              !isTaskClosed(task) &&
-              currentUser?.id &&
-              task.ownerUserId !== currentUser.id;
             const showCancelAction = !isArchiveApprovalTask &&
               !isTaskRemovalApprovalTask &&
               !isTaskClosed(task) &&
               !removalApprovalPending &&
               cancellationPolicy.decision !== TASK_CANCELLATION_DECISIONS.FORBIDDEN;
             return (
-              <article key={task.id} className={`${s.queueItem} ${isTaskRemovalApprovalTask ? s.queueItemApproval : ''} ${isOverdue ? s.queueItemOverdue : ''} ${isToday ? s.queueItemToday : ''}`}>
+              <article key={task.id} className={`${s.queueItem} ${isTaskRemovalApprovalTask ? s.queueItemApproval : ''}`}>
                 <div>
-                  <Link className={`${s.taskTitle} ${s.taskTitleLink}`} href={`/tasks/${encodeURIComponent(task.id)}`}>
+                  <Link className={`${s.taskTitle} ${s.taskTitleLink}`} href={taskDetailHref(task.id, taskQueueHref(filters, task.businessUnitId || currentBusinessUnitId))}>
                     {task.title}
                   </Link>
                   {task.description && <div className={s.taskDescription}>{task.description}</div>}
@@ -1859,9 +1942,11 @@ export default function FollowUpQueuePage() {
                     </div>
                   )}
                   <div className={s.metaLine}>
-                    <span className={`badge ${taskBadgeClass(task)}`}>{titleCase(task.status)}</span>
-                    <span className={`badge badge-${task.priority}`}>{titleCase(task.priority)}</span>
-                    <span className="badge badge-draft">{titleCase(task.taskType)}</span>
+                    {task.status !== 'open' && (
+                      <span className={`badge ${taskBadgeClass(task)}`}>{titleCase(task.status)}</span>
+                    )}
+                    <span className={`${s.metaText} ${['high', 'urgent'].includes(task.priority) ? s.metaTextPriority : ''}`}>{titleCase(task.priority)}</span>
+                    <span className={s.metaText}>{titleCase(task.taskType)}</span>
                     {task.recurrence && <span className="badge badge-pending">{recurrenceLabel(task.recurrence)}</span>}
                   </div>
                   {isTaskRemovalApprovalTask && (
@@ -1900,7 +1985,7 @@ export default function FollowUpQueuePage() {
                   )}
                   <div className={s.taskContext}>
                     <span className={s.compactLabel}>Contact</span>
-                    <span className={s.mutedText}>{task.contactName || 'No contact linked'}</span>
+                    <span className={s.mutedText}>{task.contactName || (task.contactId ? 'Linked contact' : 'No contact linked')}</span>
                   </div>
                 </div>
                 <div className={s.assigneeSelect}>
@@ -1912,7 +1997,7 @@ export default function FollowUpQueuePage() {
                       disabled={!access.canWriteCrm || busyTaskId === task.id}
                       onChange={(event) => applyTaskAction(task, 'assign', { ownerUserId: event.target.value || null })}
                     >
-                      <option value="" disabled>Select owner</option>
+                      <option value="" disabled>Unassigned</option>
                       {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
                     </select>
                   ) : (
@@ -1947,7 +2032,7 @@ export default function FollowUpQueuePage() {
                   )}
                   {task.taskType === 'follow_up' && !isTaskClosed(task) && (
                     <button
-                      className="btn btn-sm btn-primary"
+                      className={`btn btn-sm ${s.outcomeAction}`}
                       type="button"
                       disabled={!access.canWriteCrm || busyTaskId === task.id}
                       onClick={(event) => toggleFollowUpCompletion(task.id, event.currentTarget)}
@@ -1956,10 +2041,6 @@ export default function FollowUpQueuePage() {
                       Log outcome
                     </button>
                   )}
-                  <Link className={`btn btn-sm ${(task.taskType === 'follow_up' && !isTaskClosed(task)) || isTaskRemovalApprovalTask ? '' : 'btn-primary'}`} href={`/tasks/${encodeURIComponent(task.id)}`}>
-                    <ListTodo size={14} />
-                    Review
-                  </Link>
                   {task.contactId && (
                     <Link className="btn btn-sm" href={`/contacts/${encodeURIComponent(task.contactId)}`}>
                       <ExternalLink size={14} />
@@ -1974,7 +2055,7 @@ export default function FollowUpQueuePage() {
                     aria-controls={`task-actions-${task.id}`}
                   >
                     <MoreHorizontal size={14} />
-                    Actions
+                    More
                   </button>
                 </div>
                 {actionPanelTaskId === task.id && (
@@ -1992,17 +2073,6 @@ export default function FollowUpQueuePage() {
                         <Pencil size={14} />
                         Edit
                       </button>
-                      {showAssignToMe && (
-                        <button
-                          className="btn btn-sm"
-                          type="button"
-                          disabled={!access.canWriteCrm || busyTaskId === task.id || !currentUser?.id}
-                          onClick={() => applyTaskAction(task, 'assign', { ownerUserId: currentUser.id })}
-                        >
-                          <UserPlus size={14} />
-                          Assign to me
-                        </button>
-                      )}
                       {isArchiveApprovalTask ? (
                         <>
                           <button
@@ -2109,7 +2179,7 @@ export default function FollowUpQueuePage() {
                       <label>
                         <span className="form-label">Owner</span>
                         <select className="select" value={editDraft.ownerUserId} disabled={editBusy} onChange={(event) => updateEditDraft({ ownerUserId: event.target.value })}>
-                          <option value="" disabled>Select owner</option>
+                          <option value="" disabled>Unassigned</option>
                           {visibleAssignees.map((user) => <option key={user.id} value={user.id}>{user.name || user.email}</option>)}
                         </select>
                       </label>
@@ -2162,7 +2232,7 @@ export default function FollowUpQueuePage() {
         </div>
 
         {completedTodayTasks.length > 0 && (
-          <section className={s.completedBacklog} aria-label="Completed tasks today">
+          <section className={s.completedBacklog} id="completed-tasks-today" tabIndex={-1} aria-label="Completed tasks today">
             <div className={s.completedBacklogHeader}>
               <div>
                 <h2 className={s.completedTitle}>Done today</h2>
@@ -2176,13 +2246,13 @@ export default function FollowUpQueuePage() {
                 return (
                   <article key={`completed-${task.id}`} className={s.completedItem}>
                     <div>
-                      <Link className={`${s.taskTitle} ${s.taskTitleLink}`} href={`/tasks/${encodeURIComponent(task.id)}`}>
+                      <Link className={`${s.taskTitle} ${s.taskTitleLink}`} href={taskDetailHref(task.id, taskQueueHref(filters, task.businessUnitId || currentBusinessUnitId))}>
                         {task.title}
                       </Link>
                       <div className={s.metaLine}>
                         <span className="badge badge-completed">Completed</span>
-                        <span className={`badge badge-${task.priority}`}>{titleCase(task.priority)}</span>
-                        <span className="badge badge-draft">{titleCase(task.taskType)}</span>
+                        <span className={`${s.metaText} ${['high', 'urgent'].includes(task.priority) ? s.metaTextPriority : ''}`}>{titleCase(task.priority)}</span>
+                        <span className={s.metaText}>{titleCase(task.taskType)}</span>
                         {task.recurrence && <span className="badge badge-pending">{recurrenceLabel(task.recurrence)}</span>}
                       </div>
                     </div>
@@ -2215,11 +2285,10 @@ export default function FollowUpQueuePage() {
           label: user.name || user.email || 'Unnamed User',
         }))}
         canManageAssignments={coordinatorUiPolicy.canManageCoordinatorAssignments}
-        showProfile={Boolean(
-          activeFollowUpTask &&
-          accessibleContacts.find((contact) => contact.id === activeFollowUpTask.contactId)?.workflowKey === 'ait_usa'
-        )}
-        title="Log follow-up outcome"
+        showProfile={activeFollowUpIsAitUsa}
+        isAitUsa={activeFollowUpIsAitUsa}
+        isTaskCompletion
+        title="Complete follow-up"
         returnFocusRef={followUpOutcomeTriggerRef}
       />
       <ConfirmDialog

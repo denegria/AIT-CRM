@@ -20,7 +20,8 @@ import {
 } from '@/lib/crm/access.js';
 import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from '@/lib/crm/lifecycle.js';
 import { sessionHasAdminRole } from '@/lib/auth/admin-policy.js';
-import { summarizeAitUsaDashboardContacts } from '@/lib/dashboard/summary.js';
+import { dashboardContactsForSession, summarizeAitUsaDashboardContacts } from '@/lib/dashboard/summary.js';
+import { dashboardContactFilter } from '@/lib/dashboard/workspace.js';
 
 function directoryParams(businessUnitId, values = {}) {
   const params = new URLSearchParams({ businessUnitId });
@@ -151,7 +152,7 @@ async function loadAitUsaDashboardContacts({ db, session, businessUnit, employee
     { courseRecords: courseRows, leadStatusHistory: statusRows },
   );
   return summarizeAitUsaDashboardContacts({
-    mappedContacts: mapped,
+    mappedContacts: dashboardContactsForSession(mapped, session),
     currentUserId: session.user.id,
     employeeIds,
     includeBusinessMovement: sessionHasAdminRole(session),
@@ -201,7 +202,7 @@ export async function loadDashboardSummary({ db, session, businessUnitId, employ
     );
   }
 
-  const [contactCounts, workOrderRows, estimateRows, documentRows, aitUsaSummary] = await Promise.all([
+  const [contactCounts, workOrderRows, estimateRows, documentRows, aitUsaSummary, aitUsaDirectoryCounts] = await Promise.all([
     Promise.all(contactCountRequests),
     db
       .select({ status: workOrders.status, assignedUserId: workOrders.assignedUserId })
@@ -222,6 +223,12 @@ export async function loadDashboardSummary({ db, session, businessUnitId, employ
       .where(and(scopedBusinessUnitWhere(financialDocuments, session), eq(financialDocuments.businessUnitId, businessUnitId))),
     workflowKey === WORKFLOW_KEYS.AIT_USA
       ? loadAitUsaDashboardContacts({ db, session, businessUnit, employeeIds })
+      : null,
+    workflowKey === WORKFLOW_KEYS.AIT_USA
+      ? Promise.all([
+          countRows(dashboardContactFilter('myNewLeads', session.user.id)),
+          countRows(dashboardContactFilter('myNeedsNextFollowUp', session.user.id)),
+        ])
       : null,
   ]);
 
@@ -273,6 +280,8 @@ export async function loadDashboardSummary({ db, session, businessUnitId, employ
     kpis.usaNewLeads = aitUsaSummary?.kpis.usaNewLeads ?? 0;
     kpis.usaFollowUp = aitUsaSummary?.kpis.usaFollowUp ?? 0;
     kpis.usaBadContactChannel = aitUsaSummary?.kpis.usaBadContactChannel ?? 0;
+    kpis.myUsaNewLeads = aitUsaDirectoryCounts?.[0] ?? 0;
+    kpis.myUsaNeedsNextFollowUp = aitUsaDirectoryCounts?.[1] ?? 0;
   } else if (workflowKey === WORKFLOW_KEYS.AIT_SIGNS) {
     [
       kpis.signsIntake,

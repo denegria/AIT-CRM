@@ -1,26 +1,27 @@
 'use client';
 import { useState } from 'react';
 import {
-  AlertCircle,
   BriefcaseBusiness,
   CalendarCheck,
   GraduationCap,
   Mail,
-  MessageSquareText,
   Phone,
   UserRound,
 } from 'lucide-react';
+import { contactDirectoryNextStep } from '@/lib/contact-directory-next-step.js';
 import s from './KanbanBoard.module.css';
+
+const DEFAULT_VISIBLE_CARDS = 24;
+const DEFAULT_AIT_USA_SOURCE = 'AIT USA Seguimiento Central Workbook';
+const LAST_TOUCH_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
 
 function clean(value) {
   return String(value || '').trim();
-}
-
-function titleLabel(value = '') {
-  return clean(value)
-    .replaceAll('_', ' ')
-    .replace(/\s+/g, ' ')
-    .replace(/\b\w/g, (match) => match.toUpperCase());
 }
 
 function firstPresent(values = []) {
@@ -58,12 +59,6 @@ function noisyImportedComment(value = '') {
   );
 }
 
-function contactabilityLabel(item) {
-  const status = item.enrollmentSignals?.contactability?.status || item.contactabilityStatus || '';
-  if (!status || status === 'reachable') return '';
-  return titleLabel(status);
-}
-
 function sourceLabel(item) {
   if (isAitUsa(item)) {
     return firstPresent([
@@ -74,6 +69,30 @@ function sourceLabel(item) {
   }
   if (isAitSigns(item)) return firstPresent([item.businessUnitName, item.workflowLabel, 'AIT Signs']);
   return item.source || item.workflowLabel || 'Pipeline';
+}
+
+function visibleSourceLabel(item) {
+  const label = sourceLabel(item);
+  if (isAitUsa(item) && normalized(label) === normalized(DEFAULT_AIT_USA_SOURCE)) return '';
+  return label;
+}
+
+function lastTouchPresentation(item) {
+  const value = firstPresent([item.lastTouch, item.lastContact]);
+  if (!value) {
+    return {
+      label: 'No touch recorded',
+      title: 'No touch recorded',
+    };
+  }
+
+  const dateOnly = /^\d{4}-\d{2}-\d{2}$/.test(value);
+  const parsed = new Date(dateOnly ? `${value}T00:00:00.000Z` : value);
+  const dateLabel = Number.isNaN(parsed.getTime()) ? value : LAST_TOUCH_FORMATTER.format(parsed);
+  return {
+    label: `Last touch · ${dateLabel}`,
+    title: `Last touch: ${value}`,
+  };
 }
 
 function enrollmentLine(item) {
@@ -110,22 +129,49 @@ function cardSummary(item) {
   return noisyImportedComment(item.latestComment) ? 'Open contact for source details.' : (item.latestComment || 'No latest comment yet');
 }
 
-function cardChips(item) {
-  if (isAitUsa(item)) {
-    return [
-      item.qualityDisposition === 'ready_for_follow_up' ? 'Ready Follow-up' : titleLabel(item.qualityDisposition),
-      contactabilityLabel(item),
-    ].filter(Boolean).slice(0, 3);
+function pipelineNextStep(item) {
+  const actionLabel = item.needsFirstContact || item.needsFirstOutreach
+    ? 'Log outreach'
+    : item.needsNextFollowUp
+      ? 'Log follow-up'
+      : '';
+  const model = isAitUsa(item)
+    ? (item.directoryNextStepModel || contactDirectoryNextStep(item))
+    : {
+        label: firstPresent([item.nextAction, item.operationalSummary, 'Review contact']),
+        detail: '',
+        action: actionLabel ? 'log_follow_up' : 'none',
+        actionLabel,
+      };
+  if (model.label === 'No active work' && normalized(item.status) === 'enrolled') {
+    return { ...model, label: 'No follow-up due', detail: '' };
   }
-  if (isAitSigns(item)) {
-    return [
-      item.currentStage || item.status,
-      item.relatedWorkOrderCount ? `${item.relatedWorkOrderCount} Work Orders` : '',
-      item.relatedEstimateCount ? `${item.relatedEstimateCount} Estimates` : '',
-      item.relatedPaymentCount ? `${item.relatedPaymentCount} Payments` : '',
-    ].filter(Boolean).slice(0, 3);
+  return model;
+}
+
+function usefulNextStepDetail(item, nextStep) {
+  const nextAction = firstPresent([
+    item.enrollmentSignals?.process?.nextAction,
+    item.nextAction,
+  ]);
+  if (
+    nextAction &&
+    !isDefaultFirstOutreachAction(nextAction) &&
+    normalized(nextAction) !== normalized(nextStep.label)
+  ) {
+    return nextAction;
   }
-  return (item.tags || []).map(titleLabel).slice(0, 3);
+  const redundantDetails = new Set([
+    'no outreach recorded',
+    'outreach may be recorded now',
+    'record the next outreach',
+    normalized(item.status),
+  ]);
+  if (nextStep.detail && !redundantDetails.has(normalized(nextStep.detail))) {
+    return nextStep.detail;
+  }
+  if (isAitSigns(item)) return cardSummary(item);
+  return '';
 }
 
 export default function KanbanBoard({
@@ -142,7 +188,9 @@ export default function KanbanBoard({
 }) {
   const [draggingId, setDraggingId] = useState(null);
   const [dragOverCol, setDragOverCol] = useState(null);
+  const [visibleCardCounts, setVisibleCardCounts] = useState({});
   const selectedSet = new Set(selectedIds);
+  const pageSize = DEFAULT_VISIBLE_CARDS;
 
   const normalizedColumns = columns.map((column) => {
     if (typeof column === 'string') {
@@ -206,6 +254,9 @@ export default function KanbanBoard({
     >
       {normalizedColumns.map(col => {
         const columnCards = data.filter(d => d.status === col.id);
+        const visibleCount = Math.max(pageSize, visibleCardCounts[col.id] || 0);
+        const visibleCards = columnCards.slice(0, visibleCount);
+        const remainingCount = Math.max(0, columnCards.length - visibleCards.length);
         return (
           <div 
             key={col.id}
@@ -220,113 +271,129 @@ export default function KanbanBoard({
               <span className={s.kanbanCount}>{columnCards.length}</span>
             </div>
             
-            <div className={s.kanbanList}>
-              {columnCards.map(item => (
-                <div
-                  key={item.id} 
-                  className={`${s.kanbanCard} ${isAitUsa(item) ? s.instituteCard : ''} ${isAitSigns(item) ? s.signsCard : ''} ${item.needsFirstOutreach ? s.needsFirstOutreach : ''} ${draggingId === item.id ? s.dragging : ''}`}
-                  draggable
-                  onDragStart={(e) => onDragStart(e, item.id)}
-                  onClick={() => onEdit && onEdit(item)}
-                >
-                  <div className={s.cardTop}>
-                    <span className={s.cardSource}>{sourceLabel(item)}</span>
-                    {onSelect && (
-                      <input
-                        type="checkbox"
-                        className={s.cardSelect}
-                        checked={selectedSet.has(item.id)}
-                        onChange={(event) => {
-                          event.stopPropagation();
-                          const next = new Set(selectedSet);
-                          if (event.target.checked) next.add(item.id);
-                          else next.delete(item.id);
-                          onSelect([...next]);
-                        }}
-                        onClick={(event) => event.stopPropagation()}
-                        aria-label={`Select ${item.name}`}
-                      />
-                    )}
-                    {item.needsFirstOutreach && (
-                      <span className={s.cardUrgency}><AlertCircle size={12} /> New</span>
-                    )}
-                    {(item.needsFirstContact || item.needsNextFollowUp) && (
-                      <span className={s.cardCoverage}>
-                        <AlertCircle size={12} />
-                        {item.needsFirstContact ? 'First contact' : 'Next follow-up'}
-                      </span>
-                    )}
-                  </div>
-                  <div className={s.cardName}>{item.name}</div>
-                  {isAitUsa(item) && enrollmentLine(item) && (
-                    <div className={s.cardSubline}>
-                      <GraduationCap size={12} />
-                      <span>{enrollmentLine(item)}</span>
-                    </div>
-                  )}
-                  {isAitSigns(item) && item.operationalSummary && (
-                    <div className={s.cardSubline}>
-                      <BriefcaseBusiness size={12} />
-                      <span>{item.operationalSummary}</span>
-                    </div>
-                  )}
-                  {(item.currentStage || item.nextAction) && (
-                    <div className={s.cardWorkflow}>
-                      <div className={s.workflowStage}>
-                        {item.needsFirstOutreach && <AlertCircle size={12} />}
-                        <span>{item.needsFirstOutreach && item.status ? item.status : (item.currentStage || item.status)}</span>
+            <div className={s.kanbanList} data-kanban-list={col.id}>
+              {visibleCards.map(item => {
+                const nextStep = pipelineNextStep(item);
+                const nextStepDetail = usefulNextStepDetail(item, nextStep);
+                const source = visibleSourceLabel(item);
+                const lastTouch = lastTouchPresentation(item);
+                const assignedLabel = clean(item.assignedLabel);
+                const isUnassigned = !assignedLabel || normalized(assignedLabel) === 'unassigned';
+                return (
+                  <div
+                    key={item.id}
+                    className={`${s.kanbanCard} ${isAitUsa(item) ? s.instituteCard : ''} ${isAitSigns(item) ? s.signsCard : ''} ${item.needsFirstOutreach ? s.needsFirstOutreach : ''} ${draggingId === item.id ? s.dragging : ''}`}
+                    data-kanban-card={col.id}
+                    draggable
+                    onDragStart={(e) => onDragStart(e, item.id)}
+                    onClick={() => onEdit && onEdit(item)}
+                  >
+                    <div className={s.cardTop}>
+                      <div className={s.cardIdentity}>
+                        <div className={s.cardName}>{item.name}</div>
+                        {source && <span className={s.cardSource}>{source}</span>}
                       </div>
-                      {item.nextAction && !isDefaultFirstOutreachAction(item.nextAction) && (
-                        <div className={s.workflowAction}>{item.nextAction}</div>
+                      {onSelect && (
+                        <input
+                          type="checkbox"
+                          className={s.cardSelect}
+                          checked={selectedSet.has(item.id)}
+                          onChange={(event) => {
+                            event.stopPropagation();
+                            const next = new Set(selectedSet);
+                            if (event.target.checked) next.add(item.id);
+                            else next.delete(item.id);
+                            onSelect([...next]);
+                          }}
+                          onClick={(event) => event.stopPropagation()}
+                          aria-label={`Select ${item.name}`}
+                        />
                       )}
                     </div>
-                  )}
-                  <div className={s.cardComment}>
-                    <MessageSquareText size={12} />
-                    <span>{cardSummary(item)}</span>
-                  </div>
-                  <div className={s.cardMeta}>
-                    <div className={s.metaItem}>
-                      {item.phone ? <Phone size={12} /> : <Mail size={12} />}
-                      <span>{item.phone || item.email || 'No contact channel'}</span>
+                    {isAitUsa(item) && enrollmentLine(item) && (
+                      <div className={s.cardSubline}>
+                        <GraduationCap size={12} />
+                        <span>{enrollmentLine(item)}</span>
+                      </div>
+                    )}
+                    {isAitSigns(item) && item.operationalSummary && (
+                      <div className={s.cardSubline}>
+                        <BriefcaseBusiness size={12} />
+                        <span>{item.operationalSummary}</span>
+                      </div>
+                    )}
+                    <div className={s.cardNextStep}>
+                      <span className={s.nextStepEyebrow}>Next step</span>
+                      <strong>{nextStep.label}</strong>
+                      {nextStepDetail && <span className={s.nextStepDetail}>{nextStepDetail}</span>}
                     </div>
-                    <div className={s.metaItem}><CalendarCheck size={12} /> <span>Touch {item.lastTouch || item.lastContact || 'None'}</span></div>
-                  </div>
-                  <div className={s.cardChips}>
-                    {cardChips(item).map((chip) => (
-                      <span key={chip} className={s.cardChip}>{chip}</span>
-                    ))}
-                  </div>
-                  <div className={s.cardFooter}>
-                    <div className={s.cardUser}>
-                      <div className={s.userAvatar}>{item.assignedLabel?.charAt(0) || <UserRound size={11} />}</div>
-                      <span>{item.assignedLabel || 'Unassigned'}</span>
+                    <div className={s.cardMeta}>
+                      <div className={s.metaItem}>
+                        {item.phone ? <Phone size={12} /> : <Mail size={12} />}
+                        <span>{item.phone || item.email || 'No contact channel'}</span>
+                      </div>
+                      <div className={s.metaItem} aria-label={lastTouch.label} title={lastTouch.title}>
+                        <CalendarCheck size={12} />
+                        <span>{lastTouch.label}</span>
+                      </div>
                     </div>
-                    {onLogFollowUp && (item.needsFirstContact || item.needsNextFollowUp) && (
-                      <button
-                        className={s.cardFollowUpAction}
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          onLogFollowUp(item);
-                        }}
-                      >
-                        Log follow-up
-                      </button>
+                    <div className={s.cardFooter}>
+                      <div className={s.cardUser}>
+                        <div className={s.userAvatar}>{isUnassigned ? <UserRound size={11} /> : assignedLabel.charAt(0)}</div>
+                        <span>{isUnassigned ? 'Unassigned' : assignedLabel}</span>
+                      </div>
+                      <div className={s.cardActions}>
+                        {onMove && !showMobileMoveControls && (
+                          <label className={s.cardMoveDesktop} onClick={(event) => event.stopPropagation()}>
+                            <span className={s.visuallyHidden}>Move {item.name} to another stage</span>
+                            <select value="" onChange={(event) => moveCard(event, item)} aria-label={`Move ${item.name} to another stage`}>
+                              <option value="" disabled>Move…</option>
+                              {normalizedColumns.filter((column) => column.id !== item.status).map((column) => (
+                                <option key={column.id} value={column.id}>{column.label}</option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                        {onLogFollowUp && nextStep.action === 'log_follow_up' && (
+                          <button
+                            className={s.cardFollowUpAction}
+                            type="button"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onLogFollowUp(item);
+                            }}
+                          >
+                            {nextStep.actionLabel || 'Log outreach'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    {onMove && showMobileMoveControls && (
+                      <label className={s.cardMove} onClick={(event) => event.stopPropagation()}>
+                        <span>Move to</span>
+                        <select value={item.status} onChange={(event) => moveCard(event, item)}>
+                          {normalizedColumns.map((column) => (
+                            <option key={column.id} value={column.id}>{column.label}</option>
+                          ))}
+                        </select>
+                      </label>
                     )}
                   </div>
-                  {onMove && showMobileMoveControls && (
-                    <label className={s.cardMove} onClick={(event) => event.stopPropagation()}>
-                      <span>Move to</span>
-                      <select value={item.status} onChange={(event) => moveCard(event, item)}>
-                        {normalizedColumns.map((column) => (
-                          <option key={column.id} value={column.id}>{column.label}</option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-                </div>
-              ))}
+                );
+              })}
+              {remainingCount > 0 && (
+                <button
+                  className={s.loadMore}
+                  type="button"
+                  onClick={() => setVisibleCardCounts((current) => ({
+                    ...current,
+                    [col.id]: visibleCards.length + pageSize,
+                  }))}
+                >
+                  Show {Math.min(pageSize, remainingCount)} more
+                  <span>{remainingCount.toLocaleString()} remaining</span>
+                </button>
+              )}
               {columnCards.length === 0 && (
                 <div className={s.kanbanEmpty}>{col.isOperational ? 'Driven by linked records' : 'Drop here'}</div>
               )}

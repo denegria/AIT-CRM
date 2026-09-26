@@ -18,6 +18,8 @@ export default function TaskList({
   showOwnerSelect = true,
   canToggle = true,
   emptyText = 'No tasks yet.',
+  emptyTitle = '',
+  fillHeight = false,
 }) {
   const [newTask, setNewTask] = useState('');
   const [dueDate, setDueDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -79,9 +81,13 @@ export default function TaskList({
   };
 
   return (
-    <div>
+    <div className={fillHeight ? s.fillHeight : undefined}>
       <div className={s.list}>
-        {tasks.length === 0 && <div className={s.empty}>{emptyText}</div>}
+        {tasks.length === 0 && (
+          <div className={s.empty}>
+            {emptyTitle ? <><strong className={s.emptyTitle}>{emptyTitle}</strong><span>{emptyText}</span></> : emptyText}
+          </div>
+        )}
         {tasks.map(t => {
           const isFollowUpTask = t.taskType === 'follow_up';
           return (

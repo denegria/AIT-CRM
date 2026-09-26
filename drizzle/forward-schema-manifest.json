@@ -1,0 +1,81 @@
+{
+  "formatVersion": 1,
+  "lineageId": "ait-crm-forward-2026-09-17",
+  "priorBaseline": {
+    "baselineId": "ait-crm-reconciled-2026-08-10",
+    "canonicalSha256": "92f0bb1dbc8b7afc1dc0af57fb11dda11d7cc05c83b4b16bd3301f7cf23cb675",
+    "firstForwardMigration": 27
+  },
+  "serialization": {
+    "canonicalManifest": "recursive-key-sort-json-utf8-lf-v1",
+    "fileDigest": "sha256-raw-bytes-v1",
+    "drizzleExport": "sha256-raw-stdout-including-final-newline-v1"
+  },
+  "repository": {
+    "schema": {
+      "path": "src/db/schema.js",
+      "sha256": "a195c052a79cab325233723fa2fbda471a144f18e13f4878c9977db6d3891cba"
+    },
+    "drizzleExport": {
+      "command": "drizzle-kit export --config drizzle.config.mjs",
+      "rawStdoutSha256": "9a97a4beb362d47ad6a19b6ebb4411921585e2c84de922d679fe8830884a8ec2",
+      "structure": {
+        "tableCount": 59,
+        "explicitIndexCount": 128,
+        "foreignKeyCount": 234,
+        "checkConstraintCount": 30
+      }
+    },
+    "forwardMigrations": [
+      {
+        "identifier": "0027",
+        "path": "drizzle/forward/0027_student_billing_ledger.sql",
+        "sha256": "c90176c2939cfcffc076766ca5519ce77def10a60d6c96b03027667b2e3221ab",
+        "purpose": "MIS-414 student billing ledger",
+        "provenance": "forward-migration"
+      },
+      {
+        "identifier": "0028",
+        "path": "drizzle/forward/0028_book_fulfillment.sql",
+        "sha256": "d317a6711c2aa3d144fa049ae920f3d2fc2aae7bd2f17e81edf36c6ab34eff01",
+        "purpose": "MIS-418 book fulfillment contract and staff worklist",
+        "provenance": "forward-migration"
+      },
+      {
+        "identifier": "0029",
+        "path": "drizzle/forward/0029_workos_employee_auth.sql",
+        "sha256": "59dc24c6b5c55ec3fdb60b81bcebbe67797931d1624a526eb474046c6a2c95ad",
+        "purpose": "MIS-413 WorkOS employee authentication and invitation lifecycle",
+        "provenance": "forward-migration"
+      }
+    ],
+    "migrationLedger": {
+      "schema": "ait_crm_migrations",
+      "table": "forward_migrations",
+      "baselineMarker": "0026-reconciled-cutover"
+    }
+  },
+  "database": {
+    "catalog": {
+      "contract": "postgres-public-catalog-lf-pipe-v1",
+      "expected": {
+        "tableCount": 59,
+        "tableNameMd5": "eafbb3ee2a8f09904a27ea8340550546",
+        "columnCount": 860,
+        "columnCatalogMd5": "313b90337cbb5497c1eb2a47a82d26fb",
+        "logicalColumnCatalogMd5": "600dc84843192b9731b66398c6d95477",
+        "indexCount": 194,
+        "indexCatalogMd5": "91fef6aa16fa079f75f8d333bf64ad3a",
+        "constraintCount": 329,
+        "constraintCatalogMd5": "4eec57fa87be62e56c96e66c4f6ac3ec"
+      }
+    }
+  },
+  "validation": {
+    "status": "validated-and-rolled-back",
+    "projectId": "plain-band-07005942",
+    "branchId": "br-gentle-lab-aphoglfc",
+    "databaseName": "mis413_validation",
+    "validatedAt": "2026-09-19T13:17:50Z"
+  }
+}

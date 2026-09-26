@@ -1,6 +1,12 @@
 import { filterContactsByDirectoryFacet } from '../contact-directory-facets.js';
 import { isCurrentLeadDateScope } from '../contact-directory-view.js';
 import { buildBusinessMovement } from '../team-monitor.js';
+import { isRegularCoordinatorSession } from '../crm/coordinator-policy.js';
+
+export function dashboardContactsForSession(mappedContacts = [], session = {}) {
+  if (!isRegularCoordinatorSession(session)) return mappedContacts;
+  return mappedContacts.filter((contact) => contact.assignedTo === session.user.id);
+}
 
 function serializeBusinessMovement(movement) {
   return {

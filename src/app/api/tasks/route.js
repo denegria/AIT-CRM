@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
 import {
   businessUnits,
@@ -34,8 +34,10 @@ import {
 import { isUuid } from '@/lib/crm/validation.js';
 import { TASK_STATUSES, TASK_TYPES } from '@/lib/tasks/constants.js';
 import {
+  assertFollowUpOutcomeAllowed,
   contactPatchForFollowUpOutcome,
   followUpActivityMessage,
+  followUpOutcomeAllowsProfileUpdate,
   leadStatusForFollowUpOutcome,
   normalizeFollowUpCompletionPayload,
 } from '@/lib/tasks/follow-up.js';
@@ -416,10 +418,20 @@ export async function GET(request) {
       ? rows
       : rows.filter((row) => row.taskType !== TASK_TYPES.TASK_REMOVAL_APPROVAL);
     const taskContactIds = visibleRows.map((row) => row.contactId).filter(Boolean);
-    const [assignableUsers, taskContacts, previousFollowUps] = await Promise.all([
+    const [assignableUsers, taskContacts, taskContactNames, previousFollowUps] = await Promise.all([
       listAssignableUsers(db, session),
       taskContactIds.length
         ? loadTaskContactOptions({ db, session, contactIds: taskContactIds })
+        : Promise.resolve([]),
+      // A visible task may reference an archived contact. Keep its name in the
+      // queue, as Task Detail already does, without offering it as a picker option.
+      taskContactIds.length
+        ? db.select({ id: contacts.id, name: contacts.name })
+            .from(contacts)
+            .where(and(
+              eq(contacts.organizationId, session.user.organizationId),
+              inArray(contacts.id, taskContactIds),
+            ))
         : Promise.resolve([]),
       filters.taskType === TASK_TYPES.FOLLOW_UP
         ? loadLatestFollowUpOutcomePreviews({
@@ -430,7 +442,7 @@ export async function GET(request) {
           })
         : Promise.resolve(new Map()),
     ]);
-    const contactNameById = new Map(taskContacts.map((contact) => [contact.id, contact.name]));
+    const contactNameById = new Map(taskContactNames.map((contact) => [contact.id, contact.name]));
     return NextResponse.json({
       tasks: visibleRows.map((row) => toTaskPayload({
         ...row,
@@ -658,9 +670,12 @@ export async function PATCH(request, runtime = {}) {
       });
       const effectiveOwnerUserId = existingTask.ownerUserId || session.user.id;
       const businessUnit = await resolveBusinessUnitById(db, session, existingTask.businessUnitId);
+      assertFollowUpOutcomeAllowed(completion.outcome, businessUnit);
       const lead = exactContext.lead;
       const suggestedLeadStatus = leadStatusForFollowUpOutcome(completion.outcome, businessUnit);
-      const leadProfilePatch = leadProfilePatchFromPayload(body, { allowClear: false });
+      const leadProfilePatch = followUpOutcomeAllowsProfileUpdate(completion.outcome)
+        ? leadProfilePatchFromPayload(body, { allowClear: false })
+        : {};
       const leadProfileDbPatch = leadProfilePatchToDrizzleValues(leadProfilePatch);
       const leadProfileUpdateSummary = leadProfileSummary(leadProfilePatch);
       let leadPatch = null;
@@ -707,6 +722,7 @@ export async function PATCH(request, runtime = {}) {
         contactMethod: completion.contactMethod,
         note: completion.note,
         nextDueAt: completion.nextDueAt?.toISOString?.() || null,
+        appointmentAt: completion.appointmentAt?.toISOString?.() || null,
         statusTransition: statusTransitionMeta,
         leadProfile: Object.keys(leadProfilePatch).length ? leadProfilePatch : null,
       });
@@ -714,6 +730,7 @@ export async function PATCH(request, runtime = {}) {
         followUpOutcome: completion.outcome,
         activityEventType: completion.eventType,
         nextDueAt: completion.nextDueAt?.toISOString?.() || null,
+        appointmentAt: completion.appointmentAt?.toISOString?.() || null,
         nextOwnerUserId: body.nextOwnerUserId || body.nextAssignedTo || null,
       });
       const nextOwnerUserId = completion.createNextTask && completion.nextDueAt
@@ -725,12 +742,17 @@ export async function PATCH(request, runtime = {}) {
           )
         : null;
       if (completion.createNextTask && completion.nextDueAt && !nextOwnerUserId) {
-        throw createCrmError('Next follow-up owner is required.');
+        throw createCrmError(completion.appointmentAt
+          ? 'Appointment owner is required.'
+          : 'Next follow-up owner is required.');
       }
       const nextTaskValues = completion.createNextTask && completion.nextDueAt
         ? {
-            title: stringParam(body.nextTaskTitle) || existingTask.title || 'Follow up',
+            title: stringParam(body.nextTaskTitle) || (completion.appointmentAt
+              ? `Appointment - ${exactContext.contact.name}`
+              : existingTask.title || 'Follow up'),
             description: stringParam(body.nextTaskDescription) || null,
+            taskType: completion.appointmentAt ? TASK_TYPES.APPOINTMENT : TASK_TYPES.FOLLOW_UP,
             status: TASK_STATUSES.OPEN,
             dueAt: completion.nextDueAt,
             ownerUserId: nextOwnerUserId,
@@ -739,7 +761,7 @@ export async function PATCH(request, runtime = {}) {
             canceledAt: null,
             sourceType: 'manual',
             sourceId: existingTask.id,
-            sourceLabel: 'Follow-up completion',
+            sourceLabel: completion.appointmentAt ? 'Appointment commitment' : 'Follow-up completion',
             metadataJson: compactObject({
               createdFromTaskId: existingTask.id,
               previousOutcome: completion.outcome,
@@ -811,6 +833,7 @@ export async function PATCH(request, runtime = {}) {
           createdFromTaskId: existingTask.id,
           followUpOutcome: completion.outcome,
           ownerUserId: nextOwnerUserId,
+          appointmentAt: completion.appointmentAt?.toISOString?.() || null,
         }),
       });
 

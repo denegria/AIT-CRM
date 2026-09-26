@@ -13,7 +13,6 @@ import {
 import {
   buildTaskScopePreview,
   buildTeamMonitorPageModel,
-  buildTeamMonitorSummary,
   buildTeamMonitorViewModel,
   filterTeamMonitorRows,
 } from '@/lib/team-monitor.js';
@@ -144,39 +143,47 @@ function PreviewEmployeeList({ roster }) {
   );
 }
 
-function MonitorSummary({ summary, periodLabel }) {
-  const metrics = [
-    { key: 'taskProgress', value: `${summary.completedTasks} / ${summary.taskProgressTotal}`, label: `Task progress ${periodLabel.toLowerCase()}`, tone: 'success' },
-    { key: 'openTasks', value: summary.openTasks, label: 'Open tasks', tone: 'accent' },
-    { key: 'dueToday', value: summary.dueToday, label: 'Due today', tone: 'warning' },
-    { key: 'overdue', value: summary.overdue, label: 'Overdue tasks', tone: 'danger' },
-    { key: 'assignedContacts', value: summary.assignedContacts, label: 'Assigned contacts', tone: 'accent' },
-    { key: 'contactsWithoutNextFollowUp', value: summary.contactsWithoutNextFollowUp, label: 'Without next follow-up', tone: 'warning' },
-    { key: 'enrollments', value: summary.enrollments, label: `Enrollments ${periodLabel.toLowerCase()}`, tone: 'success' },
-    { key: 'cancellations', value: summary.cancellations, label: `Cancellations ${periodLabel.toLowerCase()}`, tone: 'danger' },
+function MonitorSummary({ summary, period, onPeriodChange }) {
+  const risks = [
+    { key: 'overdue', value: summary.overdue, label: 'Overdue tasks', hint: 'Open work past due', tone: 'danger' },
+    { key: 'dueToday', value: summary.dueToday, label: 'Due today', hint: 'Open tasks due today', tone: 'warning' },
+    { key: 'contactsWithoutNextFollowUp', value: summary.contactsWithoutNextFollowUp, label: 'Follow-up gaps', hint: 'Active-stage contacts without an open, dated follow-up', tone: 'warning' },
   ];
   return (
-    <div className={s.monitorMetricGrid} aria-label="Filtered roster plus unassigned reconciliation totals">
-      {metrics.map(({ key, value, label, tone }) => (
-        <div key={key} className={s.monitorMetric}>
-          <span className={`${s.dot} ${statusDotClass(tone)}`} aria-hidden="true" />
-          <span><strong>{value}</strong><small>{label} · visible rows</small></span>
+    <section className={s.monitorOverview} aria-label="Team workload overview">
+      <div className={s.overviewHeader}>
+        <div><h2>Needs review</h2><p>Current work across this division, including unassigned work.</p></div>
+        <span className={s.overviewTotal}>{summary.openTasks} open tasks</span>
+      </div>
+      <div className={s.monitorMetricGrid}>
+        {risks.map(({ key, value, label, hint, tone }) => (
+          <div key={key} className={s.monitorMetric}>
+            <span className={`${s.dot} ${statusDotClass(tone)}`} aria-hidden="true" />
+            <span><strong>{value}</strong><b>{label}</b><small>{hint}</small></span>
+          </div>
+        ))}
+      </div>
+      <div className={s.movementRow}>
+        <div className={s.movementIntro}>
+          <span>Movement</span>
+          <div className={s.controlGroup} role="group" aria-label="Reporting period">
+            {[['today', 'Today'], ['week', 'This week']].map(([value, label]) => (
+              <button key={value} type="button" className={period === value ? s.activePill : s.pill} aria-pressed={period === value} onClick={() => onPeriodChange(value)}>{label}</button>
+            ))}
+          </div>
         </div>
-      ))}
-    </div>
+        <span><strong>{summary.completedTasks}</strong> tasks completed</span>
+        <span><strong>{summary.enrollments}</strong> enrollments</span>
+        <span><strong>{summary.cancellations}</strong> cancellations</span>
+      </div>
+    </section>
   );
 }
 
-function MonitorControls({ period, attention, onPeriodChange, onAttentionChange }) {
+function MonitorControls({ attention, onAttentionChange }) {
   return (
     <div className={s.monitorControls}>
-      <div className={s.controlGroup} role="group" aria-label="Reporting period">
-        {[['today', 'Today'], ['week', 'This week']].map(([value, label]) => (
-          <button key={value} type="button" className={period === value ? s.activePill : s.pill} aria-pressed={period === value} onClick={() => onPeriodChange(value)}>
-            {label}
-          </button>
-        ))}
-      </div>
+      <div className={s.rosterHeading}><strong>Coordinator workload</strong><small>Current portfolio and {attention === 'all' ? 'all work' : attention === 'attention' ? 'attention items' : 'quiet rows'}</small></div>
       <div className={s.controlGroup} role="group" aria-label="Attention filter">
         {[['all', 'All work'], ['attention', 'Needs attention'], ['no-work', 'No active workload']].map(([value, label]) => (
           <button key={value} type="button" className={attention === value ? s.activePill : s.pill} aria-pressed={attention === value} onClick={() => onAttentionChange(value)}>
@@ -196,7 +203,7 @@ function EmployeeDetail({ employee, periodLabel }) {
   if (!employee) {
     return (
       <aside className={s.detailPanel}>
-        <div className={s.emptyDetail}>Select an employee to review today&apos;s open work.</div>
+        <div className={s.emptyDetail}>No team member matches this filter.</div>
       </aside>
     );
   }
@@ -208,47 +215,44 @@ function EmployeeDetail({ employee, periodLabel }) {
         <span>
           <strong>{employee.name || employee.email || 'Unnamed user'}</strong>
           <small>{employee.roleLabel}</small>
-          {employee.isUnassignedBucket && <small>Explicit reconciliation bucket</small>}
         </span>
       </div>
-      <div className={s.detailSection}>
-        <div className={s.detailTitle}>Auditable workload</div>
-        <div className={s.detailStats}>
-          <span><strong>{employee.completedTasks} / {employee.taskProgressTotal}</strong><small>task progress {periodLabel.toLowerCase()}</small></span>
-          <span><strong>{employee.openTasks}</strong><small>open tasks</small></span>
-          <span><strong>{employee.assignedContacts}</strong><small>assigned contacts</small></span>
-          <span><strong>{employee.activeAssignedContacts}</strong><small>active contacts</small></span>
-          <span><strong>{employee.contactsWithoutNextFollowUp}</strong><small>without next follow-up</small></span>
-          <span><strong>{employee.enrollments}</strong><small>enrollments {periodLabel.toLowerCase()}</small></span>
-          <span><strong>{employee.cancellations}</strong><small>cancellations {periodLabel.toLowerCase()}</small></span>
-        </div>
+      <div className={s.detailSnapshot}>
+        <span><strong>{employee.openTasks}</strong><small>open tasks</small></span>
+        <span><strong>{Number(employee.activeAssignedContacts || 0) + Number(employee.unassignedActiveContacts || 0)}</strong><small>active contacts</small></span>
+        <span><strong>{employee.contactsWithoutNextFollowUp}</strong><small>follow-up gaps</small></span>
       </div>
+      <p className={s.detailContext}>{employee.isUnassignedBucket
+        ? `${employee.unattributedTasks + employee.unattributedContacts} record${employee.unattributedTasks + employee.unattributedContacts === 1 ? '' : 's'} have owners outside this roster. Queue links below show ownerless work; individual tasks above open directly.`
+        : `${employee.completedTasks} tasks completed, ${employee.enrollments} enrollments and ${employee.cancellations} cancellations ${periodLabel.toLowerCase()}.`}</p>
       <div className={s.detailSection}>
-        <div className={s.detailTitle}>Due today</div>
-        {employee.dueTodayTasks.length ? employee.dueTodayTasks.map((task) => (
-          <div key={task.id} className={s.detailTask}>
-            <CheckSquare size={14} />
-            <span>{task.title || 'Untitled task'}</span>
-            <small>{taskDateLabel(task.dueAt || task.dueDate)}</small>
-          </div>
-        )) : <div className={s.emptyDetail}>No tasks due today.</div>}
-      </div>
-      <div className={s.detailSection}>
-        <div className={s.detailTitle}>Overdue</div>
-        {employee.overdueTasks.length ? employee.overdueTasks.map((task) => (
-          <div key={task.id} className={s.detailTask}>
+        <div className={s.detailTitle}>Overdue tasks <span>{employee.overdue}</span></div>
+        {employee.overdueTasks.length ? employee.overdueTasks.slice(0, 5).map((task) => (
+          <Link key={task.id} className={s.detailTask} href={`/tasks/${encodeURIComponent(task.id)}`} title={task.title || 'Untitled task'}>
             <Clock3 size={14} />
             <span>{task.title || 'Untitled task'}</span>
             <small>{taskDateLabel(task.dueAt || task.dueDate)}</small>
-          </div>
+          </Link>
         )) : <div className={s.emptyDetail}>No overdue tasks.</div>}
+        {employee.overdueTasks.length > 5 && <div className={s.moreTasks}>+{employee.overdueTasks.length - 5} more in Tasks</div>}
+      </div>
+      <div className={s.detailSection}>
+        <div className={s.detailTitle}>Due today <span>{employee.dueToday}</span></div>
+        {employee.dueTodayTasks.length ? employee.dueTodayTasks.slice(0, 5).map((task) => (
+          <Link key={task.id} className={s.detailTask} href={`/tasks/${encodeURIComponent(task.id)}`} title={task.title || 'Untitled task'}>
+            <CheckSquare size={14} />
+            <span>{task.title || 'Untitled task'}</span>
+            <small>{taskDateLabel(task.dueAt || task.dueDate)}</small>
+          </Link>
+        )) : <div className={s.emptyDetail}>No tasks due today.</div>}
+        {employee.dueTodayTasks.length > 5 && <div className={s.moreTasks}>+{employee.dueTodayTasks.length - 5} more in Tasks</div>}
       </div>
       <div className={s.detailActions}>
         <Link className="btn btn-sm" href={employee.taskHref}>
-          View tasks
+          {employee.isUnassignedBucket ? 'Unassigned tasks' : 'View tasks'}
         </Link>
         <Link className="btn btn-sm" href={employee.contactHref}>
-          View contacts
+          {employee.isUnassignedBucket ? 'Unassigned contacts' : 'View contacts'}
         </Link>
       </div>
     </aside>
@@ -376,7 +380,6 @@ export function TeamMonitorPageSurface({ employees, tasks, contacts, currentUser
   );
   const visibleUnassigned = filteredRoster.find((employee) => employee.isUnassignedBucket);
   const visibleEmployees = filteredRoster.filter((employee) => !employee.isUnassignedBucket);
-  const filteredSummary = buildTeamMonitorSummary({ roster: visibleEmployees, unassigned: visibleUnassigned });
   const selectedEmployee = filteredRoster.find((employee) => employee.id === selectedEmployeeId) || filteredRoster[0] || null;
 
   return (
@@ -384,13 +387,13 @@ export function TeamMonitorPageSurface({ employees, tasks, contacts, currentUser
       <div className="page-header">
         <div>
           <h1 className="page-title">Team Monitor</h1>
-          <p className="page-subtitle">Scoped task ownership, follow-up coverage, and enrollment movement. Counts are from CRM records, not presence signals.</p>
+          <p className="page-subtitle">Spot uncovered work, review coordinators, and open the right queue.</p>
         </div>
       </div>
-      <MonitorSummary summary={filteredSummary} periodLabel={viewModel.period.label} />
+      <MonitorSummary summary={viewModel.summary} period={period} onPeriodChange={setPeriod} />
       <div className={s.fullLayout}>
         <section className={s.rosterCard}>
-          <MonitorControls period={period} attention={attention} onPeriodChange={setPeriod} onAttentionChange={setAttention} />
+          <MonitorControls attention={attention} onAttentionChange={setAttention} />
           <RosterTable
             roster={filteredRoster}
             selectedEmployeeId={selectedEmployee?.id}

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import {
   findCredentialByEmail,
   getRequestSession,
+  reauthenticateWorkOSPassword,
+  usesWorkOSAuth,
   verifyPassword,
 } from '@/lib/auth';
 
@@ -72,6 +74,24 @@ export async function POST(request) {
   const key = session.sessionId || session.user.id;
   const blockedUntil = activeBlock(key);
   if (blockedUntil) return rateLimitResponse(blockedUntil);
+
+  if (usesWorkOSAuth()) {
+    try {
+      await reauthenticateWorkOSPassword({
+        session,
+        password,
+        ipAddress: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || undefined,
+        userAgent: request.headers.get('user-agent') || undefined,
+      });
+      clearFailures(key);
+      return NextResponse.json({ ok: true, user: session.user });
+    } catch (error) {
+      if (error?.status === 429) return rateLimitResponse(Date.now() + REAUTH_LOCKOUT_MS);
+      const lockedUntil = recordFailure(key);
+      if (lockedUntil) return rateLimitResponse(lockedUntil);
+      return NextResponse.json({ error: 'Invalid password.' }, { status: 401 });
+    }
+  }
 
   const row = await findCredentialByEmail(session.user.email);
   if (!row || row.user?.id !== session.user.id || !row.user?.isActive || !verifyPassword(password, row.credential)) {

@@ -14,3 +14,16 @@ test('record detail context replaces the mutable global selector with a read-onl
   assert.match(source, /isRecordScope \? 'Record division'/);
   assert.match(source, /aria-label=\{`Record division: \$\{displayedBusinessUnit\.name\}`\}/);
 });
+
+test('division title is restored after route navigation even when the division is unchanged', () => {
+  assert.match(source, /if \(document\.title !== divisionBrand\.title\) document\.title = divisionBrand\.title;/);
+  assert.match(source, /\[divisionBrand\.title, pathname\]/);
+  assert.match(source, /new MutationObserver\(syncDivisionTitle\)/);
+  assert.match(source, /observer\.observe\(document\.head, \{ childList: true, subtree: true, characterData: true \}\)/);
+  assert.match(source, /return \(\) => observer\.disconnect\(\)/);
+});
+
+test('payments is limited to AIT USA staff with financial read access', () => {
+  assert.match(source, /href: '\/payments', label: 'Payments'/);
+  assert.match(source, /href === '\/payments' && \(!isAitUsaScope \|\| !access\.canReadFinancials\)/);
+});

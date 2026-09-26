@@ -12,7 +12,7 @@ import { isAitUsaBusinessUnit } from '@/lib/attendance/policy.js';
 import { isClientAccountBusinessUnit } from '@/lib/crm/lifecycle';
 import s from './Sidebar.module.css';
 
-import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, CloudSun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal, Inbox, Megaphone, UsersRound, BookOpenCheck } from 'lucide-react';
+import { LayoutDashboard, Users, ClipboardList, DollarSign, BarChart3, Settings, Moon, Sun, CloudSun, Database, LogOut, Building2, ListTodo, RadioTower, Columns3, MoreHorizontal, Inbox, Megaphone, UsersRound, BookOpenCheck, PackageCheck, HandCoins } from 'lucide-react';
 
 const nav = [
   { href: '/', label: 'Dashboard', Icon: LayoutDashboard },
@@ -21,6 +21,8 @@ const nav = [
   { href: '/tasks', label: 'Tasks', Icon: ListTodo },
   { href: '/recovery-queue', label: 'Recovery Queue', mobileLabel: 'Recovery', Icon: ListTodo },
   { href: '/active-classes', label: 'Active Classes', mobileLabel: 'Classes', Icon: BookOpenCheck },
+  { href: '/payments', label: 'Payments', Icon: HandCoins },
+  { href: '/fulfillment', label: 'Book Fulfillment', mobileLabel: 'Fulfillment', Icon: PackageCheck },
   { href: '/team-monitor', label: 'Team Monitor', Icon: UsersRound },
   { href: '/inbox', label: 'Inbox', Icon: Inbox },
   { href: '/sms-campaigns', label: 'SMS Campaigns', Icon: Megaphone },
@@ -33,7 +35,7 @@ const nav = [
 ];
 
 const mobilePrimaryPriority = ['/', '/clients', '/contacts', '/pipeline', '/tasks', '/work-orders'];
-const regularCoordinatorNav = new Set(['/', '/clients', '/contacts', '/pipeline', '/tasks', '/recovery-queue', '/active-classes', '/work-orders']);
+const regularCoordinatorNav = new Set(['/', '/clients', '/contacts', '/pipeline', '/tasks', '/recovery-queue', '/active-classes', '/payments', '/fulfillment', '/work-orders']);
 const scopePersistenceKeys = ['ait-crm-business-unit-scope', 'ait-crm-scope-user-id'];
 
 const themeOptions = [
@@ -125,8 +127,14 @@ export default function Sidebar() {
   const isAitUsaScope = isAitUsaBusinessUnit(displayedBusinessUnit?.name);
 
   useEffect(() => {
-    document.title = divisionBrand.title;
-  }, [divisionBrand.title]);
+    const syncDivisionTitle = () => {
+      if (document.title !== divisionBrand.title) document.title = divisionBrand.title;
+    };
+    syncDivisionTitle();
+    const observer = new MutationObserver(syncDivisionTitle);
+    observer.observe(document.head, { childList: true, subtree: true, characterData: true });
+    return () => observer.disconnect();
+  }, [divisionBrand.title, pathname]);
 
   const scopedNav = useMemo(() => nav.map((item) => {
     if (item.href === '/contacts' && isClientViewScope) {
@@ -138,6 +146,8 @@ export default function Sidebar() {
   const visibleNav = useMemo(() => scopedNav.filter(({ href }) => {
     if (coordinatorUiPolicy.isRegularCoordinator && !regularCoordinatorNav.has(href)) return false;
     if (href === '/active-classes' && !isAitUsaScope) return false;
+    if (href === '/payments' && (!isAitUsaScope || !access.canReadFinancials)) return false;
+    if (href === '/fulfillment' && (!isAitUsaScope || !access.canReadCrm)) return false;
     if (href === '/work-orders' && !canUseWorkOrders) return false;
     if (href === '/team-monitor' && !canUseTeamMonitorWorkspace(monitorCurrentUser)) return false;
     if (href === '/settings' && !access.canReadSettings) return false;
@@ -148,7 +158,7 @@ export default function Sidebar() {
     if (href === '/inbox' && !canReadMessagingInbox) return false;
     if (href === '/sms-campaigns' && !canManageSmsCampaigns) return false;
     return true;
-  }), [access.canReadFinancials, access.canReadImportReview, access.canReadReports, access.canReadSettings, canManageSmsCampaigns, canReadMessagingInbox, canUseFinancialsWorkspace, canUseWorkOrders, coordinatorUiPolicy.isRegularCoordinator, isAitUsaScope, monitorCurrentUser, scopedNav]);
+  }), [access.canReadCrm, access.canReadFinancials, access.canReadImportReview, access.canReadReports, access.canReadSettings, canManageSmsCampaigns, canReadMessagingInbox, canUseFinancialsWorkspace, canUseWorkOrders, coordinatorUiPolicy.isRegularCoordinator, isAitUsaScope, monitorCurrentUser, scopedNav]);
 
   const mobileNav = useMemo(() => {
     if (visibleNav.length <= 5) {

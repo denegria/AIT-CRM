@@ -14,6 +14,8 @@ import {
 } from '@/components/TeamMonitorPanel';
 import monitorStyles from '@/components/TeamMonitorPanel.module.css';
 import { canUseTeamMonitor } from '@/lib/team-monitor.js';
+import { canUseTeamMonitorWorkspace } from '@/lib/crm/coordinator-policy.js';
+import dashboardStyles from './DashboardWorkspace.module.css';
 import { WORKFLOW_KEYS, workflowKeyForBusinessUnit } from '@/lib/crm/lifecycle';
 import {
   buildTaskCalendarEvents,
@@ -29,6 +31,7 @@ import {
   isTaskOverdue,
 } from '@/lib/tasks/visibility.js';
 import { completeDashboardTaskAndReload } from '@/lib/dashboard/task-completion.js';
+import { dashboardContactHref, dashboardTaskScope } from '@/lib/dashboard/workspace.js';
 
 function dateInputToIso(value) {
   if (!value) return null;
@@ -106,6 +109,8 @@ export default function Dashboard() {
   const monitorCurrentUser = currentUser || { id: currentUserId, primaryRoleKey: role };
   const isAdminView = canUseTeamMonitor(monitorCurrentUser);
   const canUseTeamMonitorView = isAdminView;
+  const isSeniorView = !isAdminView && canUseTeamMonitorWorkspace(monitorCurrentUser);
+  const isAitUsaDashboard = workflowKeyForBusinessUnit(currentBusinessUnit || '') === WORKFLOW_KEYS.AIT_USA;
   const canReadFinancials = Boolean(access?.canReadFinancials);
 
   useEffect(() => {
@@ -203,26 +208,54 @@ export default function Dashboard() {
     };
   }, [contacts, currentUserId, dashboardNow, financials, isAdminView, tasks, workOrders]);
   const kpis = dashboardSummary?.kpis || legacyKpis;
+  const taskWorkspace = useMemo(() => dashboardTaskScope(
+    tasks,
+    currentUserId,
+    currentBusinessUnit?.id && currentBusinessUnit.id !== 'all' ? currentBusinessUnit.id : '',
+  ), [tasks, currentUserId, currentBusinessUnit?.id]);
 
   const myTasks = useMemo(() => {
+    if (isAitUsaDashboard) return taskWorkspace.personalTasks;
     if (isAdminView) return tasks;
     return tasks.filter(t => (t.ownerUserId || t.assignedTo) === currentUserId);
-  }, [tasks, isAdminView, currentUserId]);
+  }, [tasks, isAdminView, isAitUsaDashboard, currentUserId, taskWorkspace.personalTasks]);
 
   const dashboardKpiCards = useMemo(() => {
+    if (isAitUsaDashboard && !isAdminView) {
+      return [
+        {
+          label: 'My overdue tasks', value: taskWorkspace.personalOverdue.length,
+          change: 'Past due', trend: 'neutral',
+          href: '/tasks?due=overdue&ownerUserId=__me',
+        },
+        {
+          label: 'My tasks today', value: taskWorkspace.personalToday.length,
+          change: 'Due today', trend: 'neutral', href: '/tasks?due=today&ownerUserId=__me',
+        },
+        {
+          label: 'My new leads', value: kpis.myUsaNewLeads ?? 0,
+          change: 'Current-year leads', trend: 'neutral', href: dashboardContactHref('myNewLeads', currentUserId),
+        },
+        {
+          label: 'Needs next follow-up', value: kpis.myUsaNeedsNextFollowUp ?? 0,
+          change: 'My contacts without a dated next step', trend: 'neutral',
+          href: dashboardContactHref('myNeedsNextFollowUp', currentUserId),
+        },
+      ];
+    }
     const inboundTaskHref = '/tasks?ownerUserId=unassigned&taskType=follow_up&status=open';
-    const taskHref = kpis.unassignedLeadFollowUps
+    const taskHref = legacyKpis.unassignedLeadFollowUps
       ? inboundTaskHref
-      : kpis.overdueTasks
+      : legacyKpis.overdueTasks
       ? `/tasks?due=overdue${isAdminView ? '' : '&ownerUserId=__me'}`
       : `/tasks?due=today${isAdminView ? '' : '&ownerUserId=__me'}`;
     const taskCard = {
-      label: kpis.unassignedLeadFollowUps ? 'Unassigned Lead Follow-ups' : kpis.overdueTasks ? 'Overdue Tasks' : 'Tasks Due Today',
-      value: kpis.unassignedLeadFollowUps || kpis.overdueTasks || kpis.dueTodayTasks,
-      change: kpis.unassignedLeadFollowUps
-        ? kpis.unassignedFacebookFollowUps ? `${kpis.unassignedFacebookFollowUps} Facebook leads` : 'Needs owner'
-        : kpis.overdueTasks ? `${kpis.dueTodayTasks} also due today` : 'Due today',
-      trend: kpis.unassignedLeadFollowUps || kpis.overdueTasks ? 'down' : 'up',
+      label: legacyKpis.unassignedLeadFollowUps ? 'Unassigned Lead Follow-ups' : legacyKpis.overdueTasks ? 'Overdue Tasks' : 'Tasks Due Today',
+      value: legacyKpis.unassignedLeadFollowUps || legacyKpis.overdueTasks || legacyKpis.dueTodayTasks,
+      change: legacyKpis.unassignedLeadFollowUps
+        ? legacyKpis.unassignedFacebookFollowUps ? `${legacyKpis.unassignedFacebookFollowUps} Facebook leads` : 'Needs owner'
+        : legacyKpis.overdueTasks ? `${legacyKpis.dueTodayTasks} also due today` : 'Due today',
+      trend: legacyKpis.unassignedLeadFollowUps || legacyKpis.overdueTasks ? 'down' : 'up',
       href: taskHref,
     };
     const workflowKey = workflowKeyForBusinessUnit(currentBusinessUnit || '');
@@ -256,7 +289,7 @@ export default function Dashboard() {
         ? { label: 'Pending Estimates', value: moneyLabel(kpis.pendingEstimateValue), change: `${kpis.pendingEstimates} estimates`, trend: 'up', href: '/financials' }
         : { label: 'New Leads', value: kpis.needsFirstOutreach, change: 'Ready to assign', trend: 'up', href: '/contacts?leadDateScope=current&status=New+Lead' },
     ];
-  }, [canReadFinancials, currentBusinessUnit, dashboardSummary?.kpis?.inProgressWorkOrders, isAdminView, kpis, workOrders]);
+  }, [canReadFinancials, currentBusinessUnit, currentUserId, dashboardSummary?.kpis?.inProgressWorkOrders, isAdminView, isAitUsaDashboard, kpis, legacyKpis, taskWorkspace.personalOverdue.length, taskWorkspace.personalToday.length, workOrders]);
 
   const unassignedLeadFollowUps = useMemo(
     () => (isAdminView ? tasks.filter(isUnassignedInboundLeadFollowUp) : []),
@@ -401,7 +434,16 @@ export default function Dashboard() {
             {' '}· {currentBusinessUnit?.name || `All ${scopeLabel}`}
           </p>
         </div>
-        <span className={`badge ${isAdminView ? 'badge-won' : 'badge-contacted'}`} style={{fontSize:'var(--text-sm)',padding:'4px 12px'}}>{isAdminView ? 'Admin View' : 'Employee View'}</span>
+        {isAitUsaDashboard && isSeniorView ? (
+          <div className={dashboardStyles.headerActions}>
+            <Link className="btn btn-sm" href={`/team-monitor?businessUnitId=${encodeURIComponent(currentBusinessUnit.id)}`}>Team Monitor</Link>
+            <span className="badge badge-contacted" style={{fontSize:'var(--text-sm)',padding:'4px 12px'}}>Senior Coordinator</span>
+          </div>
+        ) : (
+          <span className={`badge ${isAdminView ? 'badge-won' : 'badge-contacted'}`} style={{fontSize:'var(--text-sm)',padding:'4px 12px'}}>
+            {isAdminView ? 'Admin View' : isAitUsaDashboard ? 'My day' : 'Employee View'}
+          </span>
+        )}
       </div>
 
       {dataSource === 'postgres' && access.canReadImportReview && importStaging?.latestBatch && (
@@ -463,18 +505,28 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="dashboard-kpi-grid" style={{marginBottom:20}}>
-        {dashboardKpiCards.map((card) => (
-          <KPICard
-            key={card.label}
-            label={card.label}
-            value={card.value}
-            change={card.change}
-            trend={card.trend}
-            href={card.href}
-          />
-        ))}
-      </div>
+      {!(isAitUsaDashboard && isSeniorView) && (
+        <div className="dashboard-kpi-grid" style={{marginBottom:20}}>
+          {dashboardKpiCards.map((card) => (
+            <KPICard
+              key={card.label}
+              label={card.label}
+              value={card.value}
+              change={card.change}
+              trend={card.trend}
+              href={card.href}
+            />
+          ))}
+        </div>
+      )}
+
+      {isAitUsaDashboard && isSeniorView && (
+        <section className={dashboardStyles.seniorMetrics} aria-label="Dashboard task overview">
+          <KPICard label="My overdue tasks" value={taskWorkspace.personalOverdue.length} href="/tasks?due=overdue&ownerUserId=__me" />
+          <KPICard label="My tasks today" value={taskWorkspace.personalToday.length} href="/tasks?due=today&ownerUserId=__me" />
+          <KPICard label="Unassigned tasks" value={taskWorkspace.teamUnassigned.length} href="/tasks?ownerUserId=unassigned&status=open" />
+        </section>
+      )}
 
       {canUseTeamMonitorView ? (
         <>
@@ -512,6 +564,55 @@ export default function Dashboard() {
             currentUser={monitorCurrentUser}
           />
         </>
+      ) : isAitUsaDashboard ? (
+        <div className={dashboardStyles.workspace}>
+          <section className={dashboardStyles.actionRail} aria-labelledby="dashboard-priority-title">
+            <div className={dashboardStyles.sectionHead}>
+              <div>
+                {!isSeniorView && <span className={dashboardStyles.eyebrow}>My work</span>}
+                <h2 id="dashboard-priority-title">{isSeniorView ? 'My tasks' : 'Priority tasks'}</h2>
+                {!isSeniorView && <p>{taskWorkspace.personalOverdue.length} overdue · {taskWorkspace.personalToday.length} due today</p>}
+              </div>
+            </div>
+            {isSeniorView && ((kpis.myUsaNewLeads ?? 0) > 0 || (kpis.myUsaNeedsNextFollowUp ?? 0) > 0) && (
+              <div className={dashboardStyles.personalNudges} aria-label="My contact follow-ups">
+                {(kpis.myUsaNewLeads ?? 0) > 0 && (
+                  <Link href={dashboardContactHref('myNewLeads', currentUserId)}>{kpis.myUsaNewLeads} new lead{kpis.myUsaNewLeads === 1 ? '' : 's'}</Link>
+                )}
+                {(kpis.myUsaNeedsNextFollowUp ?? 0) > 0 && (
+                  <Link href={dashboardContactHref('myNeedsNextFollowUp', currentUserId)}>{kpis.myUsaNeedsNextFollowUp} need follow-up</Link>
+                )}
+              </div>
+            )}
+            <TaskList
+              tasks={taskWorkspace.urgentTasks.slice(0, 5)}
+              onToggle={completeDashboardTask}
+              onAdd={createDashboardTask}
+              employees={employees}
+              canAdd={Boolean(access.canWriteCrm)}
+              canToggle={Boolean(access.canWriteCrm)}
+              fixedOwnerId={currentUser?.id || ''}
+              ownerRequired
+              showOwnerSelect={false}
+              fillHeight
+              emptyTitle="No urgent tasks"
+              emptyText={isSeniorView ? '' : 'Nothing overdue or due today. Upcoming work remains on your calendar.'}
+            />
+            {taskWorkspace.urgentTasks.length > 5 && (
+              <p className={dashboardStyles.moreWork}>Showing five priority tasks · open My tasks for the rest.</p>
+            )}
+            {dashboardCompletedTodayTasks.length > 0 && (
+              <p className={dashboardStyles.doneToday}>{dashboardCompletedTodayTasks.length} completed today</p>
+            )}
+            <nav className={dashboardStyles.quickLinks} aria-label="My work shortcuts">
+              <Link className="btn btn-sm" href="/tasks?due=work&ownerUserId=__me">My task queue</Link>
+              <Link className="btn btn-sm" href={`/contacts?leadDateScope=all&owner=${encodeURIComponent(currentUserId)}`}>My contacts</Link>
+            </nav>
+          </section>
+          <section className={dashboardStyles.calendarCard} aria-label="Calendar">
+            <Calendar events={dashboardCalendarEvents} />
+          </section>
+        </div>
       ) : (
         <div className="dashboard-panel-grid" style={{marginBottom:20}}>
           <div className="card">

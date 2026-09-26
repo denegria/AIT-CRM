@@ -77,6 +77,22 @@ test('dashboard follow-up entry carries exact task, contact, and lead identifier
   assert.equal(url.searchParams.has('taskType'), false);
 });
 
+test('task detail follow-up entry preserves the queue view but uses the task division', () => {
+  const selected = task({ businessUnitId: 'bu-usa' });
+  const href = followUpTaskEntryHref(selected, {
+    returnTo: '/tasks?businessUnitId=bu-signs&due=overdue&ownerUserId=__me',
+  });
+  const params = new URL(href, 'https://crm.test').searchParams;
+
+  assert.equal(params.get('taskId'), selected.id);
+  assert.equal(params.get('contactId'), selected.contactId);
+  assert.equal(params.get('leadId'), selected.leadId);
+  assert.equal(params.get('businessUnitId'), 'bu-usa');
+  assert.equal(params.get('due'), 'overdue');
+  assert.equal(params.get('ownerUserId'), '__me');
+  assert.equal(clearedFollowUpTaskEntryHref(params), '/tasks?businessUnitId=bu-usa&due=overdue&ownerUserId=__me');
+});
+
 test('task-specific Contact lookup preserves an omitted lead identifier', () => {
   const selected = task();
   const lookup = buildContactFollowUpLookup({

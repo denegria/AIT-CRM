@@ -71,10 +71,15 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null 
   const today = useMemo(() => initialState?.today || todayInNewYork(), [initialState]);
   const [date, setDate] = useState(initialState?.date || today);
   const [classes, setClasses] = useState(initialState?.classes || []);
+  const [scheduleSummary, setScheduleSummary] = useState({
+    hasActiveSchedules: initialState?.hasActiveSchedules ?? Boolean(initialState?.classes?.length),
+    nextScheduledDate: initialState?.nextScheduledDate || null,
+  });
   const [selectedClassId, setSelectedClassId] = useState(initialState?.selectedClassId || initialState?.classes?.[0]?.id || '');
   const [workspace, setWorkspace] = useState(initialState?.workspace || null);
   const [activeTab, setActiveTab] = useState(initialState?.activeTab || 'overview');
   const [locationFilter, setLocationFilter] = useState('all');
+  const locationFilterRef = useRef('all');
   const [classLoading, setClassLoading] = useState(!staticMode);
   const [workspaceLoading, setWorkspaceLoading] = useState(!staticMode);
   const [classError, setClassError] = useState('');
@@ -106,9 +111,24 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null 
     requestJson(`/api/attendance/classes?date=${encodeURIComponent(date)}`, { signal: controller.signal })
       .then((result) => {
         const nextClasses = result.classes || [];
+        const requestedLocation = locationFilterRef.current;
+        const locationExists = requestedLocation === 'all'
+          || nextClasses.some((item) => formatClassLocation(item) === requestedLocation);
+        const nextLocation = locationExists ? requestedLocation : 'all';
+        if (!locationExists) {
+          locationFilterRef.current = 'all';
+          setLocationFilter('all');
+        }
+        const availableClasses = nextLocation === 'all'
+          ? nextClasses
+          : nextClasses.filter((item) => formatClassLocation(item) === nextLocation);
         const currentId = selectedClassIdRef.current;
-        const nextId = nextClasses.some((item) => item.id === currentId) ? currentId : nextClasses[0]?.id || '';
+        const nextId = availableClasses.some((item) => item.id === currentId) ? currentId : availableClasses[0]?.id || '';
         setClasses(nextClasses);
+        setScheduleSummary({
+          hasActiveSchedules: Boolean(result.hasActiveSchedules),
+          nextScheduledDate: result.nextScheduledDate || null,
+        });
         setClassError('');
         if (nextId !== currentId) setSelectedClassId(nextId);
         if (!nextId) {
@@ -331,6 +351,7 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null 
   };
 
   const chooseLocation = (value) => {
+    locationFilterRef.current = value;
     setLocationFilter(value);
     const nextVisible = value === 'all' ? classes : classes.filter((item) => formatClassLocation(item) === value);
     if (!nextVisible.some((item) => item.id === selectedClassId)) chooseClass(nextVisible[0]?.id || '');
@@ -339,6 +360,8 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null 
   const sessionRows = workspace?.sessions || [];
   const roster = workspace?.roster || [];
   const classInfo = workspace?.class || selectedClass;
+  const hasNoVisibleClasses = !classLoading && !classError && visibleClasses.length === 0;
+  const locationIsEmpty = hasNoVisibleClasses && classes.length > 0 && locationFilter !== 'all';
 
   return (
     <section className={s.page} aria-label="Active Classes attendance workspace">
@@ -369,6 +392,36 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null 
         </label>
       </header>
 
+      {hasNoVisibleClasses ? (
+        <div className={s.emptyWorkspace}>
+          <span className={s.emptyIcon}><CalendarDays size={23} aria-hidden="true" /></span>
+          <div role="status">
+            <h2>
+              {locationIsEmpty
+                ? 'No classes at this location'
+                : scheduleSummary.hasActiveSchedules
+                  ? `No classes on ${formatSessionDate(date)}`
+                  : 'No active class schedules'}
+            </h2>
+            <p>
+              {locationIsEmpty
+                ? `Classes are scheduled at other locations on ${formatSessionDate(date)}.`
+                : scheduleSummary.hasActiveSchedules && scheduleSummary.nextScheduledDate
+                  ? `The next scheduled class is ${formatLongDate(scheduleSummary.nextScheduledDate)}.`
+                  : scheduleSummary.hasActiveSchedules
+                    ? 'Choose another date to find a scheduled class.'
+                    : 'AIT USA Institute has no active class schedules yet.'}
+            </p>
+          </div>
+          {locationIsEmpty ? (
+            <button type="button" className="btn" onClick={() => chooseLocation('all')}>Show all locations</button>
+          ) : scheduleSummary.nextScheduledDate ? (
+            <button type="button" className="btn btn-primary" onClick={() => chooseDate(scheduleSummary.nextScheduledDate)}>
+              View next class <ChevronRight size={16} aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+      ) : (
       <div className={s.workspaceGrid}>
         <aside className={s.classRail} aria-label={classRailHeading(date, today)}>
           <div className={s.railHeading}>
@@ -385,14 +438,7 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null 
           <div className={s.classList}>
             {classLoading && <div className={s.railState}><LoaderCircle className={s.spin} size={18} /> Loading classes…</div>}
             {!classLoading && classError && <div className={s.railStateError}>{classError}</div>}
-            {!classLoading && !classError && visibleClasses.length === 0 && (
-              <div className={s.railEmpty}>
-                <CalendarDays size={22} />
-                <strong>No scheduled classes</strong>
-                <span>Try another date or location.</span>
-              </div>
-            )}
-            {visibleClasses.map((item) => (
+            {!classLoading && !classError && visibleClasses.map((item) => (
               <button
                 type="button"
                 key={item.id}
@@ -695,6 +741,7 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null 
           )}
         </main>
       </div>
+      )}
 
       {reopenOpen && (
         <div className={s.dialogBackdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setReopenOpen(false); }}>

@@ -6,10 +6,13 @@ import {
   TASK_TYPES,
 } from './constants.js';
 import {
+  assertFollowUpOutcomeAllowed,
   contactPatchForFollowUpOutcome,
   followUpActivityMessage,
   followUpEventTypeForOutcome,
   followUpOutcomeClosesFollowUp,
+  followUpOutcomeAllowsProfileUpdate,
+  followUpOutcomeRequiresAppointment,
   followUpOutcomeSuggestsNextDue,
   followUpQuickDueDate,
   leadStatusForFollowUpOutcome,
@@ -99,6 +102,54 @@ test('continuation outcomes recommend but do not require a next date', () => {
   assert.equal(followUpOutcomeSuggestsNextDue(FOLLOW_UP_OUTCOMES.REACHED_INTERESTED), false);
 });
 
+test('appointment scheduled requires a dated commitment and creates the next task timestamp', () => {
+  assert.equal(followUpOutcomeRequiresAppointment(FOLLOW_UP_OUTCOMES.APPOINTMENT_SCHEDULED), true);
+  assert.throws(
+    () => normalizeFollowUpCompletionPayload({
+      task: followUpTask(),
+      payload: {
+        outcome: FOLLOW_UP_OUTCOMES.APPOINTMENT_SCHEDULED,
+        channel: FOLLOW_UP_CHANNELS.IN_PERSON,
+        note: 'Student confirmed an appointment.',
+      },
+      now,
+    }),
+    /Appointment date and time are required/,
+  );
+
+  const payload = normalizeFollowUpCompletionPayload({
+    task: followUpTask(),
+    payload: {
+      outcome: FOLLOW_UP_OUTCOMES.APPOINTMENT_SCHEDULED,
+      channel: FOLLOW_UP_CHANNELS.IN_PERSON,
+      note: 'Student confirmed an appointment.',
+      appointmentAt: '2026-06-05T15:30:00.000Z',
+      nextDueAt: '2026-06-06T13:00:00.000Z',
+    },
+    now,
+  });
+  assert.equal(payload.appointmentAt.toISOString(), '2026-06-05T15:30:00.000Z');
+  assert.equal(payload.nextDueAt.toISOString(), '2026-06-05T15:30:00.000Z');
+  assert.equal(payload.createNextTask, true);
+});
+
+test('inquiry preference updates are limited to plausible conversation outcomes', () => {
+  for (const outcome of [
+    FOLLOW_UP_OUTCOMES.REACHED_INTERESTED,
+    FOLLOW_UP_OUTCOMES.APPOINTMENT_SCHEDULED,
+    FOLLOW_UP_OUTCOMES.NEEDS_NEXT_FOLLOW_UP,
+  ]) {
+    assert.equal(followUpOutcomeAllowsProfileUpdate(outcome), true);
+  }
+  for (const outcome of [
+    FOLLOW_UP_OUTCOMES.NO_ANSWER,
+    FOLLOW_UP_OUTCOMES.DO_NOT_CONTACT,
+    FOLLOW_UP_OUTCOMES.WRONG_NUMBER,
+  ]) {
+    assert.equal(followUpOutcomeAllowsProfileUpdate(outcome), false);
+  }
+});
+
 test('quick due dates offer tomorrow, two-day, and three-day choices', () => {
   const reference = new Date('2026-07-21T12:00:00.000Z');
   assert.equal(followUpQuickDueDate(1, reference), '2026-07-22');
@@ -163,6 +214,20 @@ test('keeps lifecycle updates conservative and explicit', () => {
   assert.equal(
     leadStatusForFollowUpOutcome(FOLLOW_UP_OUTCOMES.DO_NOT_CONTACT, { name: 'AIT USA Institute' }),
     'Not Interested',
+  );
+});
+
+test('AIT USA enrollment cannot be recorded as an outreach outcome', () => {
+  assert.throws(
+    () => assertFollowUpOutcomeAllowed(
+      FOLLOW_UP_OUTCOMES.ENROLLED_OR_WON,
+      { name: 'AIT USA Institute' },
+    ),
+    (error) => error.status === 409 && /Start enrollment/.test(error.message),
+  );
+  assert.equal(
+    assertFollowUpOutcomeAllowed(FOLLOW_UP_OUTCOMES.ENROLLED_OR_WON, { name: 'AIT Signs' }),
+    FOLLOW_UP_OUTCOMES.ENROLLED_OR_WON,
   );
 });
 

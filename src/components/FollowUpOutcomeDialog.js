@@ -1,10 +1,12 @@
 'use client';
 
 import { useId, useRef, useState } from 'react';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, Info } from 'lucide-react';
 import Modal from './Modal';
 import {
   followUpOutcomeClosesFollowUp,
+  followUpOutcomeAllowsProfileUpdate,
+  followUpOutcomeRequiresAppointment,
   followUpOutcomeSuggestsNextDue,
   followUpQuickDueDate,
 } from '@/lib/tasks/follow-up.js';
@@ -36,8 +38,37 @@ export const FOLLOW_UP_CHANNEL_OPTIONS = Object.freeze([
   ['other', 'Other'],
 ]);
 
-export function requiredFollowUpField(draft = {}) {
-  if (!FOLLOW_UP_OUTCOME_OPTIONS.some(([value]) => value === draft.outcome)) {
+export function followUpOutcomeImpact({ draft = {}, isTaskCompletion = false } = {}) {
+  const taskEffect = isTaskCompletion ? ' Completes the selected follow-up task.' : '';
+  const nextDate = draft.nextDueDate ? ' Creates the next follow-up task.' : '';
+  switch (draft.outcome) {
+    case 'reached_interested':
+      return `Moves the inquiry to Follow Up.${taskEffect}${nextDate}`;
+    case 'left_voicemail':
+      return `Moves the inquiry to Follow Up.${taskEffect}${nextDate || ' Leaves the contact in the coverage queue.'}`;
+    case 'no_answer':
+      return `Records an unsuccessful attempt.${taskEffect}${nextDate || ' Leaves the contact in the coverage queue.'}`;
+    case 'appointment_scheduled':
+      return `Moves the inquiry to Follow Up and creates an appointment task for the selected date and time.${taskEffect}`;
+    case 'needs_next_follow_up':
+      return `Keeps the inquiry in Follow Up.${taskEffect}${nextDate || ' Leaves the contact in the coverage queue.'}`;
+    case 'reached_not_interested':
+      return `Moves the inquiry to Not Interested and cancels its remaining automated follow-up tasks.${taskEffect}`;
+    case 'wrong_number':
+      return `Marks the current phone as wrong. Email and other channels remain available.${taskEffect}`;
+    case 'do_not_contact':
+      return `Blocks contact, moves the inquiry to Not Interested, and cancels its remaining automated follow-up tasks.${taskEffect}`;
+    case 'enrolled_or_won':
+      return `Marks the opportunity as won.${taskEffect}`;
+    default:
+      return isTaskCompletion
+        ? 'Records the outcome and completes the selected follow-up task.'
+        : 'Records outreach without completing a task.';
+  }
+}
+
+export function requiredFollowUpField(draft = {}, { outcomeOptions = FOLLOW_UP_OUTCOME_OPTIONS } = {}) {
+  if (!outcomeOptions.some(([value]) => value === draft.outcome)) {
     return {
       field: 'outcome',
       message: draft.outcome ? 'Select a valid outcome.' : 'Select an outcome.',
@@ -47,6 +78,18 @@ export function requiredFollowUpField(draft = {}) {
     return {
       field: 'channel',
       message: draft.channel ? 'Select a valid channel.' : 'Select a channel.',
+    };
+  }
+  if (followUpOutcomeRequiresAppointment(draft.outcome) && !String(draft.appointmentAt || '').trim()) {
+    return {
+      field: 'appointmentAt',
+      message: 'Choose the appointment date and time.',
+    };
+  }
+  if (!String(draft.note || '').trim()) {
+    return {
+      field: 'note',
+      message: 'Write a note explaining the outcome.',
     };
   }
   return null;
@@ -66,17 +109,28 @@ export default function FollowUpOutcomeDialog({
   ownerOptions = [],
   canManageAssignments = false,
   showProfile = false,
+  isAitUsa = false,
+  isTaskCompletion = false,
   title = 'Log Follow-up',
   returnFocusRef,
 }) {
   const id = useId().replaceAll(':', '');
   const outcomeRef = useRef(null);
   const channelRef = useRef(null);
+  const appointmentRef = useRef(null);
+  const noteRef = useRef(null);
   const [validationError, setValidationError] = useState(null);
 
   if (!open || !draft) return null;
   const suggestsNextDue = followUpOutcomeSuggestsNextDue(draft.outcome);
   const closesFollowUp = followUpOutcomeClosesFollowUp(draft.outcome);
+  const requiresAppointment = followUpOutcomeRequiresAppointment(draft.outcome);
+  const outcomeOptions = isAitUsa
+    ? FOLLOW_UP_OUTCOME_OPTIONS.filter(([value]) => value !== 'enrolled_or_won')
+    : FOLLOW_UP_OUTCOME_OPTIONS;
+  const showContactTarget = Boolean(draft.channel && draft.channel !== 'in_person');
+  const showInquiryPreferences = showProfile && followUpOutcomeAllowsProfileUpdate(draft.outcome);
+  const impact = followUpOutcomeImpact({ draft, isTaskCompletion });
   const fieldId = (name) => `${id}-${name}`;
   const formId = fieldId('form');
 
@@ -94,11 +148,16 @@ export default function FollowUpOutcomeDialog({
 
   const handleSubmit = (event) => {
     event?.preventDefault?.();
-    const nextError = requiredFollowUpField(draft);
+    const nextError = requiredFollowUpField(draft, { outcomeOptions });
     if (nextError) {
       setValidationError(nextError);
       window.requestAnimationFrame(() => {
-        (nextError.field === 'outcome' ? outcomeRef : channelRef).current?.focus();
+        ({
+          outcome: outcomeRef,
+          channel: channelRef,
+          appointmentAt: appointmentRef,
+          note: noteRef,
+        }[nextError.field])?.current?.focus();
       });
       return;
     }
@@ -122,18 +181,18 @@ export default function FollowUpOutcomeDialog({
             type="submit"
             form={formId}
             onClick={handleSubmit}
-            disabled={busy || submitDisabled || !draft.note.trim()}
+            disabled={busy || submitDisabled}
           >
-            <CheckCircle2 size={16} /> {busy ? 'Saving...' : 'Save Outcome'}
+            <CheckCircle2 size={16} /> {busy ? 'Saving...' : isTaskCompletion ? 'Complete follow-up' : 'Record outreach'}
           </button>
         </>
       )}
     >
       <form id={formId} className="follow-up-dialog-form" noValidate onSubmit={handleSubmit}>
         {taskMatchText && (
-          <div className="follow-up-task-match">
+          <div className={`follow-up-task-match ${isTaskCompletion ? 'is-task-completion' : 'is-outreach-context'}`}>
             <div>
-              <strong>Task match</strong>
+              <strong>{isTaskCompletion ? 'Selected task' : 'Outreach record'}</strong>
               <p>{taskMatchText}</p>
             </div>
           </div>
@@ -166,7 +225,7 @@ export default function FollowUpOutcomeDialog({
                     onChange={(event) => updateDraft({ outcome: event.target.value })}
                   >
                     <option value="" disabled>Select an outcome</option>
-                    {FOLLOW_UP_OUTCOME_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    {outcomeOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                   </select>
                   {validationError?.field === 'outcome' && (
                     <p id={fieldId('outcome-error')} className="form-error" role="alert" aria-live="assertive">
@@ -198,31 +257,56 @@ export default function FollowUpOutcomeDialog({
                   )}
                 </div>
               </div>
-              <div className="form-group">
-                <label className="form-label" htmlFor={fieldId('attempted')}>Attempted</label>
+              {showContactTarget && <div className="form-group">
+                <label className="form-label" htmlFor={fieldId('contact-target')}>Number or address used <span className="form-optional">Optional</span></label>
                 <input
-                  id={fieldId('attempted')}
+                  id={fieldId('contact-target')}
                   className="input"
                   value={draft.contactMethod}
                   disabled={busy}
-                  placeholder="Phone or email used"
+                  placeholder={draft.channel === 'email' ? 'Email address used' : 'Phone number or channel address'}
                   onChange={(event) => updateDraft({ contactMethod: event.target.value })}
                 />
-              </div>
+              </div>}
             </section>
 
             {!closesFollowUp && <section className="follow-up-dialog-section">
               <div className="contact-dialog-section-header">
                 <span className="contact-dialog-section-index">2</span>
                 <div>
-                  <h2>What happens next?</h2>
-                  <p>{suggestsNextDue ? 'Schedule the next attempt now, or leave it in the coverage queue.' : 'Set a date when another follow-up is needed.'}</p>
+                  <h2>{requiresAppointment ? 'Appointment commitment' : 'What happens next?'}</h2>
+                  <p>{requiresAppointment
+                    ? 'Choose the date and time promised to the student.'
+                    : suggestsNextDue
+                      ? 'Schedule the next attempt now, or leave it in the coverage queue.'
+                      : 'Set a date when another follow-up is needed.'}</p>
                 </div>
               </div>
               <div className="grid-2">
-                <div className="form-group">
+                {requiresAppointment ? <div className="form-group">
+                  <label className="form-label" htmlFor={fieldId('appointment-at')}>Appointment date and time</label>
+                  <input
+                    ref={appointmentRef}
+                    id={fieldId('appointment-at')}
+                    className="input"
+                    type="datetime-local"
+                    value={draft.appointmentAt || ''}
+                    disabled={busy}
+                    required
+                    aria-required="true"
+                    aria-invalid={validationError?.field === 'appointmentAt'}
+                    aria-describedby={validationError?.field === 'appointmentAt' ? fieldId('appointment-error') : fieldId('appointment-help')}
+                    onChange={(event) => updateDraft({ appointmentAt: event.target.value, nextDueDate: '' })}
+                  />
+                  <p id={fieldId('appointment-help')} className="follow-up-next-due-note">An appointment task will be created in the same save.</p>
+                  {validationError?.field === 'appointmentAt' && (
+                    <p id={fieldId('appointment-error')} className="form-error" role="alert" aria-live="assertive">
+                      {validationError.message}
+                    </p>
+                  )}
+                </div> : <div className="form-group">
                   <label className="form-label" htmlFor={fieldId('next-due')}>
-                    Next Due (optional)
+                    Next due <span className="form-optional">Optional</span>
                   </label>
                   <input
                     id={fieldId('next-due')}
@@ -265,10 +349,10 @@ export default function FollowUpOutcomeDialog({
                         : 'Leave blank to log the outcome without scheduling another task.'}
                     </p>
                   )}
-                </div>
-                {canManageAssignments && draft.nextDueDate && (
+                </div>}
+                {canManageAssignments && (requiresAppointment ? draft.appointmentAt : draft.nextDueDate) && (
                   <div className="form-group">
-                    <label className="form-label" htmlFor={fieldId('next-owner')}>Next Owner</label>
+                    <label className="form-label" htmlFor={fieldId('next-owner')}>{requiresAppointment ? 'Appointment owner' : 'Next owner'}</label>
                     <select
                       id={fieldId('next-owner')}
                       className="input select"
@@ -296,8 +380,13 @@ export default function FollowUpOutcomeDialog({
               </div>
             </div>
             <textarea
+              ref={noteRef}
               id={fieldId('note')}
               aria-label="Required note"
+              aria-required="true"
+              aria-invalid={validationError?.field === 'note'}
+              aria-describedby={validationError?.field === 'note' ? fieldId('note-error') : undefined}
+              required
               className="textarea follow-up-note-input"
               rows={8}
               value={draft.note}
@@ -305,24 +394,26 @@ export default function FollowUpOutcomeDialog({
               placeholder="Example: No answer. Left a voicemail and will call again Friday."
               onChange={(event) => updateDraft({ note: event.target.value })}
             />
+            {validationError?.field === 'note' && (
+              <p id={fieldId('note-error')} className="form-error" role="alert" aria-live="assertive">
+                {validationError.message}
+              </p>
+            )}
           </section>
         </div>
 
-        {showProfile && (
+        {showInquiryPreferences && (
           <details className="follow-up-profile-disclosure">
             <summary>
-              <span>Update enrollment profile</span>
+              <span>Update inquiry preferences</span>
               <small>Optional fields from the conversation</small>
             </summary>
             <div className="follow-up-profile-fields">
               {[
                 ['programInterest', 'Program'],
-                ['locationPreference', 'Student Location'],
                 ['preferredDay', 'Preferred Day'],
                 ['preferredSchedule', 'Schedule'],
-                ['testInterest', 'Test'],
-                ['educationLevel', 'Level'],
-                ['schoolName', 'School'],
+                ['locationPreference', 'Student Location'],
               ].map(([field, label]) => (
                 <div className="form-group" key={field}>
                   <label className="form-label" htmlFor={fieldId(field)}>{label}</label>
@@ -335,9 +426,38 @@ export default function FollowUpOutcomeDialog({
                   />
                 </div>
               ))}
+              <details className="follow-up-secondary-preferences">
+                <summary>Additional preferences</summary>
+                <div className="follow-up-secondary-preference-grid">
+                  {[
+                    ['testInterest', 'Test'],
+                    ['educationLevel', 'Level'],
+                    ['schoolName', 'School'],
+                  ].map(([field, label]) => (
+                    <div className="form-group" key={field}>
+                      <label className="form-label" htmlFor={fieldId(field)}>{label}</label>
+                      <input
+                        id={fieldId(field)}
+                        className="input"
+                        value={draft.leadProfile?.[field] || ''}
+                        disabled={busy}
+                        onChange={(event) => onProfileChange?.(field, event.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </details>
             </div>
           </details>
         )}
+
+        <div className="follow-up-impact" role="status" aria-live="polite">
+          <Info size={17} aria-hidden="true" />
+          <div>
+            <strong>This will…</strong>
+            <p>{impact}</p>
+          </div>
+        </div>
 
         {error && <div className="form-error" role="alert">{error}</div>}
       </form>

@@ -42,6 +42,23 @@ test('internal-note composer renders an associated label and permanence helper',
   assert.match(markup, />Add note<\/button>/);
 });
 
+test('AIT USA internal-note mode separates context-only notes from outreach logging', () => {
+  const markup = renderToStaticMarkup(createElement(InternalNoteComposer, {
+    value: 'Call after 4 PM.',
+    canWrite: true,
+    onChange: noop,
+    onSubmit: noop,
+    onCancel: noop,
+    helpText: 'Internal context only. Does not record outreach, complete tasks, or schedule follow-up. Saved notes cannot be edited.',
+    submitLabel: 'Save note',
+  }));
+
+  assert.match(markup, /Internal context only\. Does not record outreach, complete tasks, or schedule follow-up\./);
+  assert.match(markup, />Save note<\/button>/);
+  assert.match(markup, />Cancel<\/button>/);
+  assert.doesNotMatch(markup, /Log Follow-up/);
+});
+
 test('internal-note submit state stays disabled for empty, read-only, and pending states', () => {
   assert.equal(isInternalNoteSubmitDisabled({ value: '', canWrite: true }), true);
   assert.equal(isInternalNoteSubmitDisabled({ value: 'A note', canWrite: false }), true);

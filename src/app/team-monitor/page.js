@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { TeamMonitorPageSurface } from '@/components/TeamMonitorPanel';
 import PageState, { PageStateAction } from '@/components/PageState';
 import { canUseTeamMonitorWorkspace } from '@/lib/crm/coordinator-policy.js';
 import { useCRM } from '@/lib/store';
 
 export default function TeamMonitorPage() {
+  const searchParams = useSearchParams();
   const {
     role,
     contacts,
@@ -21,9 +23,19 @@ export default function TeamMonitorPage() {
     dataSource,
     access,
     routeDataReady,
+    accessibleBusinessUnits,
+    currentBusinessUnitId,
+    setCurrentBusinessUnitId,
   } = useCRM();
   const monitorCurrentUser = currentUser || { id: 'emp-1', primaryRoleKey: role };
   const canViewTeamMonitor = canUseTeamMonitorWorkspace(monitorCurrentUser);
+  const requestedBusinessUnitId = searchParams.get('businessUnitId') || '';
+  const hasAuthorizedRequestedScope = accessibleBusinessUnits.some((unit) => unit.id === requestedBusinessUnitId);
+
+  useEffect(() => {
+    if (!routeDataReady || !canViewTeamMonitor || !hasAuthorizedRequestedScope || currentBusinessUnitId === requestedBusinessUnitId) return;
+    setCurrentBusinessUnitId(requestedBusinessUnitId);
+  }, [canViewTeamMonitor, currentBusinessUnitId, hasAuthorizedRequestedScope, requestedBusinessUnitId, routeDataReady, setCurrentBusinessUnitId]);
 
   useEffect(() => {
     if (!routeDataReady || !canViewTeamMonitor || dataSource !== 'postgres' || !access.canReadCrm || tasksLoaded || tasksLoading) return;
@@ -43,6 +55,10 @@ export default function TeamMonitorPage() {
         actions={<PageStateAction href="/">Back to Dashboard</PageStateAction>}
       />
     );
+  }
+
+  if (hasAuthorizedRequestedScope && currentBusinessUnitId !== requestedBusinessUnitId) {
+    return <PageState tone="loading" title="Loading team monitor" copy="Opening the selected division's team workspace." />;
   }
 
   if (!loaded || (dataSource === 'postgres' && !tasksLoaded && !tasksError)) {

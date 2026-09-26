@@ -48,6 +48,8 @@ test('Recovery Queue query keeps deterministic lanes and excludes Retargeting el
   assert.doesNotMatch(RECOVERY_QUEUE_SQL, /lower\(trim\(lead_status\)\).*retargeting/);
   assert.match(RECOVERY_QUEUE_SQL, /not is_do_not_call/);
   assert.match(RECOVERY_QUEUE_SQL, /not is_wrong_number/);
+  assert.match(RECOVERY_QUEUE_SQL, /jsonb_agg\(jsonb_build_object\([\s\S]*'id', vt\.task_id,[\s\S]*'title', vt\.task_title,[\s\S]*'dueAt', vt\.task_due_at/);
+  assert.match(RECOVERY_QUEUE_SQL, /from visible_tasks vt[\s\S]*where vt\.task_type = 'follow_up'[\s\S]*group by[\s\S]*having count\(\*\) > 1/);
 });
 
 test('Recovery Queue avoids a database read when the user has no division access', async () => {

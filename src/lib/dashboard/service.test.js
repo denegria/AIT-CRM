@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { summarizeAitUsaDashboardContacts } from './summary.js';
+import { dashboardContactsForSession, summarizeAitUsaDashboardContacts } from './summary.js';
 
 const currentYear = new Date().getUTCFullYear();
 
@@ -64,4 +64,20 @@ test('an invalid phone alone is not the legacy bad-contact-channel bucket', () =
   });
 
   assert.equal(summary.kpis.usaBadContactChannel, 0);
+});
+
+test('regular Dashboard contact summaries exclude work owned by other coordinators', () => {
+  const mappedContacts = [
+    contact({ id: 'mine', assignedTo: 'user-1' }),
+    contact({ id: 'another', assignedTo: 'user-2' }),
+    contact({ id: 'unassigned', assignedTo: '' }),
+  ];
+  const regular = dashboardContactsForSession(mappedContacts, {
+    user: { id: 'user-1', primaryRoleKey: 'account_coordinator' },
+  });
+  assert.deepEqual(regular.map((row) => row.id), ['mine']);
+  assert.equal(summarizeAitUsaDashboardContacts({ mappedContacts: regular, currentUserId: 'user-1' }).kpis.usaNewLeads, 1);
+  assert.equal(dashboardContactsForSession(mappedContacts, {
+    user: { id: 'user-1', primaryRoleKey: 'senior_coordinator' },
+  }).length, 3);
 });

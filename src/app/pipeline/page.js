@@ -14,6 +14,7 @@ import {
   matchesPipelineQuickFilter,
 } from '@/lib/contact-workflow-buckets';
 import { mobilePipelineTriageItems } from '@/lib/pipeline-mobile-triage.js';
+import { contactDirectoryNextStep } from '@/lib/contact-directory-next-step.js';
 import {
   buildCourseFilterOptions,
   buildLocationFilterOptions,
@@ -720,11 +721,11 @@ export default function PipelinePage() {
   }
 
   return (
-    <div className="fade-in">
+    <div className={`fade-in ${s.pipelinePage}`}>
       <div className={`page-header ${s.pipelineHeader}`}>
         <div className={s.headerCopy}>
-          <h1 className="page-title">Pipeline</h1>
-          <p className="page-subtitle">{pipelineSummaryCopy}</p>
+          <h1 className={`page-title ${s.pipelineTitle}`}>Pipeline</h1>
+          <p className={`page-subtitle ${s.pipelineSubtitle}`}>{pipelineSummaryCopy}</p>
         </div>
       </div>
 
@@ -1124,7 +1125,7 @@ export default function PipelinePage() {
             )}
           </div>
           <div className={s.pipelineActions}>
-            <button className="btn" onClick={() => nextLead ? router.push(`/contacts/${nextLead.id}`) : toast('No lead matches the current filters.', 'error')}>
+            <button className="btn btn-primary" onClick={() => nextLead ? router.push(`/contacts/${nextLead.id}`) : toast('No lead matches the current filters.', 'error')}>
               <ArrowRight size={14} /> Work Next Lead
             </button>
             {canWrite && currentUser?.id && coordinatorUiPolicy.canManageCoordinatorAssignments && (
@@ -1133,7 +1134,7 @@ export default function PipelinePage() {
               </button>
             )}
             {canWrite && (
-              <button className="btn btn-primary" onClick={() => router.push('/contacts')}>
+              <button className="btn" onClick={() => router.push('/contacts')}>
                 <UserPlus size={14} /> Add Contact
               </button>
             )}
@@ -1194,7 +1195,6 @@ export default function PipelinePage() {
                   >
                     <div>
                       <strong>{column.label}</strong>
-                      <span>Drop to mark closed</span>
                     </div>
                     <em>{closedOutcomeCounts.get(column.id) || 0}</em>
                   </div>
@@ -1211,6 +1211,7 @@ export default function PipelinePage() {
             onLogFollowUp={canWrite ? openLogFollowUp : undefined}
             showMobileMoveControls={false}
             compact={compactMode}
+            fitColumns
             selectedIds={selectedIds}
             onSelect={bulkAssignMode ? setSelectedIds : undefined}
           />
@@ -1245,6 +1246,7 @@ export default function PipelinePage() {
         <div className={s.mobileCardList}>
           {mobileStageRows.map((contact) => {
             const isMoving = mobileMoveCardId === contact.id;
+            const mobileActionLabel = (contact.directoryNextStepModel || contactDirectoryNextStep(contact)).actionLabel;
             return (
               <article key={contact.id} className={s.mobilePipelineCard}>
                 {bulkAssignMode && (
@@ -1288,7 +1290,7 @@ export default function PipelinePage() {
                   <div className={s.mobileCardTools}>
                     {followUpCoverageLabel(contact) && (
                       <button className="btn btn-sm btn-primary" type="button" onClick={() => openLogFollowUp(contact)}>
-                        Log follow-up
+                        {mobileActionLabel || 'Log follow-up'}
                       </button>
                     )}
                     <button

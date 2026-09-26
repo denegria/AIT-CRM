@@ -11,6 +11,7 @@ import {
   isAttendanceEmployee,
   normalizeAttendanceMarks,
   normalizeExpectedRevision,
+  nextScheduledClassDate,
   parseSessionDate,
   scheduledDatesForWeek,
   todayInAttendanceTimeZone,
@@ -68,6 +69,13 @@ test('scheduled occurrences and mutation dates follow canonical weekdays', () =>
     () => assertScheduledSessionDate({ scheduleDaysJson: ['Monday'] }, '2026-07-17'),
     /not a scheduled Friday meeting/,
   );
+});
+
+test('next class date respects canonical schedules and calendar boundaries', () => {
+  assert.equal(nextScheduledClassDate([['Monday'], ['Friday']], '2026-07-17'), '2026-07-20');
+  assert.equal(nextScheduledClassDate([['Friday']], '2026-12-31'), '2027-01-01');
+  assert.equal(nextScheduledClassDate([['Wednesday']], '2026-09-24'), '2026-09-30');
+  assert.equal(nextScheduledClassDate([[], ['not a weekday']], '2026-09-24'), null);
 });
 
 test('attendance marks normalize to a complete deterministic snapshot', () => {
