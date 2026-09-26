@@ -1204,9 +1204,6 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
   const openAssignmentEditorFromRoute = useEffectEvent(() => {
     openEditModal('inquiry');
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => document.getElementById('profile-edit-owner')?.focus());
-    });
   });
 
   useEffect(() => {
@@ -3632,6 +3629,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       <select
                         id="profile-edit-owner"
                         className="input select"
+                        autoFocus={searchParams.get('action') === 'assign-inquiry-owner'}
                         value={editForm.assignedTo || ''}
                         disabled={inquiryProfileDisabled}
                         onChange={e => setEditForm({...editForm, assignedTo: e.target.value})}
