@@ -6,12 +6,27 @@ import { Client } from 'pg';
 import {
   assertAuthoritativeProductionInvocation,
   validateProductionDatabaseUrl,
-  verifyProductionDatabaseBaseline,
+  verifyProductionDatabaseForward,
 } from './lib/production-readiness.mjs';
 import {
   loadSchemaManifest,
   verifyRepositoryBaseline,
 } from './lib/schema-readiness.mjs';
+import {
+  loadForwardSchemaManifest,
+  verifyForwardSchemaRepository,
+} from './lib/forward-schema.mjs';
+
+async function verifyReleaseRepository() {
+  const baseline = await verifyRepositoryBaseline({ verifyCurrentSchema: false });
+  const forward = await verifyForwardSchemaRepository();
+  return {
+    checks: [...baseline.checks, ...forward.checks],
+    manifest: baseline.manifest,
+    forwardManifest: forward.manifest,
+    manifestSha256: `${baseline.manifestSha256}; forward=${forward.manifestSha256}`,
+  };
+}
 
 function defaultClientFactory(clientConfig) {
   return new Client(clientConfig);
@@ -23,7 +38,8 @@ export async function runProductionChecks({
   fetchImpl = fetch,
   clientFactory = defaultClientFactory,
   loadManifest = loadSchemaManifest,
-  verifyRepository = verifyRepositoryBaseline,
+  loadForwardManifest = loadForwardSchemaManifest,
+  verifyRepository = verifyReleaseRepository,
   logger = console,
 } = {}) {
   if (authoritative) assertAuthoritativeProductionInvocation(env);
@@ -32,6 +48,7 @@ export async function runProductionChecks({
   const verifyToken = env.META_WEBHOOK_VERIFY_TOKEN || env.FACEBOOK_WEBHOOK_VERIFY_TOKEN || '';
   const checks = [];
   let verifiedManifest;
+  let verifiedForwardManifest;
 
   function addCheck(name, ok, detail = '') {
     checks.push({ name, ok, detail });
@@ -92,12 +109,14 @@ export async function runProductionChecks({
   async function checkRepositorySchema() {
     const report = await verifyRepository();
     verifiedManifest = report.manifest;
+    verifiedForwardManifest = report.forwardManifest;
     for (const check of report.checks) addCheck(check.name, check.ok, check.detail);
     addCheck('schema manifest fingerprint is reproducible', true, report.manifestSha256);
   }
 
   async function checkDatabase() {
     const manifest = verifiedManifest || await loadManifest();
+    const forward = verifiedForwardManifest || await loadForwardManifest();
     let target;
     try {
       target = validateProductionDatabaseUrl(env.DATABASE_URL, manifest);
@@ -116,7 +135,7 @@ export async function runProductionChecks({
     try {
       await client.connect();
       connected = true;
-      const report = await verifyProductionDatabaseBaseline(client, manifest);
+      const report = await verifyProductionDatabaseForward(client, manifest, forward);
       for (const check of report.checks) addCheck(check.name, check.ok, check.detail);
     } catch (error) {
       addCheck('production database proof completed', false, error.message);

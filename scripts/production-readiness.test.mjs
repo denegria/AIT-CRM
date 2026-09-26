@@ -7,8 +7,15 @@ import {
   PRODUCTION_DATABASE_IDENTITY_SQL,
   validateProductionDatabaseUrl,
   verifyProductionDatabaseBaseline,
+  verifyProductionDatabaseForward,
 } from './lib/production-readiness.mjs';
-import { loadSchemaManifest } from './lib/schema-readiness.mjs';
+import {
+  CATALOG_FINGERPRINT_SQL,
+  JOURNAL_MANIFEST_SQL,
+  SQL_ONLY_INDEXES_SQL,
+  loadSchemaManifest,
+} from './lib/schema-readiness.mjs';
+import { loadForwardSchemaManifest } from './lib/forward-schema.mjs';
 import {
   runProductionDiagnostics,
   runProductionReadiness,
@@ -16,12 +23,44 @@ import {
 
 const ROOT_DIR = fileURLToPath(new URL('../', import.meta.url));
 let manifest;
+let forward;
 let production;
 
 test.before(async () => {
   manifest = await loadSchemaManifest(ROOT_DIR);
+  forward = await loadForwardSchemaManifest(ROOT_DIR);
   production = manifest.database.protectedTargets.find((target) => target.label === 'production');
 });
+
+function forwardClient({ missingLastMigration = false, identity = productionIdentity() } = {}) {
+  const expectedCatalog = forward.database.catalog.expected;
+  const catalogRow = Object.fromEntries(Object.entries(expectedCatalog).map(([key, value]) => [
+    key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), value,
+  ]));
+  const ledger = [
+    { identifier: forward.repository.migrationLedger.baselineMarker, sha256: forward.priorBaseline.canonicalSha256 },
+    ...forward.repository.forwardMigrations.map(({ identifier, sha256 }) => ({ identifier, sha256 })),
+  ];
+  const queries = [];
+  return {
+    queries,
+    async query(sql) {
+      queries.push(sql);
+      if (sql === PRODUCTION_DATABASE_IDENTITY_SQL) return { rows: [identity] };
+      if (sql === JOURNAL_MANIFEST_SQL) return { rows: manifest.repository.trackedJournalPrefix.map((entry) => ({
+        id: entry.databaseId, hash: entry.sha256, created_at: entry.createdAt,
+      })) };
+      if (sql === CATALOG_FINGERPRINT_SQL) return { rows: [catalogRow] };
+      if (sql.includes('ait_crm_migrations.forward_migrations')) {
+        return { rows: missingLastMigration ? ledger.slice(0, -1) : ledger };
+      }
+      if (sql === SQL_ONLY_INDEXES_SQL) return { rows: manifest.database.sqlOnlyIndexes.map((entry) => ({
+        tablename: entry.table, indexname: entry.name, indexdef: entry.indexDefinition,
+      })) };
+      throw new Error(`unexpected query: ${sql}`);
+    },
+  };
+}
 
 function identityClient(identity) {
   const queries = [];
@@ -128,6 +167,20 @@ test('audited production identity reaches catalog verification', async () => {
   assert.equal(baselineCalls, 1);
   assert.deepEqual(client.queries, [PRODUCTION_DATABASE_IDENTITY_SQL]);
   assert.equal(report.checks[0].ok, true);
+});
+
+test('forward production proof requires exact catalog, baseline journal, and 0027–0029 ledger', async () => {
+  const complete = await verifyProductionDatabaseForward(forwardClient(), manifest, forward);
+  assert.equal(complete.ok, true, JSON.stringify(complete.checks));
+
+  const missing = await verifyProductionDatabaseForward(forwardClient({ missingLastMigration: true }), manifest, forward);
+  assert.equal(missing.ok, false);
+  assert.match(missing.checks.find((check) => check.name.includes('forward migration ledger')).detail, /missing 0029/);
+
+  const wrongBranch = forwardClient({ identity: productionIdentity({ neon_branch_id: 'br-broad-hill-aptjpyea' }) });
+  const rejected = await verifyProductionDatabaseForward(wrongBranch, manifest, forward);
+  assert.equal(rejected.ok, false);
+  assert.deepEqual(wrongBranch.queries, [PRODUCTION_DATABASE_IDENTITY_SQL]);
 });
 
 test('staging/arbitrary branch, project, and database identities stop before catalog verification', async () => {

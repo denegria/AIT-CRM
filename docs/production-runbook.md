@@ -11,7 +11,10 @@ npm run lint
 npm run build -- --webpack
 ```
 
-The reconciled baseline currently blocks all normal Drizzle mutation entrypoints:
+The reconciled baseline is extended by the pinned forward migrations `0027`
+(billing), `0028` (book fulfillment), and `0029` (employee auth). The exact SQL
+bytes, order, and final catalog are verified by `npm run verify:schema` and the
+disposable reconstruction. Normal Drizzle mutation entrypoints remain blocked:
 
 ```bash
 npm run db:generate
@@ -19,13 +22,20 @@ npm run db:migrate
 npm run db:push
 ```
 
-Each command must exit in the repository preflight before Drizzle executes. Do not bypass the guard with `npx drizzle-kit`, `node_modules/.bin/drizzle-kit`, `node_modules/drizzle-kit/bin.cjs`, or a direct SQL/journal edit. No release may add a schema dependency until an approved lineage cutover establishes a unique `0027`-or-later baseline, passes the real disposable-Postgres reconstruction in `docs/schema-readiness.md`, and updates this runbook.
+Each command must exit in the repository preflight before Drizzle executes. Do
+not bypass the guard with direct Drizzle commands or ad hoc SQL/journal edits.
+The forward SQL may be applied to production only through an explicitly
+approved, identity-checked migration step, in manifest order, with each exact
+file hash recorded in `ait_crm_migrations.forward_migrations` in the same
+transaction. Check the production baseline and backup/restore route first; do
+not run this step merely because staging is ready.
 
 No Drizzle mutation may precede `npm run verify:schema`. Production mutation remains a separate explicit approval even after the baseline is repaired.
 
 ## Production Verification
 
-After deploy, run the readiness check with production env loaded:
+After the approved forward migrations and code deploy, run the readiness check
+with actual production secrets available to the process:
 
 ```bash
 node --env-file=.env.production.local scripts/verify-production-readiness.mjs
@@ -40,12 +50,17 @@ The read-only check verifies:
 - the Meta webhook accepts the configured verify token
 - the `DATABASE_URL` host and database are exact approved production manifest values with full TLS verification
 - the connected Neon project, production branch, and database identity match the audited manifest before catalog queries
-- the exact reconciled public catalog counts and digests
+- the exact forward public catalog counts and digests (including column order)
 - all 13 expected Drizzle journal IDs, hashes, and timestamps
+- the baseline marker and exact `0027`–`0029` forward ledger IDs and hashes
 - the exact SQL-only index definitions preserved by the baseline
 - role permissions and scoped test-account boundaries are enforced
 
-Vercel may omit sensitive env values from local pulls. If the app is already deployed and Meta has been verified externally, skip only the sensitive-value check:
+Vercel CLI omits Secret values from local pulls; an env file containing those
+placeholders is not suitable for the authoritative check. Obtain scoped
+production secret access through the approved secret channel without printing
+the values. If Meta has already been verified externally, skip only its
+sensitive-value checks:
 
 ```bash
 SKIP_SENSITIVE_ENV=1 SKIP_META_VALID_TOKEN=1 node --env-file=.env.production.local scripts/verify-production-readiness.mjs

@@ -1,4 +1,12 @@
-import { verifyDatabaseBaseline } from './schema-readiness.mjs';
+import {
+  CATALOG_FINGERPRINT_SQL,
+  JOURNAL_MANIFEST_SQL,
+  SQL_ONLY_INDEXES_SQL,
+  compareCatalogFingerprint,
+  compareJournalManifest,
+  compareSqlOnlyIndexes,
+  verifyDatabaseBaseline,
+} from './schema-readiness.mjs';
 
 export const PRODUCTION_DATABASE_IDENTITY_SQL = `
 select
@@ -161,4 +169,69 @@ export async function verifyProductionDatabaseBaseline(client, manifest, {
     ok: baseline.ok,
     checks: [identityCheck, ...baseline.checks],
   };
+}
+
+export async function verifyProductionDatabaseForward(client, baseline, forward) {
+  return verifyProductionDatabaseBaseline(client, baseline, {
+    verifyBaseline: async (verifiedClient) => {
+      const checks = [];
+      const check = async (name, sql, expected, compare, parameters) => {
+        try {
+          const result = await verifiedClient.query(sql, parameters);
+          const errors = compare(result.rows, expected);
+          checks.push({ name, ok: errors.length === 0, detail: errors.join('; ') || 'exact' });
+        } catch (error) {
+          checks.push({ name, ok: false, detail: `query failed: ${error.message}` });
+        }
+      };
+
+      await check(
+        'database Drizzle journal retains the reconciled baseline',
+        JOURNAL_MANIFEST_SQL,
+        baseline.repository.trackedJournalPrefix,
+        compareJournalManifest,
+      );
+      await check(
+        'database public catalog matches the pinned forward fingerprint',
+        CATALOG_FINGERPRINT_SQL,
+        forward.database.catalog.expected,
+        (rows, expected) => rows.length === 1
+          ? compareCatalogFingerprint(rows[0], expected)
+          : [`catalog query returned ${rows.length} rows`],
+      );
+
+      const ledger = forward.repository.migrationLedger;
+      const expectedLedger = [
+        { identifier: ledger.baselineMarker, sha256: forward.priorBaseline.canonicalSha256 },
+        ...forward.repository.forwardMigrations.map(({ identifier, sha256 }) => ({ identifier, sha256 })),
+      ];
+      await check(
+        'database forward migration ledger matches 0027–0029',
+        `select identifier, sha256 from ${ledger.schema}.${ledger.table} order by identifier`,
+        expectedLedger,
+        (rows, expected) => {
+          const errors = [];
+          const actualById = new Map(rows.map((entry) => [entry.identifier, entry.sha256]));
+          for (const entry of expected) {
+            if (!actualById.has(entry.identifier)) errors.push(`missing ${entry.identifier}`);
+            else if (actualById.get(entry.identifier) !== entry.sha256) errors.push(`digest mismatch for ${entry.identifier}`);
+          }
+          for (const entry of rows) {
+            if (!expected.some((item) => item.identifier === entry.identifier)) errors.push(`unexpected ${entry.identifier}`);
+          }
+          return errors;
+        },
+      );
+
+      const expectedIndexes = baseline.database.sqlOnlyIndexes;
+      await check(
+        'database preserves the two SQL-only production indexes',
+        SQL_ONLY_INDEXES_SQL,
+        expectedIndexes,
+        compareSqlOnlyIndexes,
+        [expectedIndexes.map((entry) => entry.name)],
+      );
+      return { ok: checks.every((entry) => entry.ok), checks };
+    },
+  });
 }
