@@ -10,9 +10,11 @@ test('Recovery Queue preserves lane, page, and division scope in its URLs', () =
   assert.match(pageSource, /pageSize: String\(PAGE_SIZE\)/);
 });
 
-test('Recovery Queue opens exact tasks and routes duplicates to filtered review', () => {
-  assert.match(pageSource, /if \(item\.task\?\.id\) return `\/tasks\/\$\{encodeURIComponent\(item\.task\.id\)\}`/);
-  assert.match(pageSource, /taskType=follow_up&status=open/);
-  assert.match(pageSource, /href=\{itemHref\(item\)\} prefetch=\{false\}/);
+test('Recovery Queue opens exact tasks without invoking the create-task contactId route', () => {
+  assert.match(pageSource, /item\.lane === 'overdue' && item\.task\?\.id/);
+  assert.match(pageSource, /item\.relatedTasks\.map\(\(task\) =>/);
+  assert.match(pageSource, /href=\{`\/tasks\/\$\{encodeURIComponent\(task\.id\)\}`\}/);
+  assert.doesNotMatch(pageSource, /\/tasks\?contactId=/);
+  assert.match(pageSource, /action=assign-inquiry-owner/);
   assert.doesNotMatch(pageSource, /method:\s*['"](?:POST|PATCH|PUT|DELETE)['"]/);
 });

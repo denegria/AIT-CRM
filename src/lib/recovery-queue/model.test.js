@@ -31,14 +31,32 @@ test('regular Coordinator queue hides the unassigned lane and rows', () => {
 
   assert.equal(payload.lane, 'first_contact');
   assert.deepEqual(payload.lanes.map((lane) => lane.key), [
-    'first_contact',
     'overdue',
-    'no_commitment',
     'duplicate_follow_up',
+    'first_contact',
+    'no_commitment',
   ]);
   assert.equal(payload.lanes.find((lane) => lane.key === 'first_contact').count, 1);
   assert.equal(payload.items.length, 1);
   assert.equal(payload.items[0].key, 'first_contact:1');
+});
+
+test('duplicate follow-ups expose exact task links and titles without mixing contacts', () => {
+  const payload = buildRecoveryQueuePayload([
+    row('duplicate_follow_up', 1, {
+      related_task_count: 2,
+      related_tasks: [
+        { id: 'task-one', title: 'Call student', dueAt: '2026-09-20T10:00:00.000Z' },
+        { id: 'task-two', title: 'Review placement', dueAt: '2026-09-21T10:00:00.000Z' },
+      ],
+    }),
+  ], { lane: 'duplicate_follow_up', canViewUnassigned: true });
+
+  assert.deepEqual(payload.items[0].relatedTasks, [
+    { id: 'task-one', title: 'Call student', dueAt: '2026-09-20T10:00:00.000Z' },
+    { id: 'task-two', title: 'Review placement', dueAt: '2026-09-21T10:00:00.000Z' },
+  ]);
+  assert.equal(payload.items[0].relatedTaskCount, 2);
 });
 
 test('Senior queue counts every visible row and paginates the selected lane exactly', () => {

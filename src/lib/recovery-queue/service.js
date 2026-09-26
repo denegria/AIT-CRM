@@ -113,7 +113,8 @@ queue_rows as (
     greatest(0, floor(extract(epoch from (now() - e.lead_created_at)) / 86400))::int as age_days,
     case when e.lead_created_at < now() - interval '7 days' then 'high' else 'standard' end::text as urgency,
     1::int as urgency_rank,
-    case when pf.task_id is null then 0 else 1 end::int as related_task_count
+    case when pf.task_id is null then 0 else 1 end::int as related_task_count,
+    null::jsonb as related_tasks
   from eligible_leads e
   left join human_touches ht on ht.contact_id = e.contact_id
   left join primary_follow_ups pf on pf.contact_id = e.contact_id
@@ -132,7 +133,8 @@ queue_rows as (
     greatest(0, floor(extract(epoch from (now() - e.lead_created_at)) / 86400))::int,
     case when e.lead_created_at < now() - interval '30 days' then 'high' else 'standard' end,
     2,
-    case when pf.task_id is null then 0 else 1 end
+    case when pf.task_id is null then 0 else 1 end,
+    null::jsonb
   from eligible_leads e
   left join primary_follow_ups pf on pf.contact_id = e.contact_id
   where e.assigned_user_id is null
@@ -165,7 +167,8 @@ queue_rows as (
       when vt.task_due_at < now() - interval '7 days' then 3
       else 2
     end,
-    1
+    1,
+    null::jsonb
   from visible_tasks vt
   join contacts c
     on c.id = vt.contact_id
@@ -191,7 +194,8 @@ queue_rows as (
     greatest(0, floor(extract(epoch from (now() - e.lead_created_at)) / 86400))::int,
     case when e.lead_created_at < now() - interval '30 days' then 'high' else 'standard' end,
     2,
-    0
+    0,
+    null::jsonb
   from eligible_leads e
   where not exists (
     select 1
@@ -212,7 +216,12 @@ queue_rows as (
     greatest(0, floor(extract(epoch from (now() - min(vt.task_created_at))) / 86400))::int,
     'high',
     3,
-    count(*)::int
+    count(*)::int,
+    jsonb_agg(jsonb_build_object(
+      'id', vt.task_id,
+      'title', vt.task_title,
+      'dueAt', vt.task_due_at
+    ) order by vt.task_due_at asc nulls last, vt.task_created_at asc, vt.task_id) as related_tasks
   from visible_tasks vt
   join contacts c
     on c.id = vt.contact_id

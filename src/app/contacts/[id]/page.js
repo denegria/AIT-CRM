@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
+import { useCallback, useEffect, useEffectEvent, useRef, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCRM } from '@/lib/store';
@@ -513,6 +513,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const noteTriggerRef = useRef(null);
   const profileEditTabRefs = useRef([]);
   const followUpActionHandledRef = useRef('');
+  const assignOwnerActionHandledRef = useRef('');
   const [followUpOpen, setFollowUpOpen] = useState(false);
   const [followUpDraft, setFollowUpDraft] = useState(null);
   const [followUpTask, setFollowUpTask] = useState(null);
@@ -1169,9 +1170,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     template.channel === manualSend.channel || template.channel === 'all'
   )), [messageTemplates, manualSend.channel]);
 
-  const openEditModal = () => {
+  const openEditModal = (requestedTab = '') => {
     if (!access.canWriteCrm) return;
-    setActiveProfileEditTab(isAitUsaContact ? 'contact' : 'general');
+    setActiveProfileEditTab(isAitUsaContact && requestedTab === 'inquiry' ? 'inquiry' : isAitUsaContact ? 'contact' : 'general');
     setEditForm({
       ...contact,
       assignedTo: contact?.assignedTo || '',
@@ -1200,6 +1201,21 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
     });
     setIsEditModalOpen(true);
   };
+
+  const openAssignmentEditorFromRoute = useEffectEvent(() => {
+    openEditModal('inquiry');
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => document.getElementById('profile-edit-owner')?.focus());
+    });
+  });
+
+  useEffect(() => {
+    if (searchParams.get('action') !== 'assign-inquiry-owner' || !contact?.id || !isAitUsaContact || !canManageContactAssignments || !access.canWriteCrm) return;
+    const signature = `${contact.id}:assign-inquiry-owner`;
+    if (assignOwnerActionHandledRef.current === signature) return;
+    assignOwnerActionHandledRef.current = signature;
+    openAssignmentEditorFromRoute();
+  }, [access.canWriteCrm, canManageContactAssignments, contact?.id, isAitUsaContact, searchParams]);
 
   const startOpportunity = async () => {
     if (!contact?.id || !contactBusinessUnit?.id || startOpportunityBusy) return;

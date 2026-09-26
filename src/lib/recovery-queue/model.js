@@ -1,29 +1,34 @@
 export const RECOVERY_QUEUE_LANES = Object.freeze([
   {
-    key: 'first_contact',
-    label: 'Awaiting first contact',
-    description: 'New, contactable AIT USA Opportunities without a recorded human outreach event.',
-  },
-  {
-    key: 'unassigned',
-    label: 'Unassigned work',
-    description: 'Contactable AIT USA Opportunities that need a Senior Coordinator or administrator to assign an owner.',
-    privileged: true,
-  },
-  {
     key: 'overdue',
     label: 'Overdue commitments',
-    description: 'Open commitments whose due time has passed and whose snooze, if any, has expired.',
-  },
-  {
-    key: 'no_commitment',
-    label: 'No next commitment',
-    description: 'Active, contactable AIT USA Opportunities without an open dated commitment.',
+    description: 'Open commitments past due.',
+    group: 'immediate',
   },
   {
     key: 'duplicate_follow_up',
     label: 'Duplicate follow-ups',
-    description: 'Contacts with more than one open follow-up task; review the exact tasks before acting.',
+    description: 'Contacts with multiple open follow-up tasks.',
+    group: 'immediate',
+  },
+  {
+    key: 'unassigned',
+    label: 'Unassigned work',
+    description: 'Contactable opportunities without an owner.',
+    group: 'backlog',
+    privileged: true,
+  },
+  {
+    key: 'first_contact',
+    label: 'Awaiting first contact',
+    description: 'New opportunities without recorded employee outreach.',
+    group: 'backlog',
+  },
+  {
+    key: 'no_commitment',
+    label: 'No next commitment',
+    description: 'Active opportunities without an open dated task.',
+    group: 'backlog',
   },
 ]);
 
@@ -101,6 +106,13 @@ export function toRecoveryQueueItem(row = {}) {
     ageDays: number(row.age_days),
     urgency: String(row.urgency || 'standard'),
     relatedTaskCount: number(row.related_task_count),
+    relatedTasks: Array.isArray(row.related_tasks) ? row.related_tasks
+      .filter((task) => task?.id)
+      .map((task) => ({
+        id: String(task.id),
+        title: String(task.title || 'Follow-up task'),
+        dueAt: iso(task.dueAt),
+      })) : [],
   };
 }
 
