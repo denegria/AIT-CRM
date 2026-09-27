@@ -45,7 +45,7 @@ const NESTED_KEYS = Object.freeze({
   contact: new Set(['firstName', 'email', 'phone']),
   consent: new Set(['email', 'sms', 'whatsapp', 'advisorContactEmail', 'advisorContact', 'serviceSms', 'marketingSms', 'policyVersion', 'smsDisclosureVersion', 'serviceSmsDisclosureVersion', 'whatsappDisclosureVersion', 'consentedAt']),
   lead: new Set(['formType', 'interest', 'preferredMode', 'preferredSchedule', 'location', 'ageGroup', 'message']),
-  placement: new Set(['reviewId', 'resultId', 'resultStatus', 'reviewStatus', 'recommendedLevelKey', 'recommendedLevelLabel', 'finalLevelKey', 'communicationPreference', 'verifiedEmail', 'verifiedMobile', 'answeredQuestionCount', 'skippedQuestionCount', 'advisorConfirmationRequired', 'scoringContractVersion']),
+  placement: new Set(['reviewId', 'resultId', 'attemptId', 'portalAccountId', 'resultStatus', 'reviewStatus', 'recommendedLevelKey', 'recommendedLevelLabel', 'finalLevelKey', 'communicationPreference', 'verifiedEmail', 'verifiedMobile', 'answeredQuestionCount', 'skippedQuestionCount', 'advisorConfirmationRequired', 'scoringContractVersion']),
   practice: new Set(['sessionId', 'state', 'scenario', 'useCase', 'focusCode', 'outcomeCode', 'limitCode', 'turnCount', 'planVersion']),
   utm: new Set(['source', 'medium', 'campaign', 'term', 'content']),
 });
@@ -185,7 +185,11 @@ function validateNestedValues(body) {
   if (body.ageBand !== undefined && !['under_13', 'age_13_plus'].includes(body.ageBand)) return 'event_age_band_invalid';
   if (body.placement !== undefined) {
     const p = body.placement;
-    for (const key of ['reviewId', 'resultId', 'resultStatus', 'reviewStatus', 'recommendedLevelKey', 'recommendedLevelLabel', 'finalLevelKey', 'scoringContractVersion']) if (p[key] !== undefined && !safeText(p[key], key === 'recommendedLevelLabel' ? 120 : 80)) return `event_placement_${key}_invalid`;
+    for (const key of ['reviewId', 'resultId', 'attemptId', 'portalAccountId', 'resultStatus', 'reviewStatus', 'recommendedLevelKey', 'recommendedLevelLabel', 'finalLevelKey', 'scoringContractVersion']) if (p[key] !== undefined && !safeText(p[key], key === 'recommendedLevelLabel' ? 120 : 80)) return `event_placement_${key}_invalid`;
+    if (body.eventType === 'result_claimed' && (p.attemptId !== undefined || p.portalAccountId !== undefined)) {
+      if (!safeIdentifier(p.attemptId) || !safeIdentifier(p.portalAccountId) || !safeIdentifier(p.resultId)
+        || !safeText(p.recommendedLevelLabel, 120) || !safeEmail(body.contact?.email)) return 'event_placement_registration_link_invalid';
+    }
     if (p.communicationPreference !== undefined && !['email', 'sms', 'whatsapp', 'phone', 'portal', 'any'].includes(p.communicationPreference)) return 'event_placement_communication_preference_invalid';
     for (const key of ['verifiedEmail', 'verifiedMobile']) if (p[key] !== undefined && typeof p[key] !== 'boolean') return `event_placement_${key}_invalid`;
     for (const key of ['answeredQuestionCount', 'skippedQuestionCount']) if (p[key] !== undefined && (!Number.isInteger(p[key]) || p[key] < 0 || p[key] > 1000)) return `event_placement_${key}_invalid`;

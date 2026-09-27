@@ -65,6 +65,15 @@ test('accepts only the fixed AIT USA CRM event whitelist', () => {
   assert.equal(Object.hasOwn(lead, 'rawAnswers'), false);
 });
 
+test('accepts a verified Portal claim link but rejects a partial identity', () => {
+  const claimed = event({
+    eventType: 'result_claimed',
+    placement: { resultId: '00000000-0000-4000-8000-000000000002', attemptId: '00000000-0000-4000-8000-000000000003', portalAccountId: '00000000-0000-4000-8000-000000000004', recommendedLevelLabel: 'Book 2' },
+  });
+  assert.equal(validateAitUsaCrmEvent(claimed).ok, true);
+  assert.equal(validateAitUsaCrmEvent({ ...claimed, placement: { ...claimed.placement, portalAccountId: undefined } }).ok, false);
+});
+
 test('accepts an unverified phone as an advisor preference without treating it as login evidence', () => {
   const candidate = event({
     contact: { firstName: 'Ana', email: 'ana@example.com', phone: '+17323790593' },
@@ -310,6 +319,49 @@ test('non-follow-up events attach an existing lead but never create one', async 
   assert.equal(client.calls.some((call) => call.sql.includes('insert into leads')), false);
   assert.equal(client.calls.some((call) => call.sql.includes('insert into notifications')), false);
   assert.equal(client.calls.some((call) => call.sql.includes('insert into tasks')), false);
+});
+
+test('a claimed Portal result updates the sole existing student enrollment, not payment or payer', async () => {
+  const base = createEventClient();
+  const query = base.query.bind(base);
+  base.query = async (statement, values = []) => {
+    if (String(statement).includes('from contact_course_records')) {
+      base.calls.push({ sql: String(statement), values });
+      return { rows: [{ id: 'enrollment-1', metadata_json: { programCode: 'english_program', placementState: 'not_started' } }] };
+    }
+    return query(statement, values);
+  };
+  const result = await ingestAitUsaCrmEvent(base, {
+    organizationId: 'org-1', businessUnitId: 'unit-1', event: event({
+      eventType: 'result_claimed',
+      placement: { resultId: 'result-1', attemptId: 'attempt-1', portalAccountId: 'portal-1', recommendedLevelLabel: 'Book 2' },
+    }),
+  });
+  assert.equal(result.placementLink.status, 'linked');
+  assert.equal(base.calls.filter((call) => call.sql.includes('update contact_course_records')).length, 1);
+  assert.equal(base.calls.some((call) => call.sql.includes('update payment_requests')), false);
+});
+
+test('ambiguous English registrations create an operator review instead of guessing', async () => {
+  const base = createEventClient();
+  const query = base.query.bind(base);
+  base.query = async (statement, values = []) => {
+    if (String(statement).includes('from contact_course_records')) {
+      base.calls.push({ sql: String(statement), values });
+      return { rows: [{ id: 'enrollment-1', metadata_json: {} }, { id: 'enrollment-2', metadata_json: {} }] };
+    }
+    return query(statement, values);
+  };
+  const result = await ingestAitUsaCrmEvent(base, {
+    organizationId: 'org-1', businessUnitId: 'unit-1', event: event({
+      eventType: 'result_claimed',
+      placement: { resultId: 'result-1', attemptId: 'attempt-1', portalAccountId: 'portal-1', recommendedLevelLabel: 'Book 2' },
+    }),
+  });
+  assert.equal(result.placementLink.status, 'ambiguous_registration');
+  assert.equal(result.review, true);
+  assert.equal(base.calls.some((call) => call.sql.includes('insert into import_review_items')), true);
+  assert.equal(base.calls.some((call) => call.sql.includes('update contact_course_records')), false);
 });
 
 test('serializes concurrent first-contact upserts by normalized contact identity', async () => {

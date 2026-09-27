@@ -212,6 +212,15 @@ test('guest registration creates one contact, planned enrollment, charge, and fi
   assert.equal(result.fulfillment.deliveryMode, 'digital');
 });
 
+test('public English checkout requires a student email for later verified placement linking', async () => {
+  const client = fakeRegistrationClient();
+  await assert.rejects(
+    () => orchestrateRegistration(client, { ...publicRequest, student: { name: 'Ana Student', phone: '+15550000000' } }),
+    (error) => error.code === 'student_email_required',
+  );
+  assert.equal(client.state.enrollments.length, 0);
+});
+
 test('US GED registration persists the selected course and shared checkout amount', async () => {
   const client = fakeRegistrationClient();
   const result = await orchestrateRegistration(client, {

@@ -117,7 +117,11 @@ export function authorizeRegistrationRequest(input = {}) {
       ? (input.actor?.verifiedCrmContactIds || []).map((value) => String(value || '').trim()).filter(Boolean)
       : [],
   );
+  const programCode = String(input.programCode || 'english_program').trim().toLowerCase();
   const student = cleanIdentity(input.student, { channel, label: 'Student', verifiedContactIds });
+  if (channel === REGISTRATION_CHANNELS.PUBLIC && programCode === 'english_program' && !student.email && !student.contactId) {
+    throw new RegistrationPolicyError('student_email_required', 'Student email is required to link a later placement result.');
+  }
   const payer = input.payer
     ? cleanIdentity(input.payer, { channel, label: 'Payer', verifiedContactIds })
     : null;
@@ -131,7 +135,6 @@ export function authorizeRegistrationRequest(input = {}) {
       shippingAddress: input.shippingAddress,
     })
     : null;
-  const programCode = String(input.programCode || 'english_program').trim().toLowerCase();
   return Object.freeze({
     status: 'authorized',
     organizationId,

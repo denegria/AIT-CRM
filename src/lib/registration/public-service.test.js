@@ -118,8 +118,8 @@ test('status lookup is scoped to registration payments and returns a safe projec
     return { rows: [{
       id: 'request-1', request_status: 'completed', transaction_status: 'verified',
       requested_amount: '240.00', currency: 'USD', verified_at: '2026-09-18T00:00:00Z',
-      receipt_document_id: 'receipt-1', metadata_json: { registrationResult: {
-        quote: { total: '240.00' }, states: { registration: 'payment_pending' },
+      receipt_document_id: 'receipt-1', enrollment_metadata: { placementState: 'recommended' }, metadata_json: { registrationResult: {
+        quote: { total: '240.00' }, states: { registration: 'payment_pending', placement: 'not_started' },
         fulfillmentPolicy: { deliveryMode: 'digital' },
       } },
     }] };
@@ -131,6 +131,7 @@ test('status lookup is scoped to registration payments and returns a safe projec
   assert.deepEqual(query.params, ['request-1', 'org-1', 'bu-1']);
   assert.equal(result.state, 'confirmed');
   assert.equal(result.receiptAvailable, true);
+  assert.equal(result.registration.placement, 'recommended');
   assert.equal(result.fulfillment.deliveryMode, 'digital');
 });
 

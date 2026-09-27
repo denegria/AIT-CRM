@@ -4,6 +4,7 @@ import { classifyContactIdentity } from '../crm/contact-identity.js';
 import { resolveAitUsaActiveOpportunity } from '../crm/ait-usa-opportunities.js';
 import { isAitUsaPlacementReviewEvent } from './aitusa-crm-events.js';
 import { syncPlacementReviewWorkflow } from '../placement-reviews/crm-workflow.js';
+import { linkClaimedPlacementToRegistration } from '../registration/placement-link.js';
 
 const FOLLOW_UP_EVENTS = new Set(['placement_completed', 'advisor_handoff_requested']);
 const AITUSA_CRM_REVIEW_BATCH_SOURCE_NAME = 'AIT USA Refresh Events';
@@ -154,6 +155,17 @@ export async function ingestAitUsaCrmEvent(client, { organizationId, businessUni
       [organizationId, businessUnitId, contactId, leadId, `aitusa.${event.eventType}`, safeTimelineMessage(event), JSON.stringify(metadata), event.occurredAt],
     );
 
+    const placementLink = event.eventType === 'result_claimed'
+      ? await linkClaimedPlacementToRegistration(client, {
+          organizationId, businessUnitId, contactId, placement: event.placement,
+        })
+      : null;
+    const placementLinkReview = ['ambiguous_registration', 'account_conflict', 'attempt_conflict'].includes(placementLink?.status)
+      ? await persistAitUsaIdentityImportReview(client, {
+          organizationId, businessUnitId, event, identity, reason: placementLink.status,
+        })
+      : null;
+
     if (FOLLOW_UP_EVENTS.has(event.eventType)) {
       const followUpKey = `aitusa:${event.correlationId}:follow-up`;
       await createInboundLeadNotification(client, {
@@ -171,7 +183,7 @@ export async function ingestAitUsaCrmEvent(client, { organizationId, businessUni
       });
     }
     await client.query('commit');
-    return { acknowledged: true, duplicate: false, contactId, leadId, placementReview: null };
+    return { acknowledged: true, duplicate: false, contactId, leadId, placementReview: null, placementLink, review: Boolean(placementLinkReview), reviewRecord: placementLinkReview };
   } catch (error) {
     await client.query('rollback').catch(() => {});
     throw error;

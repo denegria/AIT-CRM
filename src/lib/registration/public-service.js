@@ -102,9 +102,14 @@ export async function loadPublicRegistrationStatus(client, scope, paymentRequest
   if (!id) throw new PublicRegistrationError('payment_request_required', 'Payment request is required.');
   const result = await client.query(
     `select pr.id, pr.status as request_status, pr.requested_amount, pr.currency, pr.expires_at,
-            pr.metadata_json, transaction.status as transaction_status,
+            pr.metadata_json, enrollment.metadata_json as enrollment_metadata,
+            transaction.status as transaction_status,
             transaction.verified_at, transaction.receipt_document_id
        from payment_requests pr
+       left join contact_course_records enrollment
+         on enrollment.id = pr.enrollment_id
+        and enrollment.organization_id = pr.organization_id
+        and enrollment.business_unit_id = pr.business_unit_id
        left join lateral (
          select pt.status, pt.verified_at, pt.receipt_document_id
            from provider_transactions pt
@@ -120,13 +125,17 @@ export async function loadPublicRegistrationStatus(client, scope, paymentRequest
   if (!row) throw new PublicRegistrationError('payment_request_not_found', 'Registration payment was not found.', 404);
   const metadata = row.metadata_json || {};
   const registration = metadata.registrationResult || {};
+  const enrollmentMetadata = row.enrollment_metadata || {};
   return {
     paymentRequestId: row.id,
     state: publicPaymentState(row),
     amount: String(row.requested_amount),
     currency: row.currency,
     quote: registration.quote || null,
-    registration: registration.states || null,
+    registration: registration.states ? {
+      ...registration.states,
+      placement: enrollmentMetadata.placementState || registration.states.placement,
+    } : null,
     programCode: registration.programCode || null,
     fulfillment: registration.fulfillmentPolicy || null,
     verifiedAt: row.verified_at || null,
