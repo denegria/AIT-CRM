@@ -6,6 +6,8 @@ import {
 import { resolveBookFulfillmentPlan } from '../fulfillment/policy.js';
 
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]{12,160}$/;
+const PLACEMENT_REVIEW_STATUSES = new Set(['pending', 'in_review', 'confirmed', 'adjusted', 'additional_review_required']);
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export class RegistrationPolicyError extends Error {
   constructor(code, message, status = 400) {
@@ -28,6 +30,23 @@ function cleanEmail(value) {
 
 function cleanPhone(value) {
   return String(value || '').replace(/[^0-9+]/g, '');
+}
+
+function verifiedPlacementContext(actor, programCode) {
+  if (programCode !== 'english_program' || !actor?.placement) return null;
+  if (!actor.portalAccountId) {
+    throw new RegistrationPolicyError('placement_account_required', 'A verified Portal account is required for placement context.', 403);
+  }
+  const attemptId = String(actor.placement.attemptId || '').trim();
+  const reviewStatus = String(actor.placement.reviewStatus || '').trim();
+  const recommendedLevel = String(actor.placement.recommendedLevel || '').trim();
+  const finalLevel = String(actor.placement.finalLevel || '').trim();
+  if (!UUID_PATTERN.test(attemptId) || !PLACEMENT_REVIEW_STATUSES.has(reviewStatus)
+    || !recommendedLevel || recommendedLevel.length > 120 || finalLevel.length > 120
+    || (['confirmed', 'adjusted'].includes(reviewStatus) !== Boolean(finalLevel))) {
+    throw new RegistrationPolicyError('placement_context_invalid', 'Verified placement context is invalid.', 400);
+  }
+  return Object.freeze({ attemptId, reviewStatus, recommendedLevel, finalLevel: finalLevel || null });
 }
 
 function cleanIdentity(value = {}, { channel, label, verifiedContactIds }) {
@@ -112,6 +131,7 @@ export function authorizeRegistrationRequest(input = {}) {
       shippingAddress: input.shippingAddress,
     })
     : null;
+  const programCode = String(input.programCode || 'english_program').trim().toLowerCase();
   return Object.freeze({
     status: 'authorized',
     organizationId,
@@ -122,7 +142,10 @@ export function authorizeRegistrationRequest(input = {}) {
     portalAccountId: channel === REGISTRATION_CHANNELS.PUBLIC
       ? String(input.actor?.portalAccountId || '').trim() || null
       : null,
-    programCode: String(input.programCode || 'english_program').trim().toLowerCase(),
+    placement: channel === REGISTRATION_CHANNELS.PUBLIC
+      ? verifiedPlacementContext(input.actor, programCode)
+      : null,
+    programCode,
     classSectionId: String(input.classSectionId || '').trim() || null,
     student,
     payer,

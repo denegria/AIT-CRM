@@ -109,6 +109,12 @@ export async function POST(request) {
     const registrationScope = await scope(client);
     if (input.action === 'create') {
       const programCode = assertPublicRegistrationProgram(input.registration?.programCode);
+      const quoted = createPublicRegistrationQuote(input.registration);
+      if (quoted.quote.status === 'advisor_required') {
+        return NextResponse.json({ result: {
+          status: 'advisor_required', reason: quoted.quote.reason, wroteRecords: false,
+        } }, { headers: { 'Cache-Control': 'private, no-store' } });
+      }
       const result = await orchestrateRegistration(client, {
         ...input.registration,
         ...registrationScope,
@@ -116,6 +122,7 @@ export async function POST(request) {
         programCode,
         actor: {
           portalAccountId: clean(input.actor?.portalAccountId) || null,
+          placement: input.actor?.placement || null,
           verifiedCrmContactIds: [],
         },
       });

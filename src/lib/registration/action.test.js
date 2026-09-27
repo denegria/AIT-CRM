@@ -212,6 +212,46 @@ test('guest registration creates one contact, planned enrollment, charge, and fi
   assert.equal(result.fulfillment.deliveryMode, 'digital');
 });
 
+test('US GED registration persists the selected course and shared checkout amount', async () => {
+  const client = fakeRegistrationClient();
+  const result = await orchestrateRegistration(client, {
+    ...publicRequest,
+    idempotencyKey: 'registration:public:ged-0001',
+    programCode: 'ged',
+    residenceCountryCode: 'US',
+    billingCountryCode: 'US',
+    learningModality: 'in_person',
+    includeTuitionPrepayment: true,
+  });
+  assert.equal(result.quote.total, '290.00');
+  assert.equal(result.paymentRequest.requested_amount, '290.00');
+  assert.equal(result.programCode, 'ged');
+  assert.equal(client.state.enrollments[0].course_name, 'GED');
+  assert.equal(client.state.enrollments[0].metadata_json.programCode, 'ged');
+  assert.equal(client.state.enrollments[0].metadata_json.placementState, 'not_applicable');
+  assert.equal(result.fulfillment.deliveryMode, 'pickup');
+});
+
+test('English Hybrid registration carries verified portal placement into the enrollment', async () => {
+  const client = fakeRegistrationClient();
+  const attemptId = '11111111-1111-4111-8111-111111111111';
+  const result = await orchestrateRegistration(client, {
+    ...publicRequest,
+    idempotencyKey: 'registration:public:hybrid-0001',
+    residenceCountryCode: 'US',
+    billingCountryCode: 'US',
+    learningModality: 'hybrid',
+    actor: { portalAccountId: 'portal-student-1', placement: {
+      attemptId, reviewStatus: 'pending', recommendedLevel: 'Nivel 2', finalLevel: null,
+    } },
+  });
+  assert.equal(result.quote.total, '95.00');
+  assert.equal(result.fulfillment.deliveryMode, 'pickup');
+  assert.equal(result.states.placement, 'recommended');
+  assert.equal(client.state.enrollments[0].metadata_json.portalAccountId, 'portal-student-1');
+  assert.equal(client.state.enrollments[0].metadata_json.placement.attemptId, attemptId);
+});
+
 test('repeated idempotency key returns the original registration without duplicate records', async () => {
   const client = fakeRegistrationClient();
   const first = await orchestrateRegistration(client, publicRequest);

@@ -156,3 +156,23 @@ test('staff registration-only quote does not collect fulfillment address data', 
   });
   assert.equal(request.fulfillmentPlan, null);
 });
+
+test('placement context requires a verified portal account and consistent review state', () => {
+  const base = {
+    organizationId: 'org-1', businessUnitId: 'bu-1', idempotencyKey: 'registration:placement:123',
+    sourceReference: 'public-form-placement', residenceCountryCode: 'US',
+    learningModality: 'in_person', channel: 'public', programCode: 'english_program',
+    student: { name: 'Student', email: 'student@example.com' },
+  };
+  const placement = { attemptId: '11111111-1111-4111-8111-111111111111',
+    reviewStatus: 'confirmed', recommendedLevel: 'Nivel 2', finalLevel: 'Nivel 3' };
+  assert.throws(() => authorizeRegistrationRequest({ ...base, actor: { placement } }),
+    (error) => error.code === 'placement_account_required');
+  assert.throws(() => authorizeRegistrationRequest({ ...base, actor: {
+    portalAccountId: 'portal-1', placement: { ...placement, finalLevel: null },
+  } }), (error) => error.code === 'placement_context_invalid');
+  const authorized = authorizeRegistrationRequest({ ...base, actor: {
+    portalAccountId: 'portal-1', placement,
+  } });
+  assert.deepEqual(authorized.placement, placement);
+});

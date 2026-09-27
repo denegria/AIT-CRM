@@ -18,7 +18,7 @@ test('fulfillment policy locks US in-person registration to physical pickup', ()
     residenceCountryCode: 'US',
     learningModality: 'in_person',
   }), {
-    policyVersion: '2026-09-18.v1',
+    policyVersion: '2026-09-27.v2',
     residenceCountryCode: 'US',
     learningModality: 'in_person',
     deliveryMode: 'pickup',
@@ -26,6 +26,15 @@ test('fulfillment policy locks US in-person registration to physical pickup', ()
     requiresPhysicalDelivery: true,
     shippingAddressSnapshot: null,
   });
+});
+
+test('Hybrid in the US also uses physical book pickup and never requests shipping', () => {
+  const plan = resolveBookFulfillmentPlan({ residenceCountryCode: 'US', learningModality: 'hybrid' });
+  assert.equal(plan.deliveryMode, 'pickup');
+  assert.equal(plan.shippingAddressSnapshot, null);
+  assert.throws(() => resolveBookFulfillmentMode({
+    residenceCountryCode: 'CO', learningModality: 'hybrid',
+  }), (error) => error.code === 'hybrid_country_invalid');
 });
 
 test('fulfillment policy requires a validated address for US online shipment and keeps digital access', () => {

@@ -43,6 +43,52 @@ test('unsupported public program remains advisor-led and cannot create payment',
   assert.equal(assertPublicRegistrationProgram(), 'english_program');
 });
 
+test('all approved US courses use the same server-owned public bundle and optional tuition', () => {
+  const courses = [
+    'english_program', 'espanol-extranjeros', 'ged', 'tutorias-matematicas',
+    'computacion-basica', 'computacion-oficina',
+  ];
+  for (const programCode of courses) {
+    assert.equal(assertPublicRegistrationProgram(programCode), programCode);
+    const result = createPublicRegistrationQuote({
+      programCode, residenceCountryCode: 'US', billingCountryCode: 'US',
+      learningModality: 'in_person', includeTuitionPrepayment: true,
+    });
+    assert.equal(result.quote.status, 'quoted', programCode);
+    assert.deepEqual(result.quote.lines.map((line) => line.amount), ['95.00', '195.00'], programCode);
+    assert.equal(result.quote.total, '290.00', programCode);
+    assert.equal(result.fulfillment.deliveryMode, 'pickup', programCode);
+  }
+});
+
+test('US Hybrid uses the shared quote and physical book pickup', () => {
+  const result = createPublicRegistrationQuote({
+    programCode: 'english_program', residenceCountryCode: 'US', billingCountryCode: 'US',
+    learningModality: 'hybrid',
+  });
+  assert.equal(result.quote.total, '95.00');
+  assert.equal(result.fulfillment.deliveryMode, 'pickup');
+});
+
+test('new courses fail closed outside the US or with an unoffered modality', () => {
+  const nonUs = createPublicRegistrationQuote({
+    programCode: 'ged', residenceCountryCode: 'MX', billingCountryCode: 'MX',
+    learningModality: 'in_person',
+  });
+  assert.equal(nonUs.quote.status, 'advisor_required');
+  assert.equal(nonUs.quote.reason, 'program_country_advisor_required');
+  const wrongMode = createPublicRegistrationQuote({
+    programCode: 'ged', residenceCountryCode: 'US', billingCountryCode: 'US',
+    learningModality: 'online',
+  });
+  assert.equal(wrongMode.quote.reason, 'program_modality_advisor_required');
+  const nonUsHybrid = createPublicRegistrationQuote({
+    programCode: 'english_program', residenceCountryCode: 'CO', billingCountryCode: 'CO',
+    learningModality: 'hybrid',
+  });
+  assert.equal(nonUsHybrid.quote.reason, 'program_country_advisor_required');
+});
+
 test('shared secret comparison and return-state validation fail closed', () => {
   assert.equal(verifyPublicRegistrationSecret('same-secret', 'same-secret'), true);
   assert.equal(verifyPublicRegistrationSecret('same-secret', 'different-secret'), false);

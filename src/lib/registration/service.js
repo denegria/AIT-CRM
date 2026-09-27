@@ -5,10 +5,7 @@ import {
   createStudentCharge,
 } from '../billing-ledger/service.js';
 import { createBookFulfillment, loadRegistrationFulfillment } from '../fulfillment/service.js';
-
-const PROGRAMS = Object.freeze({
-  english_program: Object.freeze({ code: 'english_program', courseName: 'English Program' }),
-});
+import { REGISTRATION_PROGRAMS } from './programs.js';
 
 function required(value, name) {
   const clean = String(value || '').trim();
@@ -18,6 +15,13 @@ function required(value, name) {
 
 function moneyFromCents(cents) {
   return (cents / 100).toFixed(2);
+}
+
+function registrationPlacementState(programCode, placement) {
+  if (programCode !== 'english_program') return 'not_applicable';
+  if (!placement) return 'not_started';
+  if (['confirmed', 'adjusted'].includes(placement.reviewStatus)) return 'confirmed';
+  return placement.reviewStatus === 'additional_review_required' ? 'additional_review_required' : 'recommended';
 }
 
 function json(value) {
@@ -109,7 +113,7 @@ export async function assignContactToRegistrationScope(client, scope, contactId)
 }
 
 async function resolveProgramAndSection(client, scope, programCode, classSectionId) {
-  const program = PROGRAMS[programCode];
+  const program = REGISTRATION_PROGRAMS[programCode];
   if (!program) throw new Error('Registration program is not supported.');
   if (!classSectionId) return { program, section: null };
   const result = await client.query(
@@ -125,6 +129,7 @@ async function resolveProgramAndSection(client, scope, programCode, classSection
 }
 
 async function createPlannedEnrollment(client, input) {
+  const placementState = registrationPlacementState(input.program.code, input.placement);
   const result = await client.query(
     `insert into contact_course_records
       (organization_id, business_unit_id, contact_id, class_section_id, course_name, status, metadata_json)
@@ -139,7 +144,10 @@ async function createPlannedEnrollment(client, input) {
       json({
         registrationIdempotencyKey: input.idempotencyKey,
         registrationState: 'payment_pending',
-        placementState: 'not_started',
+        placementState,
+        programCode: input.program.code,
+        ...(input.portalAccountId ? { portalAccountId: input.portalAccountId } : {}),
+        ...(input.placement ? { placement: input.placement } : {}),
         sectionState: input.section ? 'assigned' : 'pending',
         sourceReference: input.sourceReference,
         ...(input.fulfillmentPlan ? {
@@ -171,6 +179,8 @@ export async function persistRegistrationBundle(client, input) {
     studentContactId: input.studentContactId,
     idempotencyKey: keys.enrollment,
     sourceReference: input.sourceReference,
+    portalAccountId: input.portalAccountId,
+    placement: input.placement,
     fulfillmentPlan: input.fulfillmentPlan,
   });
 
@@ -212,10 +222,14 @@ export async function persistRegistrationBundle(client, input) {
   ];
   const states = Object.freeze({
     registration: 'payment_pending',
-    placement: 'not_started',
+    placement: registrationPlacementState(input.programCode, input.placement),
     section: section ? 'assigned' : 'pending',
   });
   const registrationResult = {
+    programCode: program.code,
+    courseName: program.courseName,
+    portalAccountId: input.portalAccountId || null,
+    placement: input.placement || null,
     studentContactId: input.studentContactId,
     payerContactId: input.payerContactId,
     enrollmentId: enrollment.id,

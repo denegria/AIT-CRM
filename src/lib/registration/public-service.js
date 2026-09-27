@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 
 import { resolveBookFulfillmentMode } from '../fulfillment/policy.js';
 import { calculateRegistrationQuote, REGISTRATION_CHANNELS, REGISTRATION_ITEM_CODES } from './catalog.js';
+import { REGISTRATION_PROGRAMS } from './programs.js';
 
 const RETURN_STATE_PATTERN = /^[A-Za-z0-9._~-]{20,2048}$/;
 const PUBLIC_PROGRAM_CODE = 'english_program';
@@ -17,6 +18,29 @@ export class PublicRegistrationError extends Error {
 
 function clean(value) { return String(value || '').trim(); }
 
+function advisorQuote(reason) {
+  return {
+    quote: { status: 'advisor_required', reason, lines: [], totalCents: 0, total: '0.00', currency: 'USD' },
+    fulfillment: null,
+  };
+}
+
+function publicProgramDecision(input = {}) {
+  const programCode = clean(input.programCode || PUBLIC_PROGRAM_CODE).toLowerCase();
+  const program = REGISTRATION_PROGRAMS[programCode];
+  if (!program) return { status: 'advisor_required', reason: 'program_advisor_required' };
+  const modality = clean(input.learningModality).toLowerCase();
+  if (modality && !program.modalities.includes(modality)) {
+    return { status: 'advisor_required', reason: 'program_modality_advisor_required' };
+  }
+  const residence = clean(input.residenceCountryCode).toUpperCase();
+  const billing = clean(input.billingCountryCode || input.residenceCountryCode).toUpperCase();
+  if ((program.usOnly || modality === 'hybrid') && (residence !== 'US' || billing !== 'US')) {
+    return { status: 'advisor_required', reason: 'program_country_advisor_required' };
+  }
+  return { status: 'eligible', programCode };
+}
+
 export function verifyPublicRegistrationSecret(received, expected) {
   const left = Buffer.from(clean(received));
   const right = Buffer.from(clean(expected));
@@ -24,20 +48,8 @@ export function verifyPublicRegistrationSecret(received, expected) {
 }
 
 export function createPublicRegistrationQuote(input = {}) {
-  const programCode = clean(input.programCode || PUBLIC_PROGRAM_CODE).toLowerCase();
-  if (programCode !== PUBLIC_PROGRAM_CODE) {
-    return {
-      quote: {
-        status: 'advisor_required',
-        reason: 'program_advisor_required',
-        lines: [],
-        totalCents: 0,
-        total: '0.00',
-        currency: 'USD',
-      },
-      fulfillment: null,
-    };
-  }
+  const decision = publicProgramDecision(input);
+  if (decision.status !== 'eligible') return advisorQuote(decision.reason);
   const quote = calculateRegistrationQuote({
     channel: REGISTRATION_CHANNELS.PUBLIC,
     itemCodes: [REGISTRATION_ITEM_CODES.PUBLIC_BUNDLE],
@@ -57,14 +69,14 @@ export function createPublicRegistrationQuote(input = {}) {
 
 export function assertPublicRegistrationProgram(value) {
   const programCode = clean(value || PUBLIC_PROGRAM_CODE).toLowerCase();
-  if (programCode !== PUBLIC_PROGRAM_CODE) {
+  if (!REGISTRATION_PROGRAMS[programCode]) {
     throw new PublicRegistrationError(
       'program_advisor_required',
       'This program requires an advisor before payment.',
       409,
     );
   }
-  return PUBLIC_PROGRAM_CODE;
+  return programCode;
 }
 
 export function normalizeReturnState(value) {
@@ -115,6 +127,7 @@ export async function loadPublicRegistrationStatus(client, scope, paymentRequest
     currency: row.currency,
     quote: registration.quote || null,
     registration: registration.states || null,
+    programCode: registration.programCode || null,
     fulfillment: registration.fulfillmentPolicy || null,
     verifiedAt: row.verified_at || null,
     receiptAvailable: Boolean(row.receipt_document_id),

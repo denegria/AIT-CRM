@@ -1,5 +1,6 @@
 export const LEARNING_MODALITIES = Object.freeze({
   IN_PERSON: 'in_person',
+  HYBRID: 'hybrid',
   ONLINE: 'online',
 });
 
@@ -84,7 +85,11 @@ export function resolveBookFulfillmentMode({ residenceCountryCode, learningModal
     throw new FulfillmentPolicyError('fulfillment_country_required', 'Residence country is required to determine book fulfillment.');
   }
   if (!Object.values(LEARNING_MODALITIES).includes(modality)) {
-    throw new FulfillmentPolicyError('learning_modality_invalid', 'Learning modality must be online or in_person.');
+    throw new FulfillmentPolicyError('learning_modality_invalid', 'Learning modality must be online, hybrid, or in_person.');
+  }
+
+  if (modality === LEARNING_MODALITIES.HYBRID && countryCode !== 'US') {
+    throw new FulfillmentPolicyError('hybrid_country_invalid', 'Hybrid book pickup is available only in the United States.');
   }
 
   let deliveryMode;
@@ -92,7 +97,7 @@ export function resolveBookFulfillmentMode({ residenceCountryCode, learningModal
   if (countryCode !== 'US') {
     deliveryMode = FULFILLMENT_MODES.DIGITAL;
     requiresDigitalDelivery = true;
-  } else if (modality === LEARNING_MODALITIES.IN_PERSON) {
+  } else if (modality === LEARNING_MODALITIES.IN_PERSON || modality === LEARNING_MODALITIES.HYBRID) {
     deliveryMode = FULFILLMENT_MODES.PICKUP;
     requiresDigitalDelivery = false;
   } else {
@@ -101,7 +106,7 @@ export function resolveBookFulfillmentMode({ residenceCountryCode, learningModal
   }
 
   return Object.freeze({
-    policyVersion: '2026-09-18.v1',
+    policyVersion: '2026-09-27.v2',
     residenceCountryCode: countryCode,
     learningModality: modality,
     deliveryMode,

@@ -118,6 +118,8 @@ export async function orchestrateRegistration(client, input = {}) {
       idempotencyKey: request.idempotencyKey,
       sourceReference: request.sourceReference,
       programCode: request.programCode,
+      portalAccountId: request.portalAccountId,
+      placement: request.placement,
       classSectionId: request.classSectionId,
       studentContactId: student.id,
       payerContactId: payer.id,
