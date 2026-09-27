@@ -87,6 +87,11 @@ test('new courses fail closed outside the US or with an unoffered modality', () 
     learningModality: 'hybrid',
   });
   assert.equal(nonUsHybrid.quote.reason, 'program_country_advisor_required');
+  const nonUsEnglishInPerson = createPublicRegistrationQuote({
+    programCode: 'english_program', residenceCountryCode: 'CO', billingCountryCode: 'CO',
+    learningModality: 'in_person',
+  });
+  assert.equal(nonUsEnglishInPerson.quote.reason, 'program_country_advisor_required');
 });
 
 test('shared secret comparison and return-state validation fail closed', () => {

@@ -35,7 +35,7 @@ function publicProgramDecision(input = {}) {
   }
   const residence = clean(input.residenceCountryCode).toUpperCase();
   const billing = clean(input.billingCountryCode || input.residenceCountryCode).toUpperCase();
-  if ((program.usOnly || modality === 'hybrid') && (residence !== 'US' || billing !== 'US')) {
+  if ((program.usOnly || modality !== 'online') && (residence !== 'US' || billing !== 'US')) {
     return { status: 'advisor_required', reason: 'program_country_advisor_required' };
   }
   return { status: 'eligible', programCode };
