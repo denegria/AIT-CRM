@@ -10,6 +10,7 @@ import {
   createPublicRegistrationQuote,
   loadPublicRegistrationStatus,
   normalizeReturnState,
+  reconcilePublicRegistrationDraft,
   PublicRegistrationError,
   verifyPublicRegistrationSecret,
 } from '@/lib/registration/public-service.js';
@@ -107,6 +108,10 @@ export async function POST(request) {
     }
     client = await getPool().connect();
     const registrationScope = await scope(client);
+    if (input.action === 'reconcile_draft') {
+      const result = await reconcilePublicRegistrationDraft(client, registrationScope, input.idempotencyKey);
+      return NextResponse.json({ result }, { headers: { 'Cache-Control': 'private, no-store' } });
+    }
     if (input.action === 'create') {
       const programCode = assertPublicRegistrationProgram(input.registration?.programCode);
       const quoted = createPublicRegistrationQuote(input.registration);

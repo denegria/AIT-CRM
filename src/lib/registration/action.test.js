@@ -241,6 +241,30 @@ test('US GED registration persists the selected course and shared checkout amoun
   assert.equal(result.fulfillment.deliveryMode, 'pickup');
 });
 
+test('US Spanish online registration creates the selected enrollment and book shipment', async () => {
+  const client = fakeRegistrationClient();
+  const result = await orchestrateRegistration(client, {
+    ...publicRequest,
+    idempotencyKey: 'registration:public:spanish-online-0001',
+    programCode: 'espanol-extranjeros',
+    residenceCountryCode: 'US',
+    billingCountryCode: 'US',
+    learningModality: 'online',
+    includeTuitionPrepayment: true,
+    shippingAddress: {
+      recipientName: 'Ana Student', addressLine1: '1 Main St', city: 'Bound Brook',
+      state: 'NJ', postalCode: '08805', countryCode: 'US',
+    },
+  });
+  assert.equal(result.quote.total, '290.00');
+  assert.equal(result.paymentRequest.requested_amount, '290.00');
+  assert.equal(result.programCode, 'espanol-extranjeros');
+  assert.equal(client.state.enrollments[0].course_name, 'Español para extranjeros');
+  assert.equal(client.state.enrollments[0].metadata_json.placementState, 'not_applicable');
+  assert.equal(result.fulfillment.deliveryMode, 'shipment');
+  assert.equal(client.state.fulfillments[0].shipping_address_snapshot_json.postalCode, '08805');
+});
+
 test('English Hybrid registration carries verified portal placement into the enrollment', async () => {
   const client = fakeRegistrationClient();
   const attemptId = '11111111-1111-4111-8111-111111111111';

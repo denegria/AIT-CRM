@@ -6,6 +6,7 @@ import {
   createPreviewRegistrationAdapter,
   createPublicRegistrationQuote,
   loadPublicRegistrationStatus,
+  reconcilePublicRegistrationDraft,
   normalizeReturnState,
   publicPaymentState,
   verifyPublicRegistrationSecret,
@@ -45,7 +46,7 @@ test('unsupported public program remains advisor-led and cannot create payment',
 
 test('all approved US courses use the same server-owned public bundle and optional tuition', () => {
   const courses = [
-    'english_program', 'espanol-extranjeros', 'ged', 'tutorias-matematicas',
+    'english_program', 'ged', 'tutorias-matematicas',
     'computacion-basica', 'computacion-oficina',
   ];
   for (const programCode of courses) {
@@ -59,6 +60,29 @@ test('all approved US courses use the same server-owned public bundle and option
     assert.equal(result.quote.total, '290.00', programCode);
     assert.equal(result.fulfillment.deliveryMode, 'pickup', programCode);
   }
+});
+
+test('Spanish online uses the US quote and shipment without opening other modalities or countries', () => {
+  const result = createPublicRegistrationQuote({
+    programCode: 'espanol-extranjeros', residenceCountryCode: 'US', billingCountryCode: 'US',
+    learningModality: 'online', includeTuitionPrepayment: true,
+  });
+  assert.equal(result.quote.status, 'quoted');
+  assert.deepEqual(result.quote.lines.map((line) => line.amount), ['95.00', '195.00']);
+  assert.equal(result.quote.total, '290.00');
+  assert.equal(result.fulfillment.deliveryMode, 'shipment');
+
+  const wrongMode = createPublicRegistrationQuote({
+    programCode: 'espanol-extranjeros', residenceCountryCode: 'US', billingCountryCode: 'US',
+    learningModality: 'in_person',
+  });
+  assert.equal(wrongMode.quote.reason, 'program_modality_advisor_required');
+
+  const nonUs = createPublicRegistrationQuote({
+    programCode: 'espanol-extranjeros', residenceCountryCode: 'CO', billingCountryCode: 'CO',
+    learningModality: 'online',
+  });
+  assert.equal(nonUs.quote.reason, 'program_country_advisor_required');
 });
 
 test('US Hybrid uses the shared quote and physical book pickup', () => {
@@ -133,6 +157,35 @@ test('status lookup is scoped to registration payments and returns a safe projec
   assert.equal(result.receiptAvailable, true);
   assert.equal(result.registration.placement, 'recommended');
   assert.equal(result.fulfillment.deliveryMode, 'digital');
+});
+
+test('legacy draft reconciliation distinguishes unsubmitted, pending, and completed payments without exposing records', async () => {
+  const scope = { organizationId: 'org-1', businessUnitId: 'bu-1' };
+  const key = 'public:12345678-1234-4234-8234-123456789abc';
+  const queries = [];
+  const missing = await reconcilePublicRegistrationDraft({ async query(sql, params) {
+    queries.push({ sql: String(sql), params });
+    return { rows: [] };
+  } }, scope, key);
+  assert.deepEqual(missing, { exists: false });
+  assert.match(queries[0].sql, /source_type = 'registration'/);
+  assert.deepEqual(queries[0].params.slice(0, 2), ['org-1', 'bu-1']);
+  for (const [requestStatus, transactionStatus, expectedState] of [
+    ['pending', null, 'verifying'],
+    ['completed', 'verified', 'confirmed'],
+  ]) {
+    let calls = 0;
+    const result = await reconcilePublicRegistrationDraft({ async query() {
+      calls += 1;
+      return calls === 1 ? { rows: [{ id: 'request-1' }] } : { rows: [{
+        id: 'request-1', request_status: requestStatus, transaction_status: transactionStatus,
+        requested_amount: '95.00', currency: 'USD', metadata_json: {},
+      }] };
+    } }, scope, key);
+    assert.deepEqual(result, { exists: true, state: expectedState });
+  }
+  await assert.rejects(reconcilePublicRegistrationDraft({ query() { throw new Error('should not query'); } }, scope, 'guessable'),
+    (error) => error.code === 'registration_key_invalid');
 });
 
 test('preview adapter returns only to the registration origin and does not call a provider', async () => {

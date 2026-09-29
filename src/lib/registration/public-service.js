@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { resolveBookFulfillmentMode } from '../fulfillment/policy.js';
 import { calculateRegistrationQuote, REGISTRATION_CHANNELS, REGISTRATION_ITEM_CODES } from './catalog.js';
 import { REGISTRATION_PROGRAMS } from './programs.js';
+import { registrationRecordKeys } from './service.js';
 
 const RETURN_STATE_PATTERN = /^[A-Za-z0-9._~-]{20,2048}$/;
 const PUBLIC_PROGRAM_CODE = 'english_program';
@@ -95,6 +96,24 @@ export function publicPaymentState(row = {}) {
   if (['cancelled', 'canceled'].includes(requestStatus)) return 'cancelled';
   if (row.expires_at && new Date(row.expires_at).getTime() < Date.now()) return 'expired';
   return 'verifying';
+}
+
+export async function reconcilePublicRegistrationDraft(client, scope, idempotencyKey) {
+  const key = clean(idempotencyKey);
+  if (!/^public:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(key)) {
+    throw new PublicRegistrationError('registration_key_invalid', 'Registration key is invalid.');
+  }
+  const keys = registrationRecordKeys(scope, key);
+  const result = await client.query(
+    `select id from payment_requests
+      where organization_id = $1 and business_unit_id = $2
+        and idempotency_key = $3 and source_type = 'registration'
+      limit 1`,
+    [scope.organizationId, scope.businessUnitId, keys.paymentRequest],
+  );
+  if (!result.rows[0]) return { exists: false };
+  const status = await loadPublicRegistrationStatus(client, scope, result.rows[0].id);
+  return { exists: true, state: status.state };
 }
 
 export async function loadPublicRegistrationStatus(client, scope, paymentRequestId) {
