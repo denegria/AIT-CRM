@@ -1,7 +1,8 @@
-import { createHash, timingSafeEqual } from 'node:crypto';
+import { timingSafeEqual } from 'node:crypto';
 
 import { createPaymentRequest } from '../billing-ledger/service.js';
 import { createHostedCollectionLink } from '../collections/service.js';
+import { createHppMerchantReference } from '../payments/hpp-reference.js';
 import {
   centsToMoney,
   cleanPortalIdentity,
@@ -180,7 +181,9 @@ export async function createPortalPaymentRequest(client, scope, identityInput, i
         remainingAmount: centsToMoney(remainingCents),
       });
     }
-    const merchantReference = `portal_${createHash('sha256').update(`${student.portalAccountId}:${intent.idempotencyKey}`).digest('hex').slice(0, 28)}`;
+    const merchantReference = createHppMerchantReference('portal', [
+      scope.organizationId, scope.businessUnitId, student.portalAccountId, intent.idempotencyKey,
+    ]);
     const request = await createPaymentRequest(client, {
       ...scope,
       studentContactId: student.id,

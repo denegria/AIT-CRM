@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { createHppMerchantReference, HPP_REFERENCE_PATTERN } from '../payments/hpp-reference.js';
 
 import {
   allocateVerifiedPaymentInTransaction,
@@ -380,8 +381,8 @@ export async function loadCollectionsSetup(client, input = {}) {
   };
 }
 
-function staffMerchantReference(idempotencyKey) {
-  return `PAY_${createHash('sha256').update(idempotencyKey).digest('hex').slice(0, 28).toUpperCase()}`;
+function staffMerchantReference(scope, idempotencyKey) {
+  return createHppMerchantReference('staff', [scope.organizationId, scope.businessUnitId, idempotencyKey]);
 }
 
 export async function createStaffPaymentRequest(client, input = {}) {
@@ -432,7 +433,7 @@ export async function createStaffPaymentRequest(client, input = {}) {
       requestedAmount: centsToMoney(payment.amountCents),
       currency: value(charge, 'currency') || 'USD',
       status: 'created',
-      merchantReference: staffMerchantReference(payment.idempotencyKey),
+      merchantReference: staffMerchantReference(scope, payment.idempotencyKey),
       sourceType: 'staff_payment',
       sourceReference: input.sourceReference || 'payments-workspace',
       idempotencyKey: payment.idempotencyKey,
@@ -868,6 +869,13 @@ export async function createHostedCollectionLink(client, input = {}) {
           : 'A previous hosted-link attempt may have reached the provider. Review it before creating another request.',
         409,
         { state: attempt.state, correlationId: attempt.correlationId || null },
+      );
+    }
+    if (!HPP_REFERENCE_PATTERN.test(value(request, 'merchant_reference', 'merchantReference'))) {
+      throw new CollectionsError(
+        'merchant_reference_incompatible',
+        'This request cannot create a new hosted link. Create a new payment request.',
+        409,
       );
     }
     const correlationId = `collections:${createHash('sha256').update(link.idempotencyKey).digest('hex').slice(0, 32)}`;

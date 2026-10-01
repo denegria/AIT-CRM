@@ -123,6 +123,7 @@ test('creates one fixed self-owned request after locking and rechecking the bala
   assert.equal(insert.params[2], contact.id);
   assert.equal(insert.params[3], contact.id);
   assert.equal(insert.params[7], '25.00');
+  assert.match(insert.params[13], /^P[A-F0-9]{19}$/);
   assert.equal(insert.params[15], 'portal_payment');
   assert.equal(client.calls.at(-1).sql, 'commit');
 });

@@ -23,7 +23,7 @@ function requestRow(metadata = {}) {
     status: 'created',
     requested_amount: '95.00',
     currency: 'USD',
-    merchant_reference: 'REGISTRATION_0001',
+    merchant_reference: 'R1234567890ABCDEF123',
     source_type: 'registration',
     metadata_json: metadata,
     student_name: 'Student One',
@@ -51,7 +51,7 @@ test('hosted checkout stores only a safe checkout summary and returns the URL on
     async createHostedPaymentPage(input) {
       adapterCalls += 1;
       assert.equal(input.amountCents, 9500);
-      assert.equal(input.merchantReference, 'REGISTRATION_0001');
+      assert.equal(input.merchantReference, 'R1234567890ABCDEF123');
       assert.match(input.postUrl, /\/api\/payments\/dejavoo\/callback$/);
       return {
         ok: true,
@@ -138,6 +138,21 @@ test('existing hosted attempt blocks a second provider call', async () => {
     (error) => error.code === 'hosted_link_already_attempted' && error.status === 409,
   );
   assert.equal(adapterCalls, 0);
+});
+
+test('legacy reference without an attempt stays untouched before provider I/O', async () => {
+  const client = hostedClient({ ...requestRow(), merchant_reference: 'PAY_5C02B629CF9E98C6E49BC58DEA89' });
+  let adapterCalls = 0;
+  await assert.rejects(() => createHostedCollectionLink(client, {
+    ...scope,
+    paymentRequestId: 'request-1',
+    idempotencyKey: 'collections:hpp:legacy-ref',
+    environment: 'uat',
+    baseUrl: 'https://staging.example.com',
+    adapter: { async createHostedPaymentPage() { adapterCalls += 1; } },
+  }), (error) => error.code === 'merchant_reference_incompatible');
+  assert.equal(adapterCalls, 0);
+  assert.equal(client.calls.some((call) => call.sql.includes('update payment_requests')), false);
 });
 
 test('existing terminal attempt blocks hosted provider I/O', async () => {
@@ -337,6 +352,8 @@ test('staff account credit creates a request without a fake charge', async () =>
   assert.equal(result.paymentRequest.charge_id, null);
   assert.equal(result.paymentRequest.payer_contact_id, 'student-1');
   assert.equal(result.paymentRequest.metadata_json.paymentIntent.kind, 'account_credit');
+  const insert = client.calls.find((call) => call.sql.startsWith('insert into payment_requests'));
+  assert.match(insert.params[13], /^S[A-F0-9]{19}$/);
   assert.deepEqual(result.allocationPlan, [{
     treatment: 'unapplied_credit', chargeId: null, itemCode: 'account-credit', amount: '200.00',
   }]);

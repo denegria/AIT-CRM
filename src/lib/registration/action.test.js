@@ -208,6 +208,7 @@ test('guest registration creates one contact, planned enrollment, charge, and fi
   assert.equal(client.state.enrollments[0].status, 'planned');
   assert.equal(client.state.charges.length, 1);
   assert.equal(client.state.requests.length, 1);
+  assert.match(result.paymentRequest.merchant_reference, /^R[A-F0-9]{19}$/);
   assert.equal(client.state.fulfillments.length, 1);
   assert.equal(result.fulfillment.deliveryMode, 'digital');
 });

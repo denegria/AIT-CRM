@@ -36,9 +36,14 @@ shared `AIT_CRM_EXTERNAL_IO_DISABLED` kill switch blocks both environments.
   a `scope` header; Dejavoo assigns the account's complete scope set.
 - Create checkout through `POST /api/v3/external-payment-transaction` using a
   fixed USD amount in integer minor units and the existing payment-request
-  merchant reference.
+  merchant reference. New HPP references are deterministic, alphanumeric, and
+  at most 20 characters per Dejavoo's detailed HPP request contract. Staff,
+  portal, and registration each use a distinct one-letter namespace plus 19
+  hexadecimal hash characters. A legacy nonconforming request is blocked before
+  provider I/O or a hosted-attempt write; create a new payment request instead.
 - Query status through `GET /v1/queryPaymentStatus` using the same merchant
-  reference plus the TPN-bound Ecom token.
+  reference plus the TPN-bound Ecom token. Legacy references remain accepted
+  for status queries and callbacks so older requests remain reconcilable.
 - Treat browser redirects as navigation only. MIS-417 must verify status
   server-to-server before recording money.
 - Configure `postAPI` as `/api/payments/dejavoo/callback` and pass the matching

@@ -1,9 +1,8 @@
-import { createHash } from 'node:crypto';
-
 import {
   createPaymentRequest,
   createStudentCharge,
 } from '../billing-ledger/service.js';
+import { createHppMerchantReference } from '../payments/hpp-reference.js';
 import { createBookFulfillment, loadRegistrationFulfillment } from '../fulfillment/service.js';
 import { REGISTRATION_PROGRAMS } from './programs.js';
 
@@ -30,17 +29,14 @@ function json(value) {
 
 export function registrationRecordKeys(scope, idempotencyKey) {
   const root = `registration:${required(idempotencyKey, 'idempotencyKey')}`;
-  const digest = createHash('sha256')
-    .update(`${scope.organizationId}:${scope.businessUnitId}:${idempotencyKey}`)
-    .digest('hex')
-    .slice(0, 24)
-    .toUpperCase();
   return Object.freeze({
     root,
     enrollment: `${root}:enrollment`,
     paymentRequest: `${root}:payment-request`,
     fulfillment: `${root}:book-fulfillment`,
-    merchantReference: `AITUSA-REG-${digest}`,
+    merchantReference: createHppMerchantReference('registration', [
+      scope.organizationId, scope.businessUnitId, idempotencyKey,
+    ]),
     charge: (lineCode) => `${root}:charge:${lineCode}`,
   });
 }

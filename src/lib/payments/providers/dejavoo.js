@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { externalIoDisabled } from '../../runtime-safety.js';
+import { HPP_REFERENCE_PATTERN } from '../hpp-reference.js';
 
 export const DEJAVOO_ENVIRONMENTS = Object.freeze({
   UAT: 'uat',
@@ -495,6 +496,15 @@ export function createDejavooAdapter({
         category: DEJAVOO_ERROR_CATEGORIES.VALIDATION,
         code: 'DEJAVOO_EXPIRY_INVALID',
         message: 'expiryDays must be an integer between 1 and 30.',
+        correlationId: operationCorrelationId,
+      });
+    }
+
+    if (!HPP_REFERENCE_PATTERN.test(common.merchantReference)) {
+      return resultError({
+        category: DEJAVOO_ERROR_CATEGORIES.VALIDATION,
+        code: 'DEJAVOO_HPP_REFERENCE_INVALID',
+        message: 'A new HPP transaction reference must be alphanumeric and at most 20 characters.',
         correlationId: operationCorrelationId,
       });
     }

@@ -42,7 +42,7 @@ function createInput(overrides = {}) {
   return {
     correlationId: 'mis-415:create:001',
     merchantId: UAT_ENV.DEJAVOO_UAT_CLOUDPOS_TPN,
-    merchantReference: 'AITUSA-REG-ABC123',
+    merchantReference: 'R1234567890ABCDEF123',
     amountCents: 9500,
     currency: 'USD',
     returnUrl: 'https://staging.example.com/payments/return',
@@ -152,7 +152,7 @@ test('creates a fixed-amount HPP, omits auth scope, and caches the access token'
   const first = await adapter.createHostedPaymentPage(createInput());
   const second = await adapter.createHostedPaymentPage(createInput({
     correlationId: 'mis-415:create:002',
-    merchantReference: 'AITUSA-REG-ABC124',
+    merchantReference: 'R1234567890ABCDEF124',
   }));
 
   assert.equal(first.ok, true);
@@ -174,7 +174,7 @@ test('creates a fixed-amount HPP, omits auth scope, and caches the access token'
   assert.equal(hppCall.options.headers.token, accessToken);
   assert.deepEqual(payload.merchantAuthentication, {
     merchantId: UAT_ENV.DEJAVOO_UAT_CLOUDPOS_TPN,
-    transactionReferenceId: 'AITUSA-REG-ABC123',
+    transactionReferenceId: 'R1234567890ABCDEF123',
   });
   assert.deepEqual(payload.transactionRequest, {
     transactionType: 1,
@@ -378,6 +378,29 @@ test('fails closed before network access for merchant, currency, and callback mi
   assert.equal(currency.error.code, 'DEJAVOO_CURRENCY_UNSUPPORTED');
   assert.equal(callback.error.code, 'DEJAVOO_CALLBACK_URL_INVALID');
   assert.equal(postAuth.error.code, 'DEJAVOO_POST_AUTH_INVALID');
+  assert.equal(calls, 0);
+});
+
+test('rejects legacy and overlong references before HPP network I/O', async () => {
+  let calls = 0;
+  const adapter = createDejavooAdapter({
+    environment: 'uat',
+    env: UAT_ENV,
+    fetchImpl: async () => {
+      calls += 1;
+      throw new Error('must not be called');
+    },
+  });
+
+  for (const merchantReference of [
+    'PAY_5C02B629CF9E98C6E49BC58DEA89',
+    'PAY-93EA247C37FD3484311E83DFAAC7',
+    'AITUSA-REG-FF49B0C96E078CB736DBB99A',
+    `S${'A'.repeat(20)}`,
+  ]) {
+    const result = await adapter.createHostedPaymentPage(createInput({ merchantReference }));
+    assert.equal(result.error.code, 'DEJAVOO_HPP_REFERENCE_INVALID');
+  }
   assert.equal(calls, 0);
 });
 
