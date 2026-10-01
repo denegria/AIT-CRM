@@ -30,3 +30,18 @@ Production `DEJAVOO_PRODUCTION_IO_ENABLED` setting and trigger a new reviewed
 Git build to load it. Preserve payment/provider records for reconciliation;
 do not delete or overwrite them. Use the existing `AIT_CRM_EXTERNAL_IO_DISABLED`
 kill switch only if the wider outbound-payment path must be stopped.
+
+## 2026-10-01 attempted activation and rollback
+
+- The Production-only flag loaded in the Ready deployment at `ac45319`.
+- One staff account-credit request for $0.01 was created for the confirmed
+  live-site Contact. The first HPP-link creation returned HTTP 502. CRM recorded
+  `DEJAVOO_AUTHENTICATION_FAILED` and an **uncertain** hosted attempt; no
+  checkout URL was returned and no card was entered. The adapter's stored
+  error does not distinguish token authentication from HPP endpoint rejection.
+- Do not retry this payment request or create another HPP link until the live
+  credential/merchant authorization boundary is diagnosed and the original
+  merchant reference is reconciled with Dejavoo.
+- The Production-only enable flag was removed in Vercel. This subsequent Git
+  build reloads the fail-closed configuration. The financial record remains
+  intact for investigation; neither UAT nor other provider settings changed.
