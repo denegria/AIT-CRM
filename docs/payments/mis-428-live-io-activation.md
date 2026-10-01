@@ -45,3 +45,24 @@ kill switch only if the wider outbound-payment path must be stopped.
 - The Production-only enable flag was removed in Vercel. This subsequent Git
   build reloads the fail-closed configuration. The financial record remains
   intact for investigation; neither UAT nor other provider settings changed.
+
+## 2026-10-01 controlled retry after live credential reload
+
+- Alvaro re-entered the four production Dejavoo values in Vercel and redeployed
+  the unchanged CRM commit. The new Production deployment is Ready. The four
+  `DEJAVOO_PROD_*` credentials and callback authorization header are scoped to
+  Production; the live-I/O flag remains absent until this controlled activation.
+- The original $0.01 account-credit request remains `pending` with an
+  `uncertain` hosted attempt. CRM has no verified provider transaction for the
+  Contact. No HPP URL was returned and no card was entered. A read-only provider
+  lookup did not conclusively reconcile the old reference. Preserve that
+  request, and do not retry it: the service deliberately rejects a second link
+  attempt on the same request.
+- Alvaro explicitly requested one retry with the newly loaded production keys
+  and cannot access the provider portal. Use a **new, separately traceable**
+  $0.01 account-credit request for the same Contact, with a QA note and a new
+  idempotency key. Make one HPP creation call only. If no valid checkout URL is
+  returned, stop, record the result, and disable live I/O again. If a URL is
+  returned, give it privately to Alvaro for human card entry; no automated
+  card submission. Verify provider status and CRM reconciliation before
+  claiming payment success.
