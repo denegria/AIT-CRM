@@ -77,6 +77,52 @@ test('hosted checkout stores only a safe checkout summary and returns the URL on
   assert.match(JSON.stringify(persisted), /pay\.ipospays\.tech/);
 });
 
+test('failed hosted checkout records bounded diagnostics without provider payload or customer data', async () => {
+  const client = hostedClient(requestRow());
+  await assert.rejects(
+    () => createHostedCollectionLink(client, {
+      ...scope,
+      paymentRequestId: 'request-1',
+      idempotencyKey: 'collections:hpp:diagnostic-1',
+      environment: 'uat',
+      baseUrl: 'https://staging.example.com',
+      adapter: {
+        async createHostedPaymentPage(input) {
+          return {
+            ok: false,
+            correlationId: input.correlationId,
+            error: { code: 'DEJAVOO_PROVIDER_REJECTED', httpStatus: 400, stage: 'hpp', retryable: false },
+            provider: {
+              httpStatus: 400,
+              responseCode: 'HPP_SYNTHETICSECRETTOKEN',
+              responseMessage: 'Customer ada@example.com rejected for token secret-value',
+              errors: [
+                { code: 'AUTH_ERR_004', field: 'transactionRequest.amount', message: 'Invalid amount' },
+                { field: 'transactionRequest.AdaStudent', message: 'ada@example.com secret-value' },
+                { field: `personalization.${'A'.repeat(1000)}`, message: 'secret-value' },
+              ],
+              raw: 'secret-value',
+            },
+          };
+        },
+      },
+    }),
+    (error) => error.code === 'DEJAVOO_PROVIDER_REJECTED' && error.status === 502,
+  );
+
+  const updates = client.calls.filter((call) => call.sql.includes('update payment_requests'));
+  const stored = JSON.parse(updates[1].params[2]).hostedPaymentAttempt;
+  assert.equal(stored.state, 'uncertain');
+  assert.deepEqual(stored.diagnostic, {
+    stage: 'hpp',
+    httpStatus: 400,
+    responseCode: null,
+    responseMessage: null,
+    errors: [{ code: 'AUTH_ERR_004', field: 'transactionRequest.amount', message: 'invalid amount' }],
+  });
+  assert.doesNotMatch(JSON.stringify(updates), /ada@example\.com|secret-value|AdaStudent|SYNTHETICSECRETTOKEN|A{100}/);
+});
+
 test('existing hosted attempt blocks a second provider call', async () => {
   const client = hostedClient(requestRow({ hostedPaymentAttempt: { state: 'created', correlationId: 'first' } }));
   let adapterCalls = 0;

@@ -415,11 +415,60 @@ test('maps provider errors without returning configured secrets or raw payloads'
 
   assert.equal(result.ok, false);
   assert.equal(result.error.category, 'authentication_error');
+  assert.equal(result.error.stage, 'auth');
   assert.equal(result.provider.responseCode, 'AUTH_ERR_004');
   assert.equal(serialized.includes(UAT_ENV.DEJAVOO_UAT_API_KEY), false);
   assert.equal(serialized.includes(UAT_ENV.DEJAVOO_UAT_SECRET_KEY), false);
   assert.equal(serialized.includes('private.example'), false);
   assert.equal(Object.hasOwn(result.provider, 'raw'), false);
+});
+
+test('identifies the hosted-payment stage and retains only summarized provider errors', async () => {
+  let calls = 0;
+  const adapter = createDejavooAdapter({
+    environment: 'uat',
+    env: UAT_ENV,
+    fetchImpl: async () => {
+      calls += 1;
+      return calls === 1
+        ? response(200, { token: jwt() })
+        : response(400, { errors: [{ field: 'transactionRequest.amount', message: 'Invalid amount' }] });
+    },
+  });
+
+  const result = await adapter.createHostedPaymentPage(createInput());
+
+  assert.equal(calls, 2);
+  assert.equal(result.error.code, 'DEJAVOO_PROVIDER_REJECTED');
+  assert.equal(result.error.stage, 'hpp');
+  assert.equal(result.error.httpStatus, 400);
+  assert.deepEqual(result.provider.errors, [{
+    code: null,
+    field: 'transactionRequest.amount',
+    message: 'Invalid amount',
+  }]);
+});
+
+test('HTTP 200 without a checkout URL still preserves safe HPP rejection details', async () => {
+  let calls = 0;
+  const adapter = createDejavooAdapter({
+    environment: 'uat',
+    env: UAT_ENV,
+    fetchImpl: async () => {
+      calls += 1;
+      return calls === 1
+        ? response(200, { token: jwt() })
+        : response(200, { errors: [{ field: 'merchantAuthentication.merchantId', message: 'Invalid Merchant Id' }] });
+    },
+  });
+
+  const result = await adapter.createHostedPaymentPage(createInput());
+
+  assert.equal(result.error.code, 'DEJAVOO_HPP_URL_INVALID');
+  assert.equal(result.error.stage, 'hpp');
+  assert.equal(result.provider.httpStatus, 200);
+  assert.equal(result.provider.errors[0].field, 'merchantAuthentication.merchantId');
+  assert.equal(result.provider.errors[0].message, 'Invalid Merchant Id');
 });
 
 test('returns a stable timeout after one bounded retry for status lookup', async () => {

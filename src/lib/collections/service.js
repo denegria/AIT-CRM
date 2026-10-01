@@ -28,6 +28,85 @@ function json(valueToParse) {
   try { return JSON.parse(valueToParse); } catch { return {}; }
 }
 
+const SAFE_DEJAVOO_MESSAGES = new Set([
+  'invalid merchant id',
+  'merchant id cannot be null',
+  'invalid transaction reference id',
+  'transaction reference id cannot be null',
+  'invalid amount',
+  'invalid transaction type',
+  'invalid post api',
+  'invalid return url',
+  'invalid failure url',
+  'invalid cancel url',
+  'invalid integration type',
+  'api key is required.',
+  'secret key is required.',
+  'invalid credentials, please contact support team.',
+  'invalid token, please try with a valid token.',
+]);
+const SAFE_DEJAVOO_CODES = new Set([
+  'AUTH_ERR_001', 'AUTH_ERR_002', 'AUTH_ERR_003', 'AUTH_ERR_004', 'AUTH_ERR_005',
+  'AUTH_ERR_006', 'AUTH_ERR_007', 'AUTH_ERR_008', 'AUTH_ERR_009',
+]);
+const SAFE_DEJAVOO_FIELDS = new Set([
+  'merchantAuthentication.merchantId',
+  'merchantAuthentication.transactionReferenceId',
+  'transactionRequest.amount',
+  'transactionRequest.transactionType',
+  'transactionRequest.feeAmount',
+  'transactionRequest.feeLabel',
+  'transactionRequest.lTaxAmount',
+  'transactionRequest.lTaxLabel',
+  'transactionRequest.gTaxAmount',
+  'transactionRequest.gTaxLabel',
+  'notificationOption.postAPI',
+  'notificationOption.returnUrl',
+  'notificationOption.failureUrl',
+  'notificationOption.cancelUrl',
+  'notificationOption.mobileNumber',
+  'preferences.integrationType',
+  'preferences.customerName',
+  'preferences.customerEmail',
+  'preferences.customerMobile',
+  'personalization.merchantName',
+  'personalization.logoUrl',
+  'personalization.themeColor',
+  'personalization.description',
+  'personalization.payNowButtonText',
+  'personalization.buttonColor',
+  'personalization.cancelButtonText',
+  'personalization.disclaimer',
+]);
+
+function safeDejavooDiagnostic(result) {
+  const provider = result?.provider || {};
+  const code = (value) => {
+    const text = String(value ?? '').trim();
+    return SAFE_DEJAVOO_CODES.has(text) ? text : null;
+  };
+  const field = (value) => {
+    const text = String(value ?? '').trim();
+    return SAFE_DEJAVOO_FIELDS.has(text) ? text : null;
+  };
+  const message = (value) => {
+    const text = String(value ?? '').trim().toLowerCase();
+    return SAFE_DEJAVOO_MESSAGES.has(text) ? text : null;
+  };
+  const httpStatus = Number(provider.httpStatus ?? result?.error?.httpStatus);
+  return {
+    stage: ['auth', 'hpp'].includes(result?.error?.stage) ? result.error.stage : 'unknown',
+    httpStatus: Number.isInteger(httpStatus) && httpStatus >= 100 && httpStatus <= 599 ? httpStatus : null,
+    responseCode: code(provider.responseCode),
+    responseMessage: message(provider.responseMessage),
+    errors: (Array.isArray(provider.errors) ? provider.errors : []).slice(0, 5).map((error) => ({
+      code: code(error?.code),
+      field: field(error?.field),
+      message: message(error?.message),
+    })).filter((error) => error.code || error.field || error.message),
+  };
+}
+
 function scoped(scope = {}) {
   const organizationId = String(scope.organizationId || '').trim();
   const businessUnitId = String(scope.businessUnitId || '').trim();
@@ -864,6 +943,7 @@ export async function createHostedCollectionLink(client, input = {}) {
           completedAt: new Date().toISOString(),
           checkout: result.ok ? { origin: result.checkout?.origin || null } : null,
           errorCode: result.ok ? null : result.error?.code || 'DEJAVOO_HPP_UNCERTAIN',
+          diagnostic: result.ok ? null : safeDejavooDiagnostic(result),
         } }),
         request.id,
         scope.organizationId,

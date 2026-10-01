@@ -123,6 +123,7 @@ function resultError({
   retryable = false,
   httpStatus = null,
   provider = null,
+  stage = null,
 }) {
   return {
     ok: false,
@@ -133,6 +134,7 @@ function resultError({
       message,
       retryable,
       httpStatus,
+      ...(stage ? { stage } : {}),
     },
     ...(provider ? { provider } : {}),
   };
@@ -328,7 +330,7 @@ async function requestJson({ url, options, fetchImpl, timeoutMs, safeRetry }) {
   return { ok: false, timedOut: false };
 }
 
-function requestFailure(request, operationCorrelationId) {
+function requestFailure(request, operationCorrelationId, stage) {
   return resultError({
     category: request.timedOut
       ? DEJAVOO_ERROR_CATEGORIES.TIMEOUT
@@ -339,10 +341,11 @@ function requestFailure(request, operationCorrelationId) {
       : 'The Dejavoo network request failed.',
     correlationId: operationCorrelationId,
     retryable: true,
+    stage,
   });
 }
 
-function responseFailure(response, body, config, operationCorrelationId, extraSecrets = []) {
+function responseFailure(response, body, config, operationCorrelationId, stage, extraSecrets = []) {
   const classification = classifyHttpError(response.status);
   const provider = providerSummary(body || {}, response.status, [
     config.apiKey,
@@ -356,6 +359,7 @@ function responseFailure(response, body, config, operationCorrelationId, extraSe
     correlationId: operationCorrelationId,
     httpStatus: response.status,
     provider,
+    stage,
   });
 }
 
@@ -419,9 +423,9 @@ export function createDejavooAdapter({
       timeoutMs,
       safeRetry: true,
     });
-    if (!request.ok) return requestFailure(request, operationCorrelationId);
+    if (!request.ok) return requestFailure(request, operationCorrelationId, 'auth');
     if (!request.response.ok) {
-      return responseFailure(request.response, request.body, config, operationCorrelationId);
+      return responseFailure(request.response, request.body, config, operationCorrelationId, 'auth');
     }
     const token = cleanText(request.body?.token);
     if (!token) {
@@ -431,6 +435,7 @@ export function createDejavooAdapter({
         message: 'Dejavoo authentication succeeded without an access token.',
         correlationId: operationCorrelationId,
         httpStatus: request.response.status,
+        stage: 'auth',
       });
     }
     const providerExpiry = parseJwtExpiry(token);
@@ -561,13 +566,14 @@ export function createDejavooAdapter({
       timeoutMs,
       safeRetry: false,
     });
-    if (!request.ok) return requestFailure(request, operationCorrelationId);
+    if (!request.ok) return requestFailure(request, operationCorrelationId, 'hpp');
     if (!request.response.ok) {
       return responseFailure(
         request.response,
         request.body,
         config,
         operationCorrelationId,
+        'hpp',
         [postAuthHeader, auth.token],
       );
     }
@@ -579,6 +585,15 @@ export function createDejavooAdapter({
         message: 'Dejavoo did not return an approved hosted checkout URL.',
         correlationId: operationCorrelationId,
         httpStatus: request.response.status,
+        stage: 'hpp',
+        provider: providerSummary(request.body || {}, request.response.status, [
+          config.apiKey,
+          config.secretKey,
+          config.cloudPosTpn,
+          config.ecomToken,
+          postAuthHeader,
+          auth.token,
+        ]),
       });
     }
     return {
@@ -614,9 +629,9 @@ export function createDejavooAdapter({
       timeoutMs,
       safeRetry: true,
     });
-    if (!request.ok) return requestFailure(request, operationCorrelationId);
+    if (!request.ok) return requestFailure(request, operationCorrelationId, 'status');
     if (!request.response.ok) {
-      return responseFailure(request.response, request.body, config, operationCorrelationId);
+      return responseFailure(request.response, request.body, config, operationCorrelationId, 'status');
     }
     if (!request.body || typeof request.body !== 'object' || Array.isArray(request.body)) {
       return resultError({
