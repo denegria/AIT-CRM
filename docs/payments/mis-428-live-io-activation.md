@@ -83,3 +83,23 @@ kill switch only if the wider outbound-payment path must be stopped.
   reload fail-closed configuration. Preserve both financial requests and all
   provider evidence. Determine the provider's specific response/status at the
   outbound stage before another HPP creation attempt.
+
+## 2026-10-01 $1.00 diagnostic attempt and rollback
+
+- Alvaro authorized a new $1.00 attempt. The reviewed `c9a29a5` release added
+  bounded provider diagnostics to hosted-attempt metadata without storing raw
+  provider payloads, secrets, card data, or checkout URLs. Staging and Production
+  CI passed, and both deployments were Ready before the Production call.
+- A new account-credit request for the same Contact was created:
+  `4ef23e7e-dcef-47f5-955e-0746592c885e`, merchant reference
+  `PAY_5C02B629CF9E98C6E49BC58DEA89`. Exactly one HPP creation call returned
+  CRM HTTP 502 with `DEJAVOO_PROVIDER_REJECTED`; no checkout URL or card entry.
+- The saved Dejavoo diagnostic identifies the actual boundary: HPP-stage HTTP
+  400, `merchantAuthentication.transactionReferenceId` —
+  `Invalid transaction reference id`. This $1.00 rejection rules out a one-cent
+  minimum as the cause of this attempt. The reference format must be corrected
+  and validated before any further live link creation. Preserve all three
+  payment requests; do not retry an existing request.
+- The Production-only live-I/O flag was removed in Vercel. This Git-triggered
+  build reloads fail-closed configuration; verify deployment Ready, CI green,
+  and the public auth/callback safeguards before closing the incident window.
