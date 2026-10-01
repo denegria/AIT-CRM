@@ -449,32 +449,6 @@ test('identifies the hosted-payment stage and retains only summarized provider e
   }]);
 });
 
-test('rejects underscore HPP references locally but permits legacy status reconciliation', async () => {
-  let calls = 0;
-  const reference = 'PAY_ABCDEF0123456789ABCDEF012345';
-  const adapter = createDejavooAdapter({
-    environment: 'uat',
-    env: UAT_ENV,
-    fetchImpl: async () => {
-      calls += 1;
-      return response(200, { iposHPResponse: { transactionReferenceId: reference, responseMessage: 'Pending' } });
-    },
-  });
-
-  const hpp = await adapter.createHostedPaymentPage(createInput({ merchantReference: reference }));
-  assert.equal(hpp.error.code, 'DEJAVOO_HPP_REFERENCE_INVALID');
-  assert.equal(calls, 0);
-
-  const status = await adapter.queryPaymentStatus({
-    correlationId: 'mis-428:legacy-status:001',
-    merchantId: UAT_ENV.DEJAVOO_UAT_CLOUDPOS_TPN,
-    merchantReference: reference,
-  });
-  assert.equal(status.ok, true);
-  assert.equal(status.status, 'pending');
-  assert.equal(calls, 1);
-});
-
 test('HTTP 200 without a checkout URL still preserves safe HPP rejection details', async () => {
   let calls = 0;
   const adapter = createDejavooAdapter({

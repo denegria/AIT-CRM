@@ -104,12 +104,23 @@ kill switch only if the wider outbound-payment path must be stopped.
   build reloads fail-closed configuration; verify deployment Ready, CI green,
   and the public auth/callback safeguards before closing the incident window.
 
-## Reference-format correction candidate
+## 2026-10-01 $1.00 hyphenated-reference retest and rollback
 
-The successful $55 UAT HPP used a hyphenated `AITUSA-REG-…` reference, while
-the rejected staff requests used `PAY_…`. New staff and portal requests now
-generate deterministic hyphenated `PAY-…` and `PORTAL-…` references. New HPP
-creation rejects underscore references locally; existing underscore references
-remain valid for read-only status queries and callback reconciliation. This
-matches the known-good UAT character pattern, but **Production HPP acceptance
-is not yet proven**. Do not alter or retry the three uncertain requests.
+- Alvaro approved promoting staged commit `9d25244` and one new $1.00 hosted
+  link attempt. Production CI passed, deployment was Ready, and the public
+  session/Collections/invalid-callback safeguards returned 200/401/401.
+- New account-credit request `b8876f4e-7b80-437b-9f7d-367dad77bb28` used
+  merchant reference `PAY-93EA247C37FD3484311E83DFAAC7`. Exactly one hosted
+  link call returned CRM HTTP 502 / `DEJAVOO_PROVIDER_REJECTED`, with no
+  checkout URL or card entry. Saved Dejavoo diagnostic: HPP-stage HTTP 400,
+  `merchantAuthentication.transactionReferenceId` —
+  `invalid transaction reference id`.
+- The hyphen-only hypothesis is disproven. Do not retry this or the three older
+  uncertain requests, and do not infer that reference characters are the sole
+  problem. Ask Dejavoo to inspect both rejected $1 references and confirm the
+  live HPP transaction-reference contract and merchant/TPN binding before any
+  further provider call.
+- The Production-only live-I/O flag was removed. Revert the speculative `PAY-`
+  / `PORTAL-` generators and HPP underscore guard while keeping safe provider
+  diagnostics. This Git-triggered build must be verified Ready with green CI
+  and public auth/callback safeguards before closeout.

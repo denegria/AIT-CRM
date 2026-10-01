@@ -337,8 +337,6 @@ test('staff account credit creates a request without a fake charge', async () =>
   assert.equal(result.paymentRequest.charge_id, null);
   assert.equal(result.paymentRequest.payer_contact_id, 'student-1');
   assert.equal(result.paymentRequest.metadata_json.paymentIntent.kind, 'account_credit');
-  const insert = client.calls.find((call) => call.sql.startsWith('insert into payment_requests'));
-  assert.match(insert.params[13], /^PAY-[A-F0-9]{28}$/);
   assert.deepEqual(result.allocationPlan, [{
     treatment: 'unapplied_credit', chargeId: null, itemCode: 'account-credit', amount: '200.00',
   }]);
