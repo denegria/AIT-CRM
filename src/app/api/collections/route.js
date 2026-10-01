@@ -20,6 +20,7 @@ import {
 import { resolveBusinessUnitId } from '@/lib/crm/access.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
 import { dejavooSpinConfigHealth } from '@/lib/payments/providers/dejavoo-spin.js';
+import { recoverHppPayment } from '@/lib/payments/hpp-recovery.js';
 import { orchestrateRegistration } from '@/lib/registration/action.js';
 
 function text(value) {
@@ -167,6 +168,17 @@ export async function POST(request) {
         idempotencyKey: body.idempotencyKey,
         environment: providerEnvironment(),
         actorUserId: session.user.id,
+      });
+      return NextResponse.json({ result }, { headers: { 'Cache-Control': 'private, no-store' } });
+    }
+    if (body.action === 'recover_hosted_payment') {
+      if (session.user.primaryRoleKey !== 'admin') {
+        throw createCrmError('Administrator access is required for hosted payment recovery.', 403);
+      }
+      const result = await recoverHppPayment(client, {
+        ...scope,
+        paymentRequestId: body.paymentRequestId,
+        environment: providerEnvironment(),
       });
       return NextResponse.json({ result }, { headers: { 'Cache-Control': 'private, no-store' } });
     }

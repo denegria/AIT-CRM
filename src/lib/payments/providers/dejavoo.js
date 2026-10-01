@@ -21,6 +21,7 @@ export const DEJAVOO_ERROR_CATEGORIES = Object.freeze({
 });
 
 export const DEJAVOO_PRODUCTION_IO_ENABLED_ENV = 'DEJAVOO_PRODUCTION_IO_ENABLED';
+export const DEJAVOO_PRODUCTION_STATUS_RECHECK_ENABLED_ENV = 'DEJAVOO_PRODUCTION_STATUS_RECHECK_ENABLED';
 
 const TOKEN_EXPIRY_MINUTES = 30;
 const TOKEN_REFRESH_SKEW_MS = 60_000;
@@ -145,7 +146,7 @@ function environmentContract(environment) {
   return CONTRACTS[cleanText(environment).toLowerCase()] || null;
 }
 
-export function resolveDejavooConfig({ environment, env = process.env } = {}) {
+export function resolveDejavooConfig({ environment, env = process.env, capability = 'payment' } = {}) {
   const normalizedEnvironment = cleanText(environment).toLowerCase();
   const contract = environmentContract(normalizedEnvironment);
   if (!contract) {
@@ -166,7 +167,14 @@ export function resolveDejavooConfig({ environment, env = process.env } = {}) {
     .map(([, name]) => name);
   const productionIoEnabled = normalizedEnvironment !== DEJAVOO_ENVIRONMENTS.PRODUCTION
     || enabled(env?.[DEJAVOO_PRODUCTION_IO_ENABLED_ENV]);
-  if (!productionIoEnabled) missing.push(DEJAVOO_PRODUCTION_IO_ENABLED_ENV);
+  const statusRecheckEnabled = normalizedEnvironment !== DEJAVOO_ENVIRONMENTS.PRODUCTION
+    || productionIoEnabled
+    || enabled(env?.[DEJAVOO_PRODUCTION_STATUS_RECHECK_ENABLED_ENV]);
+  if (capability === 'status' && !statusRecheckEnabled) {
+    missing.push(DEJAVOO_PRODUCTION_STATUS_RECHECK_ENABLED_ENV);
+  } else if (capability !== 'status' && !productionIoEnabled) {
+    missing.push(DEJAVOO_PRODUCTION_IO_ENABLED_ENV);
+  }
 
   return {
     environment: normalizedEnvironment,
@@ -174,6 +182,7 @@ export function resolveDejavooConfig({ environment, env = process.env } = {}) {
     missing,
     externalIoDisabled: externalIoDisabled(env),
     productionIoEnabled,
+    statusRecheckEnabled,
     ...contract,
     ...values,
   };
@@ -399,11 +408,12 @@ function checkoutUrlFromBody(body, config) {
 export function createDejavooAdapter({
   environment,
   env = process.env,
+  capability = 'payment',
   fetchImpl = globalThis.fetch,
   now = () => Date.now(),
   timeoutMs = DEFAULT_TIMEOUT_MS,
 } = {}) {
-  const config = resolveDejavooConfig({ environment, env });
+  const config = resolveDejavooConfig({ environment, env, capability });
   let tokenCache = null;
 
   async function accessToken(operationCorrelationId) {
@@ -450,6 +460,14 @@ export function createDejavooAdapter({
 
   async function createHostedPaymentPage(input = {}) {
     const operationCorrelationId = correlationId(input.correlationId);
+    if (capability === 'status' || !config.productionIoEnabled) {
+      return resultError({
+        category: DEJAVOO_ERROR_CATEGORIES.CONFIGURATION,
+        code: 'DEJAVOO_PAYMENT_IO_DISABLED',
+        message: 'Dejavoo payment creation is disabled for this adapter.',
+        correlationId: operationCorrelationId,
+      });
+    }
     const common = validateCommonInput(input, config, operationCorrelationId);
     if (!common.ok) return common;
     if (!Number.isSafeInteger(input.amountCents) || input.amountCents <= 0) {

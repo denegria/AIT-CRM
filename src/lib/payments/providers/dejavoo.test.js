@@ -6,6 +6,7 @@ import {
   dejavooConfigHealth,
   DEJAVOO_ENVIRONMENTS,
   DEJAVOO_PRODUCTION_IO_ENABLED_ENV,
+  DEJAVOO_PRODUCTION_STATUS_RECHECK_ENABLED_ENV,
   resolveDejavooConfig,
 } from './dejavoo.js';
 
@@ -95,6 +96,29 @@ test('fails production configuration closed without the explicit production I/O 
     hppHost: 'payment.ipospays.com',
     statusHost: 'api.ipospays.com',
   });
+});
+
+test('status-only Production capability cannot create a hosted payment page', async () => {
+  const env = { ...PROD_ENV, [DEJAVOO_PRODUCTION_STATUS_RECHECK_ENABLED_ENV]: 'true' };
+  delete env[DEJAVOO_PRODUCTION_IO_ENABLED_ENV];
+  const config = resolveDejavooConfig({ environment: 'production', env, capability: 'status' });
+  assert.equal(config.valid, true);
+  assert.equal(config.productionIoEnabled, false);
+  assert.equal(resolveDejavooConfig({ environment: 'production', env }).valid, false);
+  let calls = 0;
+  const adapter = createDejavooAdapter({
+    environment: 'production', env, capability: 'status',
+    fetchImpl: async () => { calls += 1; return response(200, { status: 'Pending' }); },
+  });
+  const creation = await adapter.createHostedPaymentPage(createInput({ merchantId: env.DEJAVOO_PROD_CLOUDPOS_TPN }));
+  assert.equal(creation.error.code, 'DEJAVOO_PAYMENT_IO_DISABLED');
+  assert.equal(calls, 0);
+  const query = await adapter.queryPaymentStatus({
+    merchantId: env.DEJAVOO_PROD_CLOUDPOS_TPN,
+    merchantReference: 'S67EF8FDAA29645C782C',
+  });
+  assert.equal(query.status, 'pending');
+  assert.equal(calls, 1);
 });
 
 test('reports missing configuration by variable name without exposing values', () => {

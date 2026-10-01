@@ -30,6 +30,13 @@ Production:
 The production enable flag is an additional fail-closed release gate. The
 shared `AIT_CRM_EXTERNAL_IO_DISABLED` kill switch blocks both environments.
 
+For an approved, status-only recovery window, set
+`DEJAVOO_PRODUCTION_STATUS_RECHECK_ENABLED=true` instead of the payment I/O
+flag. This permits only the `status` adapter capability; checkout-link creation
+and ordinary Production callback processing remain disabled. Remove the flag
+and reload Production after recovery. Do not enable it for routine operation
+until the recovery flow has been reviewed as a permanent product feature.
+
 ## Provider contract
 
 - Authenticate with API key, secret key, and a 30-minute expiry. Do **not** send
@@ -49,6 +56,20 @@ shared `AIT_CRM_EXTERNAL_IO_DISABLED` kill switch blocks both environments.
 - Configure `postAPI` as `/api/payments/dejavoo/callback` and pass the matching
   environment-qualified callback authorization value as `authHeader`. UAT and
   production callback values must be distinct.
+
+## Existing-callback recovery
+
+An administrator with `FINANCIALS_WRITE` may POST `action:
+"recover_hosted_payment"` and `paymentRequestId` to `/api/collections` in the
+AIT USA business-unit scope. The action never creates a link or charges a card.
+It requires a persisted authenticated `200/Success` callback, then queries
+Dejavoo for the current status. A successful status must include response code
+200, the same provider transaction ID and amounts as the callback, and the
+expected merchant/reference/environment. The existing locked, idempotent
+reconciliation service then creates the transaction, receipt, and allocation
+exactly once. `Pending` remains pending; a provider/callback conflict requires
+manual investigation, not a manual credit. Verify the resulting ledger and
+receipt before calling the payment confirmed.
 
 ## Retry and secrecy rules
 
