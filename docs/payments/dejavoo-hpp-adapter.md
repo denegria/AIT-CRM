@@ -91,3 +91,13 @@ npm run test:dejavoo
 
 The suite uses fixtures only. It makes no Dejavoo, database, staging, or
 production requests.
+
+## 2026-10-01 status-only recovery closeout
+
+The approved Production recheck of the existing $1.00 Apple Pay reference
+returned Dejavoo `Success`. CRM recorded one verified $1.00 provider
+transaction, a paid $1.00 receipt, and $1.00 unapplied account credit; no new
+checkout or charge was created. The temporary status-recheck flag was removed
+from the Production environment. This documentation-only change triggers a
+fresh Production build so the running functions also return to fail-closed
+mode. The ordinary Production payment-I/O flag remains unset.
