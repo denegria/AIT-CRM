@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+import { createDejavooAdapter } from '../payments/providers/dejavoo.js';
+
 import {
   createPortalPaymentRequest,
   loadPortalPaymentStatus,
@@ -123,8 +125,42 @@ test('creates one fixed self-owned request after locking and rechecking the bala
   assert.equal(insert.params[2], contact.id);
   assert.equal(insert.params[3], contact.id);
   assert.equal(insert.params[7], '25.00');
+  assert.match(insert.params[13], /^PORTAL-[A-F0-9]{28}$/);
   assert.equal(insert.params[15], 'portal_payment');
   assert.equal(client.calls.at(-1).sql, 'commit');
+
+  let providerCalls = 0;
+  const adapter = createDejavooAdapter({
+    environment: 'uat',
+    env: {
+      DEJAVOO_UAT_API_KEY: 'fixture-api-key',
+      DEJAVOO_UAT_SECRET_KEY: 'fixture-secret-key',
+      DEJAVOO_UAT_CLOUDPOS_TPN: '123456789012',
+      DEJAVOO_UAT_ECOM_TOKEN: 'fixture-ecom-token',
+    },
+    fetchImpl: async () => {
+      providerCalls += 1;
+      return {
+        ok: true,
+        status: 200,
+        async json() {
+          return providerCalls === 1
+            ? { token: 'fixture.token.signature' }
+            : { information: 'https://pay.ipospays.tech/externalPay?t=fixture-checkout' };
+        },
+      };
+    },
+  });
+  const hosted = await adapter.createHostedPaymentPage({
+    merchantId: '123456789012',
+    merchantReference: insert.params[13],
+    amountCents: 2500,
+    currency: 'USD',
+    returnUrl: 'https://staging.example.com/payments/return',
+    failureUrl: 'https://staging.example.com/payments/failure',
+  });
+  assert.equal(hosted.ok, true);
+  assert.equal(providerCalls, 2);
 });
 
 test('status rejects another student request by returning not found', async () => {

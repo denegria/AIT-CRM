@@ -103,3 +103,13 @@ kill switch only if the wider outbound-payment path must be stopped.
 - The Production-only live-I/O flag was removed in Vercel. This Git-triggered
   build reloads fail-closed configuration; verify deployment Ready, CI green,
   and the public auth/callback safeguards before closing the incident window.
+
+## Reference-format correction candidate
+
+The successful $55 UAT HPP used a hyphenated `AITUSA-REG-…` reference, while
+the rejected staff requests used `PAY_…`. New staff and portal requests now
+generate deterministic hyphenated `PAY-…` and `PORTAL-…` references. New HPP
+creation rejects underscore references locally; existing underscore references
+remain valid for read-only status queries and callback reconciliation. This
+matches the known-good UAT character pattern, but **Production HPP acceptance
+is not yet proven**. Do not alter or retry the three uncertain requests.

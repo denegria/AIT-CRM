@@ -180,7 +180,7 @@ export async function createPortalPaymentRequest(client, scope, identityInput, i
         remainingAmount: centsToMoney(remainingCents),
       });
     }
-    const merchantReference = `portal_${createHash('sha256').update(`${student.portalAccountId}:${intent.idempotencyKey}`).digest('hex').slice(0, 28)}`;
+    const merchantReference = `PORTAL-${createHash('sha256').update(`${student.portalAccountId}:${intent.idempotencyKey}`).digest('hex').slice(0, 28).toUpperCase()}`;
     const request = await createPaymentRequest(client, {
       ...scope,
       studentContactId: student.id,

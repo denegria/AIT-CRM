@@ -27,6 +27,7 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 const RETRYABLE_HTTP_STATUSES = new Set([500, 502, 503, 504]);
 const TRUE_VALUES = new Set(['1', 'true', 'yes', 'on']);
 const REFERENCE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{5,79}$/;
+const HPP_REFERENCE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{5,79}$/;
 const CORRELATION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{5,127}$/;
 
 const CONTRACTS = Object.freeze({
@@ -451,6 +452,14 @@ export function createDejavooAdapter({
     const operationCorrelationId = correlationId(input.correlationId);
     const common = validateCommonInput(input, config, operationCorrelationId);
     if (!common.ok) return common;
+    if (!HPP_REFERENCE_PATTERN.test(common.merchantReference)) {
+      return resultError({
+        category: DEJAVOO_ERROR_CATEGORIES.VALIDATION,
+        code: 'DEJAVOO_HPP_REFERENCE_INVALID',
+        message: 'Hosted checkout references must use letters, numbers, or hyphens.',
+        correlationId: operationCorrelationId,
+      });
+    }
     if (!Number.isSafeInteger(input.amountCents) || input.amountCents <= 0) {
       return resultError({
         category: DEJAVOO_ERROR_CATEGORIES.VALIDATION,

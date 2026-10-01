@@ -381,7 +381,7 @@ export async function loadCollectionsSetup(client, input = {}) {
 }
 
 function staffMerchantReference(idempotencyKey) {
-  return `PAY_${createHash('sha256').update(idempotencyKey).digest('hex').slice(0, 28).toUpperCase()}`;
+  return `PAY-${createHash('sha256').update(idempotencyKey).digest('hex').slice(0, 28).toUpperCase()}`;
 }
 
 export async function createStaffPaymentRequest(client, input = {}) {
