@@ -124,3 +124,22 @@ kill switch only if the wider outbound-payment path must be stopped.
   / `PORTAL-` generators and HPP underscore guard while keeping safe provider
   diagnostics. This Git-triggered build must be verified Ready with green CI
   and public auth/callback safeguards before closeout.
+
+## 2026-10-01 documented-reference Production checkout and fail-closed reload
+
+- Alvaro approved exact staged commit `1ade452` and one fresh $1 account-credit
+  HPP attempt. New request `5f575c29-7018-4797-b7b1-d1869cebfda1` used
+  20-character alphanumeric reference `S67EF8FDAA29645C782C`. Dejavoo
+  returned a hosted checkout URL on the single link-creation call; the URL
+  was delivered privately and must not be added to this repo or issue.
+- The customer's Apple Pay flow returned to CRM. Dejavoo's authenticated
+  callback carried a `Success` response, $1.00 amount, and transaction ID, but
+  the immediate independent status query returned `Pending` without a
+  transaction ID. CRM correctly left the request pending and created no
+  verified provider transaction, credit, or receipt. Do not claim the charge
+  failed or completed in CRM, and do not retry the checkout.
+- No follow-up callback was present after the observation window. The
+  Production-only `DEJAVOO_PRODUCTION_IO_ENABLED` flag was removed; this
+  Git-triggered build reloads fail-closed configuration. Verify CI, Ready
+  deployment, alias, and public auth/callback safeguards. Preserve the
+  unresolved callback/event and request for provider-status reconciliation.
