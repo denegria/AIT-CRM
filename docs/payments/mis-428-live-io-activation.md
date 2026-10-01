@@ -66,3 +66,20 @@ kill switch only if the wider outbound-payment path must be stopped.
   returned, give it privately to Alvaro for human card entry; no automated
   card submission. Verify provider status and CRM reconciliation before
   claiming payment success.
+
+### Retry result and fail-closed rollback
+
+- CRM Production loaded the flag in the Ready `fceff50` deployment after green
+  staging and production CI. A new, separate $0.01 account-credit request was
+  created for the same Contact: `7550d242-812f-4da7-915d-fd4e442aea5a`,
+  merchant reference `PAY_D84AB6DBD96CA35603A6DA4EC8DF`. The original
+  uncertain request was not reused.
+- Exactly one hosted-link attempt for the new request returned HTTP 502 with
+  `DEJAVOO_PROVIDER_REJECTED`. No checkout URL was returned; no card was
+  entered. This differs from the first attempt's authentication error but does
+  not identify whether token authentication or HPP payload/merchant validation
+  produced the rejection. Do not retry the second request.
+- Remove the Production-only live-I/O flag and trigger a reviewed Git build to
+  reload fail-closed configuration. Preserve both financial requests and all
+  provider evidence. Determine the provider's specific response/status at the
+  outbound stage before another HPP creation attempt.
