@@ -272,6 +272,7 @@ export default function PaymentsWorkspace() {
     (contact) => contact.id === payerContactId,
   );
   const terminalReady = Boolean(payload?.setup?.terminalCheckout?.ready);
+  const hostedReady = Boolean(payload?.setup?.hostedCheckout?.ready);
   const registrationQuote = useMemo(
     () =>
       calculateRegistrationQuote({
@@ -387,6 +388,8 @@ export default function PaymentsWorkspace() {
       return 'This registration needs advisor review before payment can continue.';
     }
     if (flow.step === 2) {
+      if (flow.method === 'hosted' && !hostedReady)
+        return 'Secure payment links are temporarily unavailable. No payment request was created.';
       if (flow.method === 'terminal' && !terminalReady)
         return 'Physical terminal is not configured in this environment.';
       if (
@@ -469,6 +472,7 @@ export default function PaymentsWorkspace() {
           requestKey.current = idempotency('payments:request');
         const result = await post({
           action: 'create_payment_request',
+          paymentMethod: flow.method,
           sourceReference: entrySource.current,
           payment: {
             intent: flow.intent,
@@ -517,6 +521,7 @@ export default function PaymentsWorkspace() {
             : undefined;
         const result = await post({
           action: 'create_checkout',
+          paymentMethod: flow.method,
           registration: {
             idempotencyKey: checkoutKey.current,
             sourceReference: 'staff-payments-workspace',
@@ -1208,11 +1213,16 @@ export default function PaymentsWorkspace() {
                     onClick={() =>
                       setFlow((current) => ({ ...current, method: 'hosted' }))
                     }
+                    disabled={!hostedReady}
                   >
                     <Link2 size={21} />
                     <span>
                       <strong>Secure payment link</strong>
-                      <small>Send or open a provider-hosted checkout</small>
+                      <small>
+                        {hostedReady
+                          ? 'Send or open a provider-hosted checkout'
+                          : 'Temporarily unavailable; ask an administrator'}
+                      </small>
                     </span>
                   </button>
                   <button

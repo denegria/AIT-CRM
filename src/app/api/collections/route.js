@@ -6,6 +6,7 @@ import { businessUnits } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth.js';
 import { isAitUsaBusinessUnit } from '@/lib/attendance/policy.js';
 import {
+  assertHostedCollectionAvailable,
   createHostedCollectionLink,
   createStaffPaymentRequest,
   loadCollectionsQueue,
@@ -20,6 +21,7 @@ import {
 import { resolveBusinessUnitId } from '@/lib/crm/access.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
 import { dejavooSpinConfigHealth } from '@/lib/payments/providers/dejavoo-spin.js';
+import { dejavooConfigHealth } from '@/lib/payments/providers/dejavoo.js';
 import { recoverHppPayment } from '@/lib/payments/hpp-recovery.js';
 import { orchestrateRegistration } from '@/lib/registration/action.js';
 
@@ -85,6 +87,7 @@ export async function GET(request) {
       paymentContactId: searchParams.get('paymentContactId'),
     });
     const terminalHealth = dejavooSpinConfigHealth({ environment: providerEnvironment() });
+    const hostedHealth = dejavooConfigHealth({ environment: providerEnvironment() });
     return NextResponse.json({
       queue,
       setup: {
@@ -93,6 +96,7 @@ export async function GET(request) {
           ready: terminalHealth.ready,
           environment: terminalHealth.environment,
         },
+        hostedCheckout: { ready: hostedHealth.ready },
       },
     }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (caught) {
@@ -112,6 +116,7 @@ export async function POST(request) {
     const scope = { organizationId: session.user.organizationId, businessUnitId };
     client = await getPool().connect();
     if (body.action === 'create_checkout') {
+      if (body.paymentMethod === 'hosted') assertHostedCollectionAvailable(providerEnvironment());
       const result = await orchestrateRegistration(client, {
         ...body.registration,
         ...scope,
@@ -128,6 +133,7 @@ export async function POST(request) {
       });
     }
     if (body.action === 'create_payment_request') {
+      if (body.paymentMethod === 'hosted') assertHostedCollectionAvailable(providerEnvironment());
       const sourceReference = body.sourceReference === 'contact-detail'
         ? 'contact-detail'
         : 'payments-workspace';

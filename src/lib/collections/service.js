@@ -7,7 +7,7 @@ import {
   createProviderTransaction,
 } from '../billing-ledger/service.js';
 import { activateBookFulfillmentForVerifiedPayment } from '../fulfillment/service.js';
-import { createDejavooAdapter } from '../payments/providers/dejavoo.js';
+import { createDejavooAdapter, dejavooConfigHealth } from '../payments/providers/dejavoo.js';
 import {
   CollectionsError,
   centsToMoney,
@@ -383,6 +383,16 @@ export async function loadCollectionsSetup(client, input = {}) {
 
 function staffMerchantReference(scope, idempotencyKey) {
   return createHppMerchantReference('staff', [scope.organizationId, scope.businessUnitId, idempotencyKey]);
+}
+
+export function assertHostedCollectionAvailable(environment) {
+  if (!dejavooConfigHealth({ environment }).ready) {
+    throw new CollectionsError(
+      'hosted_link_unavailable',
+      'Secure payment links are temporarily unavailable. No provider attempt was made.',
+      503,
+    );
+  }
 }
 
 export async function createStaffPaymentRequest(client, input = {}) {
@@ -827,6 +837,7 @@ export async function createHostedCollectionLink(client, input = {}) {
   if (!['uat', 'production'].includes(environment)) {
     throw new CollectionsError('provider_environment_invalid', 'Payment provider environment is invalid.');
   }
+  assertHostedCollectionAvailable(environment);
   await client.query('begin');
   let request;
   try {

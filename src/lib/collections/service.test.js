@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import test from 'node:test';
+import test, { after } from 'node:test';
 
 import {
   createHostedCollectionLink,
@@ -12,6 +12,30 @@ import {
 
 const scope = { organizationId: 'org-1', businessUnitId: 'bu-usa' };
 const serviceSource = fs.readFileSync(new URL('./service.js', import.meta.url), 'utf8');
+const testEnvNames = [
+  'DEJAVOO_UAT_API_KEY',
+  'DEJAVOO_UAT_SECRET_KEY',
+  'DEJAVOO_UAT_CLOUDPOS_TPN',
+  'DEJAVOO_UAT_ECOM_TOKEN',
+  'DEJAVOO_PROD_API_KEY',
+  'DEJAVOO_PROD_SECRET_KEY',
+  'DEJAVOO_PROD_CLOUDPOS_TPN',
+  'DEJAVOO_PROD_ECOM_TOKEN',
+  'DEJAVOO_PRODUCTION_IO_ENABLED',
+  'AIT_CRM_EXTERNAL_IO_DISABLED',
+];
+const previousTestEnv = Object.fromEntries(testEnvNames.map((name) => [name, process.env[name]]));
+for (const name of testEnvNames.filter((name) => name.includes('_API_KEY') || name.includes('_SECRET_KEY') || name.includes('_TPN') || name.includes('_ECOM_TOKEN'))) {
+  process.env[name] = 'test-only';
+}
+process.env.DEJAVOO_PRODUCTION_IO_ENABLED = 'false';
+process.env.AIT_CRM_EXTERNAL_IO_DISABLED = 'false';
+after(() => {
+  for (const name of testEnvNames) {
+    if (previousTestEnv[name] === undefined) delete process.env[name];
+    else process.env[name] = previousTestEnv[name];
+  }
+});
 
 function requestRow(metadata = {}) {
   return {
@@ -43,6 +67,21 @@ function hostedClient(row) {
     },
   };
 }
+
+test('disabled production hosted checkout stops before any database or provider attempt', async () => {
+  const client = hostedClient(requestRow());
+  let adapterCalls = 0;
+  await assert.rejects(() => createHostedCollectionLink(client, {
+    ...scope,
+    paymentRequestId: 'request-1',
+    idempotencyKey: 'collections:hpp:disabled',
+    environment: 'production',
+    baseUrl: 'https://crm.example.com',
+    adapter: { async createHostedPaymentPage() { adapterCalls += 1; } },
+  }), (error) => error.code === 'hosted_link_unavailable' && error.status === 503);
+  assert.equal(client.calls.length, 0);
+  assert.equal(adapterCalls, 0);
+});
 
 test('hosted checkout stores only a safe checkout summary and returns the URL once', async () => {
   const client = hostedClient(requestRow());

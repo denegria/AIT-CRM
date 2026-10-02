@@ -29,6 +29,13 @@ test('route exposes take-payment, registration, hosted-link, SPIn terminal, reco
   assert.match(source, /channel: 'staff'/);
 });
 
+test('hosted staff creation checks availability before any payment or registration write', () => {
+  assert.match(source, /hostedCheckout: \{ ready: hostedHealth\.ready \}/);
+  assert.match(source, /if \(body\.paymentMethod === 'hosted'\) assertHostedCollectionAvailable\(providerEnvironment\(\)\);/g);
+  assert.ok(source.indexOf("if (body.paymentMethod === 'hosted') assertHostedCollectionAvailable(providerEnvironment());") < source.indexOf('await orchestrateRegistration(client'));
+  assert.ok(source.lastIndexOf("if (body.paymentMethod === 'hosted') assertHostedCollectionAvailable(providerEnvironment());") < source.indexOf('await createStaffPaymentRequest(client'));
+});
+
 test('setup reads accept contact search and a preselected payment contact', () => {
   assert.match(source, /contactSearch: searchParams\.get\('contactSearch'\)/);
   assert.match(source, /paymentContactId: searchParams\.get\('paymentContactId'\)/);
