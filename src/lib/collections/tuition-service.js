@@ -5,6 +5,7 @@ import { CollectionsError, centsToMoney, moneyToCents } from './model.js';
 const KEY = /^[A-Za-z0-9._:-]{12,160}$/;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const text = (value) => String(value ?? '').trim();
+const dateOnly = (value) => value instanceof Date ? value.toISOString().slice(0, 10) : text(value).slice(0, 10);
 
 function period(start) {
   if (!DATE.test(text(start))) throw new CollectionsError('period_invalid', 'Choose a valid four-week service period start.');
@@ -29,16 +30,32 @@ function validKey(value) {
   return key;
 }
 
-function priceForEnrollment(enrollment) {
+function priceForEnrollment(enrollment, input) {
   const stored = enrollment.metadata_json?.tuitionPricing;
-  if (!stored?.residenceCountryCode && !stored?.billingCountryCode) {
-    throw new CollectionsError('pricing_evidence_missing', 'Enrollment has no verified regional pricing. Review its registration before creating a tuition charge.', 409);
+  if (!stored) {
+    const review = input.legacyPricingReview;
+    if (!review) throw new CollectionsError('pricing_evidence_missing', 'Enrollment has no verified regional pricing. A senior coordinator or administrator must review its country evidence before billing.', 409);
+    if (!input.canOverridePricing || !input.actorUserId) throw new CollectionsError('pricing_review_denied', 'Senior coordinator or administrator access is required to review legacy pricing.', 403);
+    const residenceCountryCode = text(review.residenceCountryCode).toUpperCase();
+    const billingCountryCode = text(review.billingCountryCode).toUpperCase();
+    const evidence = text(review.evidence);
+    if (!/^[A-Z]{2}$/.test(residenceCountryCode) || !/^[A-Z]{2}$/.test(billingCountryCode)
+      || evidence.length < 10 || evidence.length > 300) {
+      throw new CollectionsError('pricing_review_invalid', 'Enter both two-letter country codes and a 10–300 character evidence source.');
+    }
+    const decision = resolveRegionalPricing({ residenceCountryCode, billingCountryCode });
+    if (decision.status !== 'eligible') throw new CollectionsError('pricing_review_invalid', 'The reviewed countries do not resolve to one supported regional rate.', 409);
+    return { decision, review: { residenceCountryCode, billingCountryCode, evidence } };
   }
   const decision = resolveRegionalPricing(stored);
   if (decision.status !== 'eligible' || stored.pricingVersion !== REGIONAL_PRICING_VERSION) {
     throw new CollectionsError('pricing_evidence_invalid', 'Enrollment regional pricing needs staff review before billing.', 409);
   }
-  return decision;
+  if (input.legacyPricingReview && (
+    text(input.legacyPricingReview.residenceCountryCode).toUpperCase() !== stored.residenceCountryCode
+    || text(input.legacyPricingReview.billingCountryCode).toUpperCase() !== stored.billingCountryCode
+  )) throw new CollectionsError('pricing_review_stale', 'Enrollment pricing was reviewed by another staff member. Refresh before billing.', 409);
+  return { decision, review: null };
 }
 
 function finalPricing(input, standardCents) {
@@ -80,14 +97,18 @@ export async function createFourWeekTuitionCharge(client, input = {}) {
   await client.query('begin');
   try {
     await client.query('select pg_advisory_xact_lock(hashtextextended($1, 0))',
-      [`tuition:${scope.organizationId}:${scope.businessUnitId}:${enrollmentId}:${servicePeriod.start}`]);
+      [`tuition:${scope.organizationId}:${scope.businessUnitId}:${enrollmentId}`]);
     const existing = await client.query(
       `select * from student_charges where organization_id = $1 and business_unit_id = $2
          and enrollment_id = $3 and charge_type = 'tuition_four_week'
-         and service_period_start = $4 and service_period_end = $5 and status <> 'voided' limit 1`,
-      [scope.organizationId, scope.businessUnitId, enrollmentId, servicePeriod.start, servicePeriod.end],
+         and service_period_start <= $4 and service_period_end >= $5 and status <> 'voided' limit 1`,
+      [scope.organizationId, scope.businessUnitId, enrollmentId, servicePeriod.end, servicePeriod.start],
     );
     if (existing.rows[0]) {
+      if (dateOnly(existing.rows[0].service_period_start) !== servicePeriod.start
+        || dateOnly(existing.rows[0].service_period_end) !== servicePeriod.end) {
+        throw new CollectionsError('tuition_period_overlap', 'This enrollment already has a charge overlapping the selected four-week period.', 409);
+      }
       if (existing.rows[0].idempotency_key !== idempotencyKey || existing.rows[0].student_contact_id !== studentContactId) {
         throw new CollectionsError('tuition_period_duplicate', 'This enrollment already has a charge for the selected four-week period.', 409);
       }
@@ -105,13 +126,13 @@ export async function createFourWeekTuitionCharge(client, input = {}) {
          from contact_course_records e join contacts c on c.id = e.contact_id
         where e.id = $1 and e.organization_id = $2 and e.business_unit_id = $3
           and e.contact_id = $4 and c.organization_id = $2 and c.primary_business_unit_id = $3
-          and c.archived_at is null limit 1`,
+          and c.archived_at is null limit 1 for update of e`,
       [enrollmentId, scope.organizationId, scope.businessUnitId, studentContactId],
     );
     const enrollment = found.rows[0];
     if (!enrollment) throw new CollectionsError('enrollment_not_found', 'Enrollment is not available for this student in AIT USA.', 404);
     if (enrollment.status !== 'active') throw new CollectionsError('enrollment_inactive', 'Only an active enrollment can receive a four-week tuition charge.', 409);
-    const regional = priceForEnrollment(enrollment);
+    const { decision: regional, review } = priceForEnrollment(enrollment, input);
     const standardCents = regional.tuitionRateCents;
     const pricing = finalPricing(input, standardCents);
     const metadata = {
@@ -119,8 +140,19 @@ export async function createFourWeekTuitionCharge(client, input = {}) {
       region: regional.region,
       standardAmount: centsToMoney(standardCents),
       discount: centsToMoney(standardCents - pricing.finalCents),
+      ...(review ? { legacyPricingReview: { ...review, actorUserId: input.actorUserId } } : {}),
       ...(pricing.reason ? { pricingAdjustment: { reason: pricing.reason, actorUserId: input.actorUserId } } : {}),
     };
+    if (review) {
+      await client.query(
+        `update contact_course_records set metadata_json = metadata_json || $1::jsonb, updated_at = now()
+          where id = $2 and organization_id = $3 and business_unit_id = $4`,
+        [JSON.stringify({ tuitionPricing: { residenceCountryCode: review.residenceCountryCode,
+          billingCountryCode: review.billingCountryCode, pricingVersion: regional.pricingVersion,
+          review: { evidence: review.evidence, actorUserId: input.actorUserId, reviewedAt: new Date().toISOString() } } }),
+        enrollmentId, scope.organizationId, scope.businessUnitId],
+      );
+    }
     const created = await createStudentCharge(client, {
       ...scope, studentContactId, enrollmentId,
       classSectionId: enrollment.class_section_id,
@@ -132,6 +164,11 @@ export async function createFourWeekTuitionCharge(client, input = {}) {
       idempotencyKey, metadata,
     });
     if (created.duplicate) throw new CollectionsError('idempotency_conflict', 'This request key was already used for a different charge.', 409);
+    if (review) await writeAudit(client, {
+      scope, chargeId: created.record.id, actorUserId: input.actorUserId, eventType: 'created',
+      standard: metadata.standardAmount, oldAmount: null, newAmount: created.record.amount,
+      reason: `Legacy regional pricing reviewed: ${review.evidence}`, idempotencyKey: `tuition:review:${idempotencyKey}`,
+    });
     if (pricing.reason) await writeAudit(client, {
       scope, chargeId: created.record.id, actorUserId: input.actorUserId, eventType: 'created',
       standard: metadata.standardAmount, oldAmount: null, newAmount: created.record.amount,

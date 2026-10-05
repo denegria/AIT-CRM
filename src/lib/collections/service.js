@@ -153,6 +153,8 @@ function mapCharge(row, includePricingAudit = false) {
     currency: row.currency,
     state: value(row, 'derived_status', 'derivedStatus'),
     originalDueDate: value(row, 'original_due_date', 'originalDueDate'),
+    servicePeriodStart: value(row, 'service_period_start', 'servicePeriodStart'),
+    servicePeriodEnd: value(row, 'service_period_end', 'servicePeriodEnd'),
     createdAt: value(row, 'created_at', 'createdAt'),
     paymentRequest: value(row, 'payment_request_id', 'paymentRequestId') ? {
       id: value(row, 'payment_request_id', 'paymentRequestId'),
@@ -396,10 +398,12 @@ export async function loadCollectionsSetup(client, input = {}) {
         return charge;
       }),
       tuitionEnrollments: enrollments.rows.map((row) => {
-        const stored = json(row.metadata_json).tuitionPricing || {};
+        const stored = json(row.metadata_json).tuitionPricing;
         const regional = resolveRegionalPricing(stored);
+        const pricingReviewRequired = !stored;
         return { id: row.id, courseName: row.course_name, status: row.status,
-          standardAmount: regional.status === 'eligible' && stored.pricingVersion === regional.pricingVersion ? centsToMoney(regional.tuitionRateCents) : null };
+          pricingReviewRequired,
+          standardAmount: regional.status === 'eligible' && stored?.pricingVersion === regional.pricingVersion ? centsToMoney(regional.tuitionRateCents) : null };
       }),
       accountCredit: String(credit.rows[0]?.balance || '0.00'),
     };

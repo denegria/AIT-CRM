@@ -28,9 +28,11 @@ import PageState from '@/components/PageState';
 import { RegistrationPricingReview, TuitionPricingReview } from './FinancePricingReview.js';
 import { isAitUsaBusinessUnit } from '@/lib/attendance/policy.js';
 import { adjustStaffQuote } from '@/lib/registration/pricing.js';
+import { nextTuitionAttempt } from '@/lib/collections/tuition-attempt.js';
 import {
   calculateRegistrationQuote,
   REGISTRATION_CHANNELS,
+  resolveRegionalPricing,
 } from '@/lib/registration/catalog.js';
 import { useCRM } from '@/lib/store';
 import { classSectionDisplayLabel } from '@/lib/crm/class-section-display.js';
@@ -172,7 +174,7 @@ export default function PaymentsWorkspace() {
   const [terminalResult, setTerminalResult] = useState(null);
   const [flow, setFlow] = useState(initialPaymentFlow);
   const [registration, setRegistration] = useState(initialRegistration);
-  const [tuitionDraft, setTuitionDraft] = useState({ enrollmentId: '', periodStart: '', finalAmount: '', reason: '', adjustmentFinal: '', adjustmentReason: '' });
+  const [tuitionDraft, setTuitionDraft] = useState({ enrollmentId: '', periodStart: '', finalAmount: '', reason: '', adjustmentFinal: '', adjustmentReason: '', residenceCountryCode: '', billingCountryCode: '', evidence: '' });
   const [registrationSections, setRegistrationSections] = useState([]);
   const [registrationSectionsLoading, setRegistrationSectionsLoading] = useState(false);
   const [registrationSectionsError, setRegistrationSectionsError] = useState('');
@@ -181,6 +183,7 @@ export default function PaymentsWorkspace() {
   const requestKey = useRef('');
   const checkoutKey = useRef('');
   const methodKey = useRef('');
+  const tuitionAttempt = useRef(null);
   const entrySource = useRef('payments-workspace');
   const stepHeadingRef = useRef(null);
 
@@ -287,6 +290,11 @@ export default function PaymentsWorkspace() {
     [payload, selectedId],
   );
   const paymentStudent = payload?.setup?.paymentStudent || null;
+  const selectedTuitionEnrollment = paymentStudent?.tuitionEnrollments?.find((entry) => entry.id === tuitionDraft.enrollmentId);
+  const needsLegacyPricingReview = Boolean(selectedTuitionEnrollment?.pricingReviewRequired);
+  const reviewedLegacyRegional = needsLegacyPricingReview ? resolveRegionalPricing({ residenceCountryCode: tuitionDraft.residenceCountryCode, billingCountryCode: tuitionDraft.billingCountryCode }) : null;
+  const matchingTuitionCharge = paymentStudent?.openCharges?.find((charge) => charge.chargeType === 'tuition_four_week'
+    && charge.enrollmentId === tuitionDraft.enrollmentId && String(charge.servicePeriodStart).slice(0, 10) === tuitionDraft.periodStart);
   const totalPages = Math.max(
     1,
     Math.ceil((payload?.queue?.total || 0) / PAGE_SIZE),
@@ -374,7 +382,8 @@ export default function PaymentsWorkspace() {
     setError('');
     setNotice('');
     setRegistration(initialRegistration());
-    setTuitionDraft({ enrollmentId: '', periodStart: '', finalAmount: '', reason: '', adjustmentFinal: '', adjustmentReason: '' });
+    tuitionAttempt.current = null;
+    setTuitionDraft({ enrollmentId: '', periodStart: '', finalAmount: '', reason: '', adjustmentFinal: '', adjustmentReason: '', residenceCountryCode: '', billingCountryCode: '', evidence: '' });
     if (mode === 'registration') {
       setRegistrationSections([]);
       setRegistrationSectionsError('');
@@ -396,6 +405,7 @@ export default function PaymentsWorkspace() {
     requestKey.current = '';
     checkoutKey.current = '';
     methodKey.current = '';
+    tuitionAttempt.current = null;
   };
 
   const selectStudent = (contact) => {
@@ -624,17 +634,27 @@ export default function PaymentsWorkspace() {
   const createTuitionCharge = async () => {
     setSaving('tuition'); setError('');
     try {
-      const result = await post({ action: 'create_tuition_charge', charge: {
+      const charge = {
         studentContactId: flow.studentContactId,
         enrollmentId: tuitionDraft.enrollmentId,
         servicePeriodStart: tuitionDraft.periodStart,
         ...(canOverridePricing && tuitionDraft.finalAmount.trim() ? { finalAmount: tuitionDraft.finalAmount, reason: tuitionDraft.reason } : {}),
-        idempotencyKey: idempotency('tuition:charge'),
-      } });
+        ...(needsLegacyPricingReview ? { legacyPricingReview: {
+          residenceCountryCode: tuitionDraft.residenceCountryCode,
+          billingCountryCode: tuitionDraft.billingCountryCode,
+          evidence: tuitionDraft.evidence,
+        } } : {}),
+      };
+      tuitionAttempt.current = nextTuitionAttempt(tuitionAttempt.current, currentBusinessUnitId, charge, () => idempotency('tuition:charge'));
+      const result = await post({ action: 'create_tuition_charge', charge: { ...charge, idempotencyKey: tuitionAttempt.current.key } });
+      tuitionAttempt.current = null;
       setFlow((current) => ({ ...current, intent: 'charge', chargeId: result.charge.id, amount: result.charge.amount }));
-      setNotice('Four-week tuition charge created. Review its persisted amount before payment.');
+      setNotice(result.duplicate ? 'Existing four-week tuition charge recovered. Review its persisted amount before payment.' : 'Four-week tuition charge created. Review its persisted amount before payment.');
       await load();
-    } catch (caught) { setError(caught.message || 'Tuition charge could not be created.'); }
+    } catch (caught) {
+      await load();
+      setError(`${caught.message || 'Tuition charge could not be created.'} Review any charge now shown for this period before retrying unchanged.`);
+    }
     finally { setSaving(''); }
   };
 
@@ -1036,15 +1056,28 @@ export default function PaymentsWorkspace() {
                 {paymentStudent?.tuitionEnrollments?.length > 0 && (
                   <div className={s.pricingEditor}>
                     <strong>Create four-week tuition charge</strong>
-                    <small>Create a real charge for an active enrollment and 28-day period before collecting payment. Regional standard is read from the enrollment&apos;s registration.</small>
+                    <small>Create a real charge for an active enrollment and 28-day period before collecting payment. Legacy enrollments require a privileged country-evidence review.</small>
                     <label>Enrollment
                       <select value={tuitionDraft.enrollmentId} onChange={(event) => setTuitionDraft((current) => ({ ...current, enrollmentId: event.target.value }))}>
                         <option value="">Select enrollment</option>
-                        {paymentStudent.tuitionEnrollments.map((enrollment) => <option key={enrollment.id} value={enrollment.id} disabled={!enrollment.standardAmount}>
-                          {enrollment.courseName} · {enrollment.standardAmount ? `standard ${dollars(enrollment.standardAmount)}` : 'pricing review required'}
+                        {paymentStudent.tuitionEnrollments.map((enrollment) => <option key={enrollment.id} value={enrollment.id} disabled={!enrollment.standardAmount && !(canOverridePricing && enrollment.pricingReviewRequired)}>
+                          {enrollment.courseName} · {enrollment.standardAmount ? `standard ${dollars(enrollment.standardAmount)}` : enrollment.pricingReviewRequired ? 'country evidence review required' : 'pricing evidence invalid'}
                         </option>)}
                       </select>
                     </label>
+                    {needsLegacyPricingReview && canOverridePricing && <>
+                      <small>Review the registration record or another authoritative source. Enter both countries; the catalog determines the rate. This attestation is stored with the enrollment and charge audit.</small>
+                      <label>Residence country (2-letter code)
+                        <input maxLength={2} value={tuitionDraft.residenceCountryCode} onChange={(event) => setTuitionDraft((current) => ({ ...current, residenceCountryCode: event.target.value.toUpperCase() }))} />
+                      </label>
+                      <label>Billing country (2-letter code)
+                        <input maxLength={2} value={tuitionDraft.billingCountryCode} onChange={(event) => setTuitionDraft((current) => ({ ...current, billingCountryCode: event.target.value.toUpperCase() }))} />
+                      </label>
+                      <label>Evidence source and reference
+                        <textarea maxLength={300} value={tuitionDraft.evidence} onChange={(event) => setTuitionDraft((current) => ({ ...current, evidence: event.target.value }))} />
+                      </label>
+                      <small>{/^[A-Z]{2}$/.test(tuitionDraft.residenceCountryCode) && /^[A-Z]{2}$/.test(tuitionDraft.billingCountryCode) && reviewedLegacyRegional?.status === 'eligible' ? `Catalog standard: ${dollars(reviewedLegacyRegional.tuitionRateCents / 100)}` : 'Enter two supported countries in the same pricing region to see the catalog standard.'}</small>
+                    </>}
                     <label>Service period start
                       <input type="date" value={tuitionDraft.periodStart} onChange={(event) => setTuitionDraft((current) => ({ ...current, periodStart: event.target.value }))} />
                     </label>
@@ -1056,7 +1089,8 @@ export default function PaymentsWorkspace() {
                         <textarea maxLength={500} value={tuitionDraft.reason} onChange={(event) => setTuitionDraft((current) => ({ ...current, reason: event.target.value }))} />
                       </label>}
                     </>}
-                    <button type="button" className="btn" disabled={Boolean(saving) || !tuitionDraft.enrollmentId || !tuitionDraft.periodStart} onClick={createTuitionCharge}>Create charge</button>
+                    {matchingTuitionCharge && <small>This period already has an open charge for {dollars(matchingTuitionCharge.amount)}. Select it below and review the persisted amount before payment.</small>}
+                    <button type="button" className="btn" disabled={Boolean(saving) || !tuitionDraft.enrollmentId || !tuitionDraft.periodStart || Boolean(matchingTuitionCharge) || (needsLegacyPricingReview && (!/^[A-Z]{2}$/.test(tuitionDraft.residenceCountryCode) || !/^[A-Z]{2}$/.test(tuitionDraft.billingCountryCode) || reviewedLegacyRegional?.status !== 'eligible' || tuitionDraft.evidence.trim().length < 10))} onClick={createTuitionCharge}>Create charge</button>
                   </div>
                 )}
                 <fieldset className={s.choiceGroup}>
