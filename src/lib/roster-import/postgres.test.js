@@ -35,7 +35,7 @@ test('re-import of unchanged section preserves both base and version history', a
     course_location: 'Bound Brook', modality: 'in_person', schedule_days_json: ['Monday', 'Wednesday'],
     start_time: '09:00', end_time: '10:00', scheduled_days_per_week: 2, status: 'active' };
   const client = clientWith([[], [existing], [{ id: 'version-1' }]]);
-  assert.equal(await applyRosterSection(client, scope, action), 'original-section');
+  assert.equal(await applyRosterSection(client, scope, { ...action, targetSectionId: 'original-section' }), 'original-section');
   assert.match(client.calls[1].sql, /for update/i);
   assert.match(client.calls[2].sql, /class_section_versions/i);
   assert.equal(client.calls.length, 3);
@@ -46,12 +46,19 @@ test('changed re-import fails closed without updating the base or version', asyn
     course_location: 'Bound Brook', modality: 'in_person', schedule_days_json: ['Monday', 'Wednesday'],
     start_time: '09:00', end_time: '10:00', scheduled_days_per_week: 2, status: 'active' };
   const client = clientWith([[], [existing], [{ id: 'version-1' }]]);
-  await assert.rejects(applyRosterSection(client, scope, action), /managed effective-dated change/);
+  await assert.rejects(applyRosterSection(client, scope, { ...action, targetSectionId: 'original-section' }), /managed effective-dated change/);
   assert.equal(client.calls.length, 3);
   assert.doesNotMatch(client.calls[0].sql, /do update/i);
 });
 
 test('existing section without effective-dated history cannot be silently accepted', async () => {
   const client = clientWith([[], [{ id: 'original-section' }], []]);
-  await assert.rejects(applyRosterSection(client, scope, action), /no effective-dated version/);
+  await assert.rejects(applyRosterSection(client, scope, { ...action, targetSectionId: 'original-section' }), /no effective-dated version/);
+});
+
+
+test('stale plan cannot attach course actions to a newly claimed section key', async () => {
+  const client = clientWith([[], [{ id: 'different-section' }]]);
+  await assert.rejects(applyRosterSection(client, scope, action), /changed identity since planning/);
+  assert.equal(client.calls.length, 2);
 });

@@ -199,6 +199,9 @@ export async function applyRosterSection(client, scope, action) {
   );
   if (existing.rows.length !== 1) throw new Error('Class section changed during roster import; retry from a fresh plan.');
   const row = existing.rows[0];
+  if (row.id !== action.targetSectionId) {
+    throw new Error(`Class section ${section.sectionKey} changed identity since planning; create a fresh import plan.`);
+  }
   const version = await client.query(
     'select id from class_section_versions where class_section_id = $1 limit 1', [row.id],
   );
