@@ -32,8 +32,8 @@ test.before(async () => {
   production = manifest.database.protectedTargets.find((target) => target.label === 'production');
 });
 
-function forwardClient({ missingLastMigration = false, identity = productionIdentity() } = {}) {
-  const expectedCatalog = forward.database.catalog.expected;
+function forwardClient({ missingLastMigration = false, identity = productionIdentity(), catalogFingerprint } = {}) {
+  const expectedCatalog = catalogFingerprint || forward.database.catalog.expectedLive;
   const catalogRow = Object.fromEntries(Object.entries(expectedCatalog).map(([key, value]) => [
     key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`), value,
   ]));
@@ -169,13 +169,18 @@ test('audited production identity reaches catalog verification', async () => {
   assert.equal(report.checks[0].ok, true);
 });
 
-test('forward production proof requires exact catalog, baseline journal, and 0027–0029 ledger', async () => {
+test('forward production proof requires exact live catalog, baseline journal, and 0027–0031 ledger', async () => {
   const complete = await verifyProductionDatabaseForward(forwardClient(), manifest, forward);
   assert.equal(complete.ok, true, JSON.stringify(complete.checks));
 
+  const fromZeroOrder = await verifyProductionDatabaseForward(
+    forwardClient({ catalogFingerprint: forward.database.catalog.expected }), manifest, forward);
+  assert.equal(fromZeroOrder.ok, false);
+  assert.match(fromZeroOrder.checks.find((check) => check.name.includes('live forward fingerprint')).detail, /columnCatalogMd5/);
+
   const missing = await verifyProductionDatabaseForward(forwardClient({ missingLastMigration: true }), manifest, forward);
   assert.equal(missing.ok, false);
-  assert.match(missing.checks.find((check) => check.name.includes('forward migration ledger')).detail, /missing 0029/);
+  assert.match(missing.checks.find((check) => check.name.includes('forward migration ledger')).detail, /missing 0031/);
 
   const wrongBranch = forwardClient({ identity: productionIdentity({ neon_branch_id: 'br-broad-hill-aptjpyea' }) });
   const rejected = await verifyProductionDatabaseForward(wrongBranch, manifest, forward);

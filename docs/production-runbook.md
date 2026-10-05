@@ -11,10 +11,13 @@ npm run lint
 npm run build -- --webpack
 ```
 
-The reconciled baseline is extended by the pinned forward migrations `0027`
-(billing), `0028` (book fulfillment), and `0029` (employee auth). The exact SQL
-bytes, order, and final catalog are verified by `npm run verify:schema` and the
-disposable reconstruction. Normal Drizzle mutation entrypoints remain blocked:
+The reconciled baseline is extended by pinned forward migrations `0027`
+(billing), `0028` (book fulfillment), `0029` (employee auth), `0030`
+(effective-dated class sections), and `0031` (audited staff pricing). The exact
+SQL bytes, order, and from-zero catalog are verified by `npm run verify:schema`
+and the disposable reconstruction. The forward manifest separately pins the
+staging and production live physical column-order fingerprints; all logical
+catalog, index, and constraint fingerprints must match the from-zero proof. Normal Drizzle mutation entrypoints remain blocked:
 
 ```bash
 npm run db:generate
@@ -52,7 +55,7 @@ The read-only check verifies:
 - the connected Neon project, production branch, and database identity match the audited manifest before catalog queries
 - the exact forward public catalog counts and digests (including column order)
 - all 13 expected Drizzle journal IDs, hashes, and timestamps
-- the baseline marker and exact `0027`–`0029` forward ledger IDs and hashes
+- the baseline marker and exact `0027`–`0031` forward ledger IDs and hashes
 - the exact SQL-only index definitions preserved by the baseline
 - role permissions and scoped test-account boundaries are enforced
 

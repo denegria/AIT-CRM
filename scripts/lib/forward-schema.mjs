@@ -11,7 +11,7 @@ import {
 
 export const FORWARD_SCHEMA_MANIFEST_RELATIVE_PATH = 'drizzle/forward-schema-manifest.json';
 export const ACCEPTED_RECONCILED_MANIFEST_SHA256 = '92f0bb1dbc8b7afc1dc0af57fb11dda11d7cc05c83b4b16bd3301f7cf23cb675';
-export const FORWARD_SCHEMA_MANIFEST_CANONICAL_SHA256 = '26a27ad98922d215635e9cdc88f580ea2809ce734611f3ee9ea2e7a558db66ed';
+export const FORWARD_SCHEMA_MANIFEST_CANONICAL_SHA256 = 'b14f64ce158f6d243809eb8a728b6b03f5877d7effe1ce55b31a2fdfa8360cb1';
 const defaultRootDir = fileURLToPath(new URL('../../', import.meta.url));
 
 export async function loadForwardSchemaManifest(rootDir = defaultRootDir) {
@@ -45,6 +45,14 @@ export async function verifyForwardSchemaRepository({
     same('canonical manifest sha256', FORWARD_SCHEMA_MANIFEST_CANONICAL_SHA256, canonicalManifestSha256(resolved), contractErrors);
   }
   if (requireDatabaseFingerprint && !resolved.database?.catalog?.expected) contractErrors.push('database.catalog.expected is not pinned');
+  for (const target of ['expectedStaging', 'expectedLive']) {
+    if (requireDatabaseFingerprint && !resolved.database?.catalog?.[target]) contractErrors.push(`database.catalog.${target} is not pinned`);
+    if (resolved.database?.catalog?.expected && resolved.database.catalog[target]) {
+      for (const [key, value] of Object.entries(resolved.database.catalog.expected)) {
+        if (key !== 'columnCatalogMd5') same(`${target} catalog ${key}`, value, resolved.database.catalog[target][key], contractErrors);
+      }
+    }
+  }
   checks.push({
     name: 'forward lineage chains to the accepted reconciled baseline',
     ok: contractErrors.length === 0,

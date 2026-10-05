@@ -14,16 +14,16 @@
   "repository": {
     "schema": {
       "path": "src/db/schema.js",
-      "sha256": "a195c052a79cab325233723fa2fbda471a144f18e13f4878c9977db6d3891cba"
+      "sha256": "3d7b1cdaebf80f482769c4e7bbfa7599c3d0607efc7d47714d2735e8f97f4ca8"
     },
     "drizzleExport": {
       "command": "drizzle-kit export --config drizzle.config.mjs",
-      "rawStdoutSha256": "9a97a4beb362d47ad6a19b6ebb4411921585e2c84de922d679fe8830884a8ec2",
+      "rawStdoutSha256": "112de145208375dc9616c5e6ba1e708cc7ddff296059b461d1f2c0ee1913971d",
       "structure": {
-        "tableCount": 59,
-        "explicitIndexCount": 128,
-        "foreignKeyCount": 234,
-        "checkConstraintCount": 30
+        "tableCount": 62,
+        "explicitIndexCount": 134,
+        "foreignKeyCount": 240,
+        "checkConstraintCount": 37
       }
     },
     "forwardMigrations": [
@@ -47,6 +47,20 @@
         "sha256": "59dc24c6b5c55ec3fdb60b81bcebbe67797931d1624a526eb474046c6a2c95ad",
         "purpose": "MIS-413 WorkOS employee authentication and invitation lifecycle",
         "provenance": "forward-migration"
+      },
+      {
+        "identifier": "0030",
+        "path": "drizzle/forward/0030_effective_class_sections.sql",
+        "sha256": "cd3e0262de2f05fbf95672a7c6b81baf77b382f2fe5f0e57a2a4d69e79a538ba",
+        "purpose": "MIS-431 effective-dated class sections",
+        "provenance": "forward-migration"
+      },
+      {
+        "identifier": "0031",
+        "path": "drizzle/forward/0031_custom_charge_pricing.sql",
+        "sha256": "f4604c31fe5f69c09b5ca2cea5c3fcc19c142dc9dd863da2e77b7a27cb339fbb",
+        "purpose": "AIT CRM audited custom registration and tuition pricing",
+        "provenance": "forward-migration"
       }
     ],
     "migrationLedger": {
@@ -59,23 +73,62 @@
     "catalog": {
       "contract": "postgres-public-catalog-lf-pipe-v1",
       "expected": {
-        "tableCount": 59,
-        "tableNameMd5": "eafbb3ee2a8f09904a27ea8340550546",
-        "columnCount": 860,
-        "columnCatalogMd5": "313b90337cbb5497c1eb2a47a82d26fb",
-        "logicalColumnCatalogMd5": "600dc84843192b9731b66398c6d95477",
-        "indexCount": 194,
-        "indexCatalogMd5": "91fef6aa16fa079f75f8d333bf64ad3a",
-        "constraintCount": 329,
-        "constraintCatalogMd5": "4eec57fa87be62e56c96e66c4f6ac3ec"
+        "tableCount": 62,
+        "tableNameMd5": "495b7b545ae0aeda85b03bc9329a1b11",
+        "columnCount": 903,
+        "columnCatalogMd5": "3caacc292862d2ad4b57bdd62fa7390f",
+        "logicalColumnCatalogMd5": "ba3e5475760a84aa8f6b65ea7e5ce63b",
+        "indexCount": 203,
+        "indexCatalogMd5": "ddb7380eb60b44bc2490eda43f41050d",
+        "constraintCount": 347,
+        "constraintCatalogMd5": "2142b28928c7b936187223e5507e8e61"
+      },
+      "expectedLive": {
+        "tableCount": 62,
+        "tableNameMd5": "495b7b545ae0aeda85b03bc9329a1b11",
+        "columnCount": 903,
+        "columnCatalogMd5": "9c10c649d92962ae3a6f69f3144a7bab",
+        "logicalColumnCatalogMd5": "ba3e5475760a84aa8f6b65ea7e5ce63b",
+        "indexCount": 203,
+        "indexCatalogMd5": "ddb7380eb60b44bc2490eda43f41050d",
+        "constraintCount": 347,
+        "constraintCatalogMd5": "2142b28928c7b936187223e5507e8e61"
+      },
+      "expectedStaging": {
+        "tableCount": 62,
+        "tableNameMd5": "495b7b545ae0aeda85b03bc9329a1b11",
+        "columnCount": 903,
+        "columnCatalogMd5": "47798c91bc58f21180a6680f4c583213",
+        "logicalColumnCatalogMd5": "ba3e5475760a84aa8f6b65ea7e5ce63b",
+        "indexCount": 203,
+        "indexCatalogMd5": "ddb7380eb60b44bc2490eda43f41050d",
+        "constraintCount": 347,
+        "constraintCatalogMd5": "2142b28928c7b936187223e5507e8e61"
       }
     }
   },
   "validation": {
     "status": "validated-and-rolled-back",
     "projectId": "plain-band-07005942",
-    "branchId": "br-gentle-lab-aphoglfc",
-    "databaseName": "mis413_validation",
-    "validatedAt": "2026-09-19T13:17:50Z"
+    "branchId": "br-long-unit-aph3r1gf",
+    "databaseName": "mis431_forward_validation",
+    "validatedAt": "2026-10-05T05:14:51.015Z"
+  },
+  "liveValidation": {
+    "status": "validated-and-rolled-back",
+    "projectId": "plain-band-07005942",
+    "branchId": "br-blue-art-ap7prsfe",
+    "parentBranchId": "br-purple-bar-aphafrgp",
+    "databaseName": "neondb",
+    "validatedAt": "2026-10-05T05:18:14.380Z",
+    "baselineSectionVersions": 48
+  },
+  "stagingValidation": {
+    "status": "validated-and-rolled-back",
+    "projectId": "plain-band-07005942",
+    "branchId": "br-long-unit-aph3r1gf",
+    "parentBranchId": "br-broad-hill-aptjpyea",
+    "databaseName": "neondb",
+    "validatedAt": "2026-10-05T05:15:53.150Z"
   }
 }

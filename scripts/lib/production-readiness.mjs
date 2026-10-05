@@ -192,9 +192,9 @@ export async function verifyProductionDatabaseForward(client, baseline, forward)
         compareJournalManifest,
       );
       await check(
-        'database public catalog matches the pinned forward fingerprint',
+        'database public catalog matches the pinned live forward fingerprint',
         CATALOG_FINGERPRINT_SQL,
-        forward.database.catalog.expected,
+        forward.database.catalog.expectedLive,
         (rows, expected) => rows.length === 1
           ? compareCatalogFingerprint(rows[0], expected)
           : [`catalog query returned ${rows.length} rows`],
@@ -206,7 +206,7 @@ export async function verifyProductionDatabaseForward(client, baseline, forward)
         ...forward.repository.forwardMigrations.map(({ identifier, sha256 }) => ({ identifier, sha256 })),
       ];
       await check(
-        'database forward migration ledger matches 0027–0029',
+        'database forward migration ledger matches 0027–0031',
         `select identifier, sha256 from ${ledger.schema}.${ledger.table} order by identifier`,
         expectedLedger,
         (rows, expected) => {
