@@ -414,3 +414,110 @@ test('appointment outcomes create appointment tasks and ordinary terminal outrea
   assert.equal(terminalInput.contactPatch.isDoNotCall, true);
   assert.equal(Object.prototype.hasOwnProperty.call(terminalInput.leadPatch, 'programInterest'), false);
 });
+
+test('timed ordinary follow-up creates one atomic owner task with exact UTC dueAt on both routes', async () => {
+  const contact = { id: ids.contact, organizationId: ids.organization,
+    primaryBusinessUnitId: ids.businessUnit, name: 'Student' };
+  const lead = { id: ids.lead, organizationId: ids.organization,
+    businessUnitId: ids.businessUnit, contactId: ids.contact, assignedUserId: ids.user,
+    status: 'New Lead', currentStage: 'New Lead' };
+  const businessUnit = { id: ids.businessUnit, name: 'AIT Signs' };
+  const scheduled = '2026-06-04T18:30:00.000Z';
+  const body = { taskId: ids.task, contactId: ids.contact, leadId: ids.lead,
+    outcome: 'no_answer', channel: 'phone', note: 'Call back tomorrow.',
+    nextDueAt: scheduled, nextDueHasTime: true, nextOwnerUserId: ids.user };
+  let taskWriterInput;
+  const taskResponse = await patchTask(jsonRequest('http://localhost/api/tasks',
+    { id: ids.task, action: 'complete', ...body }, 'PATCH'), {
+    requirePermissionForRequest: permission,
+    getDbForRequest: () => sequentialReadDb([selectedTask], [contact], [lead], [businessUnit], [{ id: ids.user }]),
+    completeFollowUpForRequest: async (input) => {
+      taskWriterInput = input;
+      return { task: { ...selectedTask, status: 'completed' }, nextTask: { id: 'next-task', ...input.nextTaskValues } };
+    },
+  });
+  assert.equal(taskResponse.status, 200);
+  assert.equal(taskWriterInput.nextTaskValues.dueAt.toISOString(), scheduled);
+  assert.equal(taskWriterInput.nextTaskValues.ownerUserId, ids.user);
+  assert.equal(taskWriterInput.nextTaskValues.metadataJson.followUpDueHasTime, true);
+  assert.match(taskWriterInput.followUpActivity.message, /6:30 PM UTC/);
+  const taskPayload = await taskResponse.json();
+  assert.equal(taskPayload.nextTask.dueAt, scheduled);
+  assert.equal(taskPayload.nextTask.ownerUserId, ids.user);
+  assert.doesNotMatch(JSON.stringify(taskPayload.nextTask), /Call back tomorrow|@|555/);
+
+  let contactWriterInput;
+  const contactResponse = await postContactFollowUp(jsonRequest(`http://localhost/api/contacts/${ids.contact}/follow-up`, body),
+    { params: Promise.resolve({ id: ids.contact }) }, {
+      requirePermissionForRequest: permission,
+      getDbForRequest: () => sequentialReadDb([contact], [selectedTask], [lead], [businessUnit], [{ id: ids.user }]),
+      completeFollowUpForRequest: async (input) => {
+        contactWriterInput = input;
+        return { task: { ...selectedTask, status: 'completed' }, nextTask: { id: 'next-task', ...input.nextTaskValues } };
+      },
+    });
+  assert.equal(contactResponse.status, 200);
+  assert.equal(contactWriterInput.nextTaskValues.dueAt.toISOString(), scheduled);
+  assert.equal(contactWriterInput.nextTaskValues.ownerUserId, ids.user);
+  assert.equal(contactWriterInput.nextTaskValues.metadataJson.followUpDueHasTime, true);
+});
+
+test('regular staff cannot schedule to another owner, and elevated cross-unit owner fails before writer', async () => {
+  const alternate = '10000000-0000-4000-8000-000000000007';
+  const contact = { id: ids.contact, organizationId: ids.organization,
+    primaryBusinessUnitId: ids.businessUnit, name: 'Student' };
+  const lead = { id: ids.lead, organizationId: ids.organization,
+    businessUnitId: ids.businessUnit, contactId: ids.contact, assignedUserId: ids.user,
+    status: 'New Lead', currentStage: 'New Lead' };
+  const businessUnit = { id: ids.businessUnit, name: 'AIT Signs' };
+  const body = { taskId: ids.task, contactId: ids.contact, leadId: ids.lead,
+    outcome: 'no_answer', channel: 'phone', note: 'Call back.',
+    nextDueAt: '2026-06-04T18:30:00.000Z', nextDueHasTime: true,
+    nextOwnerUserId: alternate };
+  let writes = 0;
+  const regular = { user: { ...session.user, primaryRoleKey: 'account_coordinator',
+    roleKeys: ['account_coordinator'], canAccessAllBusinessUnits: false,
+    businessUnitIds: [ids.businessUnit] } };
+  const regularResponse = await postContactFollowUp(jsonRequest(`http://localhost/api/contacts/${ids.contact}/follow-up`, body),
+    { params: Promise.resolve({ id: ids.contact }) }, {
+      requirePermissionForRequest: async () => ({ error: null, session: regular }),
+      getDbForRequest: () => sequentialReadDb([contact], [selectedTask], [lead], [businessUnit], [{ id: alternate }]),
+      completeFollowUpForRequest: async () => { writes += 1; },
+    });
+  assert.equal(regularResponse.status, 403);
+  const crossUnitResponse = await postContactFollowUp(jsonRequest(`http://localhost/api/contacts/${ids.contact}/follow-up`, body),
+    { params: Promise.resolve({ id: ids.contact }) }, {
+      requirePermissionForRequest: permission,
+      getDbForRequest: () => sequentialReadDb([contact], [selectedTask], [lead], [businessUnit], [{ id: alternate }], []),
+      completeFollowUpForRequest: async () => { writes += 1; },
+    });
+  assert.equal(crossUnitResponse.status, 403);
+  assert.match((await crossUnitResponse.json()).error, /belong to this business unit/);
+  assert.equal(writes, 0);
+});
+
+test('authorized assigner may schedule a timed follow-up for an in-unit alternate owner', async () => {
+  const alternate = '10000000-0000-4000-8000-000000000007';
+  const contact = { id: ids.contact, organizationId: ids.organization,
+    primaryBusinessUnitId: ids.businessUnit, name: 'Student' };
+  const lead = { id: ids.lead, organizationId: ids.organization,
+    businessUnitId: ids.businessUnit, contactId: ids.contact, assignedUserId: ids.user,
+    status: 'New Lead', currentStage: 'New Lead' };
+  let writerInput;
+  const response = await postContactFollowUp(jsonRequest(`http://localhost/api/contacts/${ids.contact}/follow-up`, {
+    taskId: ids.task, contactId: ids.contact, leadId: ids.lead,
+    outcome: 'no_answer', channel: 'phone', note: 'Call again.',
+    nextDueAt: '2026-06-04T18:30:00.000Z', nextDueHasTime: true,
+    nextOwnerUserId: alternate,
+  }), { params: Promise.resolve({ id: ids.contact }) }, {
+    requirePermissionForRequest: permission,
+    getDbForRequest: () => sequentialReadDb([contact], [selectedTask], [lead],
+      [{ id: ids.businessUnit, name: 'AIT Signs' }], [{ id: alternate }], [{ id: 'membership-1' }]),
+    completeFollowUpForRequest: async (input) => {
+      writerInput = input;
+      return { task: { ...selectedTask, status: 'completed' }, nextTask: { id: 'next-task', ...input.nextTaskValues } };
+    },
+  });
+  assert.equal(response.status, 200);
+  assert.equal(writerInput.nextTaskValues.ownerUserId, alternate);
+});

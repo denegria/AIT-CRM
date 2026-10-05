@@ -245,3 +245,19 @@ test('rejects structured completion for non-follow-up tasks', () => {
     /only supports follow-up tasks/,
   );
 });
+
+test('timed follow-up retains exact UTC instant and activity shows readable time', () => {
+  const payload = normalizeFollowUpCompletionPayload({
+    task: followUpTask(),
+    payload: { outcome: 'no_answer', channel: 'phone', note: 'Call back',
+      nextDueAt: '2026-06-04T18:30:00.000Z', nextDueHasTime: true }, now,
+  });
+  assert.equal(payload.nextDueHasTime, true);
+  assert.equal(payload.nextDueAt.toISOString(), '2026-06-04T18:30:00.000Z');
+  assert.match(followUpActivityMessage(payload), /Jun 4, 2026.*6:30 PM UTC/);
+  assert.throws(() => normalizeFollowUpCompletionPayload({
+    task: followUpTask(),
+    payload: { outcome: 'no_answer', channel: 'phone', note: 'Call back',
+      nextDueAt: '2026-06-04T14:30', nextDueHasTime: true }, now,
+  }), /time zone/);
+});

@@ -37,6 +37,7 @@ import { appendContactNote, contactDetailPageState, loadContactTimeline } from '
 import { useRecordScopeRegistration } from '@/components/RecordScopeContext';
 import { InternalNoteComposer } from '@/components/ContactTimelineNoteFields';
 import FollowUpOutcomeDialog from '@/components/FollowUpOutcomeDialog';
+import { followUpDueInputToIso } from '@/lib/tasks/follow-up-due-input.js';
 import AitUsaActivityRecord from './AitUsaActivityRecord';
 import OpportunityLifecycleField from '@/components/OpportunityLifecycleField';
 import { buildContactProfilePatch } from '@/lib/crm/contact-profile-patch.js';
@@ -1651,7 +1652,8 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
           channel: followUpDraft.channel,
           contactMethod: followUpDraft.contactMethod,
           note: followUpDraft.note,
-          nextDueAt: dateInputToIso(followUpDraft.nextDueDate),
+          nextDueAt: followUpDueInputToIso(followUpDraft.nextDueDate, followUpDraft.nextDueTime),
+          nextDueHasTime: Boolean(followUpDraft.nextDueDate && followUpDraft.nextDueTime),
           appointmentAt: dateTimeInputToIso(followUpDraft.appointmentAt),
           nextOwnerUserId: coordinatorUiPolicy.lockedOwnerUserId || followUpDraft.nextOwnerUserId || currentUser?.id || null,
           leadProfile: followUpDraft.leadProfile,

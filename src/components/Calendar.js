@@ -25,6 +25,12 @@ function calendarItemTitle(event = {}) {
   return String(event.title || 'Calendar item').replace(/^Task:\s*/i, '').trim() || 'Calendar item';
 }
 
+function calendarItemTime(event = {}) {
+  if (!event.dueAt) return '';
+  const date = new Date(event.dueAt);
+  return Number.isNaN(date.getTime()) ? '' : new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(date);
+}
+
 function calendarItemDescription(event = {}) {
   return String(event.description || event.detail || event.subtitle || '').trim();
 }
@@ -68,6 +74,8 @@ export default function Calendar({ events = [] }) {
       .sort((left, right) => {
         const dayDiff = left.parsedDate.getDate() - right.parsedDate.getDate();
         if (dayDiff) return dayDiff;
+        const timeDiff = String(left.dueAt || '').localeCompare(String(right.dueAt || ''));
+        if (timeDiff) return timeDiff;
         return String(left.title || '').localeCompare(String(right.title || ''));
       });
   }, [events, month, year]);
@@ -89,7 +97,7 @@ export default function Calendar({ events = [] }) {
         {days.map((d, i) => {
           const dayEvents = d.current ? eventMap[d.day] || [] : [];
           return (
-            <div key={i} className={`${s.day} ${isToday(d.day, d.current) ? s.today : ''} ${!d.current ? s.otherMonth : ''}`} title={dayEvents.map(e=>e.title).join(', ')}>
+            <div key={i} className={`${s.day} ${isToday(d.day, d.current) ? s.today : ''} ${!d.current ? s.otherMonth : ''}`} title={dayEvents.map(e=>`${calendarItemTime(e) ? `${calendarItemTime(e)} · ` : ''}${e.title}`).join(', ')}>
               <span className={s.dayNumber}>{d.day}</span>
               {dayEvents.length > 0 && (
                 <div className={s.dayEvents}>
@@ -98,7 +106,7 @@ export default function Calendar({ events = [] }) {
                       <>
                         <span className={`${s.eventDot} ${eventTone(event.type)}`} />
                         <span className={s.dayEventCopy}>
-                          <strong>{calendarItemTitle(event)}</strong>
+                          <strong>{calendarItemTime(event) ? `${calendarItemTime(event)} · ` : ''}{calendarItemTitle(event)}</strong>
                           {calendarItemDescription(event) && <small>{calendarItemDescription(event)}</small>}
                         </span>
                       </>
@@ -129,7 +137,7 @@ export default function Calendar({ events = [] }) {
               <>
                 <span className={`${s.eventDot} ${eventTone(event.type)}`} />
                 <span className={s.eventDay}>{event.parsedDate.getDate()}</span>
-                <span className={s.eventTitle}>{event.title}</span>
+                <span className={s.eventTitle}>{calendarItemTime(event) ? `${calendarItemTime(event)} · ` : ''}{event.title}</span>
               </>
             );
             return event.href ? (

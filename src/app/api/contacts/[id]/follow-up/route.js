@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { and, eq } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
 import {
+  businessUnitMemberships,
   businessUnits,
   contacts,
   leads,
@@ -72,7 +73,7 @@ function optionalUuid(value, fieldName) {
   return id;
 }
 
-async function resolveOrganizationUserId(db, session, value, fieldName = 'ownerUserId') {
+async function resolveOrganizationUserId(db, session, value, fieldName = 'ownerUserId', businessUnitId = null) {
   const id = optionalUuid(value, fieldName);
   if (!id) return null;
 
@@ -84,6 +85,13 @@ async function resolveOrganizationUserId(db, session, value, fieldName = 'ownerU
 
   if (!user) throw createCrmError('Task owner not found.', 404);
   assertCanAssignUser(session, user.id, 'Regular coordinators cannot assign tasks to other users.');
+  if (businessUnitId && user.id !== session.user.id) {
+    const [membership] = await db.select({ id: businessUnitMemberships.id })
+      .from(businessUnitMemberships)
+      .where(and(eq(businessUnitMemberships.userId, user.id), eq(businessUnitMemberships.businessUnitId, businessUnitId)))
+      .limit(1);
+    if (!membership) throw createCrmError('Next follow-up owner must belong to this business unit.', 403);
+  }
   return user.id;
 }
 
@@ -390,6 +398,7 @@ export async function POST(request, { params }, runtime = {}) {
           session,
           body.nextOwnerUserId || body.nextAssignedTo || effectiveOwnerUserId,
           'nextOwnerUserId',
+          businessUnitId,
         )
       : null;
     if (completion.createNextTask && completion.nextDueAt && !nextOwnerUserId) {
@@ -417,6 +426,7 @@ export async function POST(request, { params }, runtime = {}) {
           metadataJson: compactObject({
             createdFromTaskId: existingTask?.id || null,
             previousOutcome: completion.outcome,
+            followUpDueHasTime: completion.nextDueHasTime,
           }),
         }
       : null;
@@ -446,6 +456,7 @@ export async function POST(request, { params }, runtime = {}) {
           followUpOutcome: completion.outcome,
           activityEventType: completion.eventType,
           nextDueAt: completion.nextDueAt?.toISOString?.() || null,
+          nextDueHasTime: completion.nextDueHasTime,
           appointmentAt: completion.appointmentAt?.toISOString?.() || null,
           nextOwnerUserId,
         }),

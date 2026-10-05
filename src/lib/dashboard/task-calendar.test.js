@@ -51,3 +51,28 @@ test('closed tasks are excluded from task calendar events', () => {
   assert.equal(isOpenTask({ completed: true }), false);
   assert.equal(isOpenTask({ status: 'open' }), true);
 });
+
+test('timed follow-up calendar payload exposes only scoped scheduling identifiers and UTC instant', () => {
+  const original = process.env.TZ;
+  process.env.TZ = 'America/New_York';
+  try {
+    const [event] = buildTaskCalendarEvents([{
+      id: 'task-1', taskType: 'follow_up', status: 'open',
+      title: 'Call maria@example.com at 732-555-0199',
+      description: 'Private student note and 732-555-0199',
+      dueAt: '2026-06-05T00:30:00.000Z',
+      ownerUserId: 'user-1', contactId: 'contact-1', businessUnitId: 'bu-1',
+      metadataJson: { followUpDueHasTime: true, rawAudit: 'secret' },
+    }]);
+    assert.deepEqual(event, {
+      id: 'task-task-1', title: 'Task: Follow-up', description: '',
+      dueAt: '2026-06-05T00:30:00.000Z', ownerUserId: 'user-1',
+      date: '2026-06-04', type: 'deadline', href: '/tasks/task-1',
+      contactId: 'contact-1', businessUnitId: 'bu-1',
+    });
+    assert.doesNotMatch(JSON.stringify(event), /@|555|rawAudit|secret/);
+  } finally {
+    if (original === undefined) delete process.env.TZ;
+    else process.env.TZ = original;
+  }
+});

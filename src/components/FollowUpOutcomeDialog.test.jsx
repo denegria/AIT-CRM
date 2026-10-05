@@ -248,3 +248,30 @@ for (const surface of ['Tasks queue', 'Contact detail']) {
     }
   });
 }
+
+for (const surface of ['Tasks queue', 'Contact detail']) {
+  test(`${surface} renders optional next date/time, owner choice, and validates time without a date`, () => {
+    const view = renderSurface(surface, {
+      initialDraft: { outcome: 'no_answer', channel: 'phone', nextDueTime: '14:30', nextOwnerUserId: 'user-1' },
+      componentProps: { canManageAssignments: true, ownerOptions: [{ id: 'user-1', label: 'Assigned staff' }] },
+    });
+    try {
+      const date = view.container.querySelector('input[type="date"]');
+      const time = view.container.querySelector('input[type="time"]');
+      assert.ok(date);
+      assert.ok(time);
+      assert.match(view.container.textContent, /Time shown in/);
+      assert.equal(time.value, '14:30');
+      click(fields(view).save);
+      assert.equal(view.submitCalls, 0);
+      assert.equal(document.activeElement, date);
+      assert.match(view.container.querySelector('[role="alert"]').textContent, /Choose a date/);
+      click([...view.container.querySelectorAll('button')].find((button) => button.textContent === 'Tomorrow'));
+      assert.equal(view.container.querySelector('select[id$="next-owner"]').value, 'user-1');
+      click(fields(view).save);
+      assert.equal(view.submitCalls, 1);
+    } finally {
+      view.cleanup();
+    }
+  });
+}

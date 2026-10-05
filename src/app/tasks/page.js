@@ -41,6 +41,7 @@ import { useToast } from '@/components/Toast';
 import Modal from '@/components/Modal';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import FollowUpOutcomeDialog from '@/components/FollowUpOutcomeDialog';
+import { followUpDueInputToIso } from '@/lib/tasks/follow-up-due-input.js';
 import { TaskCancellationDialog } from '@/components/TaskCancellationDialog';
 import { TaskRemovalDecisionDialog } from '@/components/TaskRemovalDecisionDialog';
 import { fetchTaskContactOptions } from '@/lib/tasks/contact-options-loader.js';
@@ -1238,7 +1239,8 @@ export default function FollowUpQueuePage() {
       contactMethod: draft.contactMethod,
       note: draft.note,
       leadProfile: draft.leadProfile,
-      nextDueAt: dateInputToIso(draft.nextDueDate),
+      nextDueAt: followUpDueInputToIso(draft.nextDueDate, draft.nextDueTime),
+      nextDueHasTime: Boolean(draft.nextDueDate && draft.nextDueTime),
       appointmentAt: dateTimeInputToIso(draft.appointmentAt),
       nextOwnerUserId: draft.nextOwnerUserId || task.ownerUserId || null,
       ...(coordinatorUiPolicy.lockedOwnerUserId ? { nextOwnerUserId: coordinatorUiPolicy.lockedOwnerUserId } : {}),

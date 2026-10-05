@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
 import {
+  businessUnitMemberships,
   businessUnits,
   contacts,
   leads,
@@ -158,7 +159,7 @@ async function listAssignableUsers(db, session) {
   }));
 }
 
-async function resolveOrganizationUserId(db, session, value, fieldName = 'ownerUserId') {
+async function resolveOrganizationUserId(db, session, value, fieldName = 'ownerUserId', businessUnitId = null) {
   const id = optionalUuid(value, fieldName);
   if (!id) return null;
 
@@ -170,6 +171,13 @@ async function resolveOrganizationUserId(db, session, value, fieldName = 'ownerU
 
   if (!user) throw createCrmError('Task owner not found.', 404);
   assertCanAssignUser(session, user.id, 'Regular coordinators cannot assign tasks to other users.');
+  if (businessUnitId && user.id !== session.user.id) {
+    const [membership] = await db.select({ id: businessUnitMemberships.id })
+      .from(businessUnitMemberships)
+      .where(and(eq(businessUnitMemberships.userId, user.id), eq(businessUnitMemberships.businessUnitId, businessUnitId)))
+      .limit(1);
+    if (!membership) throw createCrmError('Next follow-up owner must belong to this business unit.', 403);
+  }
   return user.id;
 }
 
@@ -722,6 +730,7 @@ export async function PATCH(request, runtime = {}) {
         contactMethod: completion.contactMethod,
         note: completion.note,
         nextDueAt: completion.nextDueAt?.toISOString?.() || null,
+        nextDueHasTime: completion.nextDueHasTime,
         appointmentAt: completion.appointmentAt?.toISOString?.() || null,
         statusTransition: statusTransitionMeta,
         leadProfile: Object.keys(leadProfilePatch).length ? leadProfilePatch : null,
@@ -739,6 +748,7 @@ export async function PATCH(request, runtime = {}) {
             session,
             body.nextOwnerUserId || body.nextAssignedTo || effectiveOwnerUserId,
             'nextOwnerUserId',
+            existingTask.businessUnitId,
           )
         : null;
       if (completion.createNextTask && completion.nextDueAt && !nextOwnerUserId) {
@@ -765,6 +775,7 @@ export async function PATCH(request, runtime = {}) {
             metadataJson: compactObject({
               createdFromTaskId: existingTask.id,
               previousOutcome: completion.outcome,
+              followUpDueHasTime: completion.nextDueHasTime,
             }),
           }
         : null;

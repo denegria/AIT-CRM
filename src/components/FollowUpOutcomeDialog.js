@@ -3,6 +3,7 @@
 import { useId, useRef, useState } from 'react';
 import { CheckCircle2, Info } from 'lucide-react';
 import Modal from './Modal';
+import { followUpDueInputToIso } from '@/lib/tasks/follow-up-due-input.js';
 import {
   followUpOutcomeClosesFollowUp,
   followUpOutcomeAllowsProfileUpdate,
@@ -86,6 +87,13 @@ export function requiredFollowUpField(draft = {}, { outcomeOptions = FOLLOW_UP_O
       message: 'Choose the appointment date and time.',
     };
   }
+  if (draft.nextDueTime && !draft.nextDueDate && !followUpOutcomeRequiresAppointment(draft.outcome)) {
+    return { field: 'nextDueDate', message: 'Choose a date for the next follow-up time.' };
+  }
+  if (draft.nextDueDate && !followUpOutcomeRequiresAppointment(draft.outcome)) {
+    try { followUpDueInputToIso(draft.nextDueDate, draft.nextDueTime); }
+    catch (error) { return { field: 'nextDueDate', message: error.message }; }
+  }
   if (!String(draft.note || '').trim()) {
     return {
       field: 'note',
@@ -118,6 +126,7 @@ export default function FollowUpOutcomeDialog({
   const outcomeRef = useRef(null);
   const channelRef = useRef(null);
   const appointmentRef = useRef(null);
+  const nextDueRef = useRef(null);
   const noteRef = useRef(null);
   const [validationError, setValidationError] = useState(null);
 
@@ -156,6 +165,7 @@ export default function FollowUpOutcomeDialog({
           outcome: outcomeRef,
           channel: channelRef,
           appointmentAt: appointmentRef,
+          nextDueDate: nextDueRef,
           note: noteRef,
         }[nextError.field])?.current?.focus();
       });
@@ -296,7 +306,7 @@ export default function FollowUpOutcomeDialog({
                     aria-required="true"
                     aria-invalid={validationError?.field === 'appointmentAt'}
                     aria-describedby={validationError?.field === 'appointmentAt' ? fieldId('appointment-error') : fieldId('appointment-help')}
-                    onChange={(event) => updateDraft({ appointmentAt: event.target.value, nextDueDate: '' })}
+                    onChange={(event) => updateDraft({ appointmentAt: event.target.value, nextDueDate: '', nextDueTime: '' })}
                   />
                   <p id={fieldId('appointment-help')} className="follow-up-next-due-note">An appointment task will be created in the same save.</p>
                   {validationError?.field === 'appointmentAt' && (
@@ -309,13 +319,20 @@ export default function FollowUpOutcomeDialog({
                     Next due <span className="form-optional">Optional</span>
                   </label>
                   <input
+                    ref={nextDueRef}
                     id={fieldId('next-due')}
                     className="input"
                     type="date"
                     value={draft.nextDueDate}
                     disabled={busy}
+                    aria-invalid={validationError?.field === 'nextDueDate'}
+                    aria-describedby={validationError?.field === 'nextDueDate' ? fieldId('next-due-error') : undefined}
                     onChange={(event) => updateDraft({ nextDueDate: event.target.value })}
                   />
+                  {validationError?.field === 'nextDueDate' && <p id={fieldId('next-due-error')} className="form-error" role="alert">{validationError.message}</p>}
+                  <label className="form-label follow-up-time-label" htmlFor={fieldId('next-due-time')}>Time <span className="form-optional">Optional</span></label>
+                  <input id={fieldId('next-due-time')} className="input" type="time" value={draft.nextDueTime || ''} disabled={busy} onChange={(event) => updateDraft({ nextDueTime: event.target.value })} />
+                  <p className="follow-up-next-due-note">{draft.nextDueTime ? `Time shown in ${Intl.DateTimeFormat().resolvedOptions().timeZone || 'your local time zone'}.` : 'Without a time, the existing date-only due behavior applies.'}</p>
                   <div className="follow-up-quick-dates" role="group" aria-label="Quick next due date choices">
                     {QUICK_DUE_OPTIONS.map((option) => {
                       const value = followUpQuickDueDate(option.days);
@@ -337,7 +354,7 @@ export default function FollowUpOutcomeDialog({
                       type="button"
                       disabled={busy}
                       aria-pressed={!draft.nextDueDate}
-                      onClick={() => updateDraft({ nextDueDate: '' })}
+                      onClick={() => updateDraft({ nextDueDate: '', nextDueTime: '' })}
                     >
                       No date
                     </button>

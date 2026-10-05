@@ -13,12 +13,17 @@ export function buildTaskCalendarEvents(tasks = []) {
   return tasks
     .filter(isOpenTask)
     .map((task) => {
-      const dueDate = taskDueKey(task);
+      const isTimedFollowUp = task.taskType === 'follow_up' && task.metadataJson?.followUpDueHasTime === true;
+      const dueAt = isTimedFollowUp ? new Date(task.dueAt) : null;
+      const dueDate = dueAt && !Number.isNaN(dueAt.getTime())
+        ? `${dueAt.getFullYear()}-${String(dueAt.getMonth() + 1).padStart(2, '0')}-${String(dueAt.getDate()).padStart(2, '0')}`
+        : taskDueKey(task);
       if (!dueDate) return null;
       return {
         id: `task-${task.id}`,
-        title: `Task: ${task.title || 'Untitled task'}`,
-        description: task.description || '',
+        title: isTimedFollowUp ? 'Task: Follow-up' : `Task: ${task.title || 'Untitled task'}`,
+        description: isTimedFollowUp ? '' : task.description || '',
+        ...(isTimedFollowUp ? { dueAt: dueAt.toISOString(), ownerUserId: task.ownerUserId || '' } : {}),
         date: dueDate,
         type: 'deadline',
         href: task.id ? `/tasks/${task.id}` : '/tasks',

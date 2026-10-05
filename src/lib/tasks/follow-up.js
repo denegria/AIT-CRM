@@ -134,6 +134,10 @@ export function normalizeFollowUpCompletionPayload({
   if (followUpOutcomeRequiresAppointment(outcome) && !appointmentAt) {
     throw followUpError('Appointment date and time are required when an appointment is scheduled.');
   }
+  const nextDueHasTime = !appointmentAt && payload.nextDueHasTime === true;
+  if (nextDueHasTime && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/.test(String(payload.nextDueAt || payload.nextFollowUpAt || ''))) {
+    throw followUpError('Next follow-up time must include a time zone.');
+  }
   const nextDueAt = appointmentAt || (!closesFollowUp && (payload.nextDueAt || payload.nextFollowUpAt)
     ? parseFollowUpDateTime(payload.nextDueAt || payload.nextFollowUpAt, 'nextDueAt')
     : null);
@@ -155,6 +159,7 @@ export function normalizeFollowUpCompletionPayload({
     occurredAt,
     appointmentAt,
     nextDueAt,
+    nextDueHasTime,
     createNextTask,
   };
 }
@@ -168,13 +173,13 @@ export function parseFollowUpDateTime(value, fieldName) {
   return date;
 }
 
-export function followUpActivityMessage({ outcomeLabel, note, nextDueAt, appointmentAt }) {
+export function followUpActivityMessage({ outcomeLabel, note, nextDueAt, appointmentAt, nextDueHasTime }) {
   const parts = [`Follow-up completed: ${outcomeLabel}.`];
   if (note) parts.push(note);
   if (appointmentAt) {
     parts.push(`Appointment ${appointmentAt.toISOString()}.`);
   } else if (nextDueAt) {
-    parts.push(`Next follow-up ${nextDueAt.toISOString().slice(0, 10)}.`);
+    parts.push(`Next follow-up ${nextDueHasTime ? new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }).format(nextDueAt) + ' UTC' : nextDueAt.toISOString().slice(0, 10)}.`);
   }
   return parts.join(' ');
 }

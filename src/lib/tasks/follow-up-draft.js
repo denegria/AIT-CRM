@@ -5,6 +5,7 @@ export function initialFollowUpDraftFields() {
     contactMethod: '',
     note: '',
     nextDueDate: '',
+    nextDueTime: '',
     appointmentAt: '',
   };
 }
