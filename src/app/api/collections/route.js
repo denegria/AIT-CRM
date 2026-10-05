@@ -9,6 +9,7 @@ import {
   assertHostedCollectionAvailable,
   createHostedCollectionLink,
   createStaffPaymentRequest,
+  listActiveCollectionSections,
   loadCollectionsQueue,
   loadCollectionsSetup,
   recordManualCollectionPayment,
@@ -74,6 +75,11 @@ export async function GET(request) {
     const businessUnitId = await resolveAitUsaScope(session, searchParams.get('businessUnitId'));
     client = await getPool().connect();
     const scope = { organizationId: session.user.organizationId, businessUnitId };
+    if (searchParams.get('view') === 'sections') {
+      return NextResponse.json({ sections: await listActiveCollectionSections(client, scope) }, {
+        headers: { 'Cache-Control': 'private, no-store' },
+      });
+    }
     const queue = await loadCollectionsQueue(client, {
       ...scope,
       state: searchParams.get('state'),

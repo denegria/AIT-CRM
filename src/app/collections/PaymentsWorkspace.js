@@ -31,6 +31,7 @@ import {
   REGISTRATION_CHANNELS,
 } from '@/lib/registration/catalog.js';
 import { useCRM } from '@/lib/store';
+import { classSectionDisplayLabel } from '@/lib/crm/class-section-display.js';
 import s from './PaymentsWorkspace.module.css';
 
 const PAGE_SIZE = 25;
@@ -166,6 +167,9 @@ export default function PaymentsWorkspace() {
   const [terminalResult, setTerminalResult] = useState(null);
   const [flow, setFlow] = useState(initialPaymentFlow);
   const [registration, setRegistration] = useState(initialRegistration);
+  const [registrationSections, setRegistrationSections] = useState([]);
+  const [registrationSectionsLoading, setRegistrationSectionsLoading] = useState(false);
+  const [registrationSectionsError, setRegistrationSectionsError] = useState('');
   const [contactQuery, setContactQuery] = useState('');
   const [contactSearch, setContactSearch] = useState('');
   const requestKey = useRef('');
@@ -224,6 +228,34 @@ export default function PaymentsWorkspace() {
   useEffect(() => {
     if (loaded) queueMicrotask(() => load());
   }, [load, loaded]);
+
+  useEffect(() => {
+    if (flow.mode !== 'registration' || !currentBusinessUnitId || !isAitUsaScope) return undefined;
+    const controller = new AbortController();
+    queueMicrotask(() => {
+      if (controller.signal.aborted) return;
+      setRegistrationSections([]);
+      setRegistrationSectionsError('');
+      setRegistrationSectionsLoading(true);
+    });
+    const params = new URLSearchParams({ businessUnitId: currentBusinessUnitId, view: 'sections' });
+    fetch(`/api/collections?${params}`, { cache: 'no-store', signal: controller.signal })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.error || 'Class list could not be refreshed.');
+        const sections = Array.isArray(body.sections) ? body.sections : [];
+        setRegistrationSections(sections);
+        setRegistration((current) => sections.some((section) => section.id === current.classSectionId)
+          ? current : { ...current, classSectionId: '' });
+      })
+      .catch((caught) => {
+        if (caught.name !== 'AbortError') setRegistrationSectionsError(caught.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setRegistrationSectionsLoading(false);
+      });
+    return () => controller.abort();
+  }, [flow.mode, currentBusinessUnitId, isAitUsaScope]);
 
   useEffect(() => {
     const params = new URLSearchParams(globalThis.location?.search || '');
@@ -322,6 +354,11 @@ export default function PaymentsWorkspace() {
     setError('');
     setNotice('');
     setRegistration(initialRegistration());
+    if (mode === 'registration') {
+      setRegistrationSections([]);
+      setRegistrationSectionsError('');
+      setRegistrationSectionsLoading(true);
+    }
     setFlow({
       ...initialPaymentFlow(),
       mode,
@@ -386,6 +423,9 @@ export default function PaymentsWorkspace() {
       registrationQuote.status !== 'quoted'
     ) {
       return 'This registration needs advisor review before payment can continue.';
+    }
+    if (flow.step === 1 && flow.mode === 'registration' && (registrationSectionsLoading || registrationSectionsError)) {
+      return registrationSectionsError || 'Wait for the current class list to load.';
     }
     if (flow.step === 2) {
       if (flow.method === 'hosted' && !hostedReady)
@@ -1071,6 +1111,7 @@ export default function PaymentsWorkspace() {
                     Class section
                     <select
                       value={registration.classSectionId}
+                      disabled={registrationSectionsLoading || Boolean(registrationSectionsError)}
                       onChange={(event) =>
                         setRegistration((current) => ({
                           ...current,
@@ -1079,12 +1120,14 @@ export default function PaymentsWorkspace() {
                       }
                     >
                       <option value="">Assign later</option>
-                      {payload?.setup?.sections?.map((section) => (
+                      {registrationSections.map((section) => (
                         <option key={section.id} value={section.id}>
-                          {section.courseName} · {section.sectionKey}
+                          {classSectionDisplayLabel(section)}
                         </option>
                       ))}
                     </select>
+                    {registrationSectionsLoading && <small>Loading current classes…</small>}
+                    {registrationSectionsError && <small role="alert">{registrationSectionsError}</small>}
                   </label>
                   <label>
                     Residence country

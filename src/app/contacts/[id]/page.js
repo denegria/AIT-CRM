@@ -45,6 +45,7 @@ import {
   followUpSubmissionTaskId,
 } from '@/lib/tasks/follow-up-selection.js';
 import { initialFollowUpDraftFields } from '@/lib/tasks/follow-up-draft.js';
+import { classSectionDisplayLabel } from '@/lib/crm/class-section-display.js';
 
 const SNAPSHOT_ICONS = {
   estimate: BriefcaseBusiness,
@@ -109,23 +110,6 @@ const COURSE_STATUS_HELP = {
   cancelled: 'Use when the course never moved forward.',
   transferred: 'Use when the student moved into another class or location.',
 };
-
-function classSectionScheduleLabel(section = {}) {
-  const days = Array.isArray(section.scheduleDays) ? section.scheduleDays.join(', ') : '';
-  const time = [section.startTime, section.endTime].filter(Boolean).join('–');
-  return [days, time].filter(Boolean).join(' ');
-}
-
-function classSectionDisplayLabel(section = {}) {
-  return [
-    section.courseName,
-    section.teacher,
-    section.courseLocation,
-    classSectionScheduleLabel(section),
-    section.modality === 'online' ? 'Online' : '',
-    section.status !== 'active' ? 'Inactive' : '',
-  ].filter(Boolean).join(' · ');
-}
 
 function newManualSendRequestId() {
   return crypto.randomUUID();
@@ -540,6 +524,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const [invoiceWorkOrderId, setInvoiceWorkOrderId] = useState('');
   const [courseRecordsState, setCourseRecordsState] = useState({ contactId: '', items: [], sections: [], loading: false, error: '' });
   const [courseModal, setCourseModal] = useState(null);
+  const [courseSectionsRefreshing, setCourseSectionsRefreshing] = useState(false);
   const [courseForm, setCourseForm] = useState(emptyCourseForm);
   const [courseBusy, setCourseBusy] = useState(false);
   const [courseError, setCourseError] = useState('');
@@ -1086,6 +1071,34 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   }, [contact?.id, dataSource, showCoursesTab]);
 
   useEffect(() => {
+    if (!courseModal || !contact?.id || dataSource !== 'postgres') return undefined;
+    const controller = new AbortController();
+    queueMicrotask(() => {
+      if (!controller.signal.aborted) setCourseSectionsRefreshing(true);
+    });
+    fetch(`/api/contacts/${contact.id}/courses`, { cache: 'no-store', signal: controller.signal })
+      .then(async (response) => {
+        const body = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(body.error || 'Class list could not be refreshed.');
+        setCourseRecordsState((current) => ({
+          ...current,
+          contactId: contact.id,
+          items: Array.isArray(body.courses) ? body.courses : [],
+          sections: Array.isArray(body.classSections) ? body.classSections : [],
+          loading: false,
+          error: '',
+        }));
+      })
+      .catch((error) => {
+        if (error.name !== 'AbortError') setCourseError(error.message);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setCourseSectionsRefreshing(false);
+      });
+    return () => controller.abort();
+  }, [courseModal, contact?.id, dataSource]);
+
+  useEffect(() => {
     if (!contact?.id || dataSource !== 'postgres') return undefined;
     let cancelled = false;
     const requestContactId = contact.id;
@@ -1314,6 +1327,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
 
   const openCourseModal = (mode = 'new', record = null) => {
     if (!access.canWriteCrm || !showCoursesTab) return;
+    setCourseSectionsRefreshing(true);
     const isEdit = mode === 'edit' && record;
     const isComplete = mode === 'complete' && record;
     const isEnd = mode === 'end' && record;
@@ -3336,7 +3350,7 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                 <select
                   className="input select"
                   value={courseForm.classSectionId || ''}
-                  disabled={courseBusy}
+                  disabled={courseBusy || courseSectionsRefreshing || Boolean(courseError)}
                   data-autofocus
                   onChange={(event) => selectClassSection(event.target.value)}
                 >

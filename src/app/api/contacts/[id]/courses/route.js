@@ -168,8 +168,8 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'Past enrollments must use an ended status.' }, { status: 400 });
     }
     const section = await loadClassSection(db, session, businessUnitId, input.classSectionId);
-    if (section?.status !== 'active' && input.status === 'active') {
-      return NextResponse.json({ error: 'Inactive class sections cannot accept new active enrollments.' }, { status: 400 });
+    if (section && section.status !== 'active') {
+      return NextResponse.json({ error: 'Inactive class sections cannot be selected for new enrollments.' }, { status: 400 });
     }
     input = applyClassSection(input, section);
     const existingRecords = await listCourseRecords(db, session, contact.id);
@@ -248,9 +248,8 @@ export async function PATCH(request, { params }) {
       : existing.classSectionId;
     const section = await loadClassSection(db, session, existing.businessUnitId, nextClassSectionId);
     input = applyClassSection(input, section);
-    const nextStatus = Object.prototype.hasOwnProperty.call(input, 'status') ? input.status : existing.status;
-    if (section?.status !== 'active' && nextStatus === 'active' && section.id !== existing.classSectionId) {
-      return NextResponse.json({ error: 'Inactive class sections cannot accept new active enrollments.' }, { status: 400 });
+    if (section?.status !== 'active' && section.id !== existing.classSectionId) {
+      return NextResponse.json({ error: 'Inactive class sections cannot be selected for new enrollments.' }, { status: 400 });
     }
     const existingRecords = await listCourseRecords(db, session, contact.id);
     validateCourseRecordInput({

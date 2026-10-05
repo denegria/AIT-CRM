@@ -6,11 +6,29 @@ import {
   createHostedCollectionLink,
   createStaffPaymentRequest,
   loadCollectionsSetup,
+  listActiveCollectionSections,
   recordManualCollectionPayment,
   recordManualPaymentRequest,
 } from './service.js';
 
 const scope = { organizationId: 'org-1', businessUnitId: 'bu-usa' };
+
+test('fresh class choices are active, scoped, and carry readable schedule fields', async () => {
+  const calls = [];
+  const client = { async query(sql, params) {
+    calls.push({ sql: String(sql), params });
+    return { rows: [{ id: 'section-1', section_key: 'BB-ENG-1', course_name: 'English',
+      teacher: 'Ms. Rivera', modality: 'in_person', course_location: 'Bound Brook',
+      schedule_days_json: ['Monday', 'Wednesday', 'Friday'], start_time: '09:30',
+      end_time: '10:30', status: 'active' }] };
+  } };
+  const sections = await listActiveCollectionSections(client, scope);
+  assert.deepEqual(calls[0].params, ['org-1', 'bu-usa']);
+  assert.match(calls[0].sql, /status = 'active'/);
+  assert.deepEqual(sections[0].scheduleDays, ['Monday', 'Wednesday', 'Friday']);
+  assert.equal(sections[0].teacher, 'Ms. Rivera');
+  assert.equal(sections[0].startTime, '09:30');
+});
 const serviceSource = fs.readFileSync(new URL('./service.js', import.meta.url), 'utf8');
 const testEnvNames = [
   'DEJAVOO_UAT_API_KEY',

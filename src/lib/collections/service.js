@@ -254,16 +254,34 @@ export async function loadCollectionsQueue(client, input = {}) {
   };
 }
 
+export async function listActiveCollectionSections(client, input = {}) {
+  const scope = scoped(input);
+  const result = await client.query(
+    `select id, section_key, course_name, teacher, modality, course_location,
+            schedule_days_json, start_time, end_time, status
+       from course_class_sections where organization_id = $1 and business_unit_id = $2 and status = 'active'
+      order by course_name, start_time, section_key`,
+    [scope.organizationId, scope.businessUnitId],
+  );
+  return result.rows.map((row) => ({
+    id: row.id,
+    sectionKey: row.section_key,
+    courseName: row.course_name,
+    teacher: row.teacher,
+    modality: row.modality,
+    courseLocation: row.course_location,
+    scheduleDays: row.schedule_days_json,
+    startTime: row.start_time,
+    endTime: row.end_time,
+    status: row.status,
+  }));
+}
+
 export async function loadCollectionsSetup(client, input = {}) {
   const scope = scoped(input);
   const contactSearch = String(input.contactSearch || '').trim().slice(0, 120);
   const paymentContactId = String(input.paymentContactId || '').trim();
-  const sections = await client.query(
-    `select id, section_key, course_name, modality, course_location
-       from course_class_sections where organization_id = $1 and business_unit_id = $2 and status = 'active'
-      order by course_name, section_key`,
-    [scope.organizationId, scope.businessUnitId],
-  );
+  const sections = await listActiveCollectionSections(client, scope);
   const recentContacts = await client.query(
     `select id, name, email, phone from contacts
       where organization_id = $1 and primary_business_unit_id = $2 and archived_at is null
@@ -338,13 +356,7 @@ export async function loadCollectionsSetup(client, input = {}) {
     };
   }
   return {
-    sections: sections.rows.map((row) => ({
-      id: row.id,
-      sectionKey: row.section_key,
-      courseName: row.course_name,
-      modality: row.modality,
-      courseLocation: row.course_location,
-    })),
+    sections,
     contacts: recentContacts.rows,
     paymentStudent,
     recentPayments: recentPayments.rows.map((row) => ({
