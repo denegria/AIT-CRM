@@ -51,13 +51,14 @@ test('effective versions never borrow rollout baseline for earlier meetings', as
   const { resolveSectionVersion, sectionAtDate } = await import('./class-sections.js');
   const section = { id: 'section-1', sectionKey: 'ENG-1', teacher: 'Current source row' };
   const versions = [
-    { effectiveDate: '2026-10-05', teacher: 'Rollout teacher', status: 'active' },
-    { effectiveDate: '2026-11-01', teacher: 'Next teacher', status: 'active' },
+    { id: 'version-1', effectiveDate: '2026-10-05', teacher: 'Rollout teacher', status: 'active' },
+    { id: 'version-2', effectiveDate: '2026-11-01', teacher: 'Next teacher', status: 'active' },
   ];
   assert.equal(resolveSectionVersion(versions, '2026-10-04'), null);
   assert.equal(sectionAtDate(section, versions, '2026-10-04'), null);
   assert.equal(sectionAtDate(section, versions, '2026-10-31').teacher, 'Rollout teacher');
   assert.equal(sectionAtDate(section, versions, '2026-11-01').teacher, 'Next teacher');
+  assert.equal(sectionAtDate(section, versions, '2026-11-01').id, 'section-1');
 });
 
 test('managed section validation requires local time, canonical location and matched weekdays', async () => {
@@ -136,4 +137,9 @@ test('regular catalog payload omits unpublished versions, audit metadata and con
   assert.equal(sections[0].teacher, 'Ana');
   const serialized = JSON.stringify(sections);
   assert.doesNotMatch(serialized, /Future teacher|2026-11-01|auditSummaryJson|forbidden-contact|contactId|section-other/);
+  const managerSections = await listManagedSections({ db, organizationId: 'org', businessUnitId: 'usa',
+    canManage: true, today: '2026-10-06' });
+  assert.equal(managerSections[0].id, 'section-usa');
+  assert.equal(managerSections[0].upcoming[0].id, 'section-usa');
+  assert.equal(managerSections[0].lastEffectiveDate, '2026-11-01');
 });

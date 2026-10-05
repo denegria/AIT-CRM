@@ -17,7 +17,8 @@ async function requestJson(url, options = {}) {
 }
 
 function editable(section, today) {
-  const effectiveDate = section?.baselineDate === today ? addCalendarDays(today, 1) : today;
+  const lastEffectiveDate = section?.lastEffectiveDate || section?.baselineDate;
+  const effectiveDate = lastEffectiveDate >= today ? addCalendarDays(lastEffectiveDate, 1) : today;
   return section ? { sectionKey: section.sectionKey, courseName: section.courseName,
     teacher: section.teacher, courseLocation: section.courseLocation, modality: section.modality,
     scheduleDays: section.scheduleDays, startTime: section.startTime, endTime: section.endTime,
@@ -128,7 +129,9 @@ export default function ClassManagementWorkspace({ businessUnitId, today, initia
             </select></label>
             <label>Start time<input type="time" value={form.startTime} onChange={(event) => change('startTime', event.target.value)} disabled={busy} required /></label>
             <label>End time<input type="time" value={form.endTime} onChange={(event) => change('endTime', event.target.value)} disabled={busy} required /></label>
-            <label>Effective date<input type="date" min={selected?.baselineDate === today ? addCalendarDays(today, 1) : today} value={form.effectiveDate} onChange={(event) => change('effectiveDate', event.target.value)} disabled={busy} required /></label>
+            <label>Effective date<input type="date" min={(selected?.lastEffectiveDate || selected?.baselineDate) >= today
+              ? addCalendarDays(selected.lastEffectiveDate || selected.baselineDate, 1) : today} value={form.effectiveDate}
+              onChange={(event) => change('effectiveDate', event.target.value)} disabled={busy} required /></label>
           </div>
           <fieldset disabled={busy}><legend>Meeting days</legend><div className={s.days}>{CANONICAL_WEEKDAYS.map((day) =>
             <label key={day}><input type="checkbox" checked={form.scheduleDays.includes(day)} onChange={(event) => change('scheduleDays', event.target.checked

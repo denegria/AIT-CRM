@@ -204,12 +204,14 @@ export async function listManagedSections({ db, organizationId, businessUnitId, 
     const history = versions.get(row.id) || [];
     const current = sectionAtDate(row, history, today);
     const next = canManage ? history.filter((item) => item.effectiveDate > today).map((item) => ({
-      effectiveDate: item.effectiveDate, revision: item.revision, ...classSectionPayload({ ...row, ...item }),
+      effectiveDate: item.effectiveDate, revision: item.revision,
+      ...classSectionPayload({ ...row, ...item, id: row.id, sectionKey: row.sectionKey }),
     })) : [];
     if (!current && !canManage) return [];
     return [{ ...classSectionPayload(current || row), status: current?.status || 'planned',
       revision: history.at(-1)?.revision || 0, rosterCount: countBySection.get(row.id) || 0,
-      ...(canManage ? { upcoming: next, baselineDate: history.find((item) => item.isBaseline)?.effectiveDate || null } : {}),
+      ...(canManage ? { upcoming: next, baselineDate: history.find((item) => item.isBaseline)?.effectiveDate || null,
+        lastEffectiveDate: history.at(-1)?.effectiveDate || null } : {}),
     }];
   });
 }
@@ -235,7 +237,9 @@ export async function writeManagedSection({ db, organizationId, businessUnitId, 
     const existingAtDate = versions.find((item) => item.effectiveDate === effectiveDate);
     if (existingAtDate) {
       const identical = SNAPSHOT_FIELDS.every((field) => JSON.stringify(existingAtDate[field]) === JSON.stringify(normalized[field]));
-      if (identical && (Number(expectedRevision) === revision || Number(expectedRevision) === revision - 1)) return { section: { ...classSectionPayload({ ...section, ...existingAtDate }), revision },
+      if (identical && (Number(expectedRevision) === revision || Number(expectedRevision) === revision - 1)) return { section: {
+        ...classSectionPayload({ ...section, ...existingAtDate, id: section.id, sectionKey: section.sectionKey }),
+        revision, lastEffectiveDate: versions.at(-1)?.effectiveDate || null },
         audit: { outcome: 'unchanged', effectiveDate, revision } };
       throw createCrmError(existingAtDate.isBaseline
         ? 'The rollout baseline occupies this date. Choose a later effective date.'
@@ -274,7 +278,8 @@ export async function writeManagedSection({ db, organizationId, businessUnitId, 
       revision: revision + 1, actorUserId, ...normalized,
       auditSummaryJson: { kind: sectionId ? 'class_changed' : 'class_created', changes },
     }).returning();
-    return { section: { ...classSectionPayload({ ...section, ...version }), revision: version.revision },
+      return { section: { ...classSectionPayload({ ...section, ...version, id: section.id, sectionKey: section.sectionKey }),
+        revision: version.revision, lastEffectiveDate: version.effectiveDate },
       audit: { outcome: 'saved', effectiveDate, revision: version.revision, changedFields: Object.keys(changes) } };
   });
 }
