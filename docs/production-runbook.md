@@ -30,8 +30,14 @@ not bypass the guard with direct Drizzle commands or ad hoc SQL/journal edits.
 The forward SQL may be applied to production only through an explicitly
 approved, identity-checked migration step, in manifest order, with each exact
 file hash recorded in `ait_crm_migrations.forward_migrations` in the same
-transaction. Check the production baseline and backup/restore route first; do
-not run this step merely because staging is ready.
+transaction. For the 0030/0031 release, use `scripts/apply-class-pricing-forward.mjs`
+with a direct Neon URL, the exact target confirmation, and a dry-run preflight
+before setting `FORWARD_MIGRATION_EXECUTE=1`. It checks the pre-migration catalog,
+target identity and ledger, then checks the pinned target catalog before commit.
+Staging has a pre-existing 0029 ledger gap despite its matching logical 0029
+schema; the runner allows that gap only on staging and never inserts a false
+0029 ledger record. Check the production baseline and backup/restore route first;
+do not run this step merely because staging is ready.
 
 No Drizzle mutation may precede `npm run verify:schema`. Production mutation remains a separate explicit approval even after the baseline is repaired.
 
