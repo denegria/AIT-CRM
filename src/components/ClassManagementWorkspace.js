@@ -24,7 +24,7 @@ function editable(section, today) {
     status: section.status, effectiveDate } : { ...empty, effectiveDate };
 }
 
-export default function ClassManagementWorkspace({ businessUnitId, today, initialState = null }) {
+export default function ClassManagementWorkspace({ businessUnitId, today, initialState = null, onSaved }) {
   const staticMode = Boolean(initialState);
   const [sections, setSections] = useState(initialState?.sections || []);
   const [canManage, setCanManage] = useState(Boolean(initialState?.capabilities?.canManage));
@@ -82,6 +82,7 @@ export default function ClassManagementWorkspace({ businessUnitId, today, initia
       setForm(editable(result.section, today));
       setPreview(null);
       setNotice(result.audit.outcome === 'unchanged' ? 'No class change was needed.' : `Class change saved for ${result.audit.effectiveDate}.`);
+      if (result.audit.outcome === 'saved') onSaved?.();
     } catch (caught) { setError(caught.message); }
     finally { setBusy(false); }
   };

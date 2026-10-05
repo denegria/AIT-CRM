@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import ClassManagementWorkspace from '@/components/ClassManagementWorkspace.js';
 import { todayInAttendanceTimeZone } from '@/lib/attendance/policy.js';
 import ActiveClassesWorkspace from '@/components/ActiveClassesWorkspace.js';
@@ -10,6 +11,7 @@ import s from './ActiveClasses.module.css';
 
 export default function ActiveClassesPage() {
   const { currentBusinessUnit, routeDataReady } = useCRM();
+  const [classRefreshKey, setClassRefreshKey] = useState(0);
 
   if (!routeDataReady) {
     return <PageState tone="loading" title="Loading Active Classes" copy="Preparing the attendance workspace." />;
@@ -27,7 +29,8 @@ export default function ActiveClassesPage() {
   }
 
   return <>
-    <ClassManagementWorkspace key={currentBusinessUnit?.id} businessUnitId={currentBusinessUnit?.id} today={todayInAttendanceTimeZone()} />
-    <ActiveClassesWorkspace styles={s} />
+    <ClassManagementWorkspace key={currentBusinessUnit?.id} businessUnitId={currentBusinessUnit?.id}
+      today={todayInAttendanceTimeZone()} onSaved={() => setClassRefreshKey((value) => value + 1)} />
+    <ActiveClassesWorkspace styles={s} classRefreshKey={classRefreshKey} />
   </>;
 }

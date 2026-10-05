@@ -66,7 +66,7 @@ function markSummary(status) {
   return 'Unmarked';
 }
 
-export default function ActiveClassesWorkspace({ styles: s, initialState = null }) {
+export default function ActiveClassesWorkspace({ styles: s, initialState = null, classRefreshKey = 0 }) {
   const staticMode = Boolean(initialState);
   const today = useMemo(() => initialState?.today || todayInNewYork(), [initialState]);
   const [date, setDate] = useState(initialState?.date || today);
@@ -143,7 +143,7 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null 
         if (!controller.signal.aborted) setClassLoading(false);
       });
     return () => controller.abort();
-  }, [date, reloadKey, staticMode]);
+  }, [classRefreshKey, date, reloadKey, staticMode]);
 
   useEffect(() => {
     if (staticMode) return undefined;
@@ -170,7 +170,7 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null 
         if (!controller.signal.aborted) setWorkspaceLoading(false);
       });
     return () => controller.abort();
-  }, [date, reloadKey, selectedClassId, staticMode]);
+  }, [classRefreshKey, date, reloadKey, selectedClassId, staticMode]);
 
   const locationOptions = useMemo(() => (
     [...new Set(classes.map((item) => formatClassLocation(item)))].sort()
