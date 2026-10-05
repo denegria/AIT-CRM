@@ -4,6 +4,7 @@ import {
   calculateRegistrationQuote,
 } from './catalog.js';
 import { resolveBookFulfillmentPlan } from '../fulfillment/policy.js';
+import { adjustStaffQuote } from './pricing.js';
 
 const IDEMPOTENCY_KEY_PATTERN = /^[A-Za-z0-9._:-]{12,160}$/;
 const PLACEMENT_REVIEW_STATUSES = new Set(['pending', 'in_review', 'confirmed', 'adjusted', 'additional_review_required']);
@@ -89,18 +90,24 @@ export function authorizeRegistrationRequest(input = {}) {
     throw new RegistrationPolicyError('business_unit_permission_denied', 'Staff access to the requested business unit is required.', 403);
   }
 
+  if (channel === REGISTRATION_CHANNELS.PUBLIC && input.pricingAdjustment != null) {
+    throw new RegistrationPolicyError('pricing_override_denied', 'Public registration cannot adjust pricing.', 403);
+  }
+
   const itemCodes = Array.isArray(input.itemCodes) && input.itemCodes.length
     ? input.itemCodes
     : channel === REGISTRATION_CHANNELS.PUBLIC
       ? [REGISTRATION_ITEM_CODES.PUBLIC_BUNDLE]
       : [];
-  const quote = calculateRegistrationQuote({
+  const catalogQuote = calculateRegistrationQuote({
     channel,
     itemCodes,
     includeTuitionPrepayment: input.includeTuitionPrepayment === true,
     residenceCountryCode: input.residenceCountryCode,
     billingCountryCode: input.billingCountryCode,
   });
+  const quote = catalogQuote.status === 'quoted' && channel === REGISTRATION_CHANNELS.STAFF
+    ? adjustStaffQuote(catalogQuote, input.pricingAdjustment, input.actor) : catalogQuote;
   if (quote.status === 'advisor_required') {
     return Object.freeze({
       status: 'advisor_required',

@@ -326,20 +326,25 @@ function renderAitUsaReceiptPDF(record, context = {}) {
     }
 
     doc.setDrawColor(...accent);
-    doc.roundedRect(18, 157, 174, 48, 2, 2);
+    doc.roundedRect(18, 150, 174, form.pricingLines.length ? 72 : 55, 2, 2);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9);
     doc.setTextColor(...accent);
-    doc.text('PAYMENT NOTE', 25, 169);
+    doc.text(form.pricingLines.length ? 'PRICING BREAKDOWN' : 'PAYMENT NOTE', 25, 162);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(...ink);
-    doc.text(doc.splitTextToSize(form.note || form.bilingualNote[0], 154), 25, 181);
+    if (form.pricingLines.length) {
+      form.pricingLines.slice(0, 2).forEach((line, index) => {
+        doc.text(`${line.label.slice(0, 25)}: ${line.standard} - ${line.discount} = ${line.final}`, 25, 175 + index * 12);
+      });
+    }
+    doc.text(doc.splitTextToSize(form.note || form.bilingualNote[0], 154), 25, form.pricingLines.length ? 204 : 181);
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8);
     doc.setTextColor(...muted);
-    doc.text(doc.splitTextToSize(form.bilingualNote.join(' '), 154), 25, 218);
+    doc.text(doc.splitTextToSize(form.bilingualNote.join(' '), 154), 25, 233);
 
     doc.setTextColor(...muted);
     doc.setFont('helvetica', 'normal');

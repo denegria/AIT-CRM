@@ -93,3 +93,14 @@ test('refund-capable schema does not silently implement refund policy', () => {
     amount: '10.00',
   }), /Refund allocation policy is not implemented/);
 });
+
+test('discounted $175 tuition charge settles at $175 while a $195 charge remains $20 due', () => {
+  const allocations = [{ amount: '175.00', transactionKind: 'payment', transactionStatus: 'verified' }];
+  const asOf = new Date('2026-10-05T00:00:00Z');
+  const discounted = summarizeChargeLedger({ charge: { amount: '175.00', status: 'due' }, allocations, asOf });
+  const partial = summarizeChargeLedger({ charge: { amount: '195.00', status: 'due' }, allocations, asOf });
+  assert.equal(discounted.remaining, '0.00');
+  assert.equal(discounted.status, 'paid');
+  assert.equal(partial.remaining, '20.00');
+  assert.equal(partial.status, 'partially_paid');
+});

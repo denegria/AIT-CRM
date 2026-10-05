@@ -30,3 +30,9 @@ test('AIT USA receipt money formatter handles missing values', () => {
   assert.equal(formatAitUsaReceiptMoney('1250'), '$1,250.00');
   assert.equal(formatAitUsaReceiptMoney(''), 'Not captured');
 });
+
+test('discounted receipt preserves original, discount and final without staff audit identity', () => {
+  const document = buildAitUsaReceiptDocument({ amount: '175.00', items: [{ desc: 'Four-week tuition', standardAmount: '195.00', discount: '20.00', finalAmount: '175.00', amount: 175 }] });
+  assert.deepEqual(document.pricingLines, [{ label: 'Four-week tuition', standard: '$195.00', discount: '$20.00', final: '$175.00' }]);
+  assert.doesNotMatch(JSON.stringify(document), /actorUserId|reason/);
+});

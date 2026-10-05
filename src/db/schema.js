@@ -752,6 +752,9 @@ export const studentCharges = pgTable('student_charges', {
     table.status,
   ),
   dueIdx: index('student_charges_due_idx').on(table.businessUnitId, table.status, table.originalDueDate),
+  tuitionPeriodIdx: uniqueIndex('student_charges_tuition_period_unique_idx')
+    .on(table.organizationId, table.businessUnitId, table.enrollmentId, table.servicePeriodStart, table.servicePeriodEnd)
+    .where(sql`${table.chargeType} = 'tuition_four_week' and ${table.enrollmentId} is not null and ${table.servicePeriodStart} is not null and ${table.servicePeriodEnd} is not null and ${table.status} <> 'voided'`),
   studentScopeFk: foreignKey({
     columns: [table.studentContactId, table.organizationId, table.businessUnitId],
     foreignColumns: [contacts.id, contacts.organizationId, contacts.primaryBusinessUnitId],
@@ -782,6 +785,32 @@ export const studentCharges = pgTable('student_charges', {
     'student_charges_period_check',
     sql`${table.servicePeriodStart} is null or ${table.servicePeriodEnd} is null or ${table.servicePeriodEnd} >= ${table.servicePeriodStart}`,
   ),
+}));
+
+export const chargePricingAudit = pgTable('charge_pricing_audit', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull(),
+  businessUnitId: uuid('business_unit_id').notNull(),
+  chargeId: uuid('charge_id').notNull(),
+  actorUserId: uuid('actor_user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  eventType: text('event_type').notNull(),
+  standardAmount: numeric('standard_amount', { precision: 12, scale: 2 }).notNull(),
+  oldAmount: numeric('old_amount', { precision: 12, scale: 2 }),
+  newAmount: numeric('new_amount', { precision: 12, scale: 2 }).notNull(),
+  reason: text('reason').notNull(),
+  idempotencyKey: text('idempotency_key').notNull(),
+  createdAt,
+}, (table) => ({
+  idempotencyIdx: uniqueIndex('charge_pricing_audit_idempotency_unique').on(table.organizationId, table.businessUnitId, table.idempotencyKey),
+  chargeIdx: index('charge_pricing_audit_charge_idx').on(table.organizationId, table.businessUnitId, table.chargeId, table.createdAt),
+  chargeScopeFk: foreignKey({
+    columns: [table.chargeId, table.organizationId, table.businessUnitId],
+    foreignColumns: [studentCharges.id, studentCharges.organizationId, studentCharges.businessUnitId],
+    name: 'charge_pricing_audit_charge_scope_fk',
+  }).onDelete('restrict'),
+  amountCheck: check('charge_pricing_audit_amount_check', sql`${table.standardAmount} > 0 and ${table.newAmount} > 0 and ${table.newAmount} <= ${table.standardAmount}`),
+  eventCheck: check('charge_pricing_audit_event_check', sql`${table.eventType} in ('created', 'adjusted')`),
+  reasonCheck: check('charge_pricing_audit_reason_check', sql`length(trim(${table.reason})) between 1 and 500`),
 }));
 
 export const paymentRequests = pgTable('payment_requests', {
@@ -859,6 +888,30 @@ export const paymentRequests = pgTable('payment_requests', {
     'payment_requests_status_check',
     sql`${table.status} in ('created', 'pending', 'completed', 'failed', 'expired', 'canceled')`,
   ),
+}));
+
+export const registrationPricingAudit = pgTable('registration_pricing_audit', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull(),
+  businessUnitId: uuid('business_unit_id').notNull(),
+  paymentRequestId: uuid('payment_request_id').notNull(),
+  actorUserId: uuid('actor_user_id').notNull().references(() => users.id, { onDelete: 'restrict' }),
+  reason: text('reason').notNull(),
+  standardTotal: numeric('standard_total', { precision: 12, scale: 2 }).notNull(),
+  discountTotal: numeric('discount_total', { precision: 12, scale: 2 }).notNull(),
+  finalTotal: numeric('final_total', { precision: 12, scale: 2 }).notNull(),
+  lineAdjustments: jsonb('line_adjustments').notNull(),
+  idempotencyKey: text('idempotency_key').notNull(),
+  createdAt,
+}, (table) => ({
+  idempotencyIdx: uniqueIndex('registration_pricing_audit_idempotency_unique').on(table.organizationId, table.businessUnitId, table.idempotencyKey),
+  requestScopeFk: foreignKey({
+    columns: [table.paymentRequestId, table.organizationId, table.businessUnitId],
+    foreignColumns: [paymentRequests.id, paymentRequests.organizationId, paymentRequests.businessUnitId],
+    name: 'registration_pricing_audit_request_scope_fk',
+  }).onDelete('restrict'),
+  amountCheck: check('registration_pricing_audit_amount_check', sql`${table.standardTotal} > 0 and ${table.discountTotal} > 0 and ${table.finalTotal} > 0 and ${table.standardTotal} = ${table.discountTotal} + ${table.finalTotal}`),
+  reasonCheck: check('registration_pricing_audit_reason_check', sql`length(trim(${table.reason})) between 1 and 500`),
 }));
 
 export const providerTransactions = pgTable('provider_transactions', {

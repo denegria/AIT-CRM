@@ -104,6 +104,9 @@ export async function orchestrateRegistration(client, input = {}) {
     );
     const replay = await loadRegistrationReplay(client, scope, request.idempotencyKey);
     if (replay) {
+      if (replay.quote?.channel !== request.channel) {
+        throw new RegistrationActionError('registration_channel_conflict', 'This registration key belongs to a different checkout channel.', 409);
+      }
       await client.query('commit');
       return replay;
     }

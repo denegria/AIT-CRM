@@ -25,7 +25,9 @@ import {
 } from 'lucide-react';
 
 import PageState from '@/components/PageState';
+import { RegistrationPricingReview, TuitionPricingReview } from './FinancePricingReview.js';
 import { isAitUsaBusinessUnit } from '@/lib/attendance/policy.js';
+import { adjustStaffQuote } from '@/lib/registration/pricing.js';
 import {
   calculateRegistrationQuote,
   REGISTRATION_CHANNELS,
@@ -111,6 +113,8 @@ function initialRegistration() {
     payerEmail: '',
     payerPhone: '',
     itemCode: 'registration_book_bundle',
+    customFinalAmounts: {},
+    pricingReason: '',
     includeTuitionPrepayment: false,
     residenceCountryCode: 'US',
     billingCountryCode: 'US',
@@ -149,9 +153,10 @@ function paymentAttemptState(item) {
 }
 
 export default function PaymentsWorkspace() {
-  const { loaded, access, currentBusinessUnitId, currentBusinessUnit } =
+  const { loaded, access, currentUser, currentBusinessUnitId, currentBusinessUnit } =
     useCRM();
   const isAitUsaScope = isAitUsaBusinessUnit(currentBusinessUnit?.name);
+  const canOverridePricing = Boolean(currentUser?.roleKeys?.some((role) => ['admin', 'senior_coordinator'].includes(role)));
   const [view, setView] = useState('balances');
   const [lane, setLane] = useState('due');
   const [search, setSearch] = useState('');
@@ -167,6 +172,7 @@ export default function PaymentsWorkspace() {
   const [terminalResult, setTerminalResult] = useState(null);
   const [flow, setFlow] = useState(initialPaymentFlow);
   const [registration, setRegistration] = useState(initialRegistration);
+  const [tuitionDraft, setTuitionDraft] = useState({ enrollmentId: '', periodStart: '', finalAmount: '', reason: '', adjustmentFinal: '', adjustmentReason: '' });
   const [registrationSections, setRegistrationSections] = useState([]);
   const [registrationSectionsLoading, setRegistrationSectionsLoading] = useState(false);
   const [registrationSectionsError, setRegistrationSectionsError] = useState('');
@@ -322,6 +328,20 @@ export default function PaymentsWorkspace() {
     ],
   );
 
+  const hasRegistrationAdjustment = Object.values(registration.customFinalAmounts).some((amount) => String(amount).trim());
+  const registrationPricing = (() => {
+    if (!hasRegistrationAdjustment || !canOverridePricing || registrationQuote.status !== 'quoted') return { quote: registrationQuote, error: '' };
+    try {
+      return { quote: adjustStaffQuote(registrationQuote, {
+        finalAmounts: Object.fromEntries(Object.entries(registration.customFinalAmounts).filter(([, amount]) => String(amount).trim())),
+        reason: registration.pricingReason,
+      }, { canOverridePricing: true, userId: currentUser?.id }), error: '' };
+    } catch (caught) {
+      return { quote: registrationQuote, error: caught.message };
+    }
+  })();
+  const reviewedRegistrationQuote = registrationPricing.quote;
+
   const studentName =
     paymentStudent?.name ||
     selectedContact?.name ||
@@ -354,6 +374,7 @@ export default function PaymentsWorkspace() {
     setError('');
     setNotice('');
     setRegistration(initialRegistration());
+    setTuitionDraft({ enrollmentId: '', periodStart: '', finalAmount: '', reason: '', adjustmentFinal: '', adjustmentReason: '' });
     if (mode === 'registration') {
       setRegistrationSections([]);
       setRegistrationSectionsError('');
@@ -424,6 +445,7 @@ export default function PaymentsWorkspace() {
     ) {
       return 'This registration needs advisor review before payment can continue.';
     }
+    if (flow.mode === 'registration' && registrationPricing.error) return registrationPricing.error;
     if (flow.step === 1 && flow.mode === 'registration' && (registrationSectionsLoading || registrationSectionsError)) {
       return registrationSectionsError || 'Wait for the current class list to load.';
     }
@@ -569,6 +591,7 @@ export default function PaymentsWorkspace() {
             payer,
             itemCodes: [registration.itemCode],
             includeTuitionPrepayment: registration.includeTuitionPrepayment,
+            ...(hasRegistrationAdjustment ? { pricingAdjustment: { finalAmounts: Object.fromEntries(Object.entries(registration.customFinalAmounts).filter(([, amount]) => String(amount).trim())), reason: registration.pricingReason } } : {}),
             residenceCountryCode: registration.residenceCountryCode,
             billingCountryCode: registration.billingCountryCode,
             learningModality: registration.learningModality,
@@ -596,6 +619,37 @@ export default function PaymentsWorkspace() {
     } finally {
       setSaving('');
     }
+  };
+
+  const createTuitionCharge = async () => {
+    setSaving('tuition'); setError('');
+    try {
+      const result = await post({ action: 'create_tuition_charge', charge: {
+        studentContactId: flow.studentContactId,
+        enrollmentId: tuitionDraft.enrollmentId,
+        servicePeriodStart: tuitionDraft.periodStart,
+        ...(canOverridePricing && tuitionDraft.finalAmount.trim() ? { finalAmount: tuitionDraft.finalAmount, reason: tuitionDraft.reason } : {}),
+        idempotencyKey: idempotency('tuition:charge'),
+      } });
+      setFlow((current) => ({ ...current, intent: 'charge', chargeId: result.charge.id, amount: result.charge.amount }));
+      setNotice('Four-week tuition charge created. Review its persisted amount before payment.');
+      await load();
+    } catch (caught) { setError(caught.message || 'Tuition charge could not be created.'); }
+    finally { setSaving(''); }
+  };
+
+  const adjustTuitionCharge = async () => {
+    setSaving('tuition-adjustment'); setError('');
+    try {
+      const result = await post({ action: 'adjust_tuition_charge', charge: {
+        chargeId: flow.chargeId, finalAmount: tuitionDraft.adjustmentFinal,
+        reason: tuitionDraft.adjustmentReason, idempotencyKey: idempotency('tuition:adjust'),
+      } });
+      setFlow((current) => ({ ...current, amount: result.charge.amount }));
+      setNotice('Unpaid tuition charge adjusted. Review the final amount before payment.');
+      await load();
+    } catch (caught) { setError(caught.message || 'Tuition charge could not be adjusted.'); }
+    finally { setSaving(''); }
   };
 
   const recoverTerminal = async (paymentRequestId) => {
@@ -659,7 +713,7 @@ export default function PaymentsWorkspace() {
   const paymentAmount =
     flow.mode === 'registration'
       ? registrationQuote.status === 'quoted'
-        ? dollars(registrationQuote.total)
+        ? dollars(reviewedRegistrationQuote.total)
         : 'Advisor review required'
       : dollars(flow.amount);
 
@@ -979,6 +1033,32 @@ export default function PaymentsWorkspace() {
                     </small>
                   </span>
                 </div>
+                {paymentStudent?.tuitionEnrollments?.length > 0 && (
+                  <div className={s.pricingEditor}>
+                    <strong>Create four-week tuition charge</strong>
+                    <small>Create a real charge for an active enrollment and 28-day period before collecting payment. Regional standard is read from the enrollment&apos;s registration.</small>
+                    <label>Enrollment
+                      <select value={tuitionDraft.enrollmentId} onChange={(event) => setTuitionDraft((current) => ({ ...current, enrollmentId: event.target.value }))}>
+                        <option value="">Select enrollment</option>
+                        {paymentStudent.tuitionEnrollments.map((enrollment) => <option key={enrollment.id} value={enrollment.id} disabled={!enrollment.standardAmount}>
+                          {enrollment.courseName} · {enrollment.standardAmount ? `standard ${dollars(enrollment.standardAmount)}` : 'pricing review required'}
+                        </option>)}
+                      </select>
+                    </label>
+                    <label>Service period start
+                      <input type="date" value={tuitionDraft.periodStart} onChange={(event) => setTuitionDraft((current) => ({ ...current, periodStart: event.target.value }))} />
+                    </label>
+                    {canOverridePricing && <>
+                      <label>Custom final amount (optional)
+                        <input inputMode="decimal" placeholder="Use standard rate" value={tuitionDraft.finalAmount} onChange={(event) => setTuitionDraft((current) => ({ ...current, finalAmount: event.target.value }))} />
+                      </label>
+                      {tuitionDraft.finalAmount && <label>Adjustment reason
+                        <textarea maxLength={500} value={tuitionDraft.reason} onChange={(event) => setTuitionDraft((current) => ({ ...current, reason: event.target.value }))} />
+                      </label>}
+                    </>}
+                    <button type="button" className="btn" disabled={Boolean(saving) || !tuitionDraft.enrollmentId || !tuitionDraft.periodStart} onClick={createTuitionCharge}>Create charge</button>
+                  </div>
+                )}
                 <fieldset className={s.choiceGroup}>
                   <legend>What does this payment cover?</legend>
                   {paymentStudent?.openCharges?.map((charge) => {
@@ -1043,6 +1123,19 @@ export default function PaymentsWorkspace() {
                     <WalletCards size={19} />
                   </button>
                 </fieldset>
+                {canOverridePricing && selectedCharge?.chargeType === 'tuition_four_week' && selectedCharge.allocated === '0.00' && !selectedCharge.paymentRequest && (
+                  <div className={s.pricingEditor}>
+                    <strong>Adjust unpaid tuition charge</strong>
+                    <small>Standard {dollars(selectedCharge.pricing?.standardAmount || selectedCharge.amount)} · Current {dollars(selectedCharge.amount)}. Existing allocations or payment requests block adjustment.</small>
+                    <label>New positive final amount
+                      <input inputMode="decimal" value={tuitionDraft.adjustmentFinal} onChange={(event) => setTuitionDraft((current) => ({ ...current, adjustmentFinal: event.target.value }))} />
+                    </label>
+                    <label>Adjustment reason
+                      <textarea maxLength={500} value={tuitionDraft.adjustmentReason} onChange={(event) => setTuitionDraft((current) => ({ ...current, adjustmentReason: event.target.value }))} />
+                    </label>
+                    <button type="button" className="btn" disabled={Boolean(saving) || !tuitionDraft.adjustmentFinal || !tuitionDraft.adjustmentReason.trim()} onClick={adjustTuitionCharge}>Apply adjustment</button>
+                  </div>
+                )}
                 {!paymentStudent?.openCharges?.length && (
                   <div className={s.inlineInfo}>
                     No open or future-dated charge exists. Use account credit
@@ -1097,6 +1190,7 @@ export default function PaymentsWorkspace() {
                         setRegistration((current) => ({
                           ...current,
                           itemCode: event.target.value,
+                          customFinalAmounts: {},
                         }))
                       }
                     >
@@ -1181,11 +1275,32 @@ export default function PaymentsWorkspace() {
                         setRegistration((current) => ({
                           ...current,
                           includeTuitionPrepayment: event.target.checked,
+                          customFinalAmounts: {},
                         }))
                       }
                     />
                     Add four-week tuition prepayment
                   </label>
+                  {canOverridePricing && registrationQuote.status === 'quoted' && (
+                    <div className={s.pricingEditor}>
+                      <strong>Custom final charge or credit</strong>
+                      <small>Standard catalog rates are authoritative. Enter a positive final amount below a standard line; a reason is required.</small>
+                      {registrationQuote.lines.map((line) => (
+                        <label key={line.code}>
+                          {line.label} · standard {dollars(line.amount)}
+                          <input inputMode="decimal" placeholder={line.amount} value={registration.customFinalAmounts[line.code] || ''}
+                            onChange={(event) => setRegistration((current) => ({ ...current,
+                              customFinalAmounts: { ...current.customFinalAmounts, [line.code]: event.target.value },
+                            }))} />
+                        </label>
+                      ))}
+                      {hasRegistrationAdjustment && <label>Adjustment reason
+                        <textarea maxLength={500} value={registration.pricingReason}
+                          onChange={(event) => setRegistration((current) => ({ ...current, pricingReason: event.target.value }))} />
+                      </label>}
+                      {registrationPricing.error && <small role="alert">{registrationPricing.error}</small>}
+                    </div>
+                  )}
                   {registration.residenceCountryCode === 'US' &&
                     registration.learningModality === 'online' && (
                       <>
@@ -1386,6 +1501,8 @@ export default function PaymentsWorkspace() {
                           : selectedCharge?.description}
                     </strong>
                   </div>
+                  {flow.mode === 'registration' && <RegistrationPricingReview quote={reviewedRegistrationQuote} canOverridePricing={canOverridePricing} />}
+                  {flow.mode === 'payment' && <TuitionPricingReview charge={selectedCharge} canOverridePricing={canOverridePricing} />}
                   <div>
                     <span>Amount</span>
                     <strong>{paymentAmount}</strong>

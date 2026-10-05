@@ -15,6 +15,7 @@ function fakeRegistrationClient(seed = {}) {
     charges: [],
     requests: [],
     fulfillments: [],
+    pricingAudits: [],
     sections: [...(seed.sections || [])],
     calls: [],
     next: 1,
@@ -150,6 +151,10 @@ function fakeRegistrationClient(seed = {}) {
         };
         state.requests.push(row);
         return { rows: [row] };
+      }
+      if (statement.startsWith('insert into registration_pricing_audit')) {
+        state.pricingAudits.push({ payment_request_id: parameters[2], actor_user_id: parameters[3], reason: parameters[4], standard_total: parameters[5], discount_total: parameters[6], final_total: parameters[7], lines: JSON.parse(parameters[8]) });
+        return { rows: [] };
       }
       if (statement.startsWith('insert into book_fulfillments')) {
         const existing = state.fulfillments.find((row) => (
@@ -477,4 +482,37 @@ test('registration fails closed when the scoped business unit is not AIT USA', a
   );
   assert.equal(client.state.contacts.length, 0);
   assert.equal(client.state.calls.at(-1).sql, 'rollback');
+});
+
+test('discounted staff registration persists adjusted charge, credit, request, and one immutable audit', async () => {
+  const client = fakeRegistrationClient();
+  const input = {
+    ...publicRequest, channel: 'staff', itemCodes: ['registration_only'],
+    idempotencyKey: 'registration:staff:discount-0001',
+    residenceCountryCode: 'US', billingCountryCode: 'US',
+    includeTuitionPrepayment: true, learningModality: 'in_person',
+    actor: { canManageRegistrations: true, canOverridePricing: true, userId: 'admin-1', businessUnitIds: ['bu-usa'] },
+    pricingAdjustment: { finalAmounts: { registration_only: '45', tuition_prepayment_four_week: '175' }, reason: 'Approved scholarship' },
+  };
+  const result = await orchestrateRegistration(client, input);
+  assert.equal(result.quote.standardTotal, '250.00');
+  assert.equal(result.quote.discount, '30.00');
+  assert.equal(result.quote.total, '220.00');
+  assert.equal(client.state.charges[0].amount, '45.00');
+  assert.equal(result.allocationPlan[1].amount, '175.00');
+  assert.equal(result.paymentRequest.requested_amount, '220.00');
+  assert.equal(client.state.enrollments[0].metadata_json.tuitionPricing.pricingVersion, '2026-09-17.v1');
+  assert.equal(client.state.pricingAudits[0].actor_user_id, 'admin-1');
+  assert.deepEqual(client.state.pricingAudits[0].lines.map((line) => line.finalAmount), ['45.00', '175.00']);
+  assert.equal((await orchestrateRegistration(client, input)).duplicate, true);
+  assert.equal(client.state.pricingAudits.length, 1);
+});
+
+test('public replay of a staff registration key cannot expose private pricing audit', async () => {
+  const client = fakeRegistrationClient();
+  const idempotencyKey = 'registration:cross-channel:fixture';
+  await orchestrateRegistration(client, { ...publicRequest, idempotencyKey, channel: 'staff', itemCodes: ['registration_only'], actor: { canManageRegistrations: true, canOverridePricing: true, userId: 'admin-1', businessUnitIds: ['bu-usa'] }, pricingAdjustment: { finalTotal: '45', reason: 'Private aid' } });
+  const writes = client.state.calls.filter((call) => call.sql.startsWith('insert into')).length;
+  await assert.rejects(orchestrateRegistration(client, { ...publicRequest, idempotencyKey }), (error) => error.code === 'registration_channel_conflict' && error.status === 409);
+  assert.equal(client.state.calls.filter((call) => call.sql.startsWith('insert into')).length, writes);
 });

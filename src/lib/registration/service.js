@@ -142,6 +142,7 @@ async function createPlannedEnrollment(client, input) {
         registrationState: 'payment_pending',
         placementState,
         programCode: input.program.code,
+        tuitionPricing: { residenceCountryCode: input.regionalPricing.residenceCountryCode, billingCountryCode: input.regionalPricing.billingCountryCode, pricingVersion: input.regionalPricing.pricingVersion },
         ...(input.portalAccountId ? { portalAccountId: input.portalAccountId } : {}),
         ...(input.placement ? { placement: input.placement } : {}),
         sectionState: input.section ? 'assigned' : 'pending',
@@ -178,6 +179,7 @@ export async function persistRegistrationBundle(client, input) {
     portalAccountId: input.portalAccountId,
     placement: input.placement,
     fulfillmentPlan: input.fulfillmentPlan,
+    regionalPricing: input.quote.regionalPricing,
   });
 
   const charges = [];
@@ -199,6 +201,7 @@ export async function persistRegistrationBundle(client, input) {
         catalogVersion: input.quote.catalogVersion,
         pricingVersion: input.quote.pricingVersion,
         catalogItemCode: line.code,
+        ...(input.quote.pricingAdjustment ? { standardAmount: line.standardAmount, discount: line.discount, pricingAdjustment: input.quote.pricingAdjustment } : {}),
         taxable: line.taxable,
       },
     });
@@ -265,6 +268,20 @@ export async function persistRegistrationBundle(client, input) {
       registrationResult,
     },
   });
+  if (input.quote.pricingAdjustment) {
+    await client.query(
+      `insert into registration_pricing_audit
+        (organization_id, business_unit_id, payment_request_id, actor_user_id, reason,
+         standard_total, discount_total, final_total, line_adjustments, idempotency_key)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10)
+       on conflict (organization_id, business_unit_id, idempotency_key) do nothing`,
+      [scope.organizationId, scope.businessUnitId, paymentRequest.record.id,
+        input.quote.pricingAdjustment.actorUserId, input.quote.pricingAdjustment.reason,
+        input.quote.standardTotal, input.quote.discount, input.quote.total,
+        json(input.quote.lines.map((line) => ({ code: line.code, standardAmount: line.standardAmount, discount: line.discount, finalAmount: line.amount, ledgerTreatment: line.ledgerTreatment }))),
+        `registration:pricing:${input.idempotencyKey}`],
+    );
+  }
   const fulfillment = input.fulfillmentPlan
     ? await createBookFulfillment(client, {
       ...scope,

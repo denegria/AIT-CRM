@@ -151,6 +151,7 @@ export async function POST(request) {
         baseUrl: crmOrigin(request),
         customerUrls: customerUrls(origin, returnState),
         requiredSourceType: 'registration',
+        requiredRegistrationChannel: 'public',
         adapter: fakeProvider ? createPreviewRegistrationAdapter({ siteOrigin: origin, returnState }) : undefined,
       });
       return NextResponse.json({ result }, { status: 201, headers: { 'Cache-Control': 'private, no-store' } });

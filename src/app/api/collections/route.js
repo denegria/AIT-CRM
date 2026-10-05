@@ -25,6 +25,7 @@ import { dejavooSpinConfigHealth } from '@/lib/payments/providers/dejavoo-spin.j
 import { dejavooConfigHealth } from '@/lib/payments/providers/dejavoo.js';
 import { recoverHppPayment } from '@/lib/payments/hpp-recovery.js';
 import { orchestrateRegistration } from '@/lib/registration/action.js';
+import { createFourWeekTuitionCharge, adjustUnpaidTuitionCharge } from '@/lib/collections/tuition-service.js';
 
 function text(value) {
   return String(value || '').trim();
@@ -75,6 +76,7 @@ export async function GET(request) {
     const businessUnitId = await resolveAitUsaScope(session, searchParams.get('businessUnitId'));
     client = await getPool().connect();
     const scope = { organizationId: session.user.organizationId, businessUnitId };
+    const includePricingAudit = ['admin', 'senior_coordinator'].some((role) => session.user.roleKeys?.includes(role));
     if (searchParams.get('view') === 'sections') {
       return NextResponse.json({ sections: await listActiveCollectionSections(client, scope) }, {
         headers: { 'Cache-Control': 'private, no-store' },
@@ -86,11 +88,13 @@ export async function GET(request) {
       search: searchParams.get('search'),
       page: searchParams.get('page'),
       pageSize: searchParams.get('pageSize'),
+      includePricingAudit,
     });
     const setup = await loadCollectionsSetup(client, {
       ...scope,
       contactSearch: searchParams.get('contactSearch'),
       paymentContactId: searchParams.get('paymentContactId'),
+      includePricingAudit,
     });
     const terminalHealth = dejavooSpinConfigHealth({ environment: providerEnvironment() });
     const hostedHealth = dejavooConfigHealth({ environment: providerEnvironment() });
@@ -121,6 +125,13 @@ export async function POST(request) {
     const businessUnitId = await resolveAitUsaScope(session, body.businessUnitId);
     const scope = { organizationId: session.user.organizationId, businessUnitId };
     client = await getPool().connect();
+    if (body.action === 'create_tuition_charge' || body.action === 'adjust_tuition_charge') {
+      const canOverridePricing = ['admin', 'senior_coordinator'].some((role) => session.user.roleKeys?.includes(role));
+      const result = body.action === 'create_tuition_charge'
+        ? await createFourWeekTuitionCharge(client, { ...body.charge, ...scope, actorUserId: session.user.id, canOverridePricing })
+        : await adjustUnpaidTuitionCharge(client, { ...body.charge, ...scope, actorUserId: session.user.id, canOverridePricing });
+      return NextResponse.json({ result }, { status: result.duplicate ? 200 : 201, headers: { 'Cache-Control': 'private, no-store' } });
+    }
     if (body.action === 'create_checkout') {
       if (body.paymentMethod === 'hosted') assertHostedCollectionAvailable(providerEnvironment());
       const result = await orchestrateRegistration(client, {
@@ -129,6 +140,8 @@ export async function POST(request) {
         channel: 'staff',
         actor: {
           canManageRegistrations: true,
+          canOverridePricing: ['admin', 'senior_coordinator'].some((role) => session.user.roleKeys?.includes(role)),
+          userId: session.user.id,
           isAdmin: session.user.primaryRoleKey === 'admin',
           businessUnitIds: session.user.businessUnitIds,
         },

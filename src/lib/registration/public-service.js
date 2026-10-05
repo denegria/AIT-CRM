@@ -137,6 +137,7 @@ export async function loadPublicRegistrationStatus(client, scope, paymentRequest
        ) transaction on true
       where pr.id = $1 and pr.organization_id = $2 and pr.business_unit_id = $3
         and pr.source_type = 'registration'
+        and pr.metadata_json #>> '{registrationResult,quote,channel}' = 'public'
       limit 1`,
     [id, scope.organizationId, scope.businessUnitId],
   );

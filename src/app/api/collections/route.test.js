@@ -75,3 +75,12 @@ test('terminal readiness is derived server-side without exposing secret metadata
   assert.match(source, /environment: terminalHealth\.environment/);
   assert.doesNotMatch(source, /terminalHealth\.missing/);
 });
+
+test('custom tuition actions derive privilege, actor, and AIT USA scope on the server', () => {
+  assert.match(source, /body\.action === 'create_tuition_charge'/);
+  assert.match(source, /body\.action === 'adjust_tuition_charge'/);
+  assert.match(source, /session\.user\.roleKeys\?\.includes\(role\)/);
+  assert.match(source, /actorUserId: session\.user\.id, canOverridePricing/);
+  assert.match(source, /\.\.\.body\.charge, \.\.\.scope, actorUserId: session\.user\.id/);
+  assert.doesNotMatch(source, /canOverridePricing: body\./);
+});

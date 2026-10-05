@@ -317,6 +317,7 @@ function receiptItems(request) {
       rate: Number(entry.amount),
       amount: Number(entry.amount),
       ledgerTreatment: entry.treatment,
+      ...(paymentIntent.pricing ? paymentIntent.pricing : {}),
     }));
   }
   if (!Array.isArray(quoteLines) || !quoteLines.length) {
@@ -329,6 +330,7 @@ function receiptItems(request) {
     rate: Number(line.amount),
     amount: Number(line.amount),
     ledgerTreatment: line.ledgerTreatment,
+    ...(line.standardAmount ? { standardAmount: line.standardAmount, discount: line.discount, finalAmount: line.amount } : {}),
   }));
 }
 

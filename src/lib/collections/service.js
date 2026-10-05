@@ -7,6 +7,7 @@ import {
   createProviderTransaction,
 } from '../billing-ledger/service.js';
 import { activateBookFulfillmentForVerifiedPayment } from '../fulfillment/service.js';
+import { resolveRegionalPricing } from '../registration/catalog.js';
 import { createDejavooAdapter, dejavooConfigHealth } from '../payments/providers/dejavoo.js';
 import {
   CollectionsError,
@@ -117,7 +118,18 @@ function scoped(scope = {}) {
   return { organizationId, businessUnitId };
 }
 
-function mapCharge(row) {
+function financialMetadata(metadata) {
+  const source = json(metadata);
+  const result = {};
+  for (const key of ['hostedPaymentAttempt', 'terminalPaymentAttempt']) {
+    const state = String(source[key]?.state || '').slice(0, 40);
+    if (state) result[key] = { state };
+  }
+  return result;
+}
+
+function mapCharge(row, includePricingAudit = false) {
+  const metadata = json(value(row, 'metadata_json', 'metadataJson'));
   return {
     id: row.id,
     organizationId: value(row, 'organization_id', 'organizationId'),
@@ -135,6 +147,7 @@ function mapCharge(row) {
     chargeType: value(row, 'charge_type', 'chargeType'),
     description: row.description,
     amount: String(row.amount),
+    pricing: metadata.standardAmount ? { standardAmount: metadata.standardAmount, discount: metadata.discount || '0.00', ...(includePricingAudit && metadata.pricingAdjustment ? { reason: metadata.pricingAdjustment.reason, actorUserId: metadata.pricingAdjustment.actorUserId, adjustedAt: metadata.pricingAdjustment.adjustedAt || null } : {}) } : null,
     allocated: String(row.allocated || '0.00'),
     balance: String(row.balance || row.amount),
     currency: row.currency,
@@ -148,7 +161,7 @@ function mapCharge(row) {
       merchantReference: value(row, 'merchant_reference', 'merchantReference'),
       provider: value(row, 'request_provider', 'requestProvider'),
       providerEnvironment: value(row, 'provider_environment', 'providerEnvironment'),
-      metadata: json(value(row, 'request_metadata_json', 'requestMetadataJson')),
+      metadata: financialMetadata(value(row, 'request_metadata_json', 'requestMetadataJson')),
     } : null,
     latestTransaction: value(row, 'transaction_id', 'transactionId') ? {
       id: value(row, 'transaction_id', 'transactionId'),
@@ -250,7 +263,7 @@ export async function loadCollectionsQueue(client, input = {}) {
     pageSize,
     total: Number(result.rows[0]?.total || 0),
     counts,
-    items: result.rows.map(mapCharge),
+    items: result.rows.map((row) => mapCharge(row, input.includePricingAudit === true)),
   };
 }
 
@@ -334,6 +347,22 @@ export async function loadCollectionsSetup(client, input = {}) {
         order by case when c.original_due_date is null then 1 else 0 end, c.original_due_date, c.created_at`,
       [scope.organizationId, scope.businessUnitId, paymentContactId],
     );
+    const enrollments = await client.query(
+      `select id, course_name, status, metadata_json from contact_course_records
+        where organization_id = $1 and business_unit_id = $2 and contact_id::text = $3 and status = 'active'
+        order by created_at desc limit 25`,
+      [scope.organizationId, scope.businessUnitId, paymentContactId],
+    );
+    const audit = input.includePricingAudit === true ? await client.query(
+      `select a.charge_id, a.event_type, a.standard_amount, a.old_amount, a.new_amount,
+              a.reason, a.actor_user_id, a.created_at
+         from charge_pricing_audit a join student_charges sc
+           on sc.id = a.charge_id and sc.organization_id = a.organization_id and sc.business_unit_id = a.business_unit_id
+        where a.organization_id = $1 and a.business_unit_id = $2 and sc.student_contact_id::text = $3
+        order by a.created_at desc limit 100`,
+      [scope.organizationId, scope.businessUnitId, paymentContactId],
+    ) : { rows: [] };
+    const auditByCharge = Map.groupBy(audit.rows, (row) => row.charge_id);
     const credit = await client.query(
       `select greatest(
           coalesce(sum(case when pt.transaction_kind = 'refund' then -pt.amount else pt.amount end), 0)
@@ -351,7 +380,23 @@ export async function loadCollectionsSetup(client, input = {}) {
     );
     paymentStudent = {
       ...contact.rows[0],
-      openCharges: charges.rows.map(mapCharge),
+      openCharges: charges.rows.map((row) => {
+        const charge = mapCharge(row, input.includePricingAudit === true);
+        if (input.includePricingAudit === true && auditByCharge.has(charge.id)) {
+          charge.pricing = { ...charge.pricing, history: auditByCharge.get(charge.id).map((entry) => ({
+            eventType: entry.event_type, standardAmount: String(entry.standard_amount),
+            oldAmount: entry.old_amount == null ? null : String(entry.old_amount), newAmount: String(entry.new_amount),
+            reason: entry.reason, actorUserId: entry.actor_user_id, createdAt: entry.created_at,
+          })) };
+        }
+        return charge;
+      }),
+      tuitionEnrollments: enrollments.rows.map((row) => {
+        const stored = json(row.metadata_json).tuitionPricing || {};
+        const regional = resolveRegionalPricing(stored);
+        return { id: row.id, courseName: row.course_name, status: row.status,
+          standardAmount: regional.status === 'eligible' && stored.pricingVersion === regional.pricingVersion ? centsToMoney(regional.tuitionRateCents) : null };
+      }),
       accountCredit: String(credit.rows[0]?.balance || '0.00'),
     };
   }
@@ -387,7 +432,7 @@ export async function loadCollectionsSetup(client, input = {}) {
       provider: row.provider,
       providerEnvironment: row.provider_environment,
       merchantReference: row.merchant_reference,
-      metadata: json(row.metadata_json),
+      metadata: financialMetadata(row.metadata_json),
       updatedAt: row.updated_at,
     })),
   };
@@ -465,6 +510,7 @@ export async function createStaffPaymentRequest(client, input = {}) {
           label: payment.intent === 'account_credit' ? 'Account credit' : value(charge, 'description'),
           note: payment.note,
           allocationPlan,
+          ...(charge?.metadata_json?.standardAmount ? { pricing: { standardAmount: charge.metadata_json.standardAmount, discount: charge.metadata_json.discount || '0.00', finalAmount: charge.amount } } : {}),
         },
       },
     });
@@ -505,7 +551,7 @@ async function ensureManualReceipt(client, { scope, charge, transaction, payment
       manualReceiptNumber(value(transaction, 'provider_transaction_id', 'providerTransactionId')),
       centsToMoney(payment.amountCents),
       now.toISOString().slice(0, 10),
-      JSON.stringify([{ desc: charge.description, qty: 1, amount: Number(centsToMoney(payment.amountCents)), ledgerTreatment: 'charge' }]),
+      JSON.stringify([{ desc: charge.description, qty: 1, amount: Number(centsToMoney(payment.amountCents)), ledgerTreatment: 'charge', ...(charge.metadata_json?.standardAmount ? { standardAmount: charge.metadata_json.standardAmount, discount: charge.metadata_json.discount || '0.00', finalAmount: charge.amount } : {}) }]),
       `Staff-recorded ${payment.method.replaceAll('_', ' ')} payment${payment.reference ? ` · ${payment.reference}` : ''}.`,
     ],
   );
@@ -654,6 +700,7 @@ function manualRequestReceiptItems(request, plan) {
       qty: 1,
       amount: Number(line.amount),
       ledgerTreatment: line.ledgerTreatment,
+      ...(line.standardAmount ? { standardAmount: line.standardAmount, discount: line.discount, finalAmount: line.amount } : {}),
     }));
   }
   const label = String(metadata.paymentIntent?.label || 'Payment').slice(0, 160);
@@ -663,6 +710,7 @@ function manualRequestReceiptItems(request, plan) {
     qty: 1,
     amount: Number(entry.amount),
     ledgerTreatment: entry.treatment,
+    ...(metadata.paymentIntent?.pricing ? metadata.paymentIntent.pricing : {}),
   }));
 }
 
@@ -867,6 +915,23 @@ export async function createHostedCollectionLink(client, input = {}) {
     if (!request) throw new CollectionsError('payment_request_not_found', 'Payment request is not available in this division.', 404);
     if (input.requiredSourceType && value(request, 'source_type', 'sourceType') !== input.requiredSourceType) {
       throw new CollectionsError('payment_request_source_invalid', 'This payment request is not eligible for this checkout.', 403);
+    }
+    if (input.requiredRegistrationChannel
+      && json(value(request, 'metadata_json', 'metadataJson')).registrationResult?.quote?.channel !== input.requiredRegistrationChannel) {
+      throw new CollectionsError('registration_channel_invalid', 'This payment request is not eligible for public checkout.', 403);
+    }
+    if (value(request, 'charge_id', 'chargeId')) {
+      const linked = await client.query(
+        `select amount, charge_type, status from student_charges
+          where id = $1 and organization_id = $2 and business_unit_id = $3 for update`,
+        [value(request, 'charge_id', 'chargeId'), scope.organizationId, scope.businessUnitId],
+      );
+      const tuitionCharge = linked.rows[0];
+      if (tuitionCharge?.charge_type === 'tuition_four_week'
+        && (tuitionCharge.status !== 'due' && tuitionCharge.status !== 'overdue'
+          || String(tuitionCharge.amount) !== String(value(request, 'requested_amount', 'requestedAmount')))) {
+        throw new CollectionsError('hosted_amount_mismatch', 'Hosted tuition checkout must use the full persisted unpaid charge amount.', 409);
+      }
     }
     if (value(request, 'status') === 'completed') {
       throw new CollectionsError('payment_request_completed', 'This payment request is already completed.', 409);

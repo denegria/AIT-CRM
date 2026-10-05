@@ -6,6 +6,7 @@ import {
   createHostedCollectionLink,
   createStaffPaymentRequest,
   loadCollectionsSetup,
+  loadCollectionsQueue,
   listActiveCollectionSections,
   recordManualCollectionPayment,
   recordManualPaymentRequest,
@@ -570,3 +571,35 @@ for (const status of ['pending', 'failed', 'canceled', 'expired']) {
     assert.equal(client.calls.some((call) => call.sql.startsWith('insert into provider_transactions')), false);
   });
 }
+
+test('restricted queue serialization omits audit metadata and unrelated student or charge IDs', async () => {
+  const client = { async query(sql, params) {
+    const q = String(sql);
+    if (q.includes('count(*) over()')) {
+      assert.equal(params[0], 'org-1');
+      assert.equal(params[1], 'bu-usa');
+      return { rows: [{ id: 'charge-1', organization_id: 'org-1', business_unit_id: 'bu-usa', student_contact_id: 'student-1', amount: '175.00', allocated: '0.00', balance: '175.00', currency: 'USD', derived_status: 'due', total: 1,
+        metadata_json: { standardAmount: '195.00', discount: '20.00', pricingAdjustment: { actorUserId: 'admin-1', reason: 'Private aid' } },
+        payment_request_id: 'request-1', requested_amount: '175.00', request_metadata_json: { registrationResult: { studentContactId: 'unrelated-student', chargeIds: ['unrelated-charge'], quote: { pricingAdjustment: { actorUserId: 'admin-1', reason: 'Private aid' } } }, terminalPaymentAttempt: { state: 'pending', rawSecret: 'secret' } },
+      }] };
+    }
+    return { rows: [{ derived_status: 'due', count: 1 }] };
+  } };
+  const restricted = await loadCollectionsQueue(client, { ...scope, includePricingAudit: false });
+  const payload = JSON.stringify(restricted);
+  assert.match(payload, /student-1|charge-1/);
+  assert.doesNotMatch(payload, /admin-1|Private aid|unrelated-student|unrelated-charge|rawSecret|secret/);
+  assert.equal(restricted.items[0].pricing.standardAmount, '195.00');
+  assert.deepEqual(restricted.items[0].paymentRequest.metadata, { terminalPaymentAttempt: { state: 'pending' } });
+  const privileged = await loadCollectionsQueue(client, { ...scope, includePricingAudit: true });
+  assert.equal(privileged.items[0].pricing.reason, 'Private aid');
+  assert.equal(privileged.items[0].pricing.actorUserId, 'admin-1');
+});
+
+test('public hosted checkout rejects staff pricing request before provider I/O', async () => {
+  const client = hostedClient(requestRow({ registrationResult: { quote: { channel: 'staff', pricingAdjustment: { reason: 'Private' } } } }));
+  let adapterCalls = 0;
+  await assert.rejects(createHostedCollectionLink(client, { ...scope, paymentRequestId: 'request-1', idempotencyKey: 'registration:hpp:staff-block', environment: 'uat', baseUrl: 'https://staging.example.com', requiredSourceType: 'registration', requiredRegistrationChannel: 'public', adapter: { async createHostedPaymentPage() { adapterCalls += 1; } } }), (error) => error.code === 'registration_channel_invalid' && error.status === 403);
+  assert.equal(adapterCalls, 0);
+  assert.equal(client.calls.some((call) => call.sql.includes('update payment_requests')), false);
+});

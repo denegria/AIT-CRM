@@ -124,3 +124,15 @@ test('payments gives repeated context one canonical home', () => {
     /className=\{s\.flowTopbar\}[\s\S]*?<strong>\{FLOW_STEPS\[flow\.step\]\}<\/strong>/,
   );
 });
+
+test('registration and payment review render conditional custom pricing controls and final amounts', () => {
+  assert.match(source, /canOverridePricing && registrationQuote\.status === 'quoted'/);
+  assert.match(source, /canOverridePricing && selectedCharge\?\.chargeType === 'tuition_four_week'/);
+  assert.match(source, /<RegistrationPricingReview quote=\{reviewedRegistrationQuote\}/);
+  assert.match(source, /<TuitionPricingReview charge=\{selectedCharge\}/);
+  assert.match(source, /Create four-week tuition charge/);
+  assert.match(source, /Adjustment reason/);
+  assert.match(styles, /\.pricingEditor/);
+  assert.match(styles, /@media \(max-width: 760px\)/);
+  assert.match(styles, /\.pricingEditor \{ grid-template-columns: 1fr; \}/);
+});

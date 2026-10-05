@@ -71,6 +71,12 @@ export function buildAitUsaReceiptDocument(record = {}, context = {}) {
     balanceDue,
     balanceDueDisplay: balanceDue === null ? '' : formatAitUsaReceiptMoney(balanceDue),
     note,
+    pricingLines: (Array.isArray(record.items) ? record.items : []).filter((item) => item.standardAmount && Number(item.discount) > 0).map((item) => ({
+      label: firstText(item.desc, item.description, 'Payment'),
+      standard: formatAitUsaReceiptMoney(item.standardAmount),
+      discount: formatAitUsaReceiptMoney(item.discount),
+      final: formatAitUsaReceiptMoney(item.finalAmount || item.amount),
+    })),
     bilingualNote: [
       'This receipt confirms payment received for AIT USA Institute services.',
       'Este recibo confirma el pago recibido por servicios de AIT USA Institute.',

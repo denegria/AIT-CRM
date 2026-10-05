@@ -1145,3 +1145,25 @@
     align-items: flex-start;
   }
 }
+.pricingEditor {
+  grid-column: 1 / -1;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+}
+.pricingEditor > strong,
+.pricingEditor > small,
+.pricingEditor > label:last-of-type {
+  grid-column: 1 / -1;
+}
+.pricingEditor label { min-width: 0; }
+.pricingEditor input,
+.pricingEditor textarea { width: 100%; min-width: 0; }
+.reviewCard strong { overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .pricingEditor { grid-template-columns: 1fr; }
+}
