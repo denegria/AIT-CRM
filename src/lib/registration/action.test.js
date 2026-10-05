@@ -506,6 +506,14 @@ test('discounted staff registration persists adjusted charge, credit, request, a
   assert.deepEqual(client.state.pricingAudits[0].lines.map((line) => line.finalAmount), ['45.00', '175.00']);
   assert.equal((await orchestrateRegistration(client, input)).duplicate, true);
   assert.equal(client.state.pricingAudits.length, 1);
+  await assert.rejects(() => orchestrateRegistration(client, {
+    ...input, pricingAdjustment: { ...input.pricingAdjustment,
+      finalAmounts: { ...input.pricingAdjustment.finalAmounts, registration_only: '40' } },
+  }), (error) => error.code === 'registration_idempotency_conflict' && error.status === 409);
+  await assert.rejects(() => orchestrateRegistration(client, {
+    ...input, pricingAdjustment: { ...input.pricingAdjustment, reason: 'Different aid' },
+  }), (error) => error.code === 'registration_idempotency_conflict' && error.status === 409);
+  assert.equal(client.state.pricingAudits.length, 1);
 });
 
 test('public replay of a staff registration key cannot expose private pricing audit', async () => {

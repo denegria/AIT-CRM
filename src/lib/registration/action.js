@@ -18,6 +18,20 @@ export class RegistrationActionError extends Error {
   }
 }
 
+function stableQuoteReplay(quote) {
+  return JSON.stringify({
+    channel: quote?.channel,
+    catalogVersion: quote?.catalogVersion,
+    pricingVersion: quote?.pricingVersion,
+    region: quote?.region,
+    total: quote?.total,
+    lines: quote?.lines?.map((line) => ({ code: line.code, amount: line.amount,
+      ledgerTreatment: line.ledgerTreatment })),
+    pricingReason: quote?.pricingAdjustment?.reason || null,
+    pricingActor: quote?.pricingAdjustment?.actorUserId || null,
+  });
+}
+
 async function assertAitUsaBusinessUnit(client, scope) {
   const result = await client.query(
     `select id, name, label, is_active
@@ -106,6 +120,10 @@ export async function orchestrateRegistration(client, input = {}) {
     if (replay) {
       if (replay.quote?.channel !== request.channel) {
         throw new RegistrationActionError('registration_channel_conflict', 'This registration key belongs to a different checkout channel.', 409);
+      }
+      if (stableQuoteReplay(replay.quote) !== stableQuoteReplay(request.quote)) {
+        throw new RegistrationActionError('registration_idempotency_conflict',
+          'This registration key already belongs to different products or pricing. Start a new checkout.', 409);
       }
       await client.query('commit');
       return replay;
