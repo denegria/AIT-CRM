@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { schoolLocationOptions } from '../lib/school-locations.js';
 import { CANONICAL_WEEKDAYS } from '../lib/schedule-days.js';
+import { addCalendarDays } from '../lib/attendance/client-view.js';
 import s from './ClassManagementWorkspace.module.css';
 
 const empty = { sectionKey: '', courseName: '', teacher: '', courseLocation: '', modality: 'in_person',
@@ -16,10 +17,11 @@ async function requestJson(url, options = {}) {
 }
 
 function editable(section, today) {
+  const effectiveDate = section?.baselineDate === today ? addCalendarDays(today, 1) : today;
   return section ? { sectionKey: section.sectionKey, courseName: section.courseName,
     teacher: section.teacher, courseLocation: section.courseLocation, modality: section.modality,
     scheduleDays: section.scheduleDays, startTime: section.startTime, endTime: section.endTime,
-    status: section.status, effectiveDate: today } : { ...empty, effectiveDate: today };
+    status: section.status, effectiveDate } : { ...empty, effectiveDate };
 }
 
 export default function ClassManagementWorkspace({ businessUnitId, today, initialState = null }) {
@@ -125,7 +127,7 @@ export default function ClassManagementWorkspace({ businessUnitId, today, initia
             </select></label>
             <label>Start time<input type="time" value={form.startTime} onChange={(event) => change('startTime', event.target.value)} disabled={busy} required /></label>
             <label>End time<input type="time" value={form.endTime} onChange={(event) => change('endTime', event.target.value)} disabled={busy} required /></label>
-            <label>Effective date<input type="date" min={today} value={form.effectiveDate} onChange={(event) => change('effectiveDate', event.target.value)} disabled={busy} required /></label>
+            <label>Effective date<input type="date" min={selected?.baselineDate === today ? addCalendarDays(today, 1) : today} value={form.effectiveDate} onChange={(event) => change('effectiveDate', event.target.value)} disabled={busy} required /></label>
           </div>
           <fieldset disabled={busy}><legend>Meeting days</legend><div className={s.days}>{CANONICAL_WEEKDAYS.map((day) =>
             <label key={day}><input type="checkbox" checked={form.scheduleDays.includes(day)} onChange={(event) => change('scheduleDays', event.target.checked

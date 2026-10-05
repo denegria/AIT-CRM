@@ -1,3 +1,12 @@
+# MIS-431 Rollout-Day Class Edit Correction — 2026-10-05
+
+- **Workflow/problem:** an authorized manager selects a migrated class on rollout day and needs a valid first effective date without rewriting its immutable baseline.
+- **Interaction and visual direction:** retain the existing inline management form and catalog; default the date to the next New York calendar day only when that section's baseline is today. The date remains editable.
+- **Locked state/permissions:** only authorized managers edit; preview remains required; baseline and submitted history are not rewritten; new sections retain today's default.
+- **Non-goals:** no layout, permissions, migration, scheduling-policy, or visual redesign.
+- **Viewports/invariants:** primary 1536×960 CSS pixels; regression 390×844. Keep form hierarchy, spacing, typography, and catalog/form stacking unchanged; long course names and several pending changes must remain legible.
+- **Evidence:** rendered form test for baseline-today and ordinary sections, focused server and importer checks, lint; authenticated viewport QA remains with staging acceptance.
+
 # MIS-426 Tasks Workflow Consolidation — 2026-09-23
 
 ## Final desktop and role clarity addendum — 2026-09-24

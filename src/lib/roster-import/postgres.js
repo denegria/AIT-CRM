@@ -131,48 +131,89 @@ function parseTimeRange(value = '') {
   };
 }
 
-async function applySection(client, scope, action) {
+export async function applyRosterSection(client, scope, action) {
   const section = action.section;
   const times = parseTimeRange(section.classTime);
+  const fields = {
+    courseName: section.courseName,
+    teacher: section.teacher || null,
+    courseLocation: section.courseLocation || null,
+    modality: cleanText(section.modality).toLowerCase().startsWith('pres')
+      ? 'in_person' : cleanText(section.modality).toLowerCase().replace(/\s+/g, '_'),
+    scheduleDaysJson: parseList(section.classDays),
+    startTime: times.startTime,
+    endTime: times.endTime,
+    scheduledDaysPerWeek: Number(section.scheduledDaysPerWeek) || null,
+    status: 'active',
+  };
   const result = await client.query(
     `insert into course_class_sections
       (id, organization_id, business_unit_id, section_key, course_name, teacher, course_location,
        modality, schedule_days_json, start_time, end_time, scheduled_days_per_week, status,
        source_type, source_reference, metadata_json)
      values ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10, $11, $12, 'active', $13, $14, $15::jsonb)
-     on conflict (organization_id, business_unit_id, section_key) do update set
-       course_name = excluded.course_name,
-       teacher = excluded.teacher,
-       course_location = excluded.course_location,
-       modality = excluded.modality,
-       schedule_days_json = excluded.schedule_days_json,
-       start_time = excluded.start_time,
-       end_time = excluded.end_time,
-       scheduled_days_per_week = excluded.scheduled_days_per_week,
-       source_type = excluded.source_type,
-       source_reference = excluded.source_reference,
-       metadata_json = excluded.metadata_json,
-       updated_at = now()
+     on conflict (organization_id, business_unit_id, section_key) do nothing
      returning id`,
     [
       action.targetSectionId,
       scope.organizationId,
       scope.businessUnitId,
       section.sectionKey,
-      section.courseName,
-      section.teacher || null,
-      section.courseLocation || null,
-      cleanText(section.modality).toLowerCase().startsWith('pres') ? 'in_person' : cleanText(section.modality).toLowerCase().replace(/\s+/g, '_'),
-      JSON.stringify(parseList(section.classDays)),
-      times.startTime,
-      times.endTime,
-      Number(section.scheduledDaysPerWeek) || null,
+      fields.courseName,
+      fields.teacher,
+      fields.courseLocation,
+      fields.modality,
+      JSON.stringify(fields.scheduleDaysJson),
+      fields.startTime,
+      fields.endTime,
+      fields.scheduledDaysPerWeek,
       section.sourceType || 'student_roster',
       section.sourceReference || null,
       JSON.stringify({ importIdempotencyKey: action.idempotencyKey, sourceSectionKey: section.sourceSectionKey || section.sectionKey }),
     ],
   );
-  return result.rows[0].id;
+  if (result.rows.length) {
+    const id = result.rows[0].id;
+    await client.query(
+      `insert into class_section_versions
+        (organization_id, business_unit_id, class_section_id, effective_date, revision,
+         course_name, teacher, course_location, modality, schedule_days_json, start_time,
+         end_time, scheduled_days_per_week, status, audit_summary_json)
+       select organization_id, business_unit_id, id, (now() at time zone 'America/New_York')::date, 1,
+              course_name, teacher, course_location, modality, schedule_days_json, start_time,
+              end_time, scheduled_days_per_week, status,
+              jsonb_build_object('kind', 'roster_import_created', 'idempotencyKey', $2::text)
+         from course_class_sections where id = $1 and organization_id = $3 and business_unit_id = $4`,
+      [id, action.idempotencyKey, scope.organizationId, scope.businessUnitId],
+    );
+    return id;
+  }
+  // Existing version history is immutable. A changed manifest needs an explicit
+  // effective-dated management action, never a base-row upsert.
+  const existing = await client.query(
+    `select id, course_name, teacher, course_location, modality, schedule_days_json,
+            start_time, end_time, scheduled_days_per_week, status
+       from course_class_sections
+      where organization_id = $1 and business_unit_id = $2 and section_key = $3 for update`,
+    [scope.organizationId, scope.businessUnitId, section.sectionKey],
+  );
+  if (existing.rows.length !== 1) throw new Error('Class section changed during roster import; retry from a fresh plan.');
+  const row = existing.rows[0];
+  const version = await client.query(
+    'select id from class_section_versions where class_section_id = $1 limit 1', [row.id],
+  );
+  if (!version.rows.length) throw new Error(`Class section ${section.sectionKey} has no effective-dated version; import cannot reconcile it.`);
+  const equivalent = row.course_name === fields.courseName
+    && row.teacher === fields.teacher
+    && row.course_location === fields.courseLocation
+    && row.modality === fields.modality
+    && JSON.stringify(row.schedule_days_json) === JSON.stringify(fields.scheduleDaysJson)
+    && row.start_time === fields.startTime
+    && row.end_time === fields.endTime
+    && row.scheduled_days_per_week === fields.scheduledDaysPerWeek
+    && row.status === fields.status;
+  if (!equivalent) throw new Error(`Class section ${section.sectionKey} differs from the import snapshot; schedule a managed effective-dated change first.`);
+  return row.id;
 }
 
 async function ensureContact(client, scope, action) {
@@ -360,7 +401,7 @@ export async function applyRosterImportPlan(client, {
     }
 
     for (const action of plan.classSectionActions.filter((item) => item.state === 'ready')) {
-      const targetId = await applySection(client, scope, action);
+      const targetId = await applyRosterSection(client, scope, action);
       await recordAction(client, scope, runId, action, 'applied', targetId);
     }
     for (const action of plan.contactActions) {

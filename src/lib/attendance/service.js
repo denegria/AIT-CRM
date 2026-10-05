@@ -285,8 +285,9 @@ export async function listAttendanceClasses({ db, session, date = todayInAttenda
   return { date, hasActiveSchedules, nextScheduledDate, classes: sections.map((row) => {
     const meeting = persistedBySection.get(row.id);
     const legacyContext = !sectionAtDate(row, versions.get(row.id) || [], date);
-    return { id: row.id, courseName: row.courseName, teacher: row.teacher || '',
-      location: row.courseLocation || '', modality: row.modality, legacyContext,
+    return { id: row.id, courseName: legacyContext ? `Course not recorded (legacy) · ${row.sectionKey}` : row.courseName,
+      teacher: row.teacher || '', location: row.courseLocation || '',
+      modality: legacyContext ? null : row.modality, legacyContext,
       startTime: row.startTime || '', endTime: row.endTime || '',
       studentCount: counts.get(row.id) || 0,
       attendanceState: meeting ? deriveAttendanceState(meeting, markCounts.get(meeting.id) || 0) : 'not_started' };
@@ -343,11 +344,11 @@ export async function getAttendanceWorkspace({ db, session, sectionId, weekOf, s
   return {
     class: {
       id: section.id,
-      courseName: section.courseName,
+      courseName: selectedVersion?.courseName || `Course not recorded (legacy) · ${section.sectionKey}`,
       teacher: meetingSection.teacher || '',
       location: meetingSection.courseLocation || '',
       legacyContext: !selectedVersion,
-      modality: meetingSection.modality,
+      modality: selectedVersion?.modality || null,
       scheduleDays: canonicalScheduleDays(meetingSection.scheduleDaysJson),
       startTime: selectedSession?.scheduledStartTime || meetingSection.startTime || '',
       endTime: selectedSession?.scheduledEndTime || meetingSection.endTime || '',

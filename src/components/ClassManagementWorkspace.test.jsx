@@ -34,3 +34,14 @@ test('rendered regular coordinator has catalog but no management controls or fut
   assert.doesNotMatch(html, /type="date"/);
   assert.doesNotMatch(html, /Scheduled changes|2026-11-01|Save class change/);
 });
+
+
+test('rollout-day existing section defaults to tomorrow while new sections may start today', () => {
+  const rollout = { ...section, baselineDate: '2026-10-05' };
+  const edit = render({ canManage: true }, { sections: [rollout], selectedId: 'section-1' });
+  assert.match(edit, /type="date" min="2026-10-06"[^>]*value="2026-10-06"/);
+  const create = render({ canManage: true }, { sections: [rollout] });
+  assert.match(create, /type="date" min="2026-10-05"[^>]*value="2026-10-05"/);
+  const laterBaseline = render({ canManage: true }, { sections: [{ ...rollout, baselineDate: '2026-10-04' }], selectedId: 'section-1' });
+  assert.match(laterBaseline, /type="date" min="2026-10-05"[^>]*value="2026-10-05"/);
+});
