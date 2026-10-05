@@ -71,6 +71,7 @@ export function formatScheduleDays(days = []) {
 }
 
 export function formatClassLocation(item = {}) {
+  if (item.legacyContext) return 'Location not recorded (legacy)';
   if (String(item.modality || '').toLowerCase() === 'online') return 'Online';
   return String(item.location || '').trim() || 'Location not set';
 }

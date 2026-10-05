@@ -21,6 +21,7 @@ import {
   courseClassSections,
 } from '../../db/schema.js';
 import { createCrmError } from '../crm/errors.js';
+import { loadSectionVersions, sectionAtDate } from '../crm/class-sections.js';
 import { canonicalScheduleDays } from '../schedule-days.js';
 import {
   assertScheduledSessionDate,
@@ -29,7 +30,6 @@ import {
   canLinkAttendanceContacts,
   deriveAttendanceState,
   isAitUsaBusinessUnit,
-  nextScheduledClassDate,
   normalizeAttendanceMarks,
   normalizeExpectedRevision,
   normalizeSessionNote,
@@ -164,7 +164,6 @@ export async function resolveAttendanceSection({ db, session, sectionId }) {
   if (!row) throw createCrmError('Class section not found.', 404);
   if (!isAitUsaBusinessUnit(row.businessUnitName)) throw createCrmError('Attendance is only available for AIT USA classes.', 403);
   if (!canAccessBusinessUnit(session, row.businessUnitId)) throw createCrmError('You cannot access this class section.', 403);
-  if (row.status !== 'active') throw createCrmError('Attendance is only available for active class sections.', 409);
   return row;
 }
 
@@ -218,93 +217,80 @@ async function listSessionRoster({ db, section, sessionDate, sessionId = null })
 async function assertPersistedOrScheduledDate(db, section, sessionDate) {
   parseSessionDate(sessionDate);
   const persisted = await loadSession(db, section.id, sessionDate);
-  if (!persisted) assertScheduledSessionDate(section, sessionDate);
+  const versions = (await loadSectionVersions(db, [section.id])).get(section.id) || [];
+  const effective = sectionAtDate(section, versions, sessionDate);
+  if (!persisted) {
+    if (!effective || effective.status !== 'active') throw createCrmError('No active class is scheduled on this date.', 409);
+    assertScheduledSessionDate(effective, sessionDate);
+  }
+  return effective || { ...section, teacher: null, courseLocation: null,
+    startTime: persisted?.scheduledStartTime || null, endTime: persisted?.scheduledEndTime || null };
 }
 
 export async function listAttendanceClasses({ db, session, date = todayInAttendanceTimeZone() }) {
   const weekday = weekdayForSessionDate(date);
-  const rows = await db
-    .select({
-      id: courseClassSections.id,
-      organizationId: courseClassSections.organizationId,
-      businessUnitId: courseClassSections.businessUnitId,
-      businessUnitName: businessUnits.name,
-      courseName: courseClassSections.courseName,
-      teacher: courseClassSections.teacher,
-      courseLocation: courseClassSections.courseLocation,
-      modality: courseClassSections.modality,
-      scheduleDaysJson: courseClassSections.scheduleDaysJson,
-      startTime: courseClassSections.startTime,
-      endTime: courseClassSections.endTime,
-    })
-    .from(courseClassSections)
-    .innerJoin(businessUnits, eq(businessUnits.id, courseClassSections.businessUnitId))
-    .where(and(
-      eq(courseClassSections.organizationId, session.user.organizationId),
-      eq(courseClassSections.status, 'active'),
-    ))
-    .orderBy(asc(courseClassSections.startTime), asc(courseClassSections.courseName));
-
-  const accessibleSections = rows.filter((row) => (
-    isAitUsaBusinessUnit(row.businessUnitName)
-    && canAccessBusinessUnit(session, row.businessUnitId)
-  ));
-  const sections = accessibleSections.filter((row) => canonicalScheduleDays(row.scheduleDaysJson).includes(weekday));
-  const nextScheduledDate = nextScheduledClassDate(accessibleSections.map((row) => row.scheduleDaysJson), date);
-  const hasActiveSchedules = accessibleSections.some((row) => canonicalScheduleDays(row.scheduleDaysJson).length > 0);
+  const rows = await db.select({
+    id: courseClassSections.id, organizationId: courseClassSections.organizationId,
+    businessUnitId: courseClassSections.businessUnitId, businessUnitName: businessUnits.name,
+    sectionKey: courseClassSections.sectionKey, courseName: courseClassSections.courseName,
+    teacher: courseClassSections.teacher, courseLocation: courseClassSections.courseLocation,
+    modality: courseClassSections.modality, scheduleDaysJson: courseClassSections.scheduleDaysJson,
+    startTime: courseClassSections.startTime, endTime: courseClassSections.endTime,
+  }).from(courseClassSections).innerJoin(businessUnits, eq(businessUnits.id, courseClassSections.businessUnitId))
+    .where(eq(courseClassSections.organizationId, session.user.organizationId));
+  const accessible = rows.filter((row) => isAitUsaBusinessUnit(row.businessUnitName)
+    && canAccessBusinessUnit(session, row.businessUnitId));
+  const versions = await loadSectionVersions(db, accessible.map((row) => row.id));
+  const persisted = accessible.length ? await db.select().from(classSessions).where(and(
+    inArray(classSessions.classSectionId, accessible.map((row) => row.id)), eq(classSessions.sessionDate, date),
+  )) : [];
+  const persistedBySection = new Map(persisted.map((row) => [row.classSectionId, row]));
+  const sections = accessible.flatMap((row) => {
+    const current = sectionAtDate(row, versions.get(row.id) || [], date);
+    const sessionRow = persistedBySection.get(row.id);
+    if (current?.status === 'active' && canonicalScheduleDays(current.scheduleDaysJson).includes(weekday)) return [current];
+    if (sessionRow) return [{ ...(current || row), id: row.id,
+      teacher: current?.teacher || null, courseLocation: current?.courseLocation || null,
+      startTime: sessionRow.scheduledStartTime, endTime: sessionRow.scheduledEndTime }];
+    return [];
+  });
+  const nextScheduledDate = (() => {
+    for (let offset = 1; offset <= 370; offset += 1) {
+      const candidate = new Date(`${date}T12:00:00Z`);
+      candidate.setUTCDate(candidate.getUTCDate() + offset);
+      const candidateDate = candidate.toISOString().slice(0, 10);
+      if (accessible.some((row) => {
+        const version = sectionAtDate(row, versions.get(row.id) || [], candidateDate);
+        return version?.status === 'active' && canonicalScheduleDays(version.scheduleDaysJson)
+          .includes(weekdayForSessionDate(candidateDate));
+      })) return candidateDate;
+    }
+    return null;
+  })();
+  const hasActiveSchedules = Boolean(sections.length || nextScheduledDate);
   if (!sections.length) return { date, classes: [], hasActiveSchedules, nextScheduledDate };
-
   const sectionIds = sections.map((row) => row.id);
-  const [enrollments, sessions] = await Promise.all([
-    db.select({ classSectionId: contactCourseRecords.classSectionId })
-      .from(contactCourseRecords)
-      .where(and(
-        inArray(contactCourseRecords.classSectionId, sectionIds),
-        eq(contactCourseRecords.status, 'active'),
-        or(isNull(contactCourseRecords.startDate), lte(contactCourseRecords.startDate, date)),
-        or(isNull(contactCourseRecords.endDate), gte(contactCourseRecords.endDate, date)),
-      )),
-    db.select().from(classSessions).where(and(
-      inArray(classSessions.classSectionId, sectionIds),
-      eq(classSessions.sessionDate, date),
-    )),
-  ]);
-  const enrollmentCounts = enrollments.reduce((counts, row) => {
-    counts.set(row.classSectionId, (counts.get(row.classSectionId) || 0) + 1);
-    return counts;
-  }, new Map());
-  const sessionBySection = new Map(sessions.map((row) => [row.classSectionId, row]));
-  const sessionIds = sessions.map((row) => row.id);
-  const marks = sessionIds.length
-    ? await db.select({ classSessionId: attendanceRecords.classSessionId }).from(attendanceRecords)
-      .where(inArray(attendanceRecords.classSessionId, sessionIds))
-    : [];
-  const markCounts = marks.reduce((counts, row) => {
-    counts.set(row.classSessionId, (counts.get(row.classSessionId) || 0) + 1);
-    return counts;
-  }, new Map());
-
-  return {
-    date,
-    hasActiveSchedules,
-    nextScheduledDate,
-    classes: sections.map((section) => {
-      const classSession = sessionBySection.get(section.id);
-      return {
-        id: section.id,
-        courseName: section.courseName,
-        teacher: section.teacher || '',
-        location: section.courseLocation || '',
-        modality: section.modality,
-        startTime: section.startTime || '',
-        endTime: section.endTime || '',
-        studentCount: enrollmentCounts.get(section.id) || 0,
-        attendanceState: classSession
-          ? deriveAttendanceState(classSession, markCounts.get(classSession.id) || 0)
-          : 'not_started',
-      };
-    }),
-  };
+  const enrollments = await db.select({ classSectionId: contactCourseRecords.classSectionId })
+    .from(contactCourseRecords).where(and(
+      inArray(contactCourseRecords.classSectionId, sectionIds), eq(contactCourseRecords.status, 'active'),
+      or(isNull(contactCourseRecords.startDate), lte(contactCourseRecords.startDate, date)),
+      or(isNull(contactCourseRecords.endDate), gte(contactCourseRecords.endDate, date)),
+    ));
+  const counts = new Map();
+  for (const row of enrollments) counts.set(row.classSectionId, (counts.get(row.classSectionId) || 0) + 1);
+  const marks = persisted.length ? await db.select({ classSessionId: attendanceRecords.classSessionId })
+    .from(attendanceRecords).where(inArray(attendanceRecords.classSessionId, persisted.map((row) => row.id))) : [];
+  const markCounts = new Map();
+  for (const mark of marks) markCounts.set(mark.classSessionId, (markCounts.get(mark.classSessionId) || 0) + 1);
+  return { date, hasActiveSchedules, nextScheduledDate, classes: sections.map((row) => {
+    const meeting = persistedBySection.get(row.id);
+    const legacyContext = !sectionAtDate(row, versions.get(row.id) || [], date);
+    return { id: row.id, courseName: row.courseName, teacher: row.teacher || '',
+      location: row.courseLocation || '', modality: row.modality, legacyContext,
+      startTime: row.startTime || '', endTime: row.endTime || '',
+      studentCount: counts.get(row.id) || 0,
+      attendanceState: meeting ? deriveAttendanceState(meeting, markCounts.get(meeting.id) || 0) : 'not_started' };
+  }) };
 }
 
 export async function getAttendanceWorkspace({ db, session, sectionId, weekOf, selectedDate }) {
@@ -312,7 +298,12 @@ export async function getAttendanceWorkspace({ db, session, sectionId, weekOf, s
   const anchorDate = weekOf || todayInAttendanceTimeZone();
   parseSessionDate(anchorDate);
   const { start, end } = weekBounds(anchorDate);
-  const scheduledDates = scheduledDatesForWeek(section.scheduleDaysJson, anchorDate);
+  const versions = (await loadSectionVersions(db, [section.id])).get(section.id) || [];
+  const weekDates = scheduledDatesForWeek(['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'], anchorDate);
+  const scheduledDates = weekDates.filter((date) => {
+    const version = sectionAtDate(section, versions, date);
+    return version?.status === 'active' && canonicalScheduleDays(version.scheduleDaysJson).includes(weekdayForSessionDate(date));
+  });
   const persistedSessions = await db.select().from(classSessions).where(and(
     eq(classSessions.classSectionId, section.id),
     between(classSessions.sessionDate, start, end),
@@ -344,18 +335,22 @@ export async function getAttendanceWorkspace({ db, session, sectionId, weekOf, s
     return map;
   }, new Map());
   const selectedSession = persistedByDate.get(effectiveDate) || null;
+  const selectedVersion = sectionAtDate(section, versions, effectiveDate);
+  const meetingSection = selectedVersion || { ...section, teacher: null, courseLocation: null,
+    scheduleDaysJson: [], startTime: selectedSession?.scheduledStartTime, endTime: selectedSession?.scheduledEndTime };
   const exposeContactLinks = canLinkAttendanceContacts(session.user);
 
   return {
     class: {
       id: section.id,
       courseName: section.courseName,
-      teacher: section.teacher || '',
-      location: section.courseLocation || '',
-      modality: section.modality,
-      scheduleDays: canonicalScheduleDays(section.scheduleDaysJson),
-      startTime: section.startTime || '',
-      endTime: section.endTime || '',
+      teacher: meetingSection.teacher || '',
+      location: meetingSection.courseLocation || '',
+      legacyContext: !selectedVersion,
+      modality: meetingSection.modality,
+      scheduleDays: canonicalScheduleDays(meetingSection.scheduleDaysJson),
+      startTime: selectedSession?.scheduledStartTime || meetingSection.startTime || '',
+      endTime: selectedSession?.scheduledEndTime || meetingSection.endTime || '',
     },
     week: { start, end },
     selectedDate: effectiveDate,
@@ -366,8 +361,8 @@ export async function getAttendanceWorkspace({ db, session, sectionId, weekOf, s
         : {
           id: null,
           date,
-          startTime: section.startTime || '',
-          endTime: section.endTime || '',
+          startTime: sectionAtDate(section, versions, date)?.startTime || '',
+          endTime: sectionAtDate(section, versions, date)?.endTime || '',
           status: 'open',
           attendanceState: 'not_started',
           revision: 0,
@@ -400,10 +395,10 @@ export async function getAttendanceWorkspace({ db, session, sectionId, weekOf, s
 export async function saveSessionNote({ db, section, sessionDate, expectedRevision, note, transactionRunner }) {
   const revision = normalizeExpectedRevision(expectedRevision);
   const normalizedNote = normalizeSessionNote(note);
-  await assertPersistedOrScheduledDate(db, section, sessionDate);
+  const meetingSection = await assertPersistedOrScheduledDate(db, section, sessionDate);
   return runTransaction(db, transactionRunner, async (tx) => {
     const { session, created } = await ensureSession(tx, {
-      section,
+      section: meetingSection,
       sessionDate,
       expectedRevision: revision,
       initialNote: normalizedNote,
@@ -460,10 +455,10 @@ export async function saveAttendanceSnapshot({
 }) {
   const revision = normalizeExpectedRevision(expectedRevision);
   const normalizedMarks = normalizeAttendanceMarks(marks);
-  await assertPersistedOrScheduledDate(db, section, sessionDate);
+  const meetingSection = await assertPersistedOrScheduledDate(db, section, sessionDate);
 
   return runTransaction(db, transactionRunner, async (tx) => {
-    const { session, created } = await ensureSession(tx, { section, sessionDate, expectedRevision: revision });
+    const { session, created } = await ensureSession(tx, { section: meetingSection, sessionDate, expectedRevision: revision });
     const previousMarks = await loadMarks(tx, session.id);
     const roster = await listSessionRoster({ db: tx, section, sessionDate, sessionId: session.id });
     const rosterByEnrollment = new Map(roster.map((row) => [row.enrollmentId, row]));

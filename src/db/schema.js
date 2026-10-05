@@ -418,6 +418,39 @@ export const courseClassSections = pgTable('course_class_sections', {
   ),
 }));
 
+// Immutable effective-dated snapshots; the section row remains the stable enrollment/lock anchor.
+export const classSectionVersions = pgTable('class_section_versions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').notNull(),
+  businessUnitId: uuid('business_unit_id').notNull(),
+  classSectionId: uuid('class_section_id').notNull(),
+  effectiveDate: date('effective_date').notNull(),
+  revision: integer('revision').notNull(),
+  isBaseline: boolean('is_baseline').notNull().default(false),
+  courseName: text('course_name').notNull(),
+  teacher: text('teacher'),
+  courseLocation: text('course_location'),
+  modality: text('modality').notNull(),
+  scheduleDaysJson: jsonb('schedule_days_json').notNull().default([]),
+  startTime: text('start_time'),
+  endTime: text('end_time'),
+  scheduledDaysPerWeek: integer('scheduled_days_per_week'),
+  status: text('status').notNull(),
+  actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'restrict' }),
+  auditSummaryJson: jsonb('audit_summary_json').notNull().default({}),
+  createdAt,
+}, (table) => ({
+  sectionDateIdx: uniqueIndex('class_section_versions_section_date_idx').on(table.classSectionId, table.effectiveDate),
+  sectionRevisionIdx: uniqueIndex('class_section_versions_section_revision_idx').on(table.classSectionId, table.revision),
+  sectionScopeFk: foreignKey({
+    columns: [table.classSectionId, table.organizationId, table.businessUnitId],
+    foreignColumns: [courseClassSections.id, courseClassSections.organizationId, courseClassSections.businessUnitId],
+    name: 'class_section_versions_scope_fk',
+  }).onDelete('restrict'),
+  revisionCheck: check('class_section_versions_revision_check', sql`${table.revision} >= 1`),
+  statusCheck: check('class_section_versions_status_check', sql`${table.status} in ('planned', 'active', 'inactive')`),
+}));
+
 export const contactCourseRecords = pgTable('contact_course_records', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),

@@ -270,10 +270,14 @@ export async function loadCollectionsQueue(client, input = {}) {
 export async function listActiveCollectionSections(client, input = {}) {
   const scope = scoped(input);
   const result = await client.query(
-    `select id, section_key, course_name, teacher, modality, course_location,
-            schedule_days_json, start_time, end_time, status
-       from course_class_sections where organization_id = $1 and business_unit_id = $2 and status = 'active'
-      order by course_name, start_time, section_key`,
+    `select s.id, s.section_key, v.course_name, v.teacher, v.modality, v.course_location,
+            v.schedule_days_json, v.start_time, v.end_time, v.status
+       from course_class_sections s
+       join lateral (select * from class_section_versions
+         where class_section_id = s.id and effective_date <= (now() at time zone 'America/New_York')::date
+         order by effective_date desc limit 1) v on true
+      where s.organization_id = $1 and s.business_unit_id = $2 and v.status = 'active'
+      order by v.course_name, v.start_time, s.section_key`,
     [scope.organizationId, scope.businessUnitId],
   );
   return result.rows.map((row) => ({

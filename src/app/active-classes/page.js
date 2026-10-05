@@ -1,5 +1,7 @@
 'use client';
 
+import ClassManagementWorkspace from '@/components/ClassManagementWorkspace.js';
+import { todayInAttendanceTimeZone } from '@/lib/attendance/policy.js';
 import ActiveClassesWorkspace from '@/components/ActiveClassesWorkspace.js';
 import PageState, { PageStateAction } from '@/components/PageState.js';
 import { isAitUsaBusinessUnit } from '@/lib/attendance/policy.js';
@@ -24,5 +26,8 @@ export default function ActiveClassesPage() {
     );
   }
 
-  return <ActiveClassesWorkspace styles={s} />;
+  return <>
+    <ClassManagementWorkspace key={currentBusinessUnit?.id} businessUnitId={currentBusinessUnit?.id} today={todayInAttendanceTimeZone()} />
+    <ActiveClassesWorkspace styles={s} />
+  </>;
 }

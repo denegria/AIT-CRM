@@ -5,6 +5,7 @@ import {
   attendanceCounts,
   classRailHeading,
   classTitle,
+  formatClassLocation,
   formatLongDate,
   formatScheduleDays,
   formatTimeRange,
@@ -22,6 +23,7 @@ test('attendance dates and class labels stay timezone-safe and readable', () => 
   assert.equal(formatScheduleDays(['Monday', 'Wednesday', 'Friday']), 'Mon / Wed / Fri');
   assert.equal(classTitle({ courseName: 'English 1', location: 'Plainfield' }), 'English 1 — Plainfield');
   assert.equal(classTitle({ courseName: 'English 1', modality: 'online' }), 'English 1 — Online');
+  assert.equal(formatClassLocation({ legacyContext: true, modality: 'online' }), 'Location not recorded (legacy)');
   assert.equal(classRailHeading('2026-07-17', '2026-07-17'), 'Today’s classes');
 });
 

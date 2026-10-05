@@ -82,12 +82,12 @@ function fakeRegistrationClient(seed = {}) {
         state.contacts.push(row);
         return { rows: [row] };
       }
-      if (statement.startsWith('select id, course_name, status from course_class_sections')) {
+      if (statement.startsWith('select s.id, v.course_name, v.status')) {
         return { rows: state.sections.filter((row) => (
           row.id === parameters[0]
           && row.organization_id === parameters[1]
           && row.business_unit_id === parameters[2]
-        )).slice(0, 1) };
+        )).slice(0, 1).map((row) => ({ ...row, has_pending_deactivation: Boolean(row.has_pending_deactivation) })) };
       }
       if (statement.startsWith('insert into contact_course_records')) {
         const row = {
@@ -515,4 +515,16 @@ test('public replay of a staff registration key cannot expose private pricing au
   const writes = client.state.calls.filter((call) => call.sql.startsWith('insert into')).length;
   await assert.rejects(orchestrateRegistration(client, { ...publicRequest, idempotencyKey }), (error) => error.code === 'registration_channel_conflict' && error.status === 409);
   assert.equal(client.state.calls.filter((call) => call.sql.startsWith('insert into')).length, writes);
+});
+
+test('registration refuses an assigned section with a pending deactivation before enrollment or payment', async () => {
+  const client = fakeRegistrationClient({ sections: [{
+    id: 'section-1', organization_id: 'org-1', business_unit_id: 'bu-usa',
+    course_name: 'English 2', status: 'active', has_pending_deactivation: true,
+  }] });
+  await assert.rejects(() => orchestrateRegistration(client, {
+    ...publicRequest, idempotencyKey: 'registration:public:pending-deactivation', classSectionId: 'section-1',
+  }), /deactivation is pending/);
+  assert.equal(client.state.enrollments.length, 0);
+  assert.equal(client.state.requests.length, 0);
 });

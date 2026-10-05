@@ -113,14 +113,21 @@ async function resolveProgramAndSection(client, scope, programCode, classSection
   if (!program) throw new Error('Registration program is not supported.');
   if (!classSectionId) return { program, section: null };
   const result = await client.query(
-    `select id, course_name, status
-       from course_class_sections
-      where id = $1 and organization_id = $2 and business_unit_id = $3
-      limit 1`,
+    `select s.id, v.course_name, v.status,
+            exists (select 1 from class_section_versions future
+              where future.class_section_id = s.id
+                and future.effective_date > (now() at time zone 'America/New_York')::date
+                and future.status = 'inactive') as has_pending_deactivation
+       from course_class_sections s
+       left join lateral (select course_name, status from class_section_versions
+         where class_section_id = s.id and effective_date <= (now() at time zone 'America/New_York')::date
+         order by effective_date desc limit 1) v on true
+      where s.id = $1 and s.organization_id = $2 and s.business_unit_id = $3
+      for update of s`,
     [classSectionId, scope.organizationId, scope.businessUnitId],
   );
   const section = result.rows[0];
-  if (!section || section.status !== 'active') throw new Error('Class section is not available for registration.');
+  if (!section || section.status !== 'active' || section.has_pending_deactivation) throw new Error('Class section is not available for registration while deactivation is pending.');
   return { program, section };
 }
 

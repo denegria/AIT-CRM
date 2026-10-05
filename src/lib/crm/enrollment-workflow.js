@@ -1,6 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import { contactCourseRecords, leadStatusHistory, leads } from '../../db/schema.js';
 import { createCrmError } from './errors.js';
+import { lockSectionForEnrollment } from './class-sections.js';
 import { withLockedAitUsaOpportunityMutation } from './ait-usa-opportunities.js';
 import {
   isNoFurtherProspectingLifecycleStatus,
@@ -21,6 +22,10 @@ export function normalizeEnrollmentWriteIntent(value = '') {
 }
 
 async function insertCourseRecord(tx, values) {
+  if (values.classSectionId) await lockSectionForEnrollment(tx, {
+    organizationId: values.organizationId, businessUnitId: values.businessUnitId,
+    sectionId: values.classSectionId, enrollment: values,
+  });
   const [record] = await tx.insert(contactCourseRecords).values(values).returning();
   return record;
 }

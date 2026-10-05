@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray } from 'drizzle-orm';
 import { getDb } from '@/db/index.js';
 import { businessUnits, contactCourseRecords, contacts, courseClassSections } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
@@ -12,9 +12,10 @@ import {
   sortCourseRecords,
   validateCourseRecordInput,
 } from '@/lib/crm/course-records.js';
+import { todayInAttendanceTimeZone } from '@/lib/attendance/policy.js';
 import { isUuid } from '@/lib/crm/validation.js';
 import { latestLeadForContact } from '@/lib/crm/write-helpers.js';
-import { classSectionPayload, listClassSections } from '@/lib/crm/class-sections.js';
+import { classSectionPayload, listClassSections, lockSectionForEnrollment, loadSectionVersions, sectionAtDate } from '@/lib/crm/class-sections.js';
 import {
   createCourseRecordWithEnrollmentLifecycle,
   ENROLLMENT_WRITE_INTENTS,
@@ -38,6 +39,7 @@ async function loadContactContext(db, session, contactId) {
 }
 
 async function listCourseRecords(db, session, contactId) {
+  if (!session.user.businessUnitIds?.length) return [];
   const rows = await db
     .select({ course: contactCourseRecords, classSection: courseClassSections })
     .from(contactCourseRecords)
@@ -45,11 +47,14 @@ async function listCourseRecords(db, session, contactId) {
     .where(and(
       eq(contactCourseRecords.organizationId, session.user.organizationId),
       eq(contactCourseRecords.contactId, contactId),
+      inArray(contactCourseRecords.businessUnitId, session.user.businessUnitIds),
     ))
     .orderBy(desc(contactCourseRecords.startDate), desc(contactCourseRecords.createdAt));
+  const versions = await loadSectionVersions(db, rows.map(({ classSection }) => classSection?.id).filter(Boolean));
   return sortCourseRecords(rows.map(({ course, classSection }) => ({
     ...course,
-    classSection: classSection ? classSectionPayload(classSection) : null,
+    classSection: classSection ? classSectionPayload(sectionAtDate(classSection,
+      versions.get(classSection.id) || [], todayInAttendanceTimeZone()) || classSection) : null,
   }))).map(courseRecordPayloadFromRow);
 }
 
@@ -80,7 +85,8 @@ async function loadClassSection(db, session, businessUnitId, classSectionId) {
     error.status = 404;
     throw error;
   }
-  return section;
+  const versions = (await loadSectionVersions(db, [section.id])).get(section.id) || [];
+  return sectionAtDate(section, versions, todayInAttendanceTimeZone());
 }
 
 async function loadBusinessUnit(db, session, businessUnitId) {
@@ -111,7 +117,7 @@ async function courseResponseContext(db, session, contact, lead) {
   const businessUnitId = businessUnitIdForRecord(session, contact, lead);
   const [courses, classSections] = await Promise.all([
     listCourseRecords(db, session, contact.id),
-    businessUnitId
+    businessUnitId && session.user.businessUnitIds?.includes(businessUnitId)
       ? listClassSections({
           db,
           organizationId: session.user.organizationId,
@@ -168,7 +174,7 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'Past enrollments must use an ended status.' }, { status: 400 });
     }
     const section = await loadClassSection(db, session, businessUnitId, input.classSectionId);
-    if (section && section.status !== 'active') {
+    if (input.classSectionId && (!section || section.status !== 'active')) {
       return NextResponse.json({ error: 'Inactive class sections cannot be selected for new enrollments.' }, { status: 400 });
     }
     input = applyClassSection(input, section);
@@ -201,6 +207,10 @@ export async function POST(request, { params }) {
       });
     } else {
       await db.transaction(async (tx) => {
+        if (courseValues.classSectionId) await lockSectionForEnrollment(tx, {
+          organizationId: session.user.organizationId, businessUnitId, sectionId: courseValues.classSectionId,
+          enrollment: courseValues,
+        });
         await tx.insert(contactCourseRecords).values(courseValues);
       });
     }
@@ -248,7 +258,7 @@ export async function PATCH(request, { params }) {
       : existing.classSectionId;
     const section = await loadClassSection(db, session, existing.businessUnitId, nextClassSectionId);
     input = applyClassSection(input, section);
-    if (section?.status !== 'active' && section.id !== existing.classSectionId) {
+    if (nextClassSectionId && (!section || section.status !== 'active') && nextClassSectionId !== existing.classSectionId) {
       return NextResponse.json({ error: 'Inactive class sections cannot be selected for new enrollments.' }, { status: 400 });
     }
     const existingRecords = await listCourseRecords(db, session, contact.id);
@@ -266,6 +276,10 @@ export async function PATCH(request, { params }) {
 
     const patch = courseRecordValuesFromInput(input, { updatedAt: new Date() });
     await db.transaction(async (tx) => {
+      if ((patch.status || existing.status) === 'active' && nextClassSectionId) await lockSectionForEnrollment(tx, {
+        organizationId: session.user.organizationId, businessUnitId: existing.businessUnitId,
+        sectionId: nextClassSectionId, enrollment: { ...existing, ...patch },
+      });
       await tx
         .update(contactCourseRecords)
         .set(patch)
