@@ -25,7 +25,7 @@ import {
   scopedOpenFollowUpTasks,
 } from '@/lib/contact-sidebar-model.js';
 import { WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
-import { schoolLocationForContact, schoolLocationOptions, studentLocationForContact } from '@/lib/school-locations';
+import { canonicalAitUsaSchoolLocation, retiredAitUsaSchoolLocation, schoolLocationForContact, schoolLocationOptions, studentLocationForContact } from '@/lib/school-locations';
 import {
   COURSE_RECORD_STATUS_OPTIONS,
   courseNameOptions,
@@ -743,6 +743,12 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
   const editSchoolLocationOptions = schoolLocationOptions(editForm?.address);
   const courseOptions = courseNameOptions(courseForm.courseName);
   const courseLocationOptions = schoolLocationOptions(courseForm.courseLocation);
+  const retiredEditSchoolLocation = editForm?.address && (retiredAitUsaSchoolLocation(editForm.address) || !canonicalAitUsaSchoolLocation(editForm.address))
+    ? editForm.address
+    : '';
+  const retiredCourseLocation = courseForm.courseLocation && (retiredAitUsaSchoolLocation(courseForm.courseLocation) || !canonicalAitUsaSchoolLocation(courseForm.courseLocation))
+    ? courseForm.courseLocation
+    : '';
   const showWorkOrdersTab = detailView.tabs.showWorkOrders;
   const showFinancialsTab = isAitUsaContact
     ? visibleFinancials.length > 0
@@ -3380,6 +3386,9 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                     onChange={(event) => updateCourseForm({ courseLocation: event.target.value })}
                   >
                     <option value="">Delivery location not set</option>
+                    {retiredCourseLocation && (
+                      <option value={retiredCourseLocation} disabled>{retiredCourseLocation} (previously saved)</option>
+                    )}
                     {courseLocationOptions.map((location) => (
                       <option key={location} value={location}>{location}</option>
                     ))}
@@ -3757,9 +3766,14 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       onChange={e => setEditForm({...editForm, address: e.target.value})}
                     >
                       <option value="">Not recorded</option>
+                      {retiredEditSchoolLocation && (
+                        <option value={retiredEditSchoolLocation} disabled>{retiredEditSchoolLocation} (previously saved)</option>
+                      )}
                       {editSchoolLocationOptions.map((location) => <option key={location} value={location}>{location}</option>)}
                     </select>
-                    <div className="profile-editor-helper">The campus or Online option the student intends to use.</div>
+                    <div className="profile-editor-helper">{retiredEditSchoolLocation
+                      ? 'This saved location is retired. Choose a current location to change it; other profile edits will keep the saved value.'
+                      : 'The campus or Online option the student intends to use.'}</div>
                   </div>
                 </div>
 
@@ -4081,11 +4095,16 @@ export default function ContactDetailPage({ mode = 'contacts' } = {}) {
                       <label className="form-label" htmlFor="profile-edit-school-location">Intended Learning Location</label>
                       <select id="profile-edit-school-location" className="input select" value={editForm.address || ''} onChange={e => setEditForm({...editForm, address: e.target.value})}>
                         <option value="">Not specified</option>
+                        {retiredEditSchoolLocation && (
+                          <option value={retiredEditSchoolLocation} disabled>{retiredEditSchoolLocation} (previously saved)</option>
+                        )}
                         {editSchoolLocationOptions.map((location) => (
                           <option key={location} value={location}>{location}</option>
                         ))}
                       </select>
-                      <div className="profile-editor-helper">The approved campus or Online option the student intends to use.</div>
+                      <div className="profile-editor-helper">{retiredEditSchoolLocation
+                        ? 'This saved location is retired. Choose a current location to change it; other profile edits will keep the saved value.'
+                        : 'The approved campus or Online option the student intends to use.'}</div>
                     </div>
                   ) : (
                     <div className="form-group">

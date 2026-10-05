@@ -62,7 +62,7 @@ import { workflowFromLead } from '@/lib/sales-workflow';
 import { summarizeContactTouch } from '@/lib/contact-touch.js';
 import { buildAitUsaEnrollmentSignals } from '@/lib/ait-usa-enrollment-signals.js';
 import { loadContactDirectoryPage } from '@/lib/contact-directory/service.js';
-import { canonicalAitUsaSchoolLocation } from '@/lib/school-locations.js';
+import { canonicalAitUsaSchoolLocation, retiredAitUsaSchoolLocation } from '@/lib/school-locations.js';
 import { hasOpportunityMutationRequest } from '@/lib/crm/contact-profile-patch.js';
 
 export async function GET(request) {
@@ -257,13 +257,18 @@ function normalizeFollowUpNoteInput(rawFollowUpNote) {
   };
 }
 
-function contactAddressForWrite(value, businessUnit) {
+function contactAddressForWrite(value, businessUnit, previousAddress = '') {
   const current = String(value || '').trim();
   if (workflowKeyForBusinessUnit(businessUnit) !== WORKFLOW_KEYS.AIT_USA) return current || null;
   if (!current) return null;
+  if (retiredAitUsaSchoolLocation(current)) {
+    if (current === String(previousAddress || '').trim()) return current;
+    throw createCrmError('Intended Learning Location must be Bound Brook, Plainfield, Flemington, or Online.');
+  }
   const learningLocation = canonicalAitUsaSchoolLocation(current);
+  if (!learningLocation && current === String(previousAddress || '').trim()) return current;
   if (!learningLocation) {
-    throw createCrmError('Intended Learning Location must be Bound Brook, Plainfield, Piscataway, Flemington, or Online.');
+    throw createCrmError('Intended Learning Location must be Bound Brook, Plainfield, Flemington, or Online.');
   }
   return learningLocation;
 }
@@ -490,7 +495,7 @@ export async function PATCH(request, _context = {}, overrides = {}) {
   }
   if ('address' in body) {
     try {
-      patch.address = contactAddressForWrite(body.address, statusBusinessUnit);
+      patch.address = contactAddressForWrite(body.address, statusBusinessUnit, existing.address);
     } catch (error) {
       return crmErrorResponse(error);
     }

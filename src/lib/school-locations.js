@@ -6,6 +6,11 @@ export const AIT_USA_SCHOOL_LOCATIONS = [
   'Online',
 ];
 
+const RETIRED_AIT_USA_SCHOOL_LOCATIONS = ['Piscataway', 'Somerville'];
+const SELECTABLE_AIT_USA_SCHOOL_LOCATIONS = AIT_USA_SCHOOL_LOCATIONS.filter(
+  (location) => !RETIRED_AIT_USA_SCHOOL_LOCATIONS.includes(location),
+);
+
 function clean(value = '') {
   return String(value || '').trim();
 }
@@ -17,16 +22,23 @@ function normalize(value = '') {
 const SCHOOL_LOCATION_BY_KEY = new Map(
   AIT_USA_SCHOOL_LOCATIONS.map((location) => [normalize(location), location]),
 );
+const RETIRED_SCHOOL_LOCATION_BY_KEY = new Map(
+  RETIRED_AIT_USA_SCHOOL_LOCATIONS.map((location) => [normalize(location), location]),
+);
 export function schoolLocationOptions() {
-  return [...AIT_USA_SCHOOL_LOCATIONS];
+  return [...SELECTABLE_AIT_USA_SCHOOL_LOCATIONS];
 }
 
 export function canonicalAitUsaSchoolLocation(value = '') {
   return SCHOOL_LOCATION_BY_KEY.get(normalize(value)) || '';
 }
 
+export function retiredAitUsaSchoolLocation(value = '') {
+  return RETIRED_SCHOOL_LOCATION_BY_KEY.get(normalize(value)) || '';
+}
+
 export function schoolLocationForContact(contact = {}) {
-  return canonicalAitUsaSchoolLocation(contact.address);
+  return canonicalAitUsaSchoolLocation(contact.address) || retiredAitUsaSchoolLocation(contact.address);
 }
 
 export function studentLocationForContact(contact = {}) {
@@ -39,5 +51,7 @@ export function studentLocationForContact(contact = {}) {
     if (current) return current;
   }
   const legacyAddress = clean(contact.address);
-  return legacyAddress && !canonicalAitUsaSchoolLocation(legacyAddress) ? legacyAddress : '';
+  return legacyAddress && !canonicalAitUsaSchoolLocation(legacyAddress) && !retiredAitUsaSchoolLocation(legacyAddress)
+    ? legacyAddress
+    : '';
 }
