@@ -28,9 +28,7 @@ export default function ActiveClassesPage() {
     );
   }
 
-  return <>
-    <ClassManagementWorkspace key={currentBusinessUnit?.id} businessUnitId={currentBusinessUnit?.id}
-      today={todayInAttendanceTimeZone()} onSaved={() => setClassRefreshKey((value) => value + 1)} />
-    <ActiveClassesWorkspace styles={s} classRefreshKey={classRefreshKey} />
-  </>;
+  return <ActiveClassesWorkspace styles={s} classRefreshKey={classRefreshKey}
+    managementAction={<ClassManagementWorkspace key={currentBusinessUnit?.id} businessUnitId={currentBusinessUnit?.id}
+      today={todayInAttendanceTimeZone()} onSaved={() => setClassRefreshKey((value) => value + 1)} />} />;
 }

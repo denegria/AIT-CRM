@@ -127,6 +127,8 @@
   color: var(--text-secondary);
 }
 
+.topActions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; min-width: 0; }
+
 .locationSelect select {
   min-width: 0;
   flex: 1;
@@ -957,7 +959,8 @@
     padding-right: 46px;
   }
   .dateControls { grid-column: 1 / -1; grid-row: 2; }
-  .locationSelect { grid-column: 2; grid-row: 1; min-width: 156px; }
+  .topActions { grid-column: 2; grid-row: 1; }
+  .locationSelect { min-width: 156px; }
   .workspaceGrid { min-height: auto; }
   .classList { max-height: calc(100dvh - 252px); }
   .rosterHeader,
@@ -967,7 +970,8 @@
 @media (max-width: 720px) {
   .emptyWorkspace { min-height: 200px; padding: 28px 18px; }
   .topBar { grid-template-columns: minmax(0, 1fr); padding-right: 44px; gap: 10px; }
-  .locationSelect { grid-column: 1; grid-row: 3; justify-self: stretch; min-width: 0; }
+  .topActions { grid-column: 1; grid-row: 3; justify-content: stretch; }
+  .locationSelect { flex: 1 1 160px; min-width: 0; }
   .dateControls { grid-row: 2; }
   .workspaceGrid { grid-template-columns: minmax(0, 1fr); border: 0; background: transparent; box-shadow: none; overflow: visible; }
   .classRail { border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); overflow: hidden; }

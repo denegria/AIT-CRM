@@ -66,7 +66,7 @@ function markSummary(status) {
   return 'Unmarked';
 }
 
-export default function ActiveClassesWorkspace({ styles: s, initialState = null, classRefreshKey = 0 }) {
+export default function ActiveClassesWorkspace({ styles: s, initialState = null, classRefreshKey = 0, managementAction = null }) {
   const staticMode = Boolean(initialState);
   const today = useMemo(() => initialState?.today || todayInNewYork(), [initialState]);
   const [date, setDate] = useState(initialState?.date || today);
@@ -383,13 +383,16 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null,
             <ChevronRight size={18} />
           </button>
         </div>
-        <label className={s.locationSelect}>
-          <MapPin size={16} aria-hidden="true" />
-          <select value={locationFilter} onChange={(event) => chooseLocation(event.target.value)} aria-label="Filter classes by location">
-            <option value="all">All locations</option>
-            {locationOptions.map((location) => <option key={location} value={location}>{location}</option>)}
-          </select>
-        </label>
+        <div className={s.topActions}>
+          <label className={s.locationSelect}>
+            <MapPin size={16} aria-hidden="true" />
+            <select value={locationFilter} onChange={(event) => chooseLocation(event.target.value)} aria-label="Filter classes by location">
+              <option value="all">All locations</option>
+              {locationOptions.map((location) => <option key={location} value={location}>{location}</option>)}
+            </select>
+          </label>
+          {managementAction}
+        </div>
       </header>
 
       {hasNoVisibleClasses ? (
