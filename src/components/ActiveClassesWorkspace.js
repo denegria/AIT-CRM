@@ -366,9 +366,10 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null,
   return (
     <section className={s.page} aria-label="Active Classes attendance workspace">
       <header className={s.topBar}>
-        <div>
+        <div className={s.topTitle}>
           <p className={s.eyebrow}>AIT USA</p>
           <h1>Active Classes</h1>
+          {managementAction}
         </div>
         <div className={s.dateControls} aria-label="Class date">
           <button type="button" className={s.iconButton} onClick={() => chooseDate(addCalendarDays(date, -1))} disabled={busy} aria-label="Previous day">
@@ -391,7 +392,6 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null,
               {locationOptions.map((location) => <option key={location} value={location}>{location}</option>)}
             </select>
           </label>
-          {managementAction}
         </div>
       </header>
 

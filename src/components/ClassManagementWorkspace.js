@@ -171,7 +171,7 @@ export default function ClassManagementWorkspace({ businessUnitId, today, initia
   </>;
 
   return <>
-    <button type="button" className={`${s.trigger} btn`} onClick={() => setOpen(true)} aria-haspopup="dialog">
+    <button type="button" className={s.trigger} onClick={() => setOpen(true)} aria-haspopup="dialog">
       <BookOpenCheck size={16} aria-hidden="true" />
       {loading ? 'Classes' : canManage ? 'Manage classes' : 'View classes'}
     </button>

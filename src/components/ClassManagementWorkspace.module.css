@@ -1,4 +1,5 @@
-.trigger { white-space: nowrap; min-height: 40px; gap: 8px; }
+.trigger { display: inline-flex; align-items: center; gap: 7px; min-height: 28px; padding: 0; border: 0; background: transparent; color: var(--accent); font: inherit; font-size: var(--text-md); font-weight: 700; text-align: left; cursor: pointer; }
+.trigger:hover { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 3px; }
 .dialog { --modal-dialog-width: 760px; }
 .srOnly { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .browse, .edit, .review { display: grid; gap: 20px; color: var(--text-primary); }
