@@ -206,7 +206,7 @@ export async function verifyProductionDatabaseForward(client, baseline, forward)
         ...forward.repository.forwardMigrations.map(({ identifier, sha256 }) => ({ identifier, sha256 })),
       ];
       await check(
-        'database forward migration ledger matches 0027–0031',
+        'database forward migration ledger matches 0027–0032',
         `select identifier, sha256 from ${ledger.schema}.${ledger.table} order by identifier`,
         expectedLedger,
         (rows, expected) => {

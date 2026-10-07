@@ -97,7 +97,7 @@ test('forward manifest and current Drizzle export reproduce the pinned lineage',
   });
   assert.equal(report.ok, true, report.checks.filter((check) => !check.ok).map((check) => check.detail).join('\n'));
   assert.equal(report.manifestSha256, FORWARD_SCHEMA_MANIFEST_CANONICAL_SHA256);
-  assert.deepEqual(manifest.repository.forwardMigrations.map((entry) => entry.identifier), ['0027', '0028', '0029', '0030', '0031']);
+  assert.deepEqual(manifest.repository.forwardMigrations.map((entry) => entry.identifier), ['0027', '0028', '0029', '0030', '0031', '0032']);
 });
 
 test('forward target guard rejects execution without every exact disposable-target assertion', () => {

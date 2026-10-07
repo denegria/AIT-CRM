@@ -4,6 +4,7 @@ import { createCrmError } from './errors.js';
 import { parseSessionDate, todayInAttendanceTimeZone } from '../attendance/policy.js';
 import { canonicalAitUsaSchoolLocation } from '../school-locations.js';
 import { CANONICAL_WEEKDAYS, canonicalWeekday } from '../schedule-days.js';
+import { normalizeScheduleSlots, scheduleSlotsForSection, scheduleSummary } from './class-schedule.js';
 
 const MODALITIES = new Set(['in_person', 'online', 'hybrid']);
 const STATUSES = new Set(['planned', 'active', 'inactive']);
@@ -47,7 +48,11 @@ export function classSectionInput(payload = {}) {
   if (!MODALITIES.has(modality)) throw new Error('Class section modality is not supported.');
   if (!STATUSES.has(status)) throw new Error('Class section status is not supported.');
   const courseLocation = canonicalAitUsaSchoolLocation(payload.courseLocation) || cleanText(payload.courseLocation);
-  const days = cleanDays(payload.scheduleDaysJson || payload.scheduleDays);
+  const hasSlots = Object.hasOwn(payload, 'scheduleSlots') || Object.hasOwn(payload, 'scheduleSlotsJson');
+  const slots = hasSlots ? normalizeScheduleSlots(payload.scheduleSlotsJson || payload.scheduleSlots) : [];
+  const days = slots.length
+    ? CANONICAL_WEEKDAYS.filter((day) => slots.some((slot) => slot.days.includes(day)))
+    : cleanDays(payload.scheduleDaysJson || payload.scheduleDays);
   const scheduledDaysPerWeek = payload.scheduledDaysPerWeek == null || payload.scheduledDaysPerWeek === ''
     ? (days.length || null)
     : Number(payload.scheduledDaysPerWeek);
@@ -61,8 +66,11 @@ export function classSectionInput(payload = {}) {
     courseLocation: courseLocation || null,
     modality,
     scheduleDaysJson: days,
-    startTime: cleanTime(payload.startTime),
-    endTime: cleanTime(payload.endTime),
+    scheduleSlotsJson: slots,
+    startTime: slots.length ? (slots.every((slot) => slot.startTime === slots[0].startTime && slot.endTime === slots[0].endTime)
+      ? slots[0].startTime : null) : cleanTime(payload.startTime),
+    endTime: slots.length ? (slots.every((slot) => slot.startTime === slots[0].startTime && slot.endTime === slots[0].endTime)
+      ? slots[0].endTime : null) : cleanTime(payload.endTime),
     scheduledDaysPerWeek,
     status,
     sourceType: cleanText(payload.sourceType) || null,
@@ -81,6 +89,7 @@ export function classSectionPayload(row = {}) {
     courseLocation: row.courseLocation || '',
     modality: row.modality || 'in_person',
     scheduleDays: Array.isArray(row.scheduleDaysJson) ? row.scheduleDaysJson : [],
+    scheduleSlots: scheduleSlotsForSection(row),
     startTime: row.startTime || '',
     endTime: row.endTime || '',
     scheduledDaysPerWeek: row.scheduledDaysPerWeek || null,
@@ -91,15 +100,11 @@ export function classSectionPayload(row = {}) {
 }
 
 export function classSectionLabel(section = {}) {
-  const schedule = [
-    ...(section.scheduleDays || section.scheduleDaysJson || []),
-    [section.startTime, section.endTime].filter(Boolean).join('–'),
-  ].filter(Boolean).join(' ');
   return [
     section.courseName,
     section.teacher,
     section.courseLocation,
-    schedule,
+    scheduleSummary(section),
     section.modality === 'online' ? 'Online' : '',
   ].filter(Boolean).join(' · ');
 }
@@ -137,7 +142,7 @@ export async function listClassSections({ db, organizationId, businessUnitId, in
   });
 }
 
-const SNAPSHOT_FIELDS = ['courseName', 'teacher', 'courseLocation', 'modality', 'scheduleDaysJson',
+const SNAPSHOT_FIELDS = ['courseName', 'teacher', 'courseLocation', 'modality', 'scheduleDaysJson', 'scheduleSlotsJson',
   'startTime', 'endTime', 'scheduledDaysPerWeek', 'status'];
 
 export function normalizeManagedSection(payload, { sectionKey = '' } = {}) {
@@ -145,7 +150,7 @@ export function normalizeManagedSection(payload, { sectionKey = '' } = {}) {
   try { input = classSectionInput({ ...payload, sectionKey: sectionKey || payload.sectionKey }); }
   catch (error) { throw createCrmError(error.message, 400); }
   if (!input.scheduleDaysJson.length) throw createCrmError('Choose at least one class day.', 400);
-  if (!input.startTime || !input.endTime || input.startTime >= input.endTime) {
+  if (!input.scheduleSlotsJson.length && (!input.startTime || !input.endTime || input.startTime >= input.endTime)) {
     throw createCrmError('Enter a valid start and end time in New York local time.', 400);
   }
   if (!canonicalAitUsaSchoolLocation(input.courseLocation)) {

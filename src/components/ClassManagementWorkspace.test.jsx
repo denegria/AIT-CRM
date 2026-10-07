@@ -38,25 +38,36 @@ test('only indistinguishable imported classes show a secondary reference', () =>
   assert.match(html, /To distinguish this class: ENG-2/);
 });
 
-test('editor groups controls and honors rollout-day minimum dates', () => {
+test('editor reveals one step at a time and honors rollout-day minimum dates', () => {
   const rollout = { ...section, baselineDate: '2026-10-05' };
   const edit = render({ canManage: true }, { sections: [rollout], selectedId: 'section-1', view: 'edit' });
   assert.match(edit, /Class details/);
-  assert.match(edit, /Meeting schedule/);
-  assert.match(edit, /When this takes effect/);
   assert.match(edit, /Internal class code: ENG-1/);
-  assert.match(edit, /type="date" min="2026-10-06"[^>]*value="2026-10-06"/);
-  assert.match(edit, /Review change/);
+  assert.match(edit, /Next: Class schedule/);
+  assert.doesNotMatch(edit, /type="date"|type="time"/);
   assert.doesNotMatch(edit, /Save class change/);
 
-  const create = render({ canManage: true }, { sections: [rollout], view: 'edit' });
+  const schedule = render({ canManage: true }, { sections: [rollout], selectedId: 'section-1', view: 'edit', step: 1 });
+  assert.match(schedule, /Class schedule/);
+  assert.match(schedule, /Time group 1/);
+  assert.match(schedule, /Next: Timing &amp; status/);
+  assert.doesNotMatch(schedule, /Course name<input|type="date"/);
+
+  const timing = render({ canManage: true }, { sections: [rollout], selectedId: 'section-1', view: 'edit', step: 2 });
+  assert.match(timing, /Timing &amp; status/);
+  assert.match(timing, /type="date" min="2026-10-06"[^>]*value="2026-10-06"/);
+  assert.match(timing, /Review change/);
+  assert.doesNotMatch(timing, /type="time"|Course name<input/);
+
+  const create = render({ canManage: true }, { sections: [rollout], view: 'edit', step: 0 });
   assert.match(create, /Internal class code/);
-  assert.match(create, /type="date" min="2026-10-05"[^>]*value="2026-10-05"/);
+  const createTiming = render({ canManage: true }, { sections: [rollout], view: 'edit', step: 2 });
+  assert.match(createTiming, /type="date" min="2026-10-05"[^>]*value="2026-10-05"/);
 });
 
 test('editor flags nonstandard imported schedule text for correction', () => {
   const legacy = { ...section, scheduleDays: ['VIERNES'] };
-  const html = render({ canManage: true }, { sections: [legacy], selectedId: 'section-1', view: 'edit' });
+  const html = render({ canManage: true }, { sections: [legacy], selectedId: 'section-1', view: 'edit', step: 1 });
   assert.match(html, /Imported schedule text: VIERNES/);
   assert.doesNotMatch(html, /type="checkbox" checked=""/);
 });
@@ -106,14 +117,58 @@ test('choosing a class opens the editor, then review; back to edit removes prior
     const classButton = [...container.querySelectorAll('button')].find((button) => button.textContent.includes('English'));
     await act(async () => classButton.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     assert.ok(container.querySelector('form'));
+    assert.equal(container.querySelector('button[type="submit"]').textContent.trim(), 'Next: Class schedule');
+    await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    assert.match(container.textContent, /Time group 1/);
+    assert.equal(container.querySelector('button[type="submit"]').textContent.trim(), 'Next: Timing & status');
+    await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    assert.match(container.textContent, /Timing & status/);
     assert.equal(container.querySelector('button[type="submit"]').textContent.trim(), 'Review change');
     await act(async () => container.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
     assert.match(container.textContent, /Impact check/);
     assert.ok(container.textContent.includes('Save class change'));
-    const back = [...container.querySelectorAll('button')].find((button) => button.textContent.includes('Back to edit'));
+    const back = [...container.querySelectorAll('button')].find((button) => button.textContent.includes('Back to timing'));
     await act(async () => back.dispatchEvent(new MouseEvent('click', { bubbles: true })));
     assert.ok(container.querySelector('form'));
     assert.equal(container.textContent.includes('Save class change'), false);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});
+
+test('schedule step keeps separate time groups under one class', () => {
+  const mixed = { ...section, scheduleDays: ['Tuesday', 'Thursday', 'Saturday'], scheduleSlots: [
+    { days: ['Tuesday', 'Thursday'], startTime: '18:00', endTime: '21:00' },
+    { days: ['Saturday'], startTime: '09:00', endTime: '12:00' },
+  ] };
+  const html = render({ canManage: true }, { sections: [mixed], selectedId: 'section-1', view: 'edit', step: 1 });
+  assert.match(html, /Time group 1/);
+  assert.match(html, /Time group 2/);
+  assert.match(html, /value="18:00"/);
+  assert.match(html, /value="09:00"/);
+  assert.doesNotMatch(html, /Meeting schedule/);
+});
+
+test('adding a second time group reserves weekdays already used by the first', async () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(ClassManagementWorkspace, {
+      businessUnitId: 'usa', today: '2026-10-05', initialState: {
+        sections: [section], capabilities: { canManage: true }, selectedId: 'section-1',
+        open: true, view: 'edit', step: 1, form: { ...section, effectiveDate: '2026-10-06', scheduleSlots: [
+          { days: ['Tuesday', 'Thursday'], startTime: '18:00', endTime: '21:00' },
+        ] },
+      },
+    })));
+    const add = [...container.querySelectorAll('button')].find((button) => button.textContent.includes('Add another time group'));
+    await act(async () => add.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const groups = container.querySelectorAll('fieldset');
+    assert.equal(groups.length, 2);
+    assert.equal(groups[1].querySelectorAll('input:disabled').length, 2);
+    assert.match(container.textContent, /Time group 2/);
   } finally {
     await act(async () => root.unmount());
     container.remove();

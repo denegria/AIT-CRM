@@ -28,7 +28,6 @@ import {
   formatClassLocation,
   formatEnrollmentDate,
   formatLongDate,
-  formatScheduleDays,
   formatSessionDate,
   formatTimeRange,
   initials,
@@ -37,6 +36,7 @@ import {
   serializeMarks,
   todayInNewYork,
 } from '../lib/attendance/client-view.js';
+import { scheduleSummary } from '../lib/crm/class-schedule.js';
 
 const TABS = ['overview', 'roster', 'attendance'];
 
@@ -488,8 +488,8 @@ export default function ActiveClassesWorkspace({ styles: s, initialState = null,
                 <h2>{classTitle(classInfo)}</h2>
                 <div className={s.classMeta}>
                   <span><UserRound size={16} /> {classInfo.teacher || (workspace?.class?.legacyContext ? 'Instructor not recorded (legacy)' : 'Instructor not set')}</span>
-                  <span><CalendarDays size={16} /> {formatScheduleDays(classInfo.scheduleDays)}</span>
-                  <span><Clock3 size={16} /> {formatTimeRange(classInfo.startTime, classInfo.endTime)}</span>
+                  <span><CalendarDays size={16} /> {scheduleSummary(classInfo)}</span>
+                  <span><Clock3 size={16} /> Selected meeting: {formatTimeRange(classInfo.startTime, classInfo.endTime)}</span>
                   <span><UsersRound size={16} /> {roster.length} active {roster.length === 1 ? 'student' : 'students'}</span>
                 </div>
               </header>

@@ -14,11 +14,11 @@
   "repository": {
     "schema": {
       "path": "src/db/schema.js",
-      "sha256": "3d7b1cdaebf80f482769c4e7bbfa7599c3d0607efc7d47714d2735e8f97f4ca8"
+      "sha256": "945b4779c955c3dfe1e47417f19c2474280e3e0894b9a786a3bcf00834147909"
     },
     "drizzleExport": {
       "command": "drizzle-kit export --config drizzle.config.mjs",
-      "rawStdoutSha256": "112de145208375dc9616c5e6ba1e708cc7ddff296059b461d1f2c0ee1913971d",
+      "rawStdoutSha256": "c5bab3757b5d9046d93c1d06ad08707c072491cd66d9bb6ffd318420aeafe8fc",
       "structure": {
         "tableCount": 62,
         "explicitIndexCount": 134,
@@ -61,6 +61,13 @@
         "sha256": "f4604c31fe5f69c09b5ca2cea5c3fcc19c142dc9dd863da2e77b7a27cb339fbb",
         "purpose": "AIT CRM audited custom registration and tuition pricing",
         "provenance": "forward-migration"
+      },
+      {
+        "identifier": "0032",
+        "path": "drizzle/forward/0032_class_schedule_slots.sql",
+        "sha256": "adb5f9585a7812dae39632aa6f26e8c5bd443e17c55ac609614ac313b00d0fb5",
+        "purpose": "MIS-431 heterogeneous class schedule slots",
+        "provenance": "forward-migration"
       }
     ],
     "migrationLedger": {
@@ -75,9 +82,9 @@
       "expected": {
         "tableCount": 62,
         "tableNameMd5": "495b7b545ae0aeda85b03bc9329a1b11",
-        "columnCount": 903,
-        "columnCatalogMd5": "3caacc292862d2ad4b57bdd62fa7390f",
-        "logicalColumnCatalogMd5": "ba3e5475760a84aa8f6b65ea7e5ce63b",
+        "columnCount": 905,
+        "columnCatalogMd5": "729304b89e559c9f3d727eb86cecf33c",
+        "logicalColumnCatalogMd5": "2d7b867ba247f5de8399cac0f00e816f",
         "indexCount": 203,
         "indexCatalogMd5": "ddb7380eb60b44bc2490eda43f41050d",
         "constraintCount": 347,
@@ -86,9 +93,9 @@
       "expectedLive": {
         "tableCount": 62,
         "tableNameMd5": "495b7b545ae0aeda85b03bc9329a1b11",
-        "columnCount": 903,
-        "columnCatalogMd5": "9c10c649d92962ae3a6f69f3144a7bab",
-        "logicalColumnCatalogMd5": "ba3e5475760a84aa8f6b65ea7e5ce63b",
+        "columnCount": 905,
+        "columnCatalogMd5": "7e2d90b6e86f5f7506ce2d8d5232041f",
+        "logicalColumnCatalogMd5": "2d7b867ba247f5de8399cac0f00e816f",
         "indexCount": 203,
         "indexCatalogMd5": "ddb7380eb60b44bc2490eda43f41050d",
         "constraintCount": 347,
@@ -97,9 +104,9 @@
       "expectedStaging": {
         "tableCount": 62,
         "tableNameMd5": "495b7b545ae0aeda85b03bc9329a1b11",
-        "columnCount": 903,
-        "columnCatalogMd5": "47798c91bc58f21180a6680f4c583213",
-        "logicalColumnCatalogMd5": "ba3e5475760a84aa8f6b65ea7e5ce63b",
+        "columnCount": 905,
+        "columnCatalogMd5": "729304b89e559c9f3d727eb86cecf33c",
+        "logicalColumnCatalogMd5": "2d7b867ba247f5de8399cac0f00e816f",
         "indexCount": 203,
         "indexCatalogMd5": "ddb7380eb60b44bc2490eda43f41050d",
         "constraintCount": 347,
@@ -108,27 +115,30 @@
     }
   },
   "validation": {
-    "status": "validated-and-rolled-back",
+    "status": "pending-0032-validation",
+    "lastValidatedMigration": "0031",
     "projectId": "plain-band-07005942",
     "branchId": "br-long-unit-aph3r1gf",
     "databaseName": "mis431_forward_validation",
-    "validatedAt": "2026-10-05T05:14:51.015Z"
+    "lastValidatedAt": "2026-10-05T05:14:51.015Z"
   },
   "liveValidation": {
-    "status": "validated-and-rolled-back",
+    "status": "pending-0032-validation",
+    "lastValidatedMigration": "0031",
     "projectId": "plain-band-07005942",
     "branchId": "br-blue-art-ap7prsfe",
     "parentBranchId": "br-purple-bar-aphafrgp",
     "databaseName": "neondb",
-    "validatedAt": "2026-10-05T05:18:14.380Z",
-    "baselineSectionVersions": 48
+    "lastValidatedAt": "2026-10-05T05:18:14.380Z",
+    "lastBaselineSectionVersions": 48
   },
   "stagingValidation": {
-    "status": "validated-and-rolled-back",
+    "status": "pending-0032-validation",
+    "lastValidatedMigration": "0031",
     "projectId": "plain-band-07005942",
     "branchId": "br-long-unit-aph3r1gf",
     "parentBranchId": "br-broad-hill-aptjpyea",
     "databaseName": "neondb",
-    "validatedAt": "2026-10-05T05:15:53.150Z"
+    "lastValidatedAt": "2026-10-05T05:15:53.150Z"
   }
 }

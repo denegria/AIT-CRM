@@ -22,6 +22,7 @@ import {
 } from '../../db/schema.js';
 import { createCrmError } from '../crm/errors.js';
 import { loadSectionVersions, sectionAtDate } from '../crm/class-sections.js';
+import { scheduleSlotForWeekday, scheduleSlotsForSection } from '../crm/class-schedule.js';
 import { canonicalScheduleDays } from '../schedule-days.js';
 import {
   assertScheduledSessionDate,
@@ -39,6 +40,11 @@ import {
   weekBounds,
   weekdayForSessionDate,
 } from './policy.js';
+
+function scheduledTimeForDate(section, date) {
+  const slot = scheduleSlotForWeekday(section, weekdayForSessionDate(date));
+  return { startTime: slot?.startTime || section?.startTime || '', endTime: slot?.endTime || section?.endTime || '' };
+}
 
 function canAccessBusinessUnit(session, businessUnitId) {
   return Boolean(
@@ -119,6 +125,7 @@ async function ensureSession(tx, { section, sessionDate, expectedRevision, initi
   if (session) return { session, created: false };
   if (expectedRevision !== 0) throw createCrmError('Attendance changed in another tab. Refresh and try again.', 409);
 
+  const scheduledTime = scheduledTimeForDate(section, sessionDate);
   const [created] = await tx
     .insert(classSessions)
     .values({
@@ -126,8 +133,8 @@ async function ensureSession(tx, { section, sessionDate, expectedRevision, initi
       businessUnitId: section.businessUnitId,
       classSectionId: section.id,
       sessionDate,
-      scheduledStartTime: section.startTime || null,
-      scheduledEndTime: section.endTime || null,
+      scheduledStartTime: scheduledTime.startTime || null,
+      scheduledEndTime: scheduledTime.endTime || null,
       sessionNote: initialNote,
     })
     .onConflictDoNothing({ target: [classSessions.classSectionId, classSessions.sessionDate] })
@@ -150,6 +157,7 @@ export async function resolveAttendanceSection({ db, session, sectionId }) {
       courseLocation: courseClassSections.courseLocation,
       modality: courseClassSections.modality,
       scheduleDaysJson: courseClassSections.scheduleDaysJson,
+      scheduleSlotsJson: courseClassSections.scheduleSlotsJson,
       startTime: courseClassSections.startTime,
       endTime: courseClassSections.endTime,
       status: courseClassSections.status,
@@ -235,6 +243,7 @@ export async function listAttendanceClasses({ db, session, date = todayInAttenda
     sectionKey: courseClassSections.sectionKey, courseName: courseClassSections.courseName,
     teacher: courseClassSections.teacher, courseLocation: courseClassSections.courseLocation,
     modality: courseClassSections.modality, scheduleDaysJson: courseClassSections.scheduleDaysJson,
+    scheduleSlotsJson: courseClassSections.scheduleSlotsJson,
     startTime: courseClassSections.startTime, endTime: courseClassSections.endTime,
   }).from(courseClassSections).innerJoin(businessUnits, eq(businessUnits.id, courseClassSections.businessUnitId))
     .where(eq(courseClassSections.organizationId, session.user.organizationId));
@@ -288,7 +297,8 @@ export async function listAttendanceClasses({ db, session, date = todayInAttenda
     return { id: row.id, courseName: legacyContext ? `Course not recorded (legacy) · ${row.sectionKey}` : row.courseName,
       teacher: row.teacher || '', location: row.courseLocation || '',
       modality: legacyContext ? null : row.modality, legacyContext,
-      startTime: row.startTime || '', endTime: row.endTime || '',
+      startTime: meeting?.scheduledStartTime || scheduledTimeForDate(row, date).startTime,
+      endTime: meeting?.scheduledEndTime || scheduledTimeForDate(row, date).endTime,
       studentCount: counts.get(row.id) || 0,
       attendanceState: meeting ? deriveAttendanceState(meeting, markCounts.get(meeting.id) || 0) : 'not_started' };
   }) };
@@ -350,8 +360,9 @@ export async function getAttendanceWorkspace({ db, session, sectionId, weekOf, s
       legacyContext: !selectedVersion,
       modality: selectedVersion?.modality || null,
       scheduleDays: canonicalScheduleDays(meetingSection.scheduleDaysJson),
-      startTime: selectedSession?.scheduledStartTime || meetingSection.startTime || '',
-      endTime: selectedSession?.scheduledEndTime || meetingSection.endTime || '',
+      scheduleSlots: scheduleSlotsForSection(meetingSection),
+      startTime: selectedSession?.scheduledStartTime || scheduledTimeForDate(meetingSection, effectiveDate).startTime,
+      endTime: selectedSession?.scheduledEndTime || scheduledTimeForDate(meetingSection, effectiveDate).endTime,
     },
     week: { start, end },
     selectedDate: effectiveDate,
@@ -362,8 +373,8 @@ export async function getAttendanceWorkspace({ db, session, sectionId, weekOf, s
         : {
           id: null,
           date,
-          startTime: sectionAtDate(section, versions, date)?.startTime || '',
-          endTime: sectionAtDate(section, versions, date)?.endTime || '',
+          startTime: scheduledTimeForDate(sectionAtDate(section, versions, date), date).startTime,
+          endTime: scheduledTimeForDate(sectionAtDate(section, versions, date), date).endTime,
           status: 'open',
           attendanceState: 'not_started',
           revision: 0,

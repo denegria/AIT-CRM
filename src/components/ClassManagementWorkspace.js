@@ -5,12 +5,14 @@ import { BookOpenCheck, ChevronLeft, Plus, Search } from 'lucide-react';
 import Modal from './Modal.js';
 import { schoolLocationOptions } from '../lib/school-locations.js';
 import { CANONICAL_WEEKDAYS } from '../lib/schedule-days.js';
-import { addCalendarDays, formatScheduleDays, formatTimeRange } from '../lib/attendance/client-view.js';
+import { addCalendarDays } from '../lib/attendance/client-view.js';
+import { normalizeScheduleSlots, scheduleSlotsForSection, scheduleSummary } from '../lib/crm/class-schedule.js';
 import s from './ClassManagementWorkspace.module.css';
 
 const empty = { sectionKey: '', courseName: '', teacher: '', courseLocation: '', modality: 'in_person',
-  scheduleDays: [], startTime: '', endTime: '', status: 'planned', effectiveDate: '' };
+  scheduleSlots: [{ days: [], startTime: '', endTime: '' }], status: 'planned', effectiveDate: '' };
 const statusLabels = { planned: 'Planned', active: 'Active', inactive: 'Inactive' };
+const steps = ['Class details', 'Class schedule', 'Timing & status', 'Review'];
 
 async function requestJson(url, options = {}) {
   const response = await fetch(url, { ...options, headers: { 'Content-Type': 'application/json' } });
@@ -22,20 +24,17 @@ async function requestJson(url, options = {}) {
 function editable(section, today) {
   const lastEffectiveDate = section?.lastEffectiveDate || section?.baselineDate;
   const effectiveDate = lastEffectiveDate >= today ? addCalendarDays(lastEffectiveDate, 1) : today;
+  const importedDays = section?.scheduleDays?.some((day) => !CANONICAL_WEEKDAYS.includes(day));
+  const knownSlots = section && !importedDays ? scheduleSlotsForSection(section) : [];
   return section ? { sectionKey: section.sectionKey, courseName: section.courseName,
     teacher: section.teacher, courseLocation: section.courseLocation, modality: section.modality,
-    scheduleDays: section.scheduleDays.filter((day) => CANONICAL_WEEKDAYS.includes(day)),
-    startTime: section.startTime, endTime: section.endTime,
+    scheduleSlots: knownSlots.length ? knownSlots.map((slot) => ({ ...slot, days: [...slot.days] }))
+      : [{ days: [], startTime: section.startTime || '', endTime: section.endTime || '' }],
     status: section.status, effectiveDate } : { ...empty, effectiveDate };
 }
 
 function scheduleLine(section) {
-  const days = !section.scheduleDays?.length ? 'Days not set'
-    : section.scheduleDays.some((day) => !CANONICAL_WEEKDAYS.includes(day))
-      ? 'Schedule needs review' : formatScheduleDays(section.scheduleDays);
-  const time = section.startTime && section.endTime
-    ? formatTimeRange(section.startTime, section.endTime) : 'Time not set';
-  return `${days} · ${time}`;
+  return scheduleSummary(section);
 }
 
 function identityKey(section) {
@@ -58,6 +57,7 @@ export default function ClassManagementWorkspace({ businessUnitId, today, initia
   const [previewBusy, setPreviewBusy] = useState(false);
   const [open, setOpen] = useState(Boolean(initialState?.open));
   const [view, setView] = useState(initialState?.view || 'browse');
+  const [step, setStep] = useState(initialState?.step || 0);
   const [query, setQuery] = useState(initialState?.query || '');
   const [reloadKey, setReloadKey] = useState(0);
   const stepHeadingRef = useRef(null);
@@ -90,7 +90,7 @@ export default function ClassManagementWorkspace({ businessUnitId, today, initia
     if (!open) return;
     if (view === 'browse') searchRef.current?.focus();
     else stepHeadingRef.current?.focus();
-  }, [open, view]);
+  }, [open, view, step]);
 
   const close = () => {
     if (busy || previewBusy) return;
@@ -108,15 +108,33 @@ export default function ClassManagementWorkspace({ businessUnitId, today, initia
     setPreview(null);
     setError('');
     setNotice('');
+    setStep(0);
     setView('edit');
+  };
+  const updateSlot = (index, patch) => {
+    setForm((current) => ({ ...current, scheduleSlots: current.scheduleSlots.map((slot, slotIndex) =>
+      slotIndex === index ? { ...slot, ...patch } : slot) }));
+    setPreview(null);
+    setError('');
   };
   const body = { ...form, businessUnitId, sectionId: selectedId || undefined,
     expectedRevision: selected?.revision || 0 };
 
-  const previewImpact = async (event) => {
+  const continueStep = async (event) => {
     event.preventDefault();
     if (busy || previewBusy || !canManage) return;
-    if (!form.scheduleDays.length) { setError('Choose at least one meeting day.'); return; }
+    if (step === 0) {
+      if (!form.courseName.trim() || !form.courseLocation || (!selectedId && !form.sectionKey.trim())) {
+        setError('Complete the required class details before continuing.'); return;
+      }
+      setError(''); setStep(1); return;
+    }
+    if (step === 1) {
+      try { normalizeScheduleSlots(form.scheduleSlots); }
+      catch (caught) { setError(caught.message); return; }
+      setError(''); setStep(2); return;
+    }
+    if (!form.effectiveDate) { setError('Choose when this class change takes effect.'); return; }
     setPreviewBusy(true); setError(''); setPreview(null);
     try {
       const result = staticMode ? initialState.preview : await requestJson('/api/active-classes/sections/preview', {
@@ -141,7 +159,9 @@ export default function ClassManagementWorkspace({ businessUnitId, today, initia
       setPreview(null);
       setQuery('');
       setView('browse');
-      setNotice(result.audit.outcome === 'unchanged' ? 'No class change was needed.' : `Class change saved for ${result.audit.effectiveDate}.`);
+      setNotice(result.audit.outcome === 'unchanged' ? 'No class change was needed.'
+        : selectedId ? `Class change saved for ${result.audit.effectiveDate}.`
+          : `Class created for ${result.audit.effectiveDate}.`);
       if (result.audit.outcome === 'saved') onSaved?.();
       try {
         const data = await requestJson(`/api/active-classes/sections?businessUnitId=${encodeURIComponent(businessUnitId)}`);
@@ -159,14 +179,16 @@ export default function ClassManagementWorkspace({ businessUnitId, today, initia
       <Plus size={16} aria-hidden="true" /> Add class
     </button>}
   </> : view === 'edit' ? <>
-    <button type="button" className="btn" onClick={() => { setError(''); setView('browse'); }} disabled={previewBusy}>Back to classes</button>
+    <button type="button" className="btn" onClick={() => { setError(''); if (step === 0) setView('browse'); else setStep(step - 1); }} disabled={previewBusy}>
+      {step === 0 ? 'Back to classes' : 'Back'}
+    </button>
     <button type="submit" form="class-management-form" className="btn btn-primary" disabled={previewBusy}>
-      {previewBusy ? 'Checking impact…' : 'Review change'}
+      {previewBusy ? 'Checking impact…' : step === 0 ? 'Next: Class schedule' : step === 1 ? 'Next: Timing & status' : 'Review change'}
     </button>
   </> : <>
-    <button type="button" className="btn" onClick={() => { setPreview(null); setError(''); setView('edit'); }} disabled={busy}>Back to edit</button>
+    <button type="button" className="btn" onClick={() => { setPreview(null); setError(''); setStep(2); setView('edit'); }} disabled={busy}>Back to timing</button>
     <button type="button" className="btn btn-primary" onClick={save} disabled={busy || !preview || preview.willBlockDeactivation}>
-      {busy ? 'Saving…' : 'Save class change'}
+      {busy ? 'Saving…' : selectedId ? 'Save class change' : 'Create class'}
     </button>
   </>;
 
@@ -177,7 +199,7 @@ export default function ClassManagementWorkspace({ businessUnitId, today, initia
     </button>
     <Modal open={open} onClose={close} title={view === 'browse' ? 'Classes & schedules'
       : view === 'edit' ? selected ? `Edit ${selected.courseName}` : 'Add a class'
-        : 'Review class change'} variant="dialog" panelClassName={s.dialog} footer={footer}>
+        : selected ? 'Review class change' : 'Review new class'} variant="dialog" panelClassName={s.dialog} footer={footer}>
       {view === 'browse' && <div className={s.browse}>
         <div className={s.intro}>
           <p>{canManage ? 'Find a class by course, teacher, location or day. Choose one to change its details and schedule.'
@@ -212,12 +234,17 @@ export default function ClassManagementWorkspace({ businessUnitId, today, initia
         <div className={s.stepIntro}>
           <button type="button" className={s.backLink} onClick={() => { setError(''); setView('browse'); }}><ChevronLeft size={16} aria-hidden="true" /> All classes</button>
           <h2 ref={stepHeadingRef} tabIndex="-1">{selected ? selected.courseName : 'New class'}</h2>
-          <p>{selected ? `Updates start on the effective date. Internal class code: ${selected.sectionKey}.` : 'Set up the class, then review its schedule before saving.'}</p>
+          <p>{selected ? `Updates start on the effective date. Internal class code: ${selected.sectionKey}.` : 'Set up one class with the days and times it meets.'}</p>
+          <div className={s.stepProgress} aria-label={`Step ${step + 1} of 4: ${steps[step]}`}>
+            {steps.map((label, index) => <span key={label} className={index === step ? s.currentStep : index < step ? s.completedStep : ''}>
+              <span>{index + 1}</span><span>{label}</span>
+            </span>)}
+          </div>
         </div>
         {error && <p className={s.error} role="alert">{error}</p>}
-        <form id="class-management-form" className={s.form} onSubmit={previewImpact}>
-          <section className={s.group} aria-labelledby="class-details-heading">
-            <div className={s.groupHeading}><span className={s.groupNumber}>1</span><div><h3 id="class-details-heading">Class details</h3><p>What students and staff will recognize.</p></div></div>
+        <form id="class-management-form" className={s.form} onSubmit={continueStep}>
+          {step === 0 && <section className={s.group} aria-labelledby="class-details-heading">
+            <div className={s.groupHeading}><h3 id="class-details-heading">Class details</h3><p>What students and staff will recognize.</p></div>
             <div className={s.fields}>
               <label>Course name<input value={form.courseName} onChange={(event) => change('courseName', event.target.value)} disabled={previewBusy} required /></label>
               <label>Teacher<input value={form.teacher} onChange={(event) => change('teacher', event.target.value)} disabled={previewBusy} /></label>
@@ -227,20 +254,30 @@ export default function ClassManagementWorkspace({ businessUnitId, today, initia
                 <option value="in_person">In person</option><option value="online">Online</option><option value="hybrid">Hybrid</option></select></label>
               {!selected && <label className={s.fullField}>Internal class code<input value={form.sectionKey} onChange={(event) => change('sectionKey', event.target.value)} disabled={previewBusy} required /><small>Used internally to distinguish class sections.</small></label>}
             </div>
-          </section>
-          <section className={s.group} aria-labelledby="meeting-schedule-heading">
-            <div className={s.groupHeading}><span className={s.groupNumber}>2</span><div><h3 id="meeting-schedule-heading">Meeting schedule</h3><p>Times are in New York local time.</p></div></div>
-            {importedDays.length > 0 && <p className={s.legacyNotice}>Imported schedule text: {importedDays.join(', ')}. Choose the correct meeting days below before saving.</p>}
-            <fieldset className={s.days} disabled={previewBusy}><legend>Meeting days</legend><div>{CANONICAL_WEEKDAYS.map((day) =>
-              <label key={day}><input type="checkbox" checked={form.scheduleDays.includes(day)} onChange={(event) => change('scheduleDays', event.target.checked
-                ? [...form.scheduleDays, day] : form.scheduleDays.filter((value) => value !== day))} /><span>{day.slice(0, 3)}</span></label>)}</div></fieldset>
-            <div className={s.fields}>
-              <label>Starts at<input type="time" value={form.startTime} onChange={(event) => change('startTime', event.target.value)} disabled={previewBusy} required /></label>
-              <label>Ends at<input type="time" value={form.endTime} onChange={(event) => change('endTime', event.target.value)} disabled={previewBusy} required /></label>
-            </div>
-          </section>
-          <section className={s.group} aria-labelledby="effective-date-heading">
-            <div className={s.groupHeading}><span className={s.groupNumber}>3</span><div><h3 id="effective-date-heading">When this takes effect</h3><p>Existing submitted attendance will not change.</p></div></div>
+          </section>}
+          {step === 1 && <section className={s.group} aria-labelledby="class-schedule-heading">
+            <div className={s.groupHeading}><h3 id="class-schedule-heading">Class schedule</h3><p>Group days that share a time. Times are in New York local time.</p></div>
+            {importedDays.length > 0 && <p className={s.legacyNotice}>Imported schedule text: {importedDays.join(', ')}. Confirm the correct days and times before saving.</p>}
+            <div className={s.slotList}>{form.scheduleSlots.map((slot, index) => <div key={index} className={s.slotGroup}>
+              <div className={s.slotHeading}><strong>Time group {index + 1}</strong>{form.scheduleSlots.length > 1 &&
+                <button type="button" className={s.removeSlot} onClick={() => change('scheduleSlots', form.scheduleSlots.filter((_, slotIndex) => slotIndex !== index))}>Remove</button>}</div>
+              <fieldset className={s.days} disabled={previewBusy}><legend>Class days</legend><div>{CANONICAL_WEEKDAYS.map((day) => {
+                const takenElsewhere = form.scheduleSlots.some((other, slotIndex) => slotIndex !== index && other.days.includes(day));
+                return <label key={day}><input type="checkbox" checked={slot.days.includes(day)} disabled={takenElsewhere}
+                  onChange={(event) => updateSlot(index, { days: event.target.checked
+                    ? [...slot.days, day] : slot.days.filter((value) => value !== day) })} /><span>{day.slice(0, 3)}</span></label>;
+              })}</div></fieldset>
+              <div className={s.fields}>
+                <label>Starts at<input type="time" value={slot.startTime} onChange={(event) => updateSlot(index, { startTime: event.target.value })} disabled={previewBusy} required /></label>
+                <label>Ends at<input type="time" value={slot.endTime} onChange={(event) => updateSlot(index, { endTime: event.target.value })} disabled={previewBusy} required /></label>
+              </div>
+            </div>)}</div>
+            {form.scheduleSlots.length < 7 && new Set(form.scheduleSlots.flatMap((slot) => slot.days)).size < 7 &&
+              <button type="button" className={s.addSlot} onClick={() =>
+              change('scheduleSlots', [...form.scheduleSlots, { days: [], startTime: '', endTime: '' }])}>+ Add another time group</button>}
+          </section>}
+          {step === 2 && <section className={s.group} aria-labelledby="effective-date-heading">
+            <div className={s.groupHeading}><h3 id="effective-date-heading">Timing &amp; status</h3><p>Choose when this change takes effect. Existing submitted attendance will not change.</p></div>
             <div className={s.fields}>
               <label>Class status<select value={form.status} onChange={(event) => change('status', event.target.value)} disabled={previewBusy}>
                 <option value="planned">Planned</option><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
@@ -249,13 +286,15 @@ export default function ClassManagementWorkspace({ businessUnitId, today, initia
                 onChange={(event) => change('effectiveDate', event.target.value)} disabled={previewBusy} required /></label>
             </div>
             {selected?.upcoming?.length > 0 && <div className={s.pending}><strong>Already scheduled</strong>{selected.upcoming.map((item) =>
-              <p key={item.revision}>{item.effectiveDate}: {statusLabels[item.status] || item.status} · {item.teacher || 'Teacher not set'} · {item.courseLocation}</p>)}</div>}
-          </section>
+              <p key={item.revision}>{item.effectiveDate}: {statusLabels[item.status] || item.status} · {scheduleLine(item)} · {item.teacher || 'Teacher not set'} · {item.courseLocation}</p>)}</div>}
+          </section>}
         </form>
       </div>}
 
       {view === 'review' && preview && <div className={s.review}>
         <h2 ref={stepHeadingRef} tabIndex="-1">{form.courseName}</h2>
+        <div className={s.stepProgress} aria-label="Step 4 of 4: Review">{steps.map((label, index) =>
+          <span key={label} className={index === 3 ? s.currentStep : s.completedStep}><span>{index + 1}</span><span>{label}</span></span>)}</div>
         <p>Check the change and its impact before saving. Existing submitted attendance is never rewritten.</p>
         {error && <p className={s.error} role="alert">{error}</p>}
         <div className={s.reviewSummary}>

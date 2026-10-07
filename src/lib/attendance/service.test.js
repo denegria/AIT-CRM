@@ -41,6 +41,49 @@ test('next-class guidance uses only authorized AIT USA schedules', async () => {
   assert.equal(noAccess.nextScheduledDate, null);
 });
 
+test('active class rail resolves Tuesday and Saturday from their own time groups', async () => {
+  const rows = [{ id: 'section-1', businessUnitId: 'authorized', businessUnitName: 'AIT USA Institute',
+    courseName: 'English', scheduleDaysJson: ['Tuesday', 'Thursday', 'Saturday'],
+    scheduleSlotsJson: [
+      { days: ['Tuesday', 'Thursday'], startTime: '18:00', endTime: '21:00' },
+      { days: ['Saturday'], startTime: '09:00', endTime: '12:00' },
+    ] }];
+  const session = { user: { organizationId: 'org', businessUnitIds: ['authorized'] } };
+  const tuesday = await listAttendanceClasses({ db: classListDb(rows), session, date: '2026-10-06' });
+  const saturday = await listAttendanceClasses({ db: classListDb(rows), session, date: '2026-10-10' });
+  assert.deepEqual([tuesday.classes[0].startTime, tuesday.classes[0].endTime], ['18:00', '21:00']);
+  assert.deepEqual([saturday.classes[0].startTime, saturday.classes[0].endTime], ['09:00', '12:00']);
+});
+
+test('attendance workspace shows distinct times for each upcoming day in one class', async () => {
+  const { getAttendanceWorkspace } = await import('./service.js');
+  const { courseClassSections, classSectionVersions } = await import('../../db/schema.js');
+  const section = { id: 'section-1', organizationId: 'org', businessUnitId: 'authorized',
+    businessUnitName: 'AIT USA Institute', sectionKey: 'ENG-1', courseName: 'English',
+    teacher: 'Ana', courseLocation: 'Bound Brook', modality: 'in_person', status: 'active' };
+  const version = { classSectionId: section.id, effectiveDate: '2026-10-05', revision: 1, status: 'active',
+    scheduleDaysJson: ['Tuesday', 'Thursday', 'Saturday'], scheduleSlotsJson: [
+      { days: ['Tuesday', 'Thursday'], startTime: '18:00', endTime: '21:00' },
+      { days: ['Saturday'], startTime: '09:00', endTime: '12:00' },
+    ] };
+  const db = { select: () => ({ from: (table) => {
+    const chain = { innerJoin: () => chain, where: () => chain,
+      limit: async () => table === courseClassSections ? [section] : [],
+      orderBy: async () => table === classSectionVersions ? [version] : [],
+      then: (resolve) => resolve([]),
+    };
+    return chain;
+  } }) };
+  const workspace = await getAttendanceWorkspace({ db, session: { user: { organizationId: 'org',
+    businessUnitIds: ['authorized'], roleKeys: ['account_coordinator'] } },
+  sectionId: section.id, weekOf: '2026-10-06', selectedDate: '2026-10-06' });
+  assert.deepEqual(workspace.sessions.map((item) => [item.date, item.startTime, item.endTime]), [
+    ['2026-10-06', '18:00', '21:00'], ['2026-10-08', '18:00', '21:00'], ['2026-10-10', '09:00', '12:00'],
+  ]);
+  assert.equal(workspace.class.startTime, '18:00');
+  assert.equal(workspace.class.scheduleSlots.length, 2);
+});
+
 test('pre-rollout submitted meeting keeps stored time and explicitly unknown teacher/location', async () => {
   const { getAttendanceWorkspace } = await import('./service.js');
   const { courseClassSections, classSectionVersions, classSessions, contactCourseRecords, attendanceRecords } = await import('../../db/schema.js');

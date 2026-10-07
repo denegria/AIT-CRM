@@ -35,7 +35,31 @@ test('class section payload and label keep section-owned context together', () =
     startTime: '09:00',
     endTime: '12:00',
   });
-  assert.match(classSectionLabel(payload), /Computer · Luis · Bound Brook · Saturday 09:00–12:00/);
+  assert.match(classSectionLabel(payload), /Computer · Luis · Bound Brook · Sat · 9:00 AM–12:00 PM/);
+});
+
+test('managed class normalizes separate time groups without creating separate classes', async () => {
+  const { normalizeManagedSection } = await import('./class-sections.js');
+  const slots = [
+    { days: ['Thursday', 'Tuesday'], startTime: '18:00', endTime: '21:00' },
+    { days: ['Saturday'], startTime: '09:00', endTime: '12:00' },
+  ];
+  const input = normalizeManagedSection({ sectionKey: 'ENG-2', courseName: 'English',
+    courseLocation: 'Bound Brook', status: 'active', scheduleSlots: slots });
+  assert.deepEqual(input.scheduleDaysJson, ['Tuesday', 'Thursday', 'Saturday']);
+  assert.deepEqual(input.scheduleSlotsJson[0].days, ['Tuesday', 'Thursday']);
+  assert.equal(input.scheduledDaysPerWeek, 3);
+  assert.equal(input.startTime, null);
+  assert.equal(input.endTime, null);
+  const payload = classSectionPayload({ ...input, id: 'section-1' });
+  assert.equal(payload.scheduleSlots.length, 2);
+  assert.match(classSectionLabel(payload), /Tue \/ Thu · 6:00 PM–9:00 PM; Sat · 9:00 AM–12:00 PM/);
+  assert.throws(() => normalizeManagedSection({ sectionKey: 'ENG-2', courseName: 'English',
+    courseLocation: 'Bound Brook', scheduleSlots: [...slots, { days: ['Tuesday'], startTime: '10:00', endTime: '12:00' }] }),
+  /only one class schedule time group/);
+  assert.throws(() => normalizeManagedSection({ sectionKey: 'ENG-2', courseName: 'English',
+    courseLocation: 'Bound Brook', scheduleSlots: [{ days: ['Saturday'], startTime: '12:00', endTime: '09:00' }] }),
+  /valid start and end time/);
 });
 
 test('class sections reject invalid schedule data', () => {

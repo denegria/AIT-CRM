@@ -169,7 +169,7 @@ test('audited production identity reaches catalog verification', async () => {
   assert.equal(report.checks[0].ok, true);
 });
 
-test('forward production proof requires exact live catalog, baseline journal, and 0027–0031 ledger', async () => {
+test('forward production proof requires exact live catalog, baseline journal, and 0027–0032 ledger', async () => {
   const complete = await verifyProductionDatabaseForward(forwardClient(), manifest, forward);
   assert.equal(complete.ok, true, JSON.stringify(complete.checks));
 
@@ -180,7 +180,7 @@ test('forward production proof requires exact live catalog, baseline journal, an
 
   const missing = await verifyProductionDatabaseForward(forwardClient({ missingLastMigration: true }), manifest, forward);
   assert.equal(missing.ok, false);
-  assert.match(missing.checks.find((check) => check.name.includes('forward migration ledger')).detail, /missing 0031/);
+  assert.match(missing.checks.find((check) => check.name.includes('forward migration ledger')).detail, /missing 0032/);
 
   const wrongBranch = forwardClient({ identity: productionIdentity({ neon_branch_id: 'br-broad-hill-aptjpyea' }) });
   const rejected = await verifyProductionDatabaseForward(wrongBranch, manifest, forward);

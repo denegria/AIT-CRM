@@ -273,7 +273,7 @@ export async function listActiveCollectionSections(client, input = {}) {
   const scope = scoped(input);
   const result = await client.query(
     `select s.id, s.section_key, v.course_name, v.teacher, v.modality, v.course_location,
-            v.schedule_days_json, v.start_time, v.end_time, v.status
+            v.schedule_days_json, v.schedule_slots_json, v.start_time, v.end_time, v.status
        from course_class_sections s
        join lateral (select * from class_section_versions
          where class_section_id = s.id and effective_date <= (now() at time zone 'America/New_York')::date
@@ -290,6 +290,7 @@ export async function listActiveCollectionSections(client, input = {}) {
     modality: row.modality,
     courseLocation: row.course_location,
     scheduleDays: row.schedule_days_json,
+    scheduleSlots: row.schedule_slots_json,
     startTime: row.start_time,
     endTime: row.end_time,
     status: row.status,
