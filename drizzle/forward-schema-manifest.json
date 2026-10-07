@@ -83,7 +83,7 @@
         "tableCount": 62,
         "tableNameMd5": "495b7b545ae0aeda85b03bc9329a1b11",
         "columnCount": 905,
-        "columnCatalogMd5": "729304b89e559c9f3d727eb86cecf33c",
+        "columnCatalogMd5": "8566b191416f45151d9dda17c70cedb9",
         "logicalColumnCatalogMd5": "2d7b867ba247f5de8399cac0f00e816f",
         "indexCount": 203,
         "indexCatalogMd5": "ddb7380eb60b44bc2490eda43f41050d",
@@ -115,12 +115,13 @@
     }
   },
   "validation": {
-    "status": "pending-0032-validation",
-    "lastValidatedMigration": "0031",
+    "status": "validated-and-rolled-back",
     "projectId": "plain-band-07005942",
-    "branchId": "br-long-unit-aph3r1gf",
+    "branchId": "br-empty-hall-ap4gyksl",
+    "parentBranchId": "br-purple-bar-aphafrgp",
     "databaseName": "mis431_forward_validation",
-    "lastValidatedAt": "2026-10-05T05:14:51.015Z"
+    "validatedAt": "2026-10-07T16:20:49.840Z",
+    "lastValidatedMigration": "0032"
   },
   "liveValidation": {
     "status": "pending-0032-validation",
