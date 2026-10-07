@@ -9,6 +9,7 @@ test('enrollment row schedule handles populated and legacy sections without impl
   ] }), 'Tue / Thu · 6:00 PM–9:00 PM; Sat · 9:00 AM–12:00 PM');
   assert.equal(classSectionScheduleLabel({ scheduleDays: ['Monday'], startTime: '09:00', endTime: '10:00' }),
     'Mon · 9:00 AM–10:00 AM');
+  assert.equal(classSectionScheduleLabel({}), 'Class schedule not set');
   assert.equal(classSectionScheduleLabel(null), '');
 });
 
