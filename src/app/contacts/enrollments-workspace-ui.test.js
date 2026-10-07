@@ -32,6 +32,8 @@ test('active enrollments and ended history are separated without duplicate recor
   assert.match(source, /id="enrollment-history-heading">Enrollment history/);
   assert.match(source, /activeCourseRecords\.map/);
   assert.match(source, /historicalCourseRecords\.map/);
+  assert.match(source, /import \{ classSectionDisplayLabel, classSectionScheduleLabel \} from '@\/lib\/crm\/class-section-display\.js'/);
+  assert.match(source, /classSectionScheduleLabel\(record\.classSection\)/);
 });
 
 test('server route owns the atomic enrollment and inquiry transition boundary', () => {

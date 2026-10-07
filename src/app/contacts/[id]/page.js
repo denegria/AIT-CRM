@@ -46,7 +46,7 @@ import {
   followUpSubmissionTaskId,
 } from '@/lib/tasks/follow-up-selection.js';
 import { initialFollowUpDraftFields } from '@/lib/tasks/follow-up-draft.js';
-import { classSectionDisplayLabel } from '@/lib/crm/class-section-display.js';
+import { classSectionDisplayLabel, classSectionScheduleLabel } from '@/lib/crm/class-section-display.js';
 
 const SNAPSHOT_ICONS = {
   estimate: BriefcaseBusiness,

@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { classSectionDisplayLabel } from './class-section-display.js';
+import { classSectionDisplayLabel, classSectionScheduleLabel } from './class-section-display.js';
+
+test('enrollment row schedule handles populated and legacy sections without implying a schedule for an unlinked record', () => {
+  assert.equal(classSectionScheduleLabel({ scheduleSlots: [
+    { days: ['Tuesday', 'Thursday'], startTime: '18:00', endTime: '21:00' },
+    { days: ['Saturday'], startTime: '09:00', endTime: '12:00' },
+  ] }), 'Tue / Thu · 6:00 PM–9:00 PM; Sat · 9:00 AM–12:00 PM');
+  assert.equal(classSectionScheduleLabel({ scheduleDays: ['Monday'], startTime: '09:00', endTime: '10:00' }),
+    'Mon · 9:00 AM–10:00 AM');
+  assert.equal(classSectionScheduleLabel(null), '');
+});
 
 test('class picker label makes day, local time, teacher, location and stable key legible', () => {
   assert.equal(classSectionDisplayLabel({

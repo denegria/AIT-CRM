@@ -1,7 +1,11 @@
 import { scheduleSummary } from './class-schedule.js';
 
+export function classSectionScheduleLabel(section) {
+  return section ? scheduleSummary(section) : '';
+}
+
 export function classSectionDisplayLabel(section = {}) {
-  const schedule = scheduleSummary(section);
+  const schedule = classSectionScheduleLabel(section);
   const location = section.modality === 'online'
     ? 'Online'
     : [section.courseLocation || 'Location TBD', section.modality === 'hybrid' ? 'Hybrid' : ''].filter(Boolean).join(' / ');
