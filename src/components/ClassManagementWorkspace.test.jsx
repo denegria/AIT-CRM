@@ -119,3 +119,26 @@ test('choosing a class opens the editor, then review; back to edit removes prior
     container.remove();
   }
 });
+
+test('reopening the class chooser clears an old search', async () => {
+  const container = document.createElement('div');
+  document.body.append(container);
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(ClassManagementWorkspace, {
+      businessUnitId: 'usa', today: '2026-10-05', initialState: {
+        sections: [section], capabilities: { canManage: true }, open: true, query: 'missing',
+      },
+    })));
+    assert.match(container.textContent, /No classes match your search/);
+    const close = [...container.querySelectorAll('button')].find((button) => button.textContent.trim() === 'Close');
+    await act(async () => close.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    const trigger = container.querySelector('button[aria-haspopup="dialog"]');
+    await act(async () => trigger.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    assert.equal(container.querySelector('input[type="search"]').value, '');
+    assert.match(container.textContent, /QA staging class|English/);
+  } finally {
+    await act(async () => root.unmount());
+    container.remove();
+  }
+});

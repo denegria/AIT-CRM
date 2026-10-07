@@ -58,7 +58,7 @@ export default function ClassManagementWorkspace({ businessUnitId, today, initia
   const [previewBusy, setPreviewBusy] = useState(false);
   const [open, setOpen] = useState(Boolean(initialState?.open));
   const [view, setView] = useState(initialState?.view || 'browse');
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(initialState?.query || '');
   const [reloadKey, setReloadKey] = useState(0);
   const stepHeadingRef = useRef(null);
   const searchRef = useRef(null);
@@ -171,7 +171,7 @@ export default function ClassManagementWorkspace({ businessUnitId, today, initia
   </>;
 
   return <>
-    <button type="button" className={s.trigger} onClick={() => setOpen(true)} aria-haspopup="dialog">
+    <button type="button" className={s.trigger} onClick={() => { if (view === 'browse') setQuery(''); setOpen(true); }} aria-haspopup="dialog">
       <BookOpenCheck size={16} aria-hidden="true" />
       {loading ? 'Classes' : canManage ? 'Manage classes' : 'View classes'}
     </button>
