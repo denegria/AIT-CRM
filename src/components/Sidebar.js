@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { publishLogout } from '@/lib/auth/session-sync.js';
+import { userHasAdminRole } from '@/lib/auth/admin-policy.js';
 import { useRecordScope } from '@/components/RecordScopeContext';
 import { roleLabel } from '@/lib/roles.js';
 import { useCRM } from '@/lib/store';
@@ -35,7 +36,7 @@ const nav = [
 ];
 
 const mobilePrimaryPriority = ['/', '/clients', '/contacts', '/pipeline', '/tasks', '/work-orders'];
-const regularCoordinatorNav = new Set(['/', '/clients', '/contacts', '/pipeline', '/tasks', '/recovery-queue', '/active-classes', '/payments', '/fulfillment', '/work-orders']);
+const regularCoordinatorNav = new Set(['/', '/clients', '/contacts', '/pipeline', '/tasks', '/active-classes', '/payments', '/fulfillment', '/work-orders']);
 const scopePersistenceKeys = ['ait-crm-business-unit-scope', 'ait-crm-scope-user-id'];
 
 const themeOptions = [
@@ -145,6 +146,7 @@ export default function Sidebar() {
 
   const visibleNav = useMemo(() => scopedNav.filter(({ href }) => {
     if (coordinatorUiPolicy.isRegularCoordinator && !regularCoordinatorNav.has(href)) return false;
+    if (href === '/recovery-queue' && !userHasAdminRole(currentUser)) return false;
     if (href === '/active-classes' && !isAitUsaScope) return false;
     if (href === '/payments' && (!isAitUsaScope || !access.canReadFinancials)) return false;
     if (href === '/fulfillment' && (!isAitUsaScope || !access.canReadCrm)) return false;
@@ -158,7 +160,7 @@ export default function Sidebar() {
     if (href === '/inbox' && !canReadMessagingInbox) return false;
     if (href === '/sms-campaigns' && !canManageSmsCampaigns) return false;
     return true;
-  }), [access.canReadCrm, access.canReadFinancials, access.canReadImportReview, access.canReadReports, access.canReadSettings, canManageSmsCampaigns, canReadMessagingInbox, canUseFinancialsWorkspace, canUseWorkOrders, coordinatorUiPolicy.isRegularCoordinator, isAitUsaScope, monitorCurrentUser, scopedNav]);
+  }), [access.canReadCrm, access.canReadFinancials, access.canReadImportReview, access.canReadReports, access.canReadSettings, canManageSmsCampaigns, canReadMessagingInbox, canUseFinancialsWorkspace, canUseWorkOrders, coordinatorUiPolicy.isRegularCoordinator, currentUser, isAitUsaScope, monitorCurrentUser, scopedNav]);
 
   const mobileNav = useMemo(() => {
     if (visibleNav.length <= 5) {

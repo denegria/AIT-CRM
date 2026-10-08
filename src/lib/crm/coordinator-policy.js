@@ -4,6 +4,7 @@ import {
   roleKeysForUser,
   userHasRole,
 } from '../roles.js';
+import { userHasAdminRole } from '../auth/admin-policy.js';
 
 export { ROLE_KEYS, roleKeysForUser, userHasRole };
 
@@ -178,7 +179,6 @@ const REGULAR_COORDINATOR_ROUTE_PREFIXES = Object.freeze([
   '/contacts',
   '/pipeline',
   '/tasks',
-  '/recovery-queue',
   '/work-orders',
   '/active-classes',
 ]);
@@ -194,6 +194,9 @@ export function canUseRegularCoordinatorRoute(pathname = '') {
 export function canUseCoordinatorRoute(user = {}, pathname = '') {
   const policy = coordinatorUiPolicyForUser(user);
   const normalizedPath = String(pathname || '/').split(/[?#]/)[0] || '/';
+  if (normalizedPath === '/recovery-queue' || normalizedPath.startsWith('/recovery-queue/')) {
+    return userHasAdminRole(user);
+  }
   if (normalizedPath === '/work-orders' || normalizedPath.startsWith('/work-orders/')) {
     return canUseWorkOrdersWorkspace(user);
   }

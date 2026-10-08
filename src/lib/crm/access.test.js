@@ -209,6 +209,14 @@ test('senior coordinator route policy keeps broad workspace routes available', (
   assert.equal(canUseCoordinatorRoute(session(['admin']).user, '/settings'), true);
 });
 
+test('Recovery Queue route is restricted to admins even for direct navigation', () => {
+  assert.equal(canUseCoordinatorRoute(session(['account_coordinator']).user, '/recovery-queue'), false);
+  assert.equal(canUseCoordinatorRoute(session(['senior_coordinator']).user, '/recovery-queue'), false);
+  assert.equal(canUseCoordinatorRoute(session(['sales_manager']).user, '/recovery-queue'), false);
+  assert.equal(canUseCoordinatorRoute(session(['admin']).user, '/recovery-queue'), true);
+  assert.equal(canUseCoordinatorRoute(session(['senior_coordinator', 'admin']).user, '/recovery-queue?lane=overdue'), true);
+});
+
 test('regular coordinator contact list keeps only contacts whose latest lead is assigned to them', () => {
   const contacts = [{ id: 'contact-1' }, { id: 'contact-2' }, { id: 'contact-3' }];
   const leads = [

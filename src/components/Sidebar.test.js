@@ -27,3 +27,7 @@ test('payments is limited to AIT USA staff with financial read access', () => {
   assert.match(source, /href: '\/payments', label: 'Payments'/);
   assert.match(source, /href === '\/payments' && \(!isAitUsaScope \|\| !access\.canReadFinancials\)/);
 });
+
+test('Recovery Queue link is only visible to admins', () => {
+  assert.match(source, /href === '\/recovery-queue' && !userHasAdminRole\(currentUser\)/);
+});

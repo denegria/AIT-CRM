@@ -4,8 +4,14 @@ import { readFile } from 'node:fs/promises';
 
 const routeSource = await readFile(new URL('./route.js', import.meta.url), 'utf8');
 
-test('Recovery Queue route keeps organization, business-unit, and regular-owner scope server owned', () => {
+test('Recovery Queue route requires an admin session before querying', () => {
   assert.match(routeSource, /requirePermission\(request, PERMISSIONS\.CRM_READ\)/);
+  assert.match(routeSource, /if \(!sessionHasAdminRole\(session\)\)/);
+  assert.match(routeSource, /Recovery Queue requires administrator access\.' \}, \{ status: 403 \}/);
+  assert.ok(routeSource.indexOf('if (!sessionHasAdminRole(session))') < routeSource.indexOf('getPool().connect()'));
+});
+
+test('Recovery Queue route keeps organization and business-unit scope server owned', () => {
   assert.match(routeSource, /isRegularCoordinatorSession\(session\)/);
   assert.match(routeSource, /regularCoordinatorUserId/);
   assert.match(routeSource, /resolveBusinessUnitId/);

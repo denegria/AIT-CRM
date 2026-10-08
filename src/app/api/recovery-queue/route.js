@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb, getPool } from '@/db/index.js';
 import { businessUnits } from '@/db/schema.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth';
+import { sessionHasAdminRole } from '@/lib/auth/admin-policy.js';
 import { canManageAitUsaAssignments } from '@/lib/crm/ait-usa-assignment-policy.js';
 import {
   isRegularCoordinatorSession,
@@ -18,6 +19,9 @@ function value(searchParams, key) {
 export async function GET(request) {
   const { error, session } = await requirePermission(request, PERMISSIONS.CRM_READ);
   if (error) return error;
+  if (!sessionHasAdminRole(session)) {
+    return NextResponse.json({ error: 'Recovery Queue requires administrator access.' }, { status: 403 });
+  }
 
   const { searchParams } = new URL(request.url);
   const requestedBusinessUnitId = value(searchParams, 'businessUnitId');
