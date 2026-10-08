@@ -12,8 +12,8 @@ const SCOPE_STORAGE_KEY = 'ait-crm-business-unit-scope';
 const SCOPE_USER_KEY = 'ait-crm-scope-user-id';
 
 export const metadata = {
-  title: 'AIT Signs',
-  description: 'AIT Signs Operational CRM — Lead management, work orders, and financials.',
+  title: 'AIT CRM',
+  description: 'AIT CRM — AIT Signs and AIT USA Institute operations.',
 };
 
 export const viewport = {
