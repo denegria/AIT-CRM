@@ -43,7 +43,6 @@ export default function SessionSwitchGuard() {
 
   const lockForStaleVersion = useCallback((serverVersion) => {
     if (sameAppVersion(loadedAppVersionRef.current, serverVersion)) return;
-    clearUserScopedSessionState();
     setPassword('');
     setError('');
     setLockedIdentity(null);
