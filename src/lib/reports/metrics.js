@@ -58,9 +58,12 @@ export function buildReportEvidence({ lead, allLeads, eventsByLead, eventsByCont
   const history = (historyByLead.get(lead.id) || []).filter((row) => row.businessUnitId === lead.businessUnitId);
   const contacted = events.some((event) => successfulContactEvent(event, asOf));
   const historicalEnrollment = history.some((row) => enrollmentStatusEvidence(row, asOf));
-  const currentEnrollment = courses.some((row) => { const createdAt = asDate(row.createdAt); return createdAt && createdAt <= asOf && ['active', 'enrolled', 'matriculated', 'registered'].includes(String(row.status || '').trim().toLowerCase()); });
+  const currentCourseEnrollment = courses.some((row) => { const createdAt = asDate(row.createdAt); return createdAt && createdAt <= asOf && ['active', 'enrolled', 'matriculated', 'registered'].includes(String(row.status || '').trim().toLowerCase()); });
   const enrollmentSupported = workflowKeyForBusinessUnit(unit) === WORKFLOW_KEYS.AIT_USA;
-  return { contacted, enrolled: enrollmentSupported && (historicalEnrollment || currentEnrollment), enrollmentSupported, legacyFallbackUsed: (allowLegacy && events.some((event) => !event.leadId)) || (allowLegacy && courses.some((row) => !row.leadId)), evidence: { events, history, courses } };
+  const snapshotAt = asDate(lead.updatedAt) || asDate(lead.createdAt);
+  const currentStage = String(lead.currentStage || lead.status || '').trim().toLowerCase();
+  const currentEnrollment = enrollmentSupported && Boolean(snapshotAt && snapshotAt <= asOf && ['enrolled', 'matriculated', 'registered', 'won', 'closed won', 'sold'].includes(currentStage));
+  return { contacted, enrolled: enrollmentSupported && (historicalEnrollment || currentEnrollment || currentCourseEnrollment), enrollmentSupported, legacyFallbackUsed: (allowLegacy && events.some((event) => !event.leadId)) || (allowLegacy && courses.some((row) => !row.leadId)), evidence: { events, history, courses } };
 }
 
 export function csvCell(value) {

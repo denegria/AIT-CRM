@@ -67,6 +67,19 @@ test('report evidence preserves historical enrollment and current AIT USA enroll
   assert.equal(result.enrolled, true);
 });
 
+test('report evidence counts a current AIT USA enrolled snapshot only through its snapshot time', () => {
+  const current = evidenceFixture({ lead: { id: 'lead-a', contactId: 'contact-1', businessUnitId: 'usa', currentStage: 'Enrolled', updatedAt: '2026-10-01T10:00:00Z' } });
+  assert.equal(current.enrolled, true);
+  const beforeSnapshot = evidenceFixture({ lead: { id: 'lead-a', contactId: 'contact-1', businessUnitId: 'usa', currentStage: 'Enrolled', updatedAt: '2026-10-20T10:00:00Z' }, asOf: new Date('2026-10-14T00:00:00Z') });
+  assert.equal(beforeSnapshot.enrolled, false);
+});
+
+test('report evidence never maps an AIT Signs snapshot to enrollment', () => {
+  const result = evidenceFixture({ lead: { id: 'lead-a', contactId: 'contact-1', businessUnitId: 'signs', currentStage: 'Enrolled', updatedAt: '2026-10-01T10:00:00Z' }, allLeads: [{ id: 'lead-a', contactId: 'contact-1', businessUnitId: 'signs' }], unit: { id: 'signs', name: 'AIT Signs' } });
+  assert.equal(result.enrolled, false);
+  assert.equal(result.enrollmentSupported, false);
+});
+
 test('report date validation rejects malformed, rolled, reversed, and future values', () => {
   const params = (values) => new URLSearchParams(values);
   assert.throws(() => parseReportDates(params({ from: '2026-02-30' }), new Date('2026-10-14T00:00:00Z')), /valid calendar date/);
