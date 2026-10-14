@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { enrollmentStatusEvidence, successfulContactEvent } from './metrics.js';
-import { buildReportEvidence, canonicalLeadDate, parseReportDates } from './metrics.js';
+import { buildReportEvidence, canonicalLeadDate, detailRowsForSelection, parseReportDates } from './metrics.js';
 
 const asOf = new Date('2026-10-14T00:00:00.000Z');
 
@@ -103,4 +103,15 @@ test('canonical intake dates retain linked captures and allow a single-lead lega
   const args = { lead, contact: { createdAt: '2026-01-01T00:00:00Z' }, eventsByLead: new Map([['lead-a', [linked]]]), eventsByContact: new Map([['contact-1', [legacy]]]), allLeads: [lead], unit: { id: 'usa', name: 'AIT USA' } };
   assert.equal(canonicalLeadDate(args).toISOString(), '2026-09-01T00:00:00.000Z');
   assert.equal(canonicalLeadDate({ ...args, eventsByLead: new Map() }).toISOString(), '2026-08-01T00:00:00.000Z');
+});
+
+test('report detail selections return only the selected context', () => {
+  const rows = [
+    { id: 'a', source: 'Website form', coordinatorId: 'u1', status: 'New', businessUnit: 'AIT USA', contacted: true, enrolled: false, leadDate: '2026-01-02T00:00:00Z' },
+    { id: 'b', source: 'Workbook import', coordinatorId: '', status: 'Enrolled', businessUnit: 'AIT USA', contacted: false, enrolled: true, leadDate: '2026-02-02T00:00:00Z' },
+  ];
+  assert.deepEqual(detailRowsForSelection(rows, { detailType: 'source', detailKey: 'Website form' }).map((row) => row.id), ['a']);
+  assert.deepEqual(detailRowsForSelection(rows, { detailType: 'coordinator', detailKey: '__unassigned__' }).map((row) => row.id), ['b']);
+  assert.deepEqual(detailRowsForSelection(rows, { detailType: 'metric', detailKey: 'enrolled' }).map((row) => row.id), ['b']);
+  assert.deepEqual(detailRowsForSelection(rows, { detailType: 'trend', detailKey: '2026-02-01', detailUnit: 'month' }).map((row) => row.id), ['b']);
 });

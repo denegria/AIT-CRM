@@ -3,7 +3,7 @@ import { activityEvents, businessUnits, contactCourseRecords, contacts, leadStat
 import { scopedBusinessUnitWhere, scopedOrgWhere } from '@/lib/crm/access.js';
 import { workflowKeyForBusinessUnit, WORKFLOW_KEYS } from '@/lib/crm/lifecycle.js';
 import { canAccessContactLead } from '@/lib/crm/coordinator-policy.js';
-import { buildIntakeTrend, buildReportEvidence, canonicalLeadDate, parseReportDates, reportRate } from './metrics.js';
+import { buildIntakeTrend, buildReportEvidence, canonicalLeadDate, detailRowsForSelection, parseReportDates, reportRate } from './metrics.js';
 
 const PAGE_SIZE = 25;
 const clean = (value) => String(value || '').trim();
@@ -27,6 +27,9 @@ export async function loadLeadPerformanceReport({ db, session, searchParams }) {
   const source = clean(searchParams.get('source')).toLowerCase();
   const coordinatorId = clean(searchParams.get('coordinatorId'));
   const groupBy = searchParams.get('groupBy') === 'coordinator' ? 'coordinator' : 'source';
+  const detailType = clean(searchParams.get('detailType')).toLowerCase();
+  const detailKey = searchParams.get('detailKey') || '';
+  const detailUnit = clean(searchParams.get('detailUnit')).toLowerCase();
   const dates = parseReportDates(searchParams);
   const from = dates.from || new Date('1970-01-01T00:00:00.000Z');
   const page = Math.max(1, Number.parseInt(searchParams.get('page') || '1', 10) || 1);
@@ -78,11 +81,12 @@ export async function loadLeadPerformanceReport({ db, session, searchParams }) {
   const grouped = (field) => [...new Set(rows.map((row) => field === 'coordinator' ? row.coordinatorId || '__unassigned__' : row[field]))].map((key) => { const groupRows = rows.filter((row) => (field === 'coordinator' ? row.coordinatorId || '__unassigned__' : row[field]) === key); const group = { key, label: field === 'coordinator' ? groupRows[0]?.coordinator || 'Unassigned' : key, incoming: groupRows.length, contacted: groupRows.filter((row) => row.contacted).length, enrolled: groupRows.filter((row) => row.enrolled).length }; const denominator = groupRows.filter((row) => row.enrollmentSupported).length; return { ...group, contactRate: reportRate(group.contacted, group.incoming), enrollmentRate: reportRate(group.enrolled, denominator), enrollmentDenominator: denominator }; }).sort((a, b) => b.incoming - a.incoming || a.label.localeCompare(b.label));
   const statusGroups = grouped('status').map(({ key, label, incoming, enrolled }) => ({ key, label, incoming, enrolled }));
   const divisionGroups = grouped('businessUnit').map(({ key, label, incoming, enrolled }) => ({ key, label, incoming, enrolled }));
-  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE)); const pageRows = exportAll ? rows : rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const detailRows = detailRowsForSelection(rows, { detailType, detailKey, detailUnit });
+  const totalPages = Math.max(1, Math.ceil(detailRows.length / PAGE_SIZE)); const pageRows = exportAll ? detailRows : detailRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const enrollmentSupported = selectedUnits.every((unit) => workflowKeyForBusinessUnit(unit) === WORKFLOW_KEYS.AIT_USA);
   const limitation = enrollmentSupported
     ? 'AIT USA enrollment combines status history, course snapshots, and the current lead stage through the as-of timestamp. Older imported leads without dated evidence may remain limited.'
     : 'Enrollment reporting is supported only for AIT USA. AIT Signs leads remain visible, but are not mapped to enrollment. Historical enrollment status depends on available lead history; current AIT USA enrollment snapshots are included through the as-of timestamp.';
   const enrollmentRate = enrollmentSupported ? reportRate(enrolled, enrollmentEligible) : null;
-  return { filters: { businessUnitId: requestedBusinessUnitId, from: dates.fromRaw, to: dates.toRaw, asOf: dates.asOf.toISOString(), source, coordinatorId, groupBy }, summary: { incoming, contacted, enrolled, contactRate: reportRate(contacted, incoming), enrollmentRate, contactEvidence, contactCoverage: reportRate(contactEvidence, incoming), enrollmentEligible }, comparisons: [{ key: 'contacted', label: 'Confirmed contact evidence', numerator: contacted, denominator: incoming, rate: reportRate(contacted, incoming) }, { key: 'enrolled', label: 'USA-supported enrollment', numerator: enrolled, denominator: enrollmentEligible, rate: enrollmentRate }], breakdown, analytics: { sources: grouped('source'), coordinators: grouped('coordinator'), statuses: statusGroups, divisions: divisionGroups, intakeTrend: buildIntakeTrend(rows, { from: dates.from, to: dates.to || dates.asOf }) }, leads: pageRows, pagination: { page, pageSize: PAGE_SIZE, total: rows.length, totalPages }, sources: [...facetSources].sort(), coordinators: ownerRows.filter((row) => facetCoordinators.has(row.id)).map((row) => ({ id: row.id, name: row.name || row.email })), scope: { businessUnits: selectedUnits, enrollmentSupported, limitation } };
+  return { filters: { businessUnitId: requestedBusinessUnitId, from: dates.fromRaw, to: dates.toRaw, asOf: dates.asOf.toISOString(), source, coordinatorId, groupBy, detailType, detailKey }, summary: { incoming, contacted, enrolled, contactRate: reportRate(contacted, incoming), enrollmentRate, contactEvidence, contactCoverage: reportRate(contactEvidence, incoming), enrollmentEligible }, comparisons: [{ key: 'contacted', label: 'Confirmed contact evidence', numerator: contacted, denominator: incoming, rate: reportRate(contacted, incoming) }, { key: 'enrolled', label: 'Enrollment evidence', numerator: enrolled, denominator: enrollmentEligible, rate: enrollmentRate }], breakdown, analytics: { sources: grouped('source'), coordinators: grouped('coordinator'), statuses: statusGroups, divisions: divisionGroups, intakeTrend: buildIntakeTrend(rows, { from: dates.from, to: dates.to || dates.asOf }) }, leads: pageRows, pagination: { page, pageSize: PAGE_SIZE, total: detailRows.length, totalPages }, sources: [...facetSources].sort(), coordinators: ownerRows.filter((row) => facetCoordinators.has(row.id)).map((row) => ({ id: row.id, name: row.name || row.email })), scope: { businessUnits: selectedUnits, enrollmentSupported, limitation } };
 }

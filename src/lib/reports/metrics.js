@@ -74,7 +74,31 @@ function bucketDefinition(from, to) {
   const span = Math.max(1, Math.ceil((to.getTime() - from.getTime()) / 86400000));
   if (span <= 45) return { unit: 'day', step: 1, format: (date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) };
   if (span <= 180) return { unit: 'week', step: 7, format: (date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) };
-  return { unit: 'month', step: 1, format: (date) => date.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' }) };
+  if (span <= 900) return { unit: 'month', step: 1, format: (date) => date.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' }) };
+  if (span <= 3000) return { unit: 'quarter', step: 3, format: (date) => `Q${Math.floor(date.getUTCMonth() / 3) + 1} ${date.getUTCFullYear()}` };
+  return { unit: 'year', step: 1, format: (date) => String(date.getUTCFullYear()) };
+}
+
+export function detailRowsForSelection(rows, { detailType, detailKey, detailUnit }) {
+  if (!detailType || !detailKey) return rows;
+  if (detailType === 'metric') {
+    if (detailKey === 'confirmed-contact') return rows.filter((row) => row.contacted);
+    if (detailKey === 'enrolled') return rows.filter((row) => row.enrolled);
+    return rows;
+  }
+  if (detailType === 'source') return rows.filter((row) => row.source === detailKey);
+  if (detailType === 'coordinator') return rows.filter((row) => (row.coordinatorId || '__unassigned__') === detailKey);
+  if (detailType === 'status') return rows.filter((row) => row.status === detailKey);
+  if (detailType === 'division') return rows.filter((row) => row.businessUnit === detailKey);
+  if (detailType === 'trend') {
+    const start = new Date(`${detailKey}T00:00:00.000Z`);
+    const increments = { day: 1, week: 7, month: 1, quarter: 3, year: 12 };
+    const trendEnd = new Date(start);
+    if (detailUnit === 'year' || detailUnit === 'quarter' || detailUnit === 'month') trendEnd.setUTCMonth(trendEnd.getUTCMonth() + (increments[detailUnit] || 1));
+    else trendEnd.setUTCDate(trendEnd.getUTCDate() + (increments[detailUnit] || 1));
+    return rows.filter((row) => { const date = new Date(row.leadDate); return date >= start && date < trendEnd; });
+  }
+  return rows;
 }
 
 export function buildIntakeTrend(rows, { from, to } = {}) {
@@ -82,22 +106,21 @@ export function buildIntakeTrend(rows, { from, to } = {}) {
   const start = from || dates.reduce((earliest, date) => date < earliest ? date : earliest, dates[0] || new Date());
   const end = to || dates.reduce((latest, date) => date > latest ? date : latest, dates[0] || start);
   const definition = bucketDefinition(start, end);
-  const anchor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), definition.unit === 'month' ? 1 : start.getUTCDate()));
+  const anchor = new Date(Date.UTC(start.getUTCFullYear(), definition.unit === 'year' ? 0 : definition.unit === 'quarter' ? Math.floor(start.getUTCMonth() / 3) * 3 : start.getUTCMonth(), definition.unit === 'day' || definition.unit === 'week' ? start.getUTCDate() : 1));
   if (definition.unit === 'week') anchor.setUTCDate(anchor.getUTCDate() - ((anchor.getUTCDay() + 6) % 7));
   const buckets = [];
   const cursor = new Date(anchor);
-  const maxBuckets = definition.unit === 'day' ? 62 : definition.unit === 'week' ? 30 : 18;
-  for (let index = 0; index < maxBuckets && cursor <= end; index += 1) {
+  while (cursor <= end) {
     const bucketStart = new Date(cursor);
     const bucketEnd = new Date(cursor);
-    if (definition.unit === 'month') bucketEnd.setUTCMonth(bucketEnd.getUTCMonth() + 1);
+    if (definition.unit === 'month' || definition.unit === 'quarter' || definition.unit === 'year') bucketEnd.setUTCMonth(bucketEnd.getUTCMonth() + (definition.unit === 'year' ? 12 : definition.step));
     else bucketEnd.setUTCDate(bucketEnd.getUTCDate() + definition.step);
     buckets.push({ key: bucketStart.toISOString().slice(0, 10), label: definition.format(bucketStart), incoming: 0, contacted: 0, enrolled: 0 });
     cursor.setTime(bucketEnd.getTime());
   }
   for (const row of rows) {
     const date = asDate(row.leadDate); if (!date) continue;
-    let bucketDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), definition.unit === 'month' ? 1 : date.getUTCDate()));
+    let bucketDate = new Date(Date.UTC(date.getUTCFullYear(), definition.unit === 'year' ? 0 : definition.unit === 'quarter' ? Math.floor(date.getUTCMonth() / 3) * 3 : date.getUTCMonth(), definition.unit === 'day' || definition.unit === 'week' ? date.getUTCDate() : 1));
     if (definition.unit === 'week') bucketDate.setUTCDate(bucketDate.getUTCDate() - ((bucketDate.getUTCDay() + 6) % 7));
     const bucket = buckets.find((candidate) => candidate.key === bucketDate.toISOString().slice(0, 10));
     if (bucket) { bucket.incoming += 1; if (row.contacted) bucket.contacted += 1; if (row.enrolled) bucket.enrolled += 1; }
