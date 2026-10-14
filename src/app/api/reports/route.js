@@ -2,12 +2,7 @@ import { NextResponse } from 'next/server';
 import { getDb } from '@/db/index.js';
 import { PERMISSIONS, requirePermission } from '@/lib/auth.js';
 import { loadLeadPerformanceReport } from '@/lib/reports/service.js';
-
-function csvCell(value) {
-  const text = String(value ?? '');
-  const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
-  return `"${safe.replaceAll('"', '""')}"`;
-}
+import { csvCell } from '@/lib/reports/metrics.js';
 
 export async function GET(request) {
   const { error, session } = await requirePermission(request, PERMISSIONS.REPORTS_READ);
