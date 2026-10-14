@@ -115,7 +115,7 @@ export function buildIntakeTrend(rows, { from, to } = {}) {
     const bucketEnd = new Date(cursor);
     if (definition.unit === 'month' || definition.unit === 'quarter' || definition.unit === 'year') bucketEnd.setUTCMonth(bucketEnd.getUTCMonth() + (definition.unit === 'year' ? 12 : definition.step));
     else bucketEnd.setUTCDate(bucketEnd.getUTCDate() + definition.step);
-    buckets.push({ key: bucketStart.toISOString().slice(0, 10), label: definition.format(bucketStart), incoming: 0, contacted: 0, enrolled: 0 });
+    buckets.push({ key: bucketStart.toISOString().slice(0, 10), label: definition.format(bucketStart), unit: definition.unit, incoming: 0, contacted: 0, enrolled: 0 });
     cursor.setTime(bucketEnd.getTime());
   }
   for (const row of rows) {
