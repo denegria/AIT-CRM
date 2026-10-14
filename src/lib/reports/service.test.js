@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { enrollmentStatusEvidence, successfulContactEvent } from './metrics.js';
-import { buildReportEvidence, parseReportDates } from './metrics.js';
+import { buildReportEvidence, canonicalLeadDate, parseReportDates } from './metrics.js';
 
 const asOf = new Date('2026-10-14T00:00:00.000Z');
 
@@ -72,4 +72,22 @@ test('report date validation rejects malformed, rolled, reversed, and future val
   assert.throws(() => parseReportDates(params({ from: '2026-02-30' }), new Date('2026-10-14T00:00:00Z')), /valid calendar date/);
   assert.throws(() => parseReportDates(params({ from: '2026-10-15', to: '2026-10-14' }), new Date('2026-10-14T00:00:00Z')), /on or before/);
   assert.throws(() => parseReportDates(params({ asOf: '2026-10-15' }), new Date('2026-10-14T00:00:00Z')), /future/);
+});
+
+test('canonical intake dates isolate ambiguous same-contact legacy captures', () => {
+  const leadA = { id: 'lead-a', contactId: 'contact-1', businessUnitId: 'usa', createdAt: '2026-10-10T00:00:00Z' };
+  const leadB = { id: 'lead-b', contactId: 'contact-1', businessUnitId: 'usa', createdAt: '2026-10-11T00:00:00Z' };
+  const eventsByContact = new Map([['contact-1', [{ contactId: 'contact-1', eventType: 'website_lead_captured', occurredAt: '2026-01-01T00:00:00Z', businessUnitId: null }]]]);
+  const shared = { contact: { createdAt: '2026-01-02T00:00:00Z' }, eventsByLead: new Map(), eventsByContact, allLeads: [leadA, leadB], unit: { id: 'usa', name: 'AIT USA' } };
+  assert.equal(canonicalLeadDate({ ...shared, lead: leadA }).toISOString(), '2026-10-10T00:00:00.000Z');
+  assert.equal(canonicalLeadDate({ ...shared, lead: leadB }).toISOString(), '2026-10-11T00:00:00.000Z');
+});
+
+test('canonical intake dates retain linked captures and allow a single-lead legacy fallback', () => {
+  const lead = { id: 'lead-a', contactId: 'contact-1', businessUnitId: 'usa', createdAt: '2026-10-10T00:00:00Z' };
+  const linked = { leadId: 'lead-a', eventType: 'facebook_lead_captured', occurredAt: '2026-09-01T00:00:00Z', businessUnitId: 'usa' };
+  const legacy = { contactId: 'contact-1', eventType: 'website_lead_captured', occurredAt: '2026-08-01T00:00:00Z', businessUnitId: null };
+  const args = { lead, contact: { createdAt: '2026-01-01T00:00:00Z' }, eventsByLead: new Map([['lead-a', [linked]]]), eventsByContact: new Map([['contact-1', [legacy]]]), allLeads: [lead], unit: { id: 'usa', name: 'AIT USA' } };
+  assert.equal(canonicalLeadDate(args).toISOString(), '2026-09-01T00:00:00.000Z');
+  assert.equal(canonicalLeadDate({ ...args, eventsByLead: new Map() }).toISOString(), '2026-08-01T00:00:00.000Z');
 });

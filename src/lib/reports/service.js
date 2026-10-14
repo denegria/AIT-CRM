@@ -3,8 +3,7 @@ import { activityEvents, businessUnits, contactCourseRecords, contacts, leadStat
 import { scopedBusinessUnitWhere, scopedOrgWhere } from '@/lib/crm/access.js';
 import { workflowKeyForBusinessUnit, WORKFLOW_KEYS } from '@/lib/crm/lifecycle.js';
 import { canAccessContactLead } from '@/lib/crm/coordinator-policy.js';
-import { buildReportEvidence, parseReportDates } from './metrics.js';
-import { latestExcelDateFromText } from '@/lib/contact-touch.js';
+import { buildReportEvidence, canonicalLeadDate, parseReportDates } from './metrics.js';
 
 const PAGE_SIZE = 25;
 const clean = (value) => String(value || '').trim();
@@ -18,18 +17,6 @@ function sourceLabel(lead, contact) {
   if (/website|web form|wix|wordpress/.test(raw)) return 'Website form';
   if (/workbook|xlsx|spreadsheet|archive|interesados|ait signs/.test(raw)) return 'Workbook import';
   return lead.sourceName || lead.sourceType || contact?.sourceLabel || 'Other source';
-}
-
-function canonicalLeadDate(lead, contact, events, unit) {
-  if (workflowKeyForBusinessUnit(unit) === WORKFLOW_KEYS.AIT_USA) {
-    const capture = events.filter((event) => ['website_lead_captured', 'facebook_lead_captured'].includes(event.eventType?.toLowerCase()))
-      .map((event) => asDate(event.occurredAt || event.createdAt)).filter(Boolean).sort((a, b) => a - b)[0];
-    return capture || asDate(lead.createdAt) || asDate(contact?.createdAt);
-  }
-  const referenceTime = Date.now();
-  const workbookDate = [lead.originalNotes, ...events.map((event) => event.message || event.eventType || '')]
-    .reduce((latest, value) => Math.max(latest, latestExcelDateFromText(value, { referenceTime })), 0);
-  return workbookDate ? new Date(workbookDate) : asDate(lead.createdAt) || asDate(contact?.createdAt);
 }
 
 function ownerName(owner, currentOwnerId) { return owner?.name || owner?.email || (currentOwnerId ? 'Assigned coordinator' : 'Unassigned'); }
@@ -74,8 +61,7 @@ export async function loadLeadPerformanceReport({ db, session, searchParams }) {
   for (const lead of leadsRows) {
     const contact = contactsById.get(lead.contactId); const unit = unitById.get(lead.businessUnitId);
     if (!canAccessContactLead(session, lead, contact)) continue;
-    const cohortEvents = [...(eventsByLead.get(lead.id) || []), ...(eventsByContact.get(lead.contactId) || []).filter((event) => !event.leadId)];
-    const cohortDate = canonicalLeadDate(lead, contact, cohortEvents, unit);
+    const cohortDate = canonicalLeadDate({ lead, contact, eventsByLead, eventsByContact, allLeads: leadsRows, unit });
     if (!cohortDate || cohortDate < from || (dates.to && cohortDate > dates.to) || cohortDate > dates.asOf) continue;
     const rowSource = sourceLabel(lead, contact);
     facetSources.add(rowSource);

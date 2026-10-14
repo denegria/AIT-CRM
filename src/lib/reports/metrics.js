@@ -2,8 +2,32 @@ const SUCCESSFUL_CONTACT_EVENTS = new Set(['follow_up.reached_interested', 'foll
 const ENROLLMENT_STATUSES = new Set(['enrolled', 'matriculated', 'registered']);
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 import { workflowKeyForBusinessUnit, WORKFLOW_KEYS } from '../crm/lifecycle.js';
+import { latestExcelDateFromText } from '../contact-touch.js';
 
 const asDate = (value) => { const date = value instanceof Date ? new Date(value.getTime()) : new Date(value || ''); return Number.isNaN(date.getTime()) ? null : date; };
+
+export function canonicalLeadDate({ lead, contact, eventsByLead, eventsByContact, allLeads, unit }) {
+  if (workflowKeyForBusinessUnit(unit) === WORKFLOW_KEYS.AIT_USA) {
+    const captureTypes = ['website_lead_captured', 'facebook_lead_captured'];
+    const sameContactBuLeads = allLeads.filter((candidate) => candidate.contactId === lead.contactId && candidate.businessUnitId === lead.businessUnitId);
+    const exactEvents = eventsByLead.get(lead.id) || [];
+    const contactEvents = eventsByContact.get(lead.contactId) || [];
+    const legacyEvents = sameContactBuLeads.length === 1
+      ? contactEvents.filter((event) => !event.leadId && (event.businessUnitId === lead.businessUnitId || event.businessUnitId == null))
+      : [];
+    const exactCapture = exactEvents.filter((event) => event.businessUnitId === lead.businessUnitId && captureTypes.includes(event.eventType?.toLowerCase()))
+      .map((event) => asDate(event.occurredAt || event.createdAt)).filter(Boolean).sort((a, b) => a - b)[0];
+    const legacyCapture = legacyEvents.filter((event) => captureTypes.includes(event.eventType?.toLowerCase()))
+      .map((event) => asDate(event.occurredAt || event.createdAt)).filter(Boolean).sort((a, b) => a - b)[0];
+    const capture = exactCapture || legacyCapture;
+    return capture || asDate(lead.createdAt) || asDate(contact?.createdAt);
+  }
+  const referenceTime = Date.now();
+  const cohortEvents = [...(eventsByLead.get(lead.id) || []), ...(eventsByContact.get(lead.contactId) || []).filter((event) => !event.leadId)];
+  const workbookDate = [lead.originalNotes, ...cohortEvents.map((event) => event.message || event.eventType || '')]
+    .reduce((latest, value) => Math.max(latest, latestExcelDateFromText(value, { referenceTime })), 0);
+  return workbookDate ? new Date(workbookDate) : asDate(lead.createdAt) || asDate(contact?.createdAt);
+}
 function invalid(message) { const error = new Error(message); error.status = 400; throw error; }
 function parseCalendarDate(value, label, end = false) {
   const raw = String(value || '').trim();
