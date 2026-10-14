@@ -63,7 +63,46 @@ export function buildReportEvidence({ lead, allLeads, eventsByLead, eventsByCont
   const snapshotAt = asDate(lead.updatedAt) || asDate(lead.createdAt);
   const currentStage = String(lead.currentStage || lead.status || '').trim().toLowerCase();
   const currentEnrollment = enrollmentSupported && Boolean(snapshotAt && snapshotAt <= asOf && ['enrolled', 'matriculated', 'registered', 'won', 'closed won', 'sold'].includes(currentStage));
-  return { contacted, enrolled: enrollmentSupported && (historicalEnrollment || currentEnrollment || currentCourseEnrollment), enrollmentSupported, legacyFallbackUsed: (allowLegacy && events.some((event) => !event.leadId)) || (allowLegacy && courses.some((row) => !row.leadId)), evidence: { events, history, courses } };
+  return { contacted, contactEvidenceAvailable: events.length > 0, enrolled: enrollmentSupported && (historicalEnrollment || currentEnrollment || currentCourseEnrollment), enrollmentSupported, legacyFallbackUsed: (allowLegacy && events.some((event) => !event.leadId)) || (allowLegacy && courses.some((row) => !row.leadId)), evidence: { events, history, courses } };
+}
+
+export function reportRate(numerator, denominator) {
+  return denominator ? Math.round((numerator / denominator) * 1000) / 10 : 0;
+}
+
+function bucketDefinition(from, to) {
+  const span = Math.max(1, Math.ceil((to.getTime() - from.getTime()) / 86400000));
+  if (span <= 45) return { unit: 'day', step: 1, format: (date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) };
+  if (span <= 180) return { unit: 'week', step: 7, format: (date) => date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' }) };
+  return { unit: 'month', step: 1, format: (date) => date.toLocaleDateString('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' }) };
+}
+
+export function buildIntakeTrend(rows, { from, to } = {}) {
+  const dates = rows.map((row) => asDate(row.leadDate)).filter(Boolean);
+  const start = from || dates.reduce((earliest, date) => date < earliest ? date : earliest, dates[0] || new Date());
+  const end = to || dates.reduce((latest, date) => date > latest ? date : latest, dates[0] || start);
+  const definition = bucketDefinition(start, end);
+  const anchor = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), definition.unit === 'month' ? 1 : start.getUTCDate()));
+  if (definition.unit === 'week') anchor.setUTCDate(anchor.getUTCDate() - ((anchor.getUTCDay() + 6) % 7));
+  const buckets = [];
+  const cursor = new Date(anchor);
+  const maxBuckets = definition.unit === 'day' ? 62 : definition.unit === 'week' ? 30 : 18;
+  for (let index = 0; index < maxBuckets && cursor <= end; index += 1) {
+    const bucketStart = new Date(cursor);
+    const bucketEnd = new Date(cursor);
+    if (definition.unit === 'month') bucketEnd.setUTCMonth(bucketEnd.getUTCMonth() + 1);
+    else bucketEnd.setUTCDate(bucketEnd.getUTCDate() + definition.step);
+    buckets.push({ key: bucketStart.toISOString().slice(0, 10), label: definition.format(bucketStart), incoming: 0, contacted: 0, enrolled: 0 });
+    cursor.setTime(bucketEnd.getTime());
+  }
+  for (const row of rows) {
+    const date = asDate(row.leadDate); if (!date) continue;
+    let bucketDate = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), definition.unit === 'month' ? 1 : date.getUTCDate()));
+    if (definition.unit === 'week') bucketDate.setUTCDate(bucketDate.getUTCDate() - ((bucketDate.getUTCDay() + 6) % 7));
+    const bucket = buckets.find((candidate) => candidate.key === bucketDate.toISOString().slice(0, 10));
+    if (bucket) { bucket.incoming += 1; if (row.contacted) bucket.contacted += 1; if (row.enrolled) bucket.enrolled += 1; }
+  }
+  return { unit: definition.unit, buckets };
 }
 
 export function csvCell(value) {
