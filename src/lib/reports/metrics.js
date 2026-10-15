@@ -67,7 +67,18 @@ export function buildReportEvidence({ lead, allLeads, eventsByLead, eventsByCont
 }
 
 export function reportRate(numerator, denominator) {
-  return denominator ? Math.round((numerator / denominator) * 1000) / 10 : 0;
+  return denominator ? Math.round((numerator / denominator) * 1000) / 10 : null;
+}
+
+export function summarizeReportRows(rows, enrollmentSupported = rows.every((row) => row.enrollmentSupported)) {
+  const incoming = rows.length;
+  const contacted = rows.filter((row) => row.contacted).length;
+  const enrolled = rows.filter((row) => row.enrolled).length;
+  const contactEvidence = rows.filter((row) => row.contactEvidenceAvailable).length;
+  const enrollmentEligible = rows.filter((row) => row.enrollmentSupported).length;
+  const contactedEnrollmentEligible = rows.filter((row) => row.contacted && row.enrollmentSupported).length;
+  const contactedEnrolled = rows.filter((row) => row.contacted && row.enrollmentSupported && row.enrolled).length;
+  return { incoming, contacted, enrolled, contactedEnrolled, contactedEnrollmentEligible, contactRate: reportRate(contacted, incoming), enrollmentRate: enrollmentSupported ? reportRate(enrolled, enrollmentEligible) : null, contactedEnrollmentRate: enrollmentSupported ? reportRate(contactedEnrolled, contactedEnrollmentEligible) : null, contactEvidence, contactCoverage: reportRate(contactEvidence, incoming), enrollmentEligible };
 }
 
 function bucketDefinition(from, to) {
@@ -84,6 +95,7 @@ export function detailRowsForSelection(rows, { detailType, detailKey, detailUnit
   if (detailType === 'metric') {
     if (detailKey === 'confirmed-contact') return rows.filter((row) => row.contacted);
     if (detailKey === 'enrolled') return rows.filter((row) => row.enrolled);
+    if (detailKey === 'contacted-enrolled') return rows.filter((row) => row.contacted && row.enrollmentSupported && row.enrolled);
     return rows;
   }
   if (detailType === 'source') return rows.filter((row) => row.source === detailKey);
