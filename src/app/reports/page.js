@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Info } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ContactMetricHelp from './ContactMetricHelp.jsx';
 import PageState, { PageStateAction } from '@/components/PageState';
 import { useCRM } from '@/lib/store';
 
@@ -56,23 +56,7 @@ export default function ReportsPage() {
 function SummaryMetric({ label, value, detail, tone = 'blue', onClick, contactHelp = false }) {
   return <div className={`reports-summary-card${contactHelp ? ' has-help' : ''}`}><button className={`reports-summary-metric ${tone}`} onClick={onClick}><span>{label}</span><strong>{value}</strong><small title={detail} aria-label={detail}>{detail}</small><b>View leads →</b></button>{contactHelp && <ContactMetricHelp label={label} />}</div>;
 }
-function ContactMetricHelp({ label }) {
-  const [open, setOpen] = useState(false);
-  const id = useId();
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    const dismissOutside = (event) => { if (!ref.current?.contains(event.target)) setOpen(false); };
-    const dismissEscape = (event) => { if (event.key === 'Escape') setOpen(false); };
-    document.addEventListener('pointerdown', dismissOutside);
-    document.addEventListener('keydown', dismissEscape);
-    return () => {
-      document.removeEventListener('pointerdown', dismissOutside);
-      document.removeEventListener('keydown', dismissEscape);
-    };
-  }, [open]);
-  return <div ref={ref} className="reports-metric-help" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)} onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setOpen(false); }}><button type="button" className="reports-metric-help-trigger" aria-label={`About ${label.toLowerCase()}`} aria-describedby={open ? id : undefined} onFocus={() => setOpen(true)} onClick={() => setOpen(true)}><Info size={16} aria-hidden="true" /></button>{open && <div id={id} className="reports-metric-tooltip" role="tooltip">Contact-based rates use confirmed contacts recorded in the CRM.</div>}</div>;
-}
+
 function PanelHeading({ eyebrow, title, copy }) { return <div className="report-panel-heading"><div><span>{eyebrow}</span><h2>{title}</h2><p>{copy}</p></div></div>; }
 function DonutChart({ groups, onSelect }) { const total = groups.reduce((sum, group) => sum + group.incoming, 0); const radius = 42; const circumference = 2 * Math.PI * radius; return <div className="reports-donut-wrap"><div className="reports-donut" role="img" aria-label={`Source composition: ${groups.map((group) => `${group.label} ${group.incoming}`).join(', ')}`}><svg viewBox="0 0 120 120" aria-hidden="true"><circle className="donut-base" cx="60" cy="60" r={radius} />{groups.map((group, index) => { const length = total ? (group.incoming / total) * circumference : 0; const offset = groups.slice(0, index).reduce((sum, prior) => sum + (total ? (prior.incoming / total) * circumference : 0), 0); return <circle key={group.key} className="donut-segment" cx="60" cy="60" r={radius} stroke={colors[index % colors.length]} strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={-offset} onClick={(event) => onSelect(group, event)} />; })}</svg><div><strong>{total}</strong><span>incoming</span></div></div></div>; }
 function TrendChart({ trend, onSelect }) { const buckets = trend?.buckets || []; const max = Math.max(1, ...buckets.map((bucket) => bucket.incoming)); return <div className="reports-trend"><div className="reports-trend-bars" role="img" aria-label={`Incoming lead trend: ${buckets.map((bucket) => `${bucket.label} ${bucket.incoming}`).join(', ')}`}>{buckets.map((bucket) => <button key={bucket.key} className="reports-trend-column" onClick={(event) => onSelect(bucket, event)} aria-label={`${bucket.label}: ${bucket.incoming} incoming leads`}><span style={{ height: `${(bucket.incoming / max) * 100}%` }} /><small>{bucket.label}</small></button>)}</div><div className="reports-trend-summary"><strong>{buckets.reduce((sum, bucket) => sum + bucket.incoming, 0)}</strong><span>total intake · {trend?.unit || 'period'} buckets</span></div></div>; }
