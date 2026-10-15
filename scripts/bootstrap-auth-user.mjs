@@ -19,7 +19,7 @@ const PERMISSIONS = {
   ],
   designer: ['crm:read', 'work_orders:write'],
   account_coordinator: ['crm:read', 'crm:write', 'financials:read', 'financials:write', 'work_orders:write'],
-  senior_coordinator: ['crm:read', 'crm:write', 'financials:read', 'financials:write', 'work_orders:write'],
+  senior_coordinator: ['crm:read', 'crm:write', 'financials:read', 'financials:write', 'reports:read', 'work_orders:write'],
   sales_manager: ['crm:read', 'crm:write', 'reports:read', 'financials:read'],
 };
 
