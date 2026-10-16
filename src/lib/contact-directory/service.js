@@ -539,6 +539,8 @@ function sourceCondition(value, latestLead) {
       or (${sourceText} ~ '(facebook_webhook|facebook webhook)' and ${sourceText} !~ '(facebook messenger|facebook_messenger|messenger)')
     )`;
   }
+  if (source === 'retargeted student records') return sql`${sourceText} ~ '(retarget)'`;
+  if (source === 'imported student records') return sql`${sourceText} ~ '(mis[-_ ]?318|roster manifest|student roster|roster import)'`;
   if (source === 'facebook messenger') {
     return sql`${sourceText} ~ '(facebook messenger|facebook_messenger|messenger)'`;
   }
@@ -553,7 +555,7 @@ function sourceCondition(value, latestLead) {
   }
   if (source === 'other source') {
     return sql`trim(${sourceText}) <> ''
-      and ${sourceText} !~ '(facebook|messenger|leadgen|website|web form|wix|wordpress|workbook|xlsx|spreadsheet|archive|work_order|estimate|interesados|ait signs)'`;
+      and ${sourceText} !~ '(facebook|messenger|leadgen|website|web form|wix|wordpress|workbook|xlsx|spreadsheet|archive|work_order|estimate|interesados|ait signs|retarget|mis[-_ ]?318|roster manifest|student roster|roster import)'`;
   }
   return or(
     eq(normalizedSql(latestLead.sourceName), source),

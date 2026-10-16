@@ -724,6 +724,7 @@ async function resolveEnrollmentOwnerUserId(client, {
       where u.id = $1
         and u.organization_id = $2
         and u.is_active = true
+        and u.account_type = 'employee'
         and (
           exists (
             select 1

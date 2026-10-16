@@ -14,11 +14,11 @@
   "repository": {
     "schema": {
       "path": "src/db/schema.js",
-      "sha256": "945b4779c955c3dfe1e47417f19c2474280e3e0894b9a786a3bcf00834147909"
+      "sha256": "f04dfa32713bc0faab813e22b5e011890023268cdfc13b534bfc1a9f3336ef32"
     },
     "drizzleExport": {
       "command": "drizzle-kit export --config drizzle.config.mjs",
-      "rawStdoutSha256": "c5bab3757b5d9046d93c1d06ad08707c072491cd66d9bb6ffd318420aeafe8fc",
+      "rawStdoutSha256": "0efe09b8598617a109028be529eea3d755b69f08c5cf9b605e916bba369284a4",
       "structure": {
         "tableCount": 62,
         "explicitIndexCount": 134,
@@ -68,6 +68,13 @@
         "sha256": "adb5f9585a7812dae39632aa6f26e8c5bd443e17c55ac609614ac313b00d0fb5",
         "purpose": "MIS-431 heterogeneous class schedule slots",
         "provenance": "forward-migration"
+      },
+      {
+        "identifier": "0033",
+        "path": "drizzle/forward/0033_user_account_classification.sql",
+        "sha256": "5cbb331ab6d50d1c0e223e9e6d192506d78c0e0e478a340ded6d2bb78f317687",
+        "purpose": "MIS-445 durable QA account classification",
+        "provenance": "forward-migration"
       }
     ],
     "migrationLedger": {
@@ -82,9 +89,9 @@
       "expected": {
         "tableCount": 62,
         "tableNameMd5": "495b7b545ae0aeda85b03bc9329a1b11",
-        "columnCount": 905,
-        "columnCatalogMd5": "8566b191416f45151d9dda17c70cedb9",
-        "logicalColumnCatalogMd5": "2d7b867ba247f5de8399cac0f00e816f",
+        "columnCount": 906,
+        "columnCatalogMd5": "00cffbdf9bed600d4a09e9dd360b3e12",
+        "logicalColumnCatalogMd5": "e1c9708b71de1bbe5edeacb544588433",
         "indexCount": 203,
         "indexCatalogMd5": "ddb7380eb60b44bc2490eda43f41050d",
         "constraintCount": 347,
@@ -93,9 +100,9 @@
       "expectedLive": {
         "tableCount": 62,
         "tableNameMd5": "495b7b545ae0aeda85b03bc9329a1b11",
-        "columnCount": 905,
-        "columnCatalogMd5": "7e2d90b6e86f5f7506ce2d8d5232041f",
-        "logicalColumnCatalogMd5": "2d7b867ba247f5de8399cac0f00e816f",
+        "columnCount": 906,
+        "columnCatalogMd5": "00cffbdf9bed600d4a09e9dd360b3e12",
+        "logicalColumnCatalogMd5": "e1c9708b71de1bbe5edeacb544588433",
         "indexCount": 203,
         "indexCatalogMd5": "ddb7380eb60b44bc2490eda43f41050d",
         "constraintCount": 347,
@@ -104,9 +111,9 @@
       "expectedStaging": {
         "tableCount": 62,
         "tableNameMd5": "495b7b545ae0aeda85b03bc9329a1b11",
-        "columnCount": 905,
-        "columnCatalogMd5": "729304b89e559c9f3d727eb86cecf33c",
-        "logicalColumnCatalogMd5": "2d7b867ba247f5de8399cac0f00e816f",
+        "columnCount": 906,
+        "columnCatalogMd5": "00cffbdf9bed600d4a09e9dd360b3e12",
+        "logicalColumnCatalogMd5": "e1c9708b71de1bbe5edeacb544588433",
         "indexCount": 203,
         "indexCatalogMd5": "ddb7380eb60b44bc2490eda43f41050d",
         "constraintCount": 347,

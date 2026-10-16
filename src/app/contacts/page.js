@@ -101,6 +101,8 @@ const REMOTE_SOURCE_FILTER_OPTIONS = [
   'Facebook Messenger',
   'Website Form Submission',
   'Workbook Import',
+  'Imported student records',
+  'Retargeted student records',
   'Manual / Unknown',
   'Other Source',
 ].map((value) => ({ value, label: value, count: null }));

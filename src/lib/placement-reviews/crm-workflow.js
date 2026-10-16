@@ -89,6 +89,7 @@ async function findPlacementReviewAssignee(client, { organizationId, businessUni
      join roles r on r.id = ur.role_id
      join business_unit_memberships bum on bum.user_id = u.id
      where u.organization_id = $1 and u.is_active = true
+       and u.account_type = 'employee'
        and r.organization_id = $1 and r.key = 'senior_coordinator'
        and bum.business_unit_id = $2
      order by bum.is_primary desc, u.id asc limit 1`,
@@ -101,6 +102,7 @@ async function findPlacementReviewAssignee(client, { organizationId, businessUni
      join user_roles ur on ur.user_id = u.id
      join roles r on r.id = ur.role_id
      where u.organization_id = $1 and u.is_active = true
+       and u.account_type = 'employee'
        and r.organization_id = $1 and r.key = 'admin'
      order by u.id asc limit 1`,
     [organizationId],

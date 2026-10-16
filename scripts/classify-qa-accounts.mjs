@@ -22,11 +22,15 @@ const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) throw new Error('DATABASE_URL is required.');
 const expectedProject = clean(process.env.EXPECTED_NEON_PROJECT_ID);
 const expectedBranch = clean(process.env.EXPECTED_NEON_BRANCH_ID);
-if (!expectedProject || !expectedBranch) throw new Error('EXPECTED_NEON_PROJECT_ID and EXPECTED_NEON_BRANCH_ID are required for the target identity assertion.');
+const expectedDatabase = clean(process.env.EXPECTED_DATABASE_NAME);
+const expectedSchema = clean(process.env.EXPECTED_SCHEMA_NAME);
+const expectedOrganization = clean(process.env.EXPECTED_ORGANIZATION_ID);
+if (!expectedProject || !expectedBranch || !expectedDatabase || !expectedSchema || !expectedOrganization) throw new Error('Expected Neon project, branch, database, schema, and organization are required for target identity assertions.');
 const execute = arg('--execute');
 const client = new Client({ connectionString: databaseUrl });
 await client.connect();
 try {
+  await client.query(execute ? 'begin' : 'begin read only');
   const fingerprint = safeFingerprint(databaseUrl);
   const catalog = await client.query(`
     select current_database() as database_name,
@@ -35,8 +39,8 @@ try {
            current_setting('neon.branch_id', true) as branch_id
   `);
   const target = catalog.rows[0];
-  if (expectedProject && target.project_id && target.project_id !== expectedProject) throw new Error('Neon project fingerprint mismatch.');
-  if (expectedBranch && target.branch_id && target.branch_id !== expectedBranch) throw new Error('Neon branch fingerprint mismatch.');
+  if (target.project_id !== expectedProject || target.branch_id !== expectedBranch) throw new Error('Neon project/branch fingerprint mismatch.');
+  if (target.database_name !== expectedDatabase || target.schema_name !== expectedSchema) throw new Error('Database/schema fingerprint mismatch.');
   const rows = await client.query(`
     select id, organization_id, email, name, account_type
     from users
@@ -47,7 +51,7 @@ try {
   const found = new Set(rows.rows.map((row) => clean(row.email).toLowerCase()));
   for (const email of QA_EMAILS) if (!found.has(email)) throw new Error(`Canonical QA identity not found: ${email}`);
   const organizations = new Set(rows.rows.map((row) => row.organization_id));
-  if (organizations.size !== 1) throw new Error('Canonical QA identities must belong to one organization.');
+  if (organizations.size !== 1 || !organizations.has(expectedOrganization)) throw new Error('Canonical QA identities must belong to the expected organization.');
   const changed = rows.rows.filter((row) => row.account_type !== 'qa');
   console.log(JSON.stringify({
     mode: execute ? 'execute' : 'dry-run',
@@ -56,18 +60,21 @@ try {
     wouldClassify: changed.map((row) => row.id),
   }, null, 2));
   if (execute) {
-    await client.query('begin');
+    const locked = await client.query('select id from users where id = any($1::uuid[]) for update', [rows.rows.map((row) => row.id)]);
+    if (locked.rowCount !== rows.rowCount) throw new Error('Canonical QA identities changed before apply.');
     const result = await client.query(`
     update users
     set account_type = 'qa', updated_at = now()
-    where lower(email) = any($1::text[])
+    where id = any($1::uuid[])
       and organization_id = $2
       and account_type <> 'qa'
-  `, [QA_EMAILS, rows.rows[0].organization_id]);
+  `, [rows.rows.map((row) => row.id), expectedOrganization]);
     if (result.rowCount !== changed.length) throw new Error('Classification row count changed during apply; rolling back.');
     await client.query('commit');
+    const verify = await client.query('select id, account_type from users where id = any($1::uuid[]) and organization_id = $2', [rows.rows.map((row) => row.id), expectedOrganization]);
+    if (verify.rowCount !== rows.rowCount || verify.rows.some((row) => row.account_type !== 'qa')) throw new Error('Post-apply classification assertion failed.');
     console.log(JSON.stringify({ applied: result.rowCount }));
-  }
+  } else await client.query('rollback');
 } catch (error) {
   try { await client.query('rollback'); } catch {}
   throw error;
