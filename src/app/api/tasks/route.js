@@ -397,6 +397,7 @@ export async function GET(request) {
       status: stringParam(searchParams.get('status')),
       taskType: stringParam(searchParams.get('taskType')),
     };
+    if (filters.ownerUserId) await resolveOrganizationUserId(db, session, filters.ownerUserId);
     if (isRegularCoordinatorSession(session)) {
       filters.ownerUserId = session.user.id;
       filters.unassigned = false;

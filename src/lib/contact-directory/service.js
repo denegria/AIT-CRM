@@ -696,7 +696,16 @@ function directoryConditions({ searchParams, latestLead, session, workflowKey, e
   }
   const owner = clean(searchParams.get('owner'));
   if (owner === 'unassigned') conditions.push(isNull(latestLead.assignedUserId));
-  else if (owner && owner !== 'all') conditions.push(eq(latestLead.assignedUserId, owner));
+  else if (owner && owner !== 'all') conditions.push(and(
+    eq(latestLead.assignedUserId, owner),
+    sql`exists (
+      select 1 from ${users} owner_filter_user
+      where owner_filter_user.id = ${latestLead.assignedUserId}
+        and owner_filter_user.organization_id = ${session.user.organizationId}
+        and owner_filter_user.is_active = true
+        and owner_filter_user.account_type = 'employee'
+    )`,
+  ));
 
   const source = sourceCondition(searchParams.get('source'), latestLead);
   if (source) conditions.push(source);

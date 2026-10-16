@@ -286,6 +286,7 @@ async function loadAuthorizationContext(db, sessionRow) {
       organizationId: sessionRow.organizationId,
       name: sessionRow.name,
       email: sessionRow.email,
+      accountType: sessionRow.accountType,
       roleKeys,
       primaryRoleKey: roleKeys.includes(ROLE_KEYS.ADMIN) ? ROLE_KEYS.ADMIN : roleKeys[0] || ROLE_KEYS.ACCOUNT_COORDINATOR,
       permissions: permissionKeys,
