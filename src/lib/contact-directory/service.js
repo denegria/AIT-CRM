@@ -260,11 +260,20 @@ function contactLastTouchSql(latestLead, businessUnitRows = [], touchAggregates)
   end`;
 }
 
+function sourceClassificationTextSql(latestLead) {
+  const leadSourceText = sql`lower(concat_ws(' ', ${latestLead.sourceName}, ${latestLead.sourceType}))`;
+  return sql`case
+    when ${leadSourceText} ~ '(retarget|mis[-_ ]?318|roster manifest|student roster|roster import|facebook|leadgen|messenger|website|web form|wix|wordpress)'
+      then ${leadSourceText}
+    else lower(concat_ws(' ', ${latestLead.sourceName}, ${latestLead.sourceType}, ${contacts.sourceLabel}))
+  end`;
+}
+
 function sourceCategorySql(latestLead, businessUnitRows = []) {
   const signsIds = businessUnitRows
     .filter((unit) => workflowKeyForBusinessUnit(unit) === WORKFLOW_KEYS.AIT_SIGNS)
     .map((unit) => unit.id);
-  const sourceText = sql`lower(concat_ws(' ', ${latestLead.sourceName}, ${latestLead.sourceType}, ${contacts.sourceLabel}))`;
+  const sourceText = sourceClassificationTextSql(latestLead);
   return sql`case
     when ${sourceText} ~ '(retarget)' then 'retargeted student records'
     when ${sourceText} ~ '(mis[-_ ]?318|roster manifest|student roster|roster import)' then 'imported student records'
@@ -532,7 +541,7 @@ function dateRangeCondition({
 function sourceCondition(value, latestLead) {
   const source = clean(value).toLowerCase();
   if (!source || source === 'all') return undefined;
-  const sourceText = sql`lower(concat_ws(' ', ${latestLead.sourceName}, ${latestLead.sourceType}, ${contacts.sourceLabel}))`;
+  const sourceText = sourceClassificationTextSql(latestLead);
   if (source === 'facebook lead ads') {
     return sql`(
       ${sourceText} ~ '(facebook lead ads|facebook ads|facebook_lead_ads|leadgen)'

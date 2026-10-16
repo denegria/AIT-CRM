@@ -13,6 +13,16 @@ test('reports present roster imports and retargeting as separate client-facing s
   assert.equal(sourceCategoryForContact({ source: 'MIS-318 roster manifest Retargeting', sourceLabel: 'historical_import', workflowKey: 'ait_usa' }), 'Retargeted student records');
 });
 
+test('explicit opportunity acquisition and roster lineage wins over contact retargeting history', () => {
+  const historicalContact = { sourceLabel: 'AIT USA Seguimiento Central Workbook | Retargeting only' };
+  assert.equal(sourceLabel({ sourceName: 'Facebook Ads', sourceType: 'facebook_lead_ads' }, historicalContact), 'Facebook lead ads');
+  assert.equal(sourceLabel({ sourceName: 'MIS-318 roster manifest', sourceType: 'historical_import' }, historicalContact), 'Imported student records');
+});
+
+test('workbook records explicitly marked retargeting remain separately filterable', () => {
+  assert.equal(sourceLabel({ sourceName: 'AIT USA Seguimiento Central Workbook', sourceType: 'ait_usa_xlsx' }, { sourceLabel: 'AIT USA Seguimiento Central Workbook | Retargeting only' }), 'Retargeted student records');
+});
+
 test('QA coordinator history remains counted but is not a selectable facet', () => {
   const rows = [{ id: 'qa', accountType: 'qa', name: 'QA account' }, { id: 'staff', accountType: 'employee', name: 'Staff' }];
   assert.deepEqual(reportCoordinatorOptions(rows, new Set(['qa', 'staff'])), [{ id: 'staff', name: 'Staff' }]);
