@@ -68,11 +68,11 @@ try {
     where id = any($1::uuid[])
       and organization_id = $2
       and account_type <> 'qa'
-  `, [rows.rows.map((row) => row.id), expectedOrganization]);
+    `, [rows.rows.map((row) => row.id), expectedOrganization]);
     if (result.rowCount !== changed.length) throw new Error('Classification row count changed during apply; rolling back.');
-    await client.query('commit');
     const verify = await client.query('select id, account_type from users where id = any($1::uuid[]) and organization_id = $2', [rows.rows.map((row) => row.id), expectedOrganization]);
     if (verify.rowCount !== rows.rowCount || verify.rows.some((row) => row.account_type !== 'qa')) throw new Error('Post-apply classification assertion failed.');
+    await client.query('commit');
     console.log(JSON.stringify({ applied: result.rowCount }));
   } else await client.query('rollback');
 } catch (error) {
