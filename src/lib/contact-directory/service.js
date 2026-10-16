@@ -540,7 +540,7 @@ function sourceCondition(value, latestLead) {
     )`;
   }
   if (source === 'retargeted student records') return sql`${sourceText} ~ '(retarget)'`;
-  if (source === 'imported student records') return sql`${sourceText} ~ '(mis[-_ ]?318|roster manifest|student roster|roster import)'`;
+  if (source === 'imported student records') return and(sql`${sourceText} ~ '(mis[-_ ]?318|roster manifest|student roster|roster import)'`, sql`${sourceText} !~ '(retarget)'`);
   if (source === 'facebook messenger') {
     return sql`${sourceText} ~ '(facebook messenger|facebook_messenger|messenger)'`;
   }
@@ -563,6 +563,8 @@ function sourceCondition(value, latestLead) {
     eq(normalizedSql(contacts.sourceLabel), source),
   );
 }
+
+export { sourceCondition };
 
 function courseCondition(value, latestLead) {
   const course = clean(value).toLowerCase();

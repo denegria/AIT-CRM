@@ -139,6 +139,8 @@ function sourceCategoryForContact({ source = '', sourceLabel = '', workflowKey =
   return 'Other Source';
 }
 
+export { sourceCategoryForContact };
+
 function aitSignsSourceActivityDate({
   lead = null,
   events = [],
