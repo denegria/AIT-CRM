@@ -23,6 +23,12 @@ test('assignable employee policy excludes staging test and automation accounts',
   );
 });
 
+test('persisted QA classification excludes accounts without changing role or historical identity', () => {
+  assert.equal(isAssignableEmployee({ id: 'qa-1', name: 'AIT USA Senior Account Coordinator', email: 'aitusa@outlook.com', accountType: 'qa', roleKeys: ['senior_coordinator'] }), false);
+  assert.equal(isAssignableEmployee({ id: 'qa-2', name: 'Giuseppe QA', email: 'openclawagent.giuseppe@gmail.com', accountType: 'qa', roleKeys: ['account_coordinator'] }), false);
+  assert.equal(isAssignableEmployee({ id: 'staff-1', name: 'Real Staff', email: 'staff@aitusa.com', accountType: 'employee', roleKeys: ['account_coordinator'] }), true);
+});
+
 test('assignable employee policy requires first-party employee roles when roles are provided', () => {
   assert.equal(isAssignableEmployee({
     id: 'user-1',

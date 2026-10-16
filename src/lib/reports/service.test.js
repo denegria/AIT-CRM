@@ -2,8 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { enrollmentStatusEvidence, successfulContactEvent } from './metrics.js';
 import { buildReportEvidence, canonicalLeadDate, detailRowsForSelection, parseReportDates } from './metrics.js';
+import { sourceLabel } from './service.js';
 
 const asOf = new Date('2026-10-14T00:00:00.000Z');
+
+test('reports present roster imports and retargeting as separate client-facing sources', () => {
+  assert.equal(sourceLabel({ sourceName: 'MIS-318 roster manifest', sourceType: 'historical_import' }, null), 'Imported student records');
+  assert.equal(sourceLabel({ sourceName: 'AIT USA Retargeting A2 Dropped Out', sourceType: 'historical_import' }, null), 'Retargeted student records');
+  assert.notEqual(sourceLabel({ sourceName: 'AIT USA Retargeting A2 Dropped Out', sourceType: 'historical_import' }, null), 'Imported student records');
+});
 
 test('reports count only affirmative follow-up outcomes as successful contact', () => {
   assert.equal(successfulContactEvent({ eventType: 'follow_up.reached_interested', occurredAt: '2026-10-01T10:00:00Z' }, asOf), true);

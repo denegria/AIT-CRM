@@ -18,6 +18,7 @@ import {
   resolveContactById,
 } from '@/lib/crm/access.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
+import { isAssignableEmployee } from '@/lib/crm/assignable-employees.js';
 import {
   evaluateLifecycleTransition,
   isNoFurtherProspectingLifecycleStatus,
@@ -78,12 +79,13 @@ async function resolveOrganizationUserId(db, session, value, fieldName = 'ownerU
   if (!id) return null;
 
   const [user] = await db
-    .select({ id: users.id })
+    .select({ id: users.id, accountType: users.accountType, isActive: users.isActive })
     .from(users)
     .where(and(eq(users.id, id), eq(users.organizationId, session.user.organizationId)))
     .limit(1);
 
   if (!user) throw createCrmError('Task owner not found.', 404);
+  if (!isAssignableEmployee(user)) throw createCrmError('Selected owner is not eligible for assignments.', 400);
   assertCanAssignUser(session, user.id, 'Regular coordinators cannot assign tasks to other users.');
   if (businessUnitId && user.id !== session.user.id) {
     const [membership] = await db.select({ id: businessUnitMemberships.id })

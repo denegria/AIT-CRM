@@ -49,6 +49,7 @@ export const users = pgTable('users', {
   authMigratedAt: timestamp('auth_migrated_at', { withTimezone: true }),
   phone: text('phone'),
   isActive: boolean('is_active').notNull().default(true),
+  accountType: text('account_type').notNull().default('employee'),
   createdAt,
   updatedAt,
 }, (table) => ({

@@ -64,6 +64,7 @@ import { buildAitUsaEnrollmentSignals } from '@/lib/ait-usa-enrollment-signals.j
 import { loadContactDirectoryPage } from '@/lib/contact-directory/service.js';
 import { canonicalAitUsaSchoolLocation, retiredAitUsaSchoolLocation } from '@/lib/school-locations.js';
 import { hasOpportunityMutationRequest } from '@/lib/crm/contact-profile-patch.js';
+import { isAssignableEmployee } from '@/lib/crm/assignable-employees.js';
 
 export async function GET(request) {
   const { error, session } = await requirePermission(request, PERMISSIONS.CRM_READ);
@@ -188,7 +189,7 @@ async function resolveAssignableUserId(db, session, value, fieldName = 'assigned
   assertCanAssignUser(session, id);
 
   const [user] = await db
-    .select({ id: users.id })
+    .select({ id: users.id, accountType: users.accountType, isActive: users.isActive })
     .from(users)
     .where(and(
       eq(users.id, id),
@@ -198,6 +199,7 @@ async function resolveAssignableUserId(db, session, value, fieldName = 'assigned
     .limit(1);
 
   if (!user) throw createCrmError('Assigned user not found.', 404);
+  if (!isAssignableEmployee(user)) throw createCrmError('Selected user is not eligible for assignments.', 400);
   if (isAitUsa) {
     const [roleRows, membershipRows] = await Promise.all([
       db

@@ -407,7 +407,8 @@ export default function FollowUpQueuePage() {
 
   const visibleAssignees = useMemo(() => {
     const options = assignees.length ? assignees : fallbackAssignees;
-    if (!coordinatorUiPolicy.ownerScoped || !currentUser?.id) return options;
+    if (!currentUser?.id || !isAssignableEmployee(currentUser)) return options.filter(isAssignableEmployee);
+    if (!coordinatorUiPolicy.ownerScoped) return options;
     const current = options.find((user) => user.id === currentUser.id) || {
       id: currentUser.id,
       name: currentUser.name || currentUser.email || 'Me',

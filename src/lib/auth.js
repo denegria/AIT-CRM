@@ -185,6 +185,7 @@ async function loadLegacySessionRow(db, token) {
       name: users.name,
       email: users.email,
       isActive: users.isActive,
+      accountType: users.accountType,
       expiresAt: userSessions.expiresAt,
     })
     .from(userSessions)
@@ -209,6 +210,7 @@ async function loadWorkOSSessionRow(db, identity) {
       name: users.name,
       email: users.email,
       isActive: users.isActive,
+      accountType: users.accountType,
     })
     .from(users)
     .where(and(
@@ -391,6 +393,7 @@ async function linkWorkOSIdentity(identity) {
         email: users.email,
         workosUserId: users.workosUserId,
         isActive: users.isActive,
+        accountType: users.accountType,
       })
       .from(users)
       .where(eq(users.workosUserId, identity.providerUserId))
@@ -402,6 +405,7 @@ async function linkWorkOSIdentity(identity) {
         email: users.email,
         workosUserId: users.workosUserId,
         isActive: users.isActive,
+        accountType: users.accountType,
       })
       .from(users)
       .where(eq(users.email, identity.email))

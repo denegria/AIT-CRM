@@ -82,7 +82,7 @@ import {
   taskCancellationDecision,
 } from '@/lib/tasks/cancellation-policy.js';
 import { taskMutationAccessDecision } from '@/lib/tasks/access-policy.js';
-import { filterAssignableEmployees } from '@/lib/crm/assignable-employees.js';
+import { filterAssignableEmployees, isAssignableEmployee } from '@/lib/crm/assignable-employees.js';
 import { loadTaskContactOptions } from '@/lib/tasks/contact-options.js';
 
 function stringParam(value) {
@@ -121,6 +121,7 @@ async function listAssignableUsers(db, session) {
       name: users.name,
       email: users.email,
       isActive: users.isActive,
+      accountType: users.accountType,
     })
     .from(users)
     .where(and(eq(users.organizationId, organizationId), eq(users.isActive, true)))
@@ -164,12 +165,13 @@ async function resolveOrganizationUserId(db, session, value, fieldName = 'ownerU
   if (!id) return null;
 
   const [user] = await db
-    .select({ id: users.id })
+    .select({ id: users.id, accountType: users.accountType, isActive: users.isActive })
     .from(users)
     .where(and(eq(users.id, id), eq(users.organizationId, session.user.organizationId)))
     .limit(1);
 
   if (!user) throw createCrmError('Task owner not found.', 404);
+  if (!isAssignableEmployee(user)) throw createCrmError('Selected task owner is not eligible for assignments.', 400);
   assertCanAssignUser(session, user.id, 'Regular coordinators cannot assign tasks to other users.');
   if (businessUnitId && user.id !== session.user.id) {
     const [membership] = await db.select({ id: businessUnitMemberships.id })

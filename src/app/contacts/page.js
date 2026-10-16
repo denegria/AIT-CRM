@@ -6,6 +6,7 @@ import PageState from '@/components/PageState';
 import { useContactWorkflowView } from '@/lib/use-contact-workflow-view';
 import { coordinatorUiPolicyForUser } from '@/lib/crm/coordinator-policy.js';
 import { aitUsaAssigneeOptionLabel, isEligibleAitUsaAssignee } from '@/lib/crm/ait-usa-assignee.js';
+import { isAssignableEmployee } from '@/lib/crm/assignable-employees.js';
 import { validateManualContactIdentity } from '@/lib/crm/contact-input';
 import { isClosedLifecycleStatus, WORKFLOW_KEYS } from '@/lib/crm/lifecycle';
 import {
@@ -580,7 +581,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
   const effectiveLocationFilter = isAitUsaDirectory ? locationFilter : DEFAULT_CONTACT_LOCATION_FILTER;
   const ownerOptions = useMemo(() => {
     const mapped = (employees || [])
-      .filter((employee) => employee?.id)
+      .filter((employee) => employee?.id && isAssignableEmployee(employee))
       .map((employee) => ({
         id: employee.id,
         label: employee.name || employee.email || 'Unnamed User',
@@ -590,7 +591,7 @@ export default function ContactsPage({ mode = 'contacts' } = {}) {
         initials: ownerInitials(employee.name || employee.email || 'Unnamed User'),
         meta: ownerMeta(employee),
       }));
-    if (currentUser?.id && !mapped.some((employee) => employee.id === currentUser.id)) {
+    if (currentUser?.id && isAssignableEmployee(currentUser) && !mapped.some((employee) => employee.id === currentUser.id)) {
       const label = currentUser.name || currentUser.email || 'Me';
       return [
         {

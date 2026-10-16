@@ -266,6 +266,8 @@ function sourceCategorySql(latestLead, businessUnitRows = []) {
     .map((unit) => unit.id);
   const sourceText = sql`lower(concat_ws(' ', ${latestLead.sourceName}, ${latestLead.sourceType}, ${contacts.sourceLabel}))`;
   return sql`case
+    when ${sourceText} ~ '(retarget)' then 'retargeted student records'
+    when ${sourceText} ~ '(mis[-_ ]?318|roster manifest|student roster|roster import)' then 'imported student records'
     when ${sourceText} ~ '(facebook lead ads|facebook ads|facebook_lead_ads|leadgen)' then 'facebook lead ads'
     when ${sourceText} ~ '(facebook messenger|facebook_messenger|messenger)' then 'facebook messenger'
     when ${sourceText} ~ '(facebook_webhook|facebook webhook)' then 'facebook lead ads'

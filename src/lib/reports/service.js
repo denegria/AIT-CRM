@@ -12,6 +12,8 @@ const asDate = (value) => { const date = value instanceof Date ? new Date(value.
 function sourceLabel(lead, contact) {
   const raw = `${lead.sourceName || ''} ${lead.sourceType || ''} ${contact?.sourceLabel || ''}`.toLowerCase();
   if (!raw.trim()) return 'Manual / unknown';
+  if (/retarget/.test(raw)) return 'Retargeted student records';
+  if (/mis[-_ ]?318|roster manifest|student roster|roster import/.test(raw)) return 'Imported student records';
   if (/messenger/.test(raw)) return 'Facebook Messenger';
   if (/facebook|leadgen/.test(raw)) return 'Facebook lead ads';
   if (/website|web form|wix|wordpress/.test(raw)) return 'Website form';
@@ -49,7 +51,7 @@ export async function loadLeadPerformanceReport({ db, session, searchParams }) {
     leadIds.length ? db.select().from(activityEvents).where(and(relatedScope(activityEvents), or(inArray(activityEvents.leadId, leadIds), inArray(activityEvents.contactId, contactIds)))).orderBy(desc(activityEvents.occurredAt), desc(activityEvents.createdAt)) : Promise.resolve([]),
     leadIds.length ? db.select().from(leadStatusHistory).where(and(scopedBusinessUnitWhere(leadStatusHistory, session), inArray(leadStatusHistory.leadId, leadIds))).orderBy(asc(leadStatusHistory.occurredAt)) : Promise.resolve([]),
     contactIds.length ? db.select().from(contactCourseRecords).where(and(scopedBusinessUnitWhere(contactCourseRecords, session), inArray(contactCourseRecords.contactId, contactIds))) : Promise.resolve([]),
-    db.select({ id: users.id, name: users.name, email: users.email }).from(users).where(and(eq(users.organizationId, session.user.organizationId), eq(users.isActive, true))).orderBy(asc(users.name)),
+    db.select({ id: users.id, name: users.name, email: users.email, accountType: users.accountType }).from(users).where(and(eq(users.organizationId, session.user.organizationId), eq(users.isActive, true))).orderBy(asc(users.name)),
   ]);
   const contactsById = new Map(contactRows.map((row) => [row.id, row]));
   const eventsByLead = new Map(); const eventsByContact = new Map();
@@ -88,5 +90,7 @@ export async function loadLeadPerformanceReport({ db, session, searchParams }) {
   const limitation = enrollmentSupported
     ? 'AIT USA enrollment combines status history, course snapshots, and the current lead stage through the as-of timestamp. Older imported leads without dated evidence may remain limited.'
     : 'Enrollment reporting is supported only for AIT USA. AIT Signs leads remain visible, but are not mapped to enrollment. Historical enrollment status depends on available lead history; current AIT USA enrollment snapshots are included through the as-of timestamp.';
-  return { filters: { businessUnitId: requestedBusinessUnitId, from: dates.fromRaw, to: dates.toRaw, asOf: dates.asOf.toISOString(), source, coordinatorId, groupBy, detailType, detailKey }, summary, comparisons: [{ key: 'confirmed-contact', label: 'Confirmed contact evidence', numerator: contacted, denominator: incoming, rate: summary.contactRate }, { key: 'enrolled', label: 'Enrollment evidence', numerator: enrolled, denominator: enrollmentEligible, rate: summary.enrollmentRate }, { key: 'contacted-enrolled', label: 'Enrollment among contacted', numerator: contactedEnrolled, denominator: contactedEnrollmentEligible, rate: summary.contactedEnrollmentRate }], breakdown, analytics: { sources: grouped('source'), coordinators: grouped('coordinator'), statuses: statusGroups, divisions: divisionGroups, intakeTrend: buildIntakeTrend(rows, { from: dates.from, to: dates.to || dates.asOf }) }, leads: pageRows, pagination: { page, pageSize: PAGE_SIZE, total: detailRows.length, totalPages }, sources: [...facetSources].sort(), coordinators: ownerRows.filter((row) => facetCoordinators.has(row.id)).map((row) => ({ id: row.id, name: row.name || row.email })), scope: { businessUnits: selectedUnits, enrollmentSupported, limitation } };
+  return { filters: { businessUnitId: requestedBusinessUnitId, from: dates.fromRaw, to: dates.toRaw, asOf: dates.asOf.toISOString(), source, coordinatorId, groupBy, detailType, detailKey }, summary, comparisons: [{ key: 'confirmed-contact', label: 'Confirmed contact evidence', numerator: contacted, denominator: incoming, rate: summary.contactRate }, { key: 'enrolled', label: 'Enrollment evidence', numerator: enrolled, denominator: enrollmentEligible, rate: summary.enrollmentRate }, { key: 'contacted-enrolled', label: 'Enrollment among contacted', numerator: contactedEnrolled, denominator: contactedEnrollmentEligible, rate: summary.contactedEnrollmentRate }], breakdown, analytics: { sources: grouped('source'), coordinators: grouped('coordinator'), statuses: statusGroups, divisions: divisionGroups, intakeTrend: buildIntakeTrend(rows, { from: dates.from, to: dates.to || dates.asOf }) }, leads: pageRows, pagination: { page, pageSize: PAGE_SIZE, total: detailRows.length, totalPages }, sources: [...facetSources].sort(), coordinators: ownerRows.filter((row) => row.accountType === 'employee' && facetCoordinators.has(row.id)).map((row) => ({ id: row.id, name: row.name || row.email })), scope: { businessUnits: selectedUnits, enrollmentSupported, limitation } };
 }
+
+export { sourceLabel };

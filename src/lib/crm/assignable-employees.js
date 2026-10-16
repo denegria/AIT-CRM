@@ -8,6 +8,8 @@ export const ASSIGNABLE_EMPLOYEE_ROLE_KEYS = Object.freeze([
   ROLE_KEYS.SALES_MANAGER,
 ]);
 
+export const USER_ACCOUNT_TYPES = Object.freeze({ EMPLOYEE: 'employee', QA: 'qa' });
+
 const NON_ASSIGNABLE_ACCOUNT_EMAILS = new Set([
   'alvarodenegri98@gmail.com',
 ]);
@@ -35,6 +37,7 @@ export function looksLikeNonEmployeeAccount(user = {}) {
 export function isAssignableEmployee(user = {}) {
   if (!user?.id) return false;
   if (user.isActive === false) return false;
+  if (Object.prototype.hasOwnProperty.call(user, 'accountType') && String(user.accountType || '').trim().toLowerCase() !== USER_ACCOUNT_TYPES.EMPLOYEE) return false;
   if (looksLikeNonEmployeeAccount(user)) return false;
 
   const roleKeys = Array.isArray(user.roleKeys) ? user.roleKeys.filter(Boolean) : [];

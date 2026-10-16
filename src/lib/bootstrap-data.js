@@ -116,6 +116,8 @@ function latestStatusTransitionDate(rows = [], targetStatus = '') {
 function sourceCategoryForContact({ source = '', sourceLabel = '', workflowKey = '' } = {}) {
   const text = [source, sourceLabel].map(clean).join(' ').toLowerCase();
   const canonicalChannel = canonicalLeadSourceChannel({ sourceName: source, sourceType: sourceLabel });
+  if (text.match(/retarget/)) return 'Retargeted student records';
+  if (text.match(/mis[-_ ]?318|roster manifest|student roster|roster import/)) return 'Imported student records';
   if (canonicalChannel.startsWith('Facebook ')) return canonicalChannel;
   if (text.includes('website') || text.includes('web form') || text.includes('wix') || text.includes('wordpress')) {
     return 'Website Form Submission';
@@ -209,6 +211,7 @@ function mapEmployees(userRows = [], membershipRows = [], roleRows = []) {
     email: user.email || '',
     phone: user.phone || '',
     isActive: user.isActive,
+    accountType: user.accountType,
     roleKeys: canonicalRoleKeys(roleKeysByUserId.get(user.id) || []),
     businessUnitIds: membershipsByUserId.get(user.id) || [],
   })));

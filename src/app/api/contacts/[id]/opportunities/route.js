@@ -31,6 +31,7 @@ import {
   toStartedOpportunityContactPayload,
 } from '@/lib/crm/ait-usa-opportunities.js';
 import { isUuid } from '@/lib/crm/validation.js';
+import { isAssignableEmployee } from '@/lib/crm/assignable-employees.js';
 
 function jsonError(error, status = 400) {
   return NextResponse.json({ error }, { status });
@@ -44,7 +45,7 @@ async function resolveStartOpportunityOwner(db, session, requestedOwnerId, busin
   assertCanAssignUser(session, assignedUserId);
 
   const [assignedUser] = await db
-    .select({ id: users.id, name: users.name, email: users.email, isActive: users.isActive })
+    .select({ id: users.id, name: users.name, email: users.email, isActive: users.isActive, accountType: users.accountType })
     .from(users)
     .where(and(
       eq(users.id, assignedUserId),
@@ -54,6 +55,7 @@ async function resolveStartOpportunityOwner(db, session, requestedOwnerId, busin
   if (!assignedUser || assignedUser.isActive === false) {
     throw Object.assign(new Error('Selected assignee is not active in this organization.'), { status: 400 });
   }
+  if (!isAssignableEmployee(assignedUser)) throw Object.assign(new Error('Selected assignee is not eligible for assignments.'), { status: 400 });
 
   const [roleRows, membershipRows] = await Promise.all([
     db

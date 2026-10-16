@@ -113,7 +113,7 @@ async function resolveAssignedUserId(db, session, assignedTo, businessUnitId) {
   assertCanAssignWorkOrderUser(session, assignedUserId);
 
   const [user] = await db
-    .select({ id: users.id, name: users.name, email: users.email, isActive: users.isActive })
+    .select({ id: users.id, name: users.name, email: users.email, isActive: users.isActive, accountType: users.accountType })
     .from(users)
     .where(and(
       eq(users.id, assignedUserId),
@@ -122,6 +122,7 @@ async function resolveAssignedUserId(db, session, assignedTo, businessUnitId) {
     .limit(1);
 
   if (!user || user.isActive === false) throw createCrmError('Selected assignee is not active in this organization.');
+  if (!isAssignableEmployee(user)) throw createCrmError('Selected assignee is not eligible for assignments.');
 
   const [roleRows, membershipRows] = await Promise.all([
     db

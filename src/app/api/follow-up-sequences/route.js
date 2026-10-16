@@ -17,6 +17,7 @@ import {
   resolveContactById,
 } from '@/lib/crm/access.js';
 import { createCrmError, crmErrorResponse } from '@/lib/crm/errors.js';
+import { isAssignableEmployee } from '@/lib/crm/assignable-employees.js';
 import { isUuid } from '@/lib/crm/validation.js';
 import {
   enrollContactInFollowUpSequence,
@@ -105,7 +106,7 @@ async function resolveOwnerUserId(db, session, value) {
   if (!isUuid(ownerUserId)) throw createCrmError('A valid owner user id is required.');
 
   const [user] = await db
-    .select({ id: users.id })
+    .select({ id: users.id, accountType: users.accountType, isActive: users.isActive })
     .from(users)
     .where(and(
       eq(users.id, ownerUserId),
@@ -115,6 +116,7 @@ async function resolveOwnerUserId(db, session, value) {
     .limit(1);
 
   if (!user) throw createCrmError('Sequence owner not found.', 404);
+  if (!isAssignableEmployee(user)) throw createCrmError('Selected sequence owner is not eligible for assignments.', 400);
   return user.id;
 }
 

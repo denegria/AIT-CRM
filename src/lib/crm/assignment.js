@@ -62,6 +62,7 @@ export async function resolveDefaultInboundLeadOwnerUserId(client, {
           left join users u on u.id = bum.user_id
             and u.organization_id = $1
             and u.is_active = true
+            and u.account_type = 'employee'
           where bu.organization_id = $1
             and bu.id = $2
             and bu.is_active = true
@@ -87,6 +88,7 @@ export async function resolveDefaultInboundLeadOwnerUserId(client, {
           select id, name, email
           from users
           where organization_id = $1 and is_active = true
+            and account_type = 'employee'
           order by coalesce(nullif(name, ''), email, id::text), id
         `,
         [organizationId],
