@@ -73,7 +73,7 @@
         "identifier": "0033",
         "path": "drizzle/forward/0033_user_account_classification.sql",
         "sha256": "5cbb331ab6d50d1c0e223e9e6d192506d78c0e0e478a340ded6d2bb78f317687",
-        "purpose": "MIS-445 durable QA account classification",
+        "purpose": "Owner request 24223 durable QA account classification",
         "provenance": "forward-migration"
       }
     ],

@@ -48,7 +48,7 @@ import { selectAitUsaOpportunityForBootstrap } from './crm/ait-usa-opportunities
 import { courseRecordSummaryPayloadFromRow, deriveCourseSummary } from './crm/course-records.js';
 import { getServerAppVersion } from './app-version.js';
 import { canonicalRoleKeys } from './roles.js';
-import { canonicalLeadSourceChannel } from './crm/source-attribution.js';
+import { sourceCategoryForContact } from './reports/source-display.js';
 import {
   deferBootstrapContactDetails,
   deferBootstrapContactDirectory,
@@ -113,33 +113,6 @@ function latestStatusTransitionDate(rows = [], targetStatus = '') {
   return match ? toIsoDateTime(match.occurredAt || match.createdAt) : '';
 }
 
-function sourceCategoryForContact({ source = '', sourceLabel = '', workflowKey = '' } = {}) {
-  const text = [source, sourceLabel].map(clean).join(' ').toLowerCase();
-  const canonicalChannel = canonicalLeadSourceChannel({ sourceName: source, sourceType: sourceLabel });
-  if (text.match(/retarget/)) return 'Retargeted student records';
-  if (text.match(/mis[-_ ]?318|roster manifest|student roster|roster import/)) return 'Imported student records';
-  if (canonicalChannel.startsWith('Facebook ')) return canonicalChannel;
-  if (text.includes('website') || text.includes('web form') || text.includes('wix') || text.includes('wordpress')) {
-    return 'Website Form Submission';
-  }
-  if (
-    workflowKey === 'ait_signs' ||
-    text.includes('workbook') ||
-    text.includes('xlsx') ||
-    text.includes('spreadsheet') ||
-    text.includes('archive') ||
-    text.includes('work_order') ||
-    text.includes('estimate') ||
-    text.includes('interesados') ||
-    text.includes('ait signs')
-  ) {
-    return 'Workbook Import';
-  }
-  if (!text) return 'Manual / Unknown';
-  return 'Other Source';
-}
-
-export { sourceCategoryForContact };
 
 function aitSignsSourceActivityDate({
   lead = null,

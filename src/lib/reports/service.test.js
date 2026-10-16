@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { enrollmentStatusEvidence, successfulContactEvent } from './metrics.js';
 import { buildReportEvidence, canonicalLeadDate, detailRowsForSelection, parseReportDates } from './metrics.js';
-import { sourceLabel } from './service.js';
+import { reportCoordinatorGroupLabel, reportCoordinatorOptions, sourceCategoryForContact, sourceLabel } from './source-display.js';
 
 const asOf = new Date('2026-10-14T00:00:00.000Z');
 
@@ -10,6 +10,13 @@ test('reports present roster imports and retargeting as separate client-facing s
   assert.equal(sourceLabel({ sourceName: 'MIS-318 roster manifest', sourceType: 'historical_import' }, null), 'Imported student records');
   assert.equal(sourceLabel({ sourceName: 'AIT USA Retargeting A2 Dropped Out', sourceType: 'historical_import' }, null), 'Retargeted student records');
   assert.notEqual(sourceLabel({ sourceName: 'AIT USA Retargeting A2 Dropped Out', sourceType: 'historical_import' }, null), 'Imported student records');
+  assert.equal(sourceCategoryForContact({ source: 'MIS-318 roster manifest Retargeting', sourceLabel: 'historical_import', workflowKey: 'ait_usa' }), 'Retargeted student records');
+});
+
+test('QA coordinator history remains counted but is not a selectable facet', () => {
+  const rows = [{ id: 'qa', accountType: 'qa', name: 'QA account' }, { id: 'staff', accountType: 'employee', name: 'Staff' }];
+  assert.deepEqual(reportCoordinatorOptions(rows, new Set(['qa', 'staff'])), [{ id: 'staff', name: 'Staff' }]);
+  assert.equal(reportCoordinatorGroupLabel(rows[0], 'QA account'), 'Internal QA ownership');
 });
 
 test('reports count only affirmative follow-up outcomes as successful contact', () => {
